@@ -50,7 +50,7 @@ require __DIR__ . '/includes/header.php';
             <span class="login-logo"><i class="fa-solid fa-truck-fast"></i></span>
         </div>
         <div class="login-heading">
-            <h1>Life Maquinariasss</h1>
+            <h1>Life Maquinarias</h1>
             <p>Gesti&oacute;n de Personal y Requisitos</p>
         </div>
         <?php if ($error): ?>
