@@ -1,5 +1,7 @@
 ---
 deployment:
   tasks:
+    - export REPOPATH=/home/servidorlifem/repositorios/lifemaquinarias
     - export DEPLOYPATH=/home/servidorlifem/public_html
-    - /bin/find /home/servidorlifem/repositorios/lifemaquinarias -mindepth 1 -maxdepth 1 ! -name ".git" ! -name ".cpanel.yml" ! -name ".htaccess" -exec /bin/cp -Rf {} $DEPLOYPATH/ \;
+    - /bin/find $REPOPATH -mindepth 1 -maxdepth 1 ! -name ".git" ! -name ".cpanel.yml" ! -name ".htaccess" ! -name ".user.ini" ! -name "php.ini" ! -name "error_log" ! -name "config" -exec /bin/cp -Rf {} $DEPLOYPATH/ \;
+    - /bin/find $REPOPATH/config -mindepth 1 -maxdepth 1 ! -name "config.php" -exec /bin/cp -Rf {} $DEPLOYPATH/config/ \;
