@@ -2,5 +2,4 @@
 deployment:
   tasks:
     - export DEPLOYPATH=/home/servidorlifem/public_html
-    - /bin/cp -Rf /home/servidorlifem/repositorios/lifemaquinarias/* $DEPLOYPATH/
-    
+    - /bin/find /home/servidorlifem/repositorios/lifemaquinarias -mindepth 1 -maxdepth 1 ! -name ".git" ! -name ".cpanel.yml" ! -name ".htaccess" -exec /bin/cp -Rf {} $DEPLOYPATH/ \;
