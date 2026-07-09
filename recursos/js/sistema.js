@@ -2182,12 +2182,13 @@ function initNotifications() {
     let notificationsData = [];
     let currentSearchQuery = '';
 
-    // Helper to format date: DD/MM/YYYY
+    // Helper to format date: DD/MM/YYYY HH:mm
     function formatNotifDate(dateStr) {
         if (!dateStr) return '';
         const t = dateStr.split(/[- :]/);
         if (t.length < 3) return dateStr;
-        return `${t[2]}/${t[1]}/${t[0]}`;
+        const time = t.length >= 5 ? ` - ${t[3]}:${t[4]}` : '';
+        return `${t[2]}/${t[1]}/${t[0]}${time}`;
     }
 
     // Load notifications from server
