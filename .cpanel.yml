@@ -3,3 +3,4 @@ deployment:
   tasks:
     - export DEPLOYPATH=/home/servidorlifem/public_html
     - /bin/cp -Rf /home/servidorlifem/repositorios/lifemaquinarias/* $DEPLOYPATH/
+    
