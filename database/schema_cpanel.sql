@@ -5,7 +5,7 @@ CREATE TABLE users (
     role VARCHAR(60) NOT NULL DEFAULT 'Administrador',
     password VARCHAR(255) NOT NULL,
     status TINYINT(1) NOT NULL DEFAULT 1,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE companies (
@@ -49,8 +49,8 @@ CREATE TABLE workers (
     status TINYINT(1) NOT NULL DEFAULT 1,
     photo_path VARCHAR(255) NULL,
     signature_path VARCHAR(255) NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_workers_company FOREIGN KEY (company_id) REFERENCES companies(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -73,8 +73,8 @@ CREATE TABLE worker_requirements (
     observations TEXT NULL,
     file_path VARCHAR(255) NULL,
     original_file_name VARCHAR(255) NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_worker_position_requirement (worker_id, position_id, requirement_id),
     CONSTRAINT fk_wr_worker FOREIGN KEY (worker_id) REFERENCES workers(id) ON DELETE CASCADE,
     CONSTRAINT fk_wr_position FOREIGN KEY (position_id) REFERENCES positions(id),
@@ -134,8 +134,8 @@ CREATE TABLE maquinarias (
     anio_equipo YEAR NOT NULL,
     foto_path VARCHAR(255) NULL,
     estado TINYINT(1) NOT NULL DEFAULT 1,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_maquinaria_serie_placa (serie_placa),
     CONSTRAINT fk_maquinarias_company FOREIGN KEY (company_id) REFERENCES companies(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -144,7 +144,7 @@ CREATE TABLE maquinaria_documentos_catalogo (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     nombre VARCHAR(150) NOT NULL,
     estado TINYINT(1) NOT NULL DEFAULT 1,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uq_maquinaria_documento_nombre (nombre)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -158,8 +158,8 @@ CREATE TABLE maquinaria_documentos (
     observaciones TEXT NULL,
     archivo_path VARCHAR(255) NULL,
     archivo_nombre_original VARCHAR(255) NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_maquinaria_documento (maquinaria_id, documento_id),
     CONSTRAINT fk_maquinaria_documentos_maquinaria FOREIGN KEY (maquinaria_id) REFERENCES maquinarias(id) ON DELETE CASCADE,
     CONSTRAINT fk_maquinaria_documentos_catalogo FOREIGN KEY (documento_id) REFERENCES maquinaria_documentos_catalogo(id)
@@ -185,8 +185,8 @@ CREATE TABLE attendance_control (
     empresa_proyecto VARCHAR(180) NULL,
     puesto VARCHAR(160) NULL,
     record_hash CHAR(64) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uniq_attendance_record (record_hash),
     KEY idx_attendance_fecha (fecha),
     KEY idx_attendance_nombre (nombre_apellido),
@@ -201,7 +201,7 @@ CREATE TABLE notifications (
     body TEXT NOT NULL,
     worker_id INT UNSIGNED NULL,
     is_read TINYINT(1) NOT NULL DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     KEY fk_notif_worker (worker_id),
     CONSTRAINT fk_notif_worker FOREIGN KEY (worker_id) REFERENCES workers(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
