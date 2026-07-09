@@ -1,0 +1,3 @@
+db: servidorlifem_lifemaquidb
+user: servidorlifem_userlife
+clave: f@Vr[9Vs9zYBAp5+
