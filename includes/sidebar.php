@@ -4,6 +4,7 @@ $dashboardActive = str_contains($currentPath, '/panel.php') || str_ends_with($cu
 $controlPersonalOpen = str_contains($currentPath, '/modulos/aliados/') || str_contains($currentPath, '/modulos/control_personal/');
 $requisitosOpen = str_contains($currentPath, '/modulos/requisitos/');
 $maquinariaOpen = str_contains($currentPath, '/modulos/maquinaria/');
+$empresaOpen = str_contains($currentPath, '/modulos/empresa/');
 $usuarioOpen = str_contains($currentPath, '/modulos/usuario/');
 $isAdmin = is_admin();
 ?>
@@ -59,6 +60,16 @@ $isAdmin = is_admin();
                 <div class="submenu">
                     <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/maquinaria/datos_generales.php"><i class="fa-solid fa-clipboard-list"></i><span>Datos generales</span></a>
                     <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/maquinaria/documentos.php"><i class="fa-solid fa-file-lines"></i><span>Documentos</span></a>
+                </div>
+            </div>
+
+            <button class="nav-link nav-parent <?= $empresaOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#empresaMenu" aria-expanded="<?= $empresaOpen ? 'true' : 'false' ?>" aria-controls="empresaMenu">
+                <i class="fa-solid fa-building"></i><span>Empresa</span><i class="fa-solid fa-chevron-down nav-caret"></i>
+            </button>
+            <div class="collapse <?= $empresaOpen ? 'show' : '' ?>" id="empresaMenu">
+                <div class="submenu">
+                    <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa/datos_generales.php"><i class="fa-solid fa-address-card"></i><span>Datos generales</span></a>
+                    <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa/documentos.php"><i class="fa-solid fa-file-lines"></i><span>Documentos</span></a>
                 </div>
             </div>
 

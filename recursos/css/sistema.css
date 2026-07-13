@@ -3514,17 +3514,25 @@ body {
 
 /* Layout PMI Individual más amplio para requisitos */
 @media (min-width: 992px) {
-    #requirementsWorkspace .requirements-profile-col {
-        flex: 0 0 29%;
-        max-width: 29%;
+    #requirementsWorkspace .requirements-profile-col,
+    #machineDocumentsWorkspace .machine-profile-col,
+    #companyDocumentsWorkspace .machine-profile-col {
+        flex: 0 0 29% !important;
+        width: 29% !important;
+        max-width: 29% !important;
     }
 
-    #requirementsWorkspace .requirements-table-col {
-        flex: 0 0 71%;
-        max-width: 71%;
+    #requirementsWorkspace .requirements-table-col,
+    #machineDocumentsWorkspace .machine-table-col,
+    #companyDocumentsWorkspace .machine-table-col {
+        flex: 0 0 71% !important;
+        width: 71% !important;
+        max-width: 71% !important;
     }
 
-    #requirementsWorkspace .requirements-profile-col .work-panel {
+    #requirementsWorkspace .requirements-profile-col .work-panel,
+    #machineDocumentsWorkspace .machine-profile-col .work-panel,
+    #companyDocumentsWorkspace .machine-profile-col .work-panel {
         padding: 18px;
     }
 
@@ -3561,21 +3569,32 @@ body {
 }
 
 @media (min-width: 1200px) {
-    #requirementsWorkspace .requirements-profile-col {
-        flex-basis: 28%;
-        max-width: 28%;
+    #requirementsWorkspace .requirements-profile-col,
+    #machineDocumentsWorkspace .machine-profile-col,
+    #companyDocumentsWorkspace .machine-profile-col {
+        flex-basis: 28% !important;
+        width: 28% !important;
+        max-width: 28% !important;
     }
 
-    #requirementsWorkspace .requirements-table-col {
-        flex-basis: 72%;
-        max-width: 72%;
+    #requirementsWorkspace .requirements-table-col,
+    #machineDocumentsWorkspace .machine-table-col,
+    #companyDocumentsWorkspace .machine-table-col {
+        flex-basis: 72% !important;
+        width: 72% !important;
+        max-width: 72% !important;
     }
 }
 
 @media (max-width: 991px) {
     #requirementsWorkspace .requirements-profile-col,
-    #requirementsWorkspace .requirements-table-col {
-        width: 100%;
+    #requirementsWorkspace .requirements-table-col,
+    #machineDocumentsWorkspace .machine-profile-col,
+    #machineDocumentsWorkspace .machine-table-col,
+    #companyDocumentsWorkspace .machine-profile-col,
+    #companyDocumentsWorkspace .machine-table-col {
+        width: 100% !important;
+        max-width: 100% !important;
     }
 }
 
@@ -3659,52 +3678,62 @@ body {
     height: 0.9rem;
 }
 
-/* Layout Documentos de maquinaria alineado con PMI Individual */
+/* Layout Documentos de maquinaria/empresa alineado con PMI Individual */
 @media (min-width: 992px) {
-    #machineDocumentsWorkspace .machine-profile-col {
+    #machineDocumentsWorkspace .machine-profile-col,
+    #companyDocumentsWorkspace .machine-profile-col {
         flex: 0 0 29%;
         max-width: 29%;
     }
 
-    #machineDocumentsWorkspace .machine-table-col {
+    #machineDocumentsWorkspace .machine-table-col,
+    #companyDocumentsWorkspace .machine-table-col {
         flex: 0 0 71%;
         max-width: 71%;
     }
 
-    #machineDocumentsWorkspace .machine-profile-col .work-panel {
+    #machineDocumentsWorkspace .machine-profile-col .work-panel,
+    #companyDocumentsWorkspace .machine-profile-col .work-panel {
         padding: 18px;
     }
 
-    #machineDocumentsWorkspace .worker-card img {
+    #machineDocumentsWorkspace .worker-card img,
+    #companyDocumentsWorkspace .worker-card img {
         width: min(170px, 100%);
         height: 170px;
         object-fit: cover;
     }
 
-    #machineDocumentsWorkspace .worker-card .btn {
+    #machineDocumentsWorkspace .worker-card .btn,
+    #companyDocumentsWorkspace .worker-card .btn {
         font-size: 0.82rem;
         padding: 0.42rem 0.62rem;
     }
 
-    #machineDocumentsWorkspace .info-list {
+    #machineDocumentsWorkspace .info-list,
+    #companyDocumentsWorkspace .info-list {
         grid-template-columns: 96px minmax(0, 1fr);
         gap: 8px 10px;
         font-size: 0.84rem;
     }
 
     #machineDocumentsWorkspace .info-list dt,
-    #machineDocumentsWorkspace .info-list dd {
+    #machineDocumentsWorkspace .info-list dd,
+    #companyDocumentsWorkspace .info-list dt,
+    #companyDocumentsWorkspace .info-list dd {
         line-height: 1.35;
     }
 }
 
 @media (min-width: 1200px) {
-    #machineDocumentsWorkspace .machine-profile-col {
+    #machineDocumentsWorkspace .machine-profile-col,
+    #companyDocumentsWorkspace .machine-profile-col {
         flex-basis: 28%;
         max-width: 28%;
     }
 
-    #machineDocumentsWorkspace .machine-table-col {
+    #machineDocumentsWorkspace .machine-table-col,
+    #companyDocumentsWorkspace .machine-table-col {
         flex-basis: 72%;
         max-width: 72%;
     }
@@ -3712,19 +3741,23 @@ body {
 
 @media (max-width: 991px) {
     #machineDocumentsWorkspace .machine-profile-col,
-    #machineDocumentsWorkspace .machine-table-col {
+    #machineDocumentsWorkspace .machine-table-col,
+    #companyDocumentsWorkspace .machine-profile-col,
+    #companyDocumentsWorkspace .machine-table-col {
         width: 100%;
     }
 }
 
 /* Botonera compacta de documentos/requisitos */
 #requirementsWorkspace .work-panel > .d-flex:first-child,
-#machineDocumentsWorkspace .work-panel > .d-flex:first-child {
+#machineDocumentsWorkspace .work-panel > .d-flex:first-child,
+#companyDocumentsWorkspace .work-panel > .d-flex:first-child {
     align-items: center !important;
 }
 
 #requirementsWorkspace .work-panel > .d-flex:first-child > .d-flex,
-#machineDocumentsWorkspace .work-panel > .d-flex:first-child > .d-flex {
+#machineDocumentsWorkspace .work-panel > .d-flex:first-child > .d-flex,
+#companyDocumentsWorkspace .work-panel > .d-flex:first-child > .d-flex {
     flex-wrap: nowrap !important;
     gap: 7px !important;
     align-items: center;
@@ -4066,14 +4099,16 @@ input[type="checkbox"]:active {
 
 /* Visualización completa de imágenes en PMI Individual y Documentos de maquinaria */
 #requirementsWorkspace .worker-card,
-#machineDocumentsWorkspace .worker-card {
+#machineDocumentsWorkspace .worker-card,
+#companyDocumentsWorkspace .worker-card {
     display: flex;
     flex-direction: column;
     align-items: center;
 }
 
 #requirementsWorkspace .worker-card img,
-#machineDocumentsWorkspace .worker-card img {
+#machineDocumentsWorkspace .worker-card img,
+#companyDocumentsWorkspace .worker-card img {
     width: min(180px, 100%) !important;
     height: 180px !important;
     max-width: 100% !important;
@@ -4088,7 +4123,8 @@ input[type="checkbox"]:active {
 }
 
 #requirementsWorkspace .worker-card .btn,
-#machineDocumentsWorkspace .worker-card .btn {
+#machineDocumentsWorkspace .worker-card .btn,
+#companyDocumentsWorkspace .worker-card .btn {
     max-width: 100%;
     white-space: normal;
     text-align: center;
@@ -4096,7 +4132,8 @@ input[type="checkbox"]:active {
 
 @media (min-width: 992px) {
     #requirementsWorkspace .worker-card img,
-    #machineDocumentsWorkspace .worker-card img {
+    #machineDocumentsWorkspace .worker-card img,
+    #companyDocumentsWorkspace .worker-card img {
         width: min(178px, 100%) !important;
         height: 178px !important;
     }
@@ -4104,7 +4141,8 @@ input[type="checkbox"]:active {
 
 @media (max-width: 575px) {
     #requirementsWorkspace .worker-card img,
-    #machineDocumentsWorkspace .worker-card img {
+    #machineDocumentsWorkspace .worker-card img,
+    #companyDocumentsWorkspace .worker-card img {
         width: min(210px, 100%) !important;
         height: 210px !important;
     }
@@ -4112,7 +4150,8 @@ input[type="checkbox"]:active {
 
 /* Ajuste fino: imagen completa aprovechando mejor el cuadrado */
 #requirementsWorkspace .worker-card img,
-#machineDocumentsWorkspace .worker-card img {
+#machineDocumentsWorkspace .worker-card img,
+#companyDocumentsWorkspace .worker-card img {
     width: min(190px, 100%) !important;
     height: 190px !important;
     padding: 2px !important;
@@ -4123,7 +4162,8 @@ input[type="checkbox"]:active {
 
 @media (min-width: 992px) {
     #requirementsWorkspace .worker-card img,
-    #machineDocumentsWorkspace .worker-card img {
+    #machineDocumentsWorkspace .worker-card img,
+    #companyDocumentsWorkspace .worker-card img {
         width: min(188px, 100%) !important;
         height: 188px !important;
         padding: 2px !important;
@@ -4132,7 +4172,8 @@ input[type="checkbox"]:active {
 
 @media (max-width: 575px) {
     #requirementsWorkspace .worker-card img,
-    #machineDocumentsWorkspace .worker-card img {
+    #machineDocumentsWorkspace .worker-card img,
+    #companyDocumentsWorkspace .worker-card img {
         width: min(220px, 100%) !important;
         height: 220px !important;
         padding: 2px !important;
@@ -4141,7 +4182,8 @@ input[type="checkbox"]:active {
 
 /* Ajuste final: llenar el cuadrado sin deformar en PMI y maquinaria */
 #requirementsWorkspace .worker-card img,
-#machineDocumentsWorkspace .worker-card img {
+#machineDocumentsWorkspace .worker-card img,
+#companyDocumentsWorkspace .worker-card img {
     width: 190px !important;
     height: 190px !important;
     padding: 0 !important;
@@ -4152,7 +4194,8 @@ input[type="checkbox"]:active {
 
 @media (min-width: 992px) {
     #requirementsWorkspace .worker-card img,
-    #machineDocumentsWorkspace .worker-card img {
+    #machineDocumentsWorkspace .worker-card img,
+    #companyDocumentsWorkspace .worker-card img {
         width: 188px !important;
         height: 188px !important;
     }
@@ -4160,7 +4203,8 @@ input[type="checkbox"]:active {
 
 @media (max-width: 575px) {
     #requirementsWorkspace .worker-card img,
-    #machineDocumentsWorkspace .worker-card img {
+    #machineDocumentsWorkspace .worker-card img,
+    #companyDocumentsWorkspace .worker-card img {
         width: min(220px, 100%) !important;
         height: 220px !important;
     }
@@ -4168,7 +4212,8 @@ input[type="checkbox"]:active {
 
 /* Ajuste definitivo: mostrar imagen completa dentro del cuadrado sin deformar */
 #requirementsWorkspace .worker-card img,
-#machineDocumentsWorkspace .worker-card img {
+#machineDocumentsWorkspace .worker-card img,
+#companyDocumentsWorkspace .worker-card img {
     width: 190px !important;
     height: 190px !important;
     max-width: 100% !important;
@@ -4182,7 +4227,8 @@ input[type="checkbox"]:active {
 
 @media (min-width: 992px) {
     #requirementsWorkspace .worker-card img,
-    #machineDocumentsWorkspace .worker-card img {
+    #machineDocumentsWorkspace .worker-card img,
+    #companyDocumentsWorkspace .worker-card img {
         width: 188px !important;
         height: 188px !important;
     }
@@ -4190,7 +4236,8 @@ input[type="checkbox"]:active {
 
 @media (max-width: 575px) {
     #requirementsWorkspace .worker-card img,
-    #machineDocumentsWorkspace .worker-card img {
+    #machineDocumentsWorkspace .worker-card img,
+    #companyDocumentsWorkspace .worker-card img {
         width: min(220px, 100%) !important;
         height: 220px !important;
     }

@@ -53,6 +53,8 @@ document.addEventListener('DOMContentLoaded', () => {
     initRequirementsModule();
     initMaquinariaDatos();
     initMaquinariaDocumentos();
+    initEmpresaModuloDatos();
+    initEmpresaModuloDocumentos();
     initDashboardEjecutivo();
     initUsuariosModule();
     initAttendanceControl();
@@ -1640,6 +1642,471 @@ async function downloadMachineDocumentsZip(selectedIds = []) {
 
     if (selectedIds.length) {
         document.querySelectorAll('.machine-document-download-check:checked').forEach((check) => {
+            check.checked = false;
+        });
+    }
+}
+
+let currentCompanyModuleId = null;
+let companyDocumentModal = null;
+
+function initEmpresaModuloDatos() {
+    const table = document.getElementById('empresaModuloTable');
+    if (!table) return;
+
+    const form = document.getElementById('empresaModuloForm');
+    const modal = new bootstrap.Modal(document.getElementById('empresaModuloModal'));
+    const photoModal = new bootstrap.Modal(document.getElementById('empresaModuloFotoModal'));
+
+    document.getElementById('nuevaEmpresaModuloBtn')?.addEventListener('click', () => {
+        form.reset();
+        form.classList.remove('was-validated');
+        document.getElementById('empresaModuloId').value = '';
+        document.getElementById('empresaModuloRazonSocial').value = 'Life Maquinarias';
+        document.getElementById('empresaModuloModalTitle').textContent = 'Nueva empresa';
+        renderEmpresaModuloFotoActual(null);
+        modal.show();
+    });
+
+    document.querySelectorAll('.js-editar-empresa-modulo').forEach((button) => {
+        button.addEventListener('click', () => {
+            form.reset();
+            form.classList.remove('was-validated');
+            document.getElementById('empresaModuloId').value = button.dataset.id || '';
+            document.getElementById('empresaModuloRazonSocial').value = button.dataset.razonSocial || '';
+            document.getElementById('empresaModuloRuc').value = button.dataset.ruc || '';
+            document.getElementById('empresaModuloDireccion').value = button.dataset.direccion || '';
+            document.getElementById('empresaModuloModalTitle').textContent = 'Editar empresa';
+            renderEmpresaModuloFotoActual(button.dataset.foto || null);
+            modal.show();
+        });
+    });
+
+    document.querySelectorAll('.js-ver-foto-empresa-modulo').forEach((button) => {
+        button.addEventListener('click', () => {
+            if (!button.dataset.foto) return;
+            document.getElementById('empresaModuloFotoModalImg').src = `${BASE_URL}/${button.dataset.foto}`;
+            photoModal.show();
+        });
+    });
+
+    document.querySelectorAll('.js-eliminar-empresa-modulo').forEach((button) => {
+        button.addEventListener('click', async () => {
+            const ok = await confirmAction('¿Eliminar empresa?');
+            if (!ok) return;
+            const body = new FormData();
+            body.append('csrf_token', csrf);
+            body.append('id', button.dataset.id || '');
+            const response = await fetch(`${BASE_URL}/servicios/empresa/eliminar_empresa_modulo.php`, { method: 'POST', body });
+            const data = await response.json();
+            if (data.ok) window.location.reload();
+            else Swal.fire('Atención', data.message || 'No se pudo eliminar la empresa.', 'warning');
+        });
+    });
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (!form.checkValidity()) {
+            form.classList.add('was-validated');
+            return;
+        }
+        const response = await fetch(`${BASE_URL}/servicios/empresa/guardar_empresa_modulo.php`, { method: 'POST', body: new FormData(form) });
+        const data = await response.json();
+        if (!data.ok) {
+            Swal.fire('Atención', data.message || 'No se pudo guardar la empresa.', 'warning');
+            return;
+        }
+        modal.hide();
+        window.location.reload();
+    });
+}
+
+function renderEmpresaModuloFotoActual(path) {
+    const box = document.getElementById('empresaModuloFotoActual');
+    if (!box) return;
+    if (!path) {
+        box.classList.add('d-none');
+        box.innerHTML = '';
+        return;
+    }
+    box.classList.remove('d-none');
+    box.innerHTML = `<i class="fa-solid fa-image text-primary me-2"></i><a target="_blank" href="${BASE_URL}/${path}">Ver foto actual</a>`;
+}
+
+function initEmpresaModuloDocumentos() {
+    const companySearchElement = document.getElementById('companyModuleSearch');
+    if (!companySearchElement) return;
+
+    companyDocumentModal = new bootstrap.Modal(document.getElementById('companyDocumentModal'));
+
+    if (window.jQuery && $.fn.select2) {
+        $('#companyModuleSearch').select2({
+            theme: 'bootstrap4',
+            width: '100%',
+            placeholder: 'Escriba razon social o RUC'
+        });
+        $('#companyModuleSearch').on('select2:select', (event) => loadCompanyModule(event.params.data.id));
+    }
+
+    companySearchElement.addEventListener('change', (event) => {
+        if (event.target.value) loadCompanyModule(event.target.value);
+    });
+
+    document.getElementById('downloadCompanyDocumentsBtn')?.addEventListener('click', downloadCompanyDocumentsBundle);
+    document.getElementById('downloadSelectedCompanyDocumentsBtn')?.addEventListener('click', downloadSelectedCompanyDocumentsBundle);
+    document.getElementById('addCompanyDocumentBtn')?.addEventListener('click', openAddCompanyDocument);
+    document.getElementById('companyDocumentForm')?.addEventListener('submit', saveCompanyDocument);
+    document.getElementById('newCompanyCatalogDocumentBtn')?.addEventListener('click', addCompanyCatalogDocument);
+    document.getElementById('deleteCompanyCatalogDocumentBtn')?.addEventListener('click', deleteCompanyCatalogDocument);
+    document.getElementById('changeCompanyModulePhotoBtn')?.addEventListener('click', () => {
+        if (!currentCompanyModuleId) {
+            Swal.fire('Atención', 'Seleccione una empresa.', 'warning');
+            return;
+        }
+        document.getElementById('companyModulePhotoInput')?.click();
+    });
+    document.getElementById('companyModulePhotoInput')?.addEventListener('change', uploadCompanyModulePhoto);
+}
+
+async function uploadCompanyModulePhoto(event) {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    if (!file || !currentCompanyModuleId) return;
+
+    const form = new FormData();
+    form.append('csrf_token', csrf);
+    form.append('empresa_id', currentCompanyModuleId);
+    form.append('foto', file);
+
+    const response = await fetch(`${BASE_URL}/servicios/empresa/subir_foto_empresa.php`, { method: 'POST', body: form });
+    const data = await response.json();
+    input.value = '';
+
+    if (!data.ok) {
+        Swal.fire('Atención', data.message || 'No se pudo cambiar la foto.', 'warning');
+        return;
+    }
+
+    document.getElementById('companyModulePhoto').src = `${data.path}?v=${Date.now()}`;
+    Swal.fire('Actualizado', 'Foto de empresa actualizada.', 'success');
+}
+
+async function loadCompanyModule(id) {
+    currentCompanyModuleId = id;
+    const response = await fetch(`${BASE_URL}/servicios/empresa/perfil_empresa.php?id=${id}`);
+    const data = await response.json();
+    if (!data.ok) return;
+
+    const company = data.empresa;
+    document.getElementById('companyDocumentsWorkspace').classList.remove('d-none');
+    document.getElementById('companyModulePhoto').src = company.foto_path ? `${BASE_URL}/${company.foto_path}` : `${BASE_URL}/recursos/imagen_referencial.php`;
+    document.getElementById('companyModuleName').textContent = company.razon_social || '';
+    document.getElementById('companyModuleRuc').textContent = company.ruc || '';
+    document.getElementById('companyModuleAddress').textContent = company.direccion || '';
+    loadCompanyDocuments();
+}
+
+async function loadCompanyDocuments() {
+    if (!currentCompanyModuleId) return;
+    const response = await fetch(`${BASE_URL}/servicios/empresa/listar_documentos_empresa.php?empresa_id=${currentCompanyModuleId}`);
+    const data = await response.json();
+    const tbody = document.querySelector('#companyDocumentsTable tbody');
+    tbody.innerHTML = '';
+    (data.rows || []).forEach((row) => {
+        const hasPdf = !!row.archivo_path;
+        const downloadName = escapeHtml(row.archivo_nombre_original || `${row.documento}.pdf`);
+        const downloadButton = hasPdf
+            ? `<a class="btn btn-sm btn-outline-success" href="${BASE_URL}/${row.archivo_path}" download="${downloadName}" title="Descargar documento"><i class="fa-solid fa-download"></i></a>`
+            : '';
+        tbody.insertAdjacentHTML('beforeend', `
+            <tr>
+                <td class="text-center">
+                    <input class="form-check-input company-document-download-check" type="checkbox" value="${row.id}" ${hasPdf ? '' : 'disabled'} title="${hasPdf ? 'Seleccionar documento' : 'Sin PDF adjunto'}">
+                </td>
+                <td>${escapeHtml(row.documento)}</td>
+                <td>${row.fecha_registro}</td>
+                <td>${row.fecha_inicio}</td>
+                <td>${row.fecha_fin}</td>
+                <td><span class="badge ${row.status.class}">${row.status.label}</span></td>
+                <td class="text-nowrap">
+                    <button class="btn btn-sm btn-outline-primary" type="button" onclick="openEditCompanyDocument(${row.id})"><i class="fa-solid fa-pen"></i></button>
+                    <button class="btn btn-sm btn-outline-secondary" type="button" onclick="openViewCompanyDocument(${row.id})"><i class="fa-solid fa-eye"></i></button>
+                    <button class="btn btn-sm btn-outline-danger" type="button" onclick="deleteCompanyDocument(${row.id})"><i class="fa-solid fa-trash"></i></button>
+                    ${downloadButton}
+                </td>
+            </tr>
+        `);
+    });
+}
+
+function openAddCompanyDocument() {
+    if (!currentCompanyModuleId) {
+        Swal.fire('Atención', 'Seleccione una empresa.', 'warning');
+        return;
+    }
+    const form = document.getElementById('companyDocumentForm');
+    form.reset();
+    form.classList.remove('was-validated');
+    setCompanyDocumentReadonly(false);
+    document.getElementById('companyDocumentModalTitle').textContent = 'Agregar documentos';
+    document.getElementById('companyDocumentId').value = '';
+    document.getElementById('companyDocumentCompanyId').value = currentCompanyModuleId;
+    document.getElementById('companyRegistrationDate').value = localDateValue();
+    renderCompanyCurrentPdf(null);
+    companyDocumentModal.show();
+}
+
+async function openEditCompanyDocument(id) {
+    await fillCompanyDocumentModal(id);
+    setCompanyDocumentReadonly(false);
+    document.getElementById('companyDocumentModalTitle').textContent = 'Editar documentos';
+    companyDocumentModal.show();
+}
+
+async function openViewCompanyDocument(id) {
+    await fillCompanyDocumentModal(id);
+    setCompanyDocumentReadonly(true);
+    document.getElementById('companyDocumentModalTitle').textContent = 'Visualizar documentos';
+    companyDocumentModal.show();
+}
+
+async function fillCompanyDocumentModal(id) {
+    const response = await fetch(`${BASE_URL}/servicios/empresa/obtener_documento_empresa.php?id=${id}`);
+    const data = await response.json();
+    const row = data.row;
+    document.getElementById('companyDocumentId').value = row.id;
+    document.getElementById('companyDocumentCompanyId').value = row.empresa_id;
+    document.getElementById('companyDocumentSelect').value = row.documento_id;
+    document.getElementById('companyRegistrationDate').value = row.fecha_registro;
+    document.getElementById('companyStartDate').value = row.fecha_inicio;
+    document.getElementById('companyEndDate').value = row.fecha_fin;
+    document.getElementById('companyObservations').value = row.observaciones || '';
+    renderCompanyCurrentPdf(row);
+}
+
+function renderCompanyCurrentPdf(row) {
+    const box = document.getElementById('companyCurrentPdf');
+    if (!box) return;
+    if (!row || !row.archivo_path) {
+        box.classList.add('d-none');
+        box.innerHTML = '';
+        return;
+    }
+    box.classList.remove('d-none');
+    box.innerHTML = `
+        <i class="fa-solid fa-file-pdf text-danger me-2"></i>
+        <strong>${escapeHtml(row.archivo_nombre_original || 'archivo.pdf')}</strong>
+        <div class="d-flex gap-2 mt-2">
+            <a class="btn btn-sm btn-outline-primary" target="_blank" href="${BASE_URL}/${row.archivo_path}"><i class="fa-solid fa-up-right-from-square me-1"></i>Abrir</a>
+            <button class="btn btn-sm btn-outline-danger" type="button" onclick="deleteCompanyDocumentPdf(${row.id})"><i class="fa-solid fa-trash me-1"></i>Eliminar</button>
+        </div>`;
+}
+
+function setCompanyDocumentReadonly(state) {
+    document.querySelectorAll('#companyDocumentForm input, #companyDocumentForm textarea, #companyDocumentForm select').forEach((el) => {
+        if (el.name === 'csrf_token' || el.type === 'hidden') return;
+        el.disabled = state;
+    });
+    document.querySelector('#companyDocumentForm button[type="submit"]')?.classList.toggle('d-none', state);
+    document.getElementById('companyPdfInput')?.classList.toggle('d-none', state);
+    document.getElementById('newCompanyCatalogDocumentBtn')?.classList.toggle('d-none', state);
+    document.getElementById('deleteCompanyCatalogDocumentBtn')?.classList.toggle('d-none', state);
+}
+
+async function addCompanyCatalogDocument() {
+    const focusTrap = companyDocumentModal?._focustrap;
+    focusTrap?.deactivate?.();
+
+    let value = null;
+    try {
+        const result = await Swal.fire({
+            title: 'Nuevo documento',
+            input: 'text',
+            inputPlaceholder: 'Nombre del documento',
+            showCancelButton: true,
+            confirmButtonText: 'Agregar',
+            cancelButtonText: 'Cancelar',
+            didOpen: () => Swal.getInput()?.focus()
+        });
+        value = result.value;
+    } finally {
+        setTimeout(() => focusTrap?.activate?.(), 0);
+    }
+
+    if (!value) return;
+
+    const form = new FormData();
+    form.append('csrf_token', csrf);
+    form.append('nombre', value);
+
+    const response = await fetch(`${BASE_URL}/servicios/empresa/guardar_catalogo_documento_empresa.php`, { method: 'POST', body: form });
+    const data = await response.json();
+
+    if (!data.ok) {
+        Swal.fire('Atención', data.message || 'No se pudo agregar el documento.', 'warning');
+        return;
+    }
+
+    const select = document.getElementById('companyDocumentSelect');
+    const existing = Array.from(select.options).find((option) => option.value === String(data.id));
+    if (existing) {
+        existing.textContent = data.text;
+    } else {
+        select.append(new Option(data.text, data.id, false, false));
+    }
+    select.value = String(data.id);
+}
+
+async function deleteCompanyCatalogDocument() {
+    const select = document.getElementById('companyDocumentSelect');
+    const documentId = select?.value || '';
+    const documentText = select?.selectedOptions?.[0]?.textContent?.trim() || '';
+
+    if (!documentId) {
+        Swal.fire('Atención', 'Seleccione un documento para eliminar.', 'warning');
+        return;
+    }
+
+    const result = await Swal.fire({
+        title: '¿Eliminar documento?',
+        text: `Se quitará "${documentText}" del catálogo si no tiene registros asociados.`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, eliminar',
+        cancelButtonText: 'Cancelar'
+    });
+
+    if (!result.isConfirmed) return;
+
+    const form = new FormData();
+    form.append('csrf_token', csrf);
+    form.append('id', documentId);
+
+    const response = await fetch(`${BASE_URL}/servicios/empresa/eliminar_catalogo_documento_empresa.php`, { method: 'POST', body: form });
+    const data = await response.json();
+
+    if (!data.ok) {
+        Swal.fire('Atención', data.message || 'No se pudo eliminar el documento.', 'warning');
+        return;
+    }
+
+    Array.from(select.options).find((option) => option.value === String(documentId))?.remove();
+    select.value = '';
+    Swal.fire('Eliminado', data.message || 'Documento eliminado.', 'success');
+}
+
+async function saveCompanyDocument(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    if (!form.checkValidity()) {
+        form.classList.add('was-validated');
+        return;
+    }
+    const submitButton = form.querySelector('button[type="submit"]');
+    const progressBox = document.getElementById('companyUploadProgress');
+    const progressBar = progressBox?.querySelector('.progress-bar');
+    const progressLabel = progressBox?.querySelector('small');
+
+    function renderProgress(percent) {
+        if (!progressBox || !progressBar || !progressLabel) return;
+        progressBox.classList.remove('d-none');
+        progressBar.style.width = `${percent}%`;
+        progressBar.setAttribute('aria-valuenow', String(percent));
+        progressLabel.textContent = percent < 100 ? `Subiendo archivo: ${percent}%` : 'Procesando archivo...';
+    }
+
+    submitButton.disabled = true;
+    renderProgress(0);
+    try {
+        const data = await postFormWithProgress(`${BASE_URL}/servicios/empresa/guardar_documento_empresa.php`, new FormData(form), renderProgress);
+        if (!data.ok) {
+            Swal.fire('Atención', data.message || 'No se pudo guardar.', 'warning');
+            return;
+        }
+        companyDocumentModal.hide();
+        loadCompanyDocuments();
+    } catch (error) {
+        Swal.fire('Atención', error.message || 'No se pudo guardar.', 'warning');
+    } finally {
+        submitButton.disabled = false;
+        progressBox?.classList.add('d-none');
+        if (progressBar) progressBar.style.width = '0%';
+        if (progressLabel) progressLabel.textContent = 'Subiendo archivo: 0%';
+    }
+}
+
+async function deleteCompanyDocument(id) {
+    const ok = await confirmAction('¿Eliminar documento?');
+    if (!ok) return;
+    const form = new FormData();
+    form.append('csrf_token', csrf);
+    form.append('id', id);
+    const response = await fetch(`${BASE_URL}/servicios/empresa/eliminar_documento_empresa.php`, { method: 'POST', body: form });
+    const data = await response.json();
+    if (data.ok) loadCompanyDocuments();
+}
+
+async function deleteCompanyDocumentPdf(id) {
+    const ok = await confirmAction('¿Eliminar PDF?');
+    if (!ok) return;
+    const form = new FormData();
+    form.append('csrf_token', csrf);
+    form.append('id', id);
+    const response = await fetch(`${BASE_URL}/servicios/empresa/eliminar_pdf_documento_empresa.php`, { method: 'POST', body: form });
+    const data = await response.json();
+    if (data.ok) {
+        renderCompanyCurrentPdf(null);
+        loadCompanyDocuments();
+    }
+}
+
+async function downloadSelectedCompanyDocumentsBundle() {
+    if (!currentCompanyModuleId) {
+        Swal.fire('Atención', 'Seleccione una empresa.', 'warning');
+        return;
+    }
+    const selectedIds = Array.from(document.querySelectorAll('.company-document-download-check:checked')).map((check) => check.value);
+    if (!selectedIds.length) {
+        Swal.fire('Atención', 'Seleccione al menos un documento para descargar.', 'warning');
+        return;
+    }
+    await downloadCompanyDocumentsZip(selectedIds);
+}
+
+async function downloadCompanyDocumentsBundle() {
+    if (!currentCompanyModuleId) {
+        Swal.fire('Atención', 'Seleccione una empresa.', 'warning');
+        return;
+    }
+    await downloadCompanyDocumentsZip();
+}
+
+async function downloadCompanyDocumentsZip(selectedIds = []) {
+    const params = new URLSearchParams({ empresa_id: currentCompanyModuleId });
+    if (selectedIds.length) {
+        params.set('ids', selectedIds.join(','));
+    }
+    const response = await fetch(`${BASE_URL}/servicios/empresa/descargar_documentos_empresa.php?${params.toString()}`);
+    if (!response.ok) {
+        const data = await response.json().catch(() => ({ message: 'No se pudo generar la descarga.' }));
+        Swal.fire('Atención', data.message || 'No se pudo generar la descarga.', 'warning');
+        return;
+    }
+    const blob = await response.blob();
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="([^"]+)"/);
+    const fileName = match ? match[1] : 'documentos_empresa.zip';
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(objectUrl);
+
+    if (selectedIds.length) {
+        document.querySelectorAll('.company-document-download-check:checked').forEach((check) => {
             check.checked = false;
         });
     }
