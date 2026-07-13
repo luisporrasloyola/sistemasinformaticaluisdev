@@ -32,8 +32,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'id' => (int) $user['id'],
                     'name' => $user['name'],
                     'email' => $user['email'],
+                    'role' => $user['role'] ?? 'Administrador',
+                    'worker_id' => !empty($user['worker_id']) ? (int) $user['worker_id'] : null,
                 ];
-                redirect('panel.php');
+                redirect(($user['role'] ?? 'Administrador') === 'Personal' ? 'modulos/control_personal/control_asistencia.php' : 'panel.php');
             }
 
             $error = "Correo o contrase\u{00F1}a incorrectos.";

@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../../includes/security.php';
-require_login();
+require_role('Administrador');
 require __DIR__ . '/../../includes/header.php';
 ?>
 <div class="page-title">

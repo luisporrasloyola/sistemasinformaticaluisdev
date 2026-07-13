@@ -1,9 +1,16 @@
 <?php
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
-require_login();
+require_role('Administrador');
 
-$users = db()->query("SELECT id, name, email, role, status FROM users ORDER BY name")->fetchAll();
+$users = db()->query("SELECT u.id, u.name, u.email, u.role, u.status, u.worker_id, w.full_name AS worker_name, w.document_number
+    FROM users u
+    LEFT JOIN workers w ON w.id = u.worker_id
+    ORDER BY u.name")->fetchAll();
+$workers = db()->query("SELECT w.id, w.full_name, w.document_number, w.email, c.name AS company
+    FROM workers w
+    LEFT JOIN companies c ON c.id = w.company_id
+    ORDER BY w.full_name")->fetchAll();
 $currentUser = current_user();
 require __DIR__ . '/../../includes/header.php';
 ?>
@@ -23,6 +30,7 @@ require __DIR__ . '/../../includes/header.php';
                 <th>Nombre completo</th>
                 <th>Correo electr&oacute;nico</th>
                 <th>Rol</th>
+                <th>Personal vinculado</th>
                 <th>Acciones</th>
             </tr>
             </thead>
@@ -32,12 +40,14 @@ require __DIR__ . '/../../includes/header.php';
                     <td><?= e($user['name']) ?></td>
                     <td><?= e($user['email']) ?></td>
                     <td><span class="badge text-bg-primary"><?= e($user['role']) ?></span></td>
+                    <td><?= e($user['worker_name'] ? $user['worker_name'] . ' - ' . $user['document_number'] : '') ?></td>
                     <td class="text-nowrap">
                         <button class="btn btn-sm btn-outline-primary js-editar-usuario" type="button"
                             data-id="<?= (int) $user['id'] ?>"
                             data-name="<?= e($user['name']) ?>"
                             data-email="<?= e($user['email']) ?>"
                             data-role="<?= e($user['role']) ?>"
+                            data-worker-id="<?= (int) ($user['worker_id'] ?? 0) ?>"
                             title="Editar"><i class="fa-solid fa-pen"></i></button>
                         <?php if (!$currentUser || (int) $currentUser['id'] !== (int) $user['id']): ?>
                             <button class="btn btn-sm btn-outline-danger js-eliminar-usuario" type="button" data-id="<?= (int) $user['id'] ?>" title="Eliminar"><i class="fa-solid fa-trash"></i></button>
@@ -73,7 +83,22 @@ require __DIR__ . '/../../includes/header.php';
                         <label class="form-label">Rol</label>
                         <select class="form-select" name="role" id="usuarioRole" required>
                             <option value="Administrador">Administrador</option>
+                            <option value="Personal">Personal</option>
                         </select>
+                    </div>
+                    <div class="col-md-6 d-none" id="usuarioWorkerGroup">
+                        <label class="form-label">Trabajador vinculado</label>
+                        <select class="form-select" name="worker_id" id="usuarioWorkerId">
+                            <option value="">Seleccione</option>
+                            <?php foreach ($workers as $worker): ?>
+                                <option value="<?= (int) $worker['id'] ?>"
+                                    data-name="<?= e($worker['full_name']) ?>"
+                                    data-email="<?= e($worker['email'] ?? '') ?>">
+                                    <?= e($worker['full_name'] . ' - ' . $worker['document_number'] . (!empty($worker['company']) ? ' - ' . $worker['company'] : '')) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <div class="form-text">Obligatorio para rol Personal. No se permitir&aacute;n dos usuarios para el mismo trabajador.</div>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Contrase&ntilde;a</label>

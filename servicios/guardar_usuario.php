@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/security.php';
 require_once __DIR__ . '/../config/database.php';
-require_login();
+require_role('Administrador');
 
 verify_csrf($_POST['csrf_token'] ?? null);
 
@@ -9,25 +9,52 @@ $id = (int) ($_POST['id'] ?? 0);
 $name = trim((string) ($_POST['name'] ?? ''));
 $email = trim((string) ($_POST['email'] ?? ''));
 $role = trim((string) ($_POST['role'] ?? ''));
+$workerId = (int) ($_POST['worker_id'] ?? 0);
 $password = (string) ($_POST['password'] ?? '');
-$allowedRoles = ['Administrador'];
+$allowedRoles = ['Administrador', 'Personal'];
 
 if ($name === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || !in_array($role, $allowedRoles, true)) {
     json_response(['ok' => false, 'message' => 'Complete los campos obligatorios.'], 400);
 }
 
+if ($role === 'Personal') {
+    if ($workerId <= 0) {
+        json_response(['ok' => false, 'message' => 'Seleccione el trabajador vinculado para el rol Personal.'], 400);
+    }
+
+    $workerStmt = db()->prepare('SELECT id FROM workers WHERE id = :id LIMIT 1');
+    $workerStmt->execute(['id' => $workerId]);
+    if (!$workerStmt->fetch()) {
+        json_response(['ok' => false, 'message' => 'El trabajador seleccionado no existe.'], 400);
+    }
+
+    $duplicateWorkerStmt = db()->prepare('SELECT id FROM users WHERE worker_id = :worker_id AND id <> :id LIMIT 1');
+    $duplicateWorkerStmt->execute(['worker_id' => $workerId, 'id' => $id]);
+    if ($duplicateWorkerStmt->fetch()) {
+        json_response(['ok' => false, 'message' => 'Este trabajador ya tiene un usuario vinculado.'], 409);
+    }
+} else {
+    $workerId = 0;
+}
+
 if ($id === 0 && strlen($password) < 8) {
-    json_response(['ok' => false, 'message' => 'La contraseña debe tener al menos 8 caracteres.'], 400);
+    json_response(['ok' => false, 'message' => 'La contrasena debe tener al menos 8 caracteres.'], 400);
 }
 
 if ($id > 0 && $password !== '' && strlen($password) < 8) {
-    json_response(['ok' => false, 'message' => 'La contraseña debe tener al menos 8 caracteres.'], 400);
+    json_response(['ok' => false, 'message' => 'La contrasena debe tener al menos 8 caracteres.'], 400);
 }
 
 try {
     if ($id > 0) {
-        $sql = 'UPDATE users SET name = :name, email = :email, role = :role';
-        $params = ['name' => $name, 'email' => $email, 'role' => $role, 'id' => $id];
+        $sql = 'UPDATE users SET name = :name, email = :email, role = :role, worker_id = :worker_id';
+        $params = [
+            'name' => $name,
+            'email' => $email,
+            'role' => $role,
+            'worker_id' => $workerId ?: null,
+            'id' => $id,
+        ];
         if ($password !== '') {
             $sql .= ', password = :password';
             $params['password'] = password_hash($password, PASSWORD_DEFAULT);
@@ -35,11 +62,13 @@ try {
         $sql .= ' WHERE id = :id';
         db()->prepare($sql)->execute($params);
     } else {
-        $stmt = db()->prepare('INSERT INTO users (name, email, role, password, status) VALUES (:name, :email, :role, :password, 1)');
+        $stmt = db()->prepare('INSERT INTO users (name, email, role, worker_id, password, status)
+            VALUES (:name, :email, :role, :worker_id, :password, 1)');
         $stmt->execute([
             'name' => $name,
             'email' => $email,
             'role' => $role,
+            'worker_id' => $workerId ?: null,
             'password' => password_hash($password, PASSWORD_DEFAULT),
         ]);
     }
@@ -47,7 +76,7 @@ try {
     json_response(['ok' => true]);
 } catch (PDOException $e) {
     if ($e->getCode() === '23000') {
-        json_response(['ok' => false, 'message' => 'El correo electrónico ya existe.'], 409);
+        json_response(['ok' => false, 'message' => 'El correo electronico o trabajador vinculado ya existe.'], 409);
     }
     json_response(['ok' => false, 'message' => 'No se pudo guardar el usuario.'], 400);
 }

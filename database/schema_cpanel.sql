@@ -3,9 +3,11 @@ CREATE TABLE users (
     name VARCHAR(120) NOT NULL,
     email VARCHAR(160) NOT NULL UNIQUE,
     role VARCHAR(60) NOT NULL DEFAULT 'Administrador',
+    worker_id INT UNSIGNED NULL,
     password VARCHAR(255) NOT NULL,
     status TINYINT(1) NOT NULL DEFAULT 1,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_users_worker_id (worker_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE companies (
@@ -61,6 +63,9 @@ CREATE TABLE worker_positions (
     CONSTRAINT fk_wp_worker FOREIGN KEY (worker_id) REFERENCES workers(id) ON DELETE CASCADE,
     CONSTRAINT fk_wp_position FOREIGN KEY (position_id) REFERENCES positions(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE users
+    ADD CONSTRAINT fk_users_worker FOREIGN KEY (worker_id) REFERENCES workers(id) ON DELETE SET NULL;
 
 CREATE TABLE worker_requirements (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

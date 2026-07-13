@@ -2,7 +2,7 @@
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../includes/upload.php';
 require_once __DIR__ . '/../../config/database.php';
-require_login();
+require_role('Administrador');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     redirect('modulos/aliados/personal.php');

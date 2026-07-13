@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/includes/security.php';
 require_once __DIR__ . '/config/database.php';
-require_login();
+require_role('Administrador');
 
 $documentRows = db()->query("SELECT end_date FROM worker_requirements")->fetchAll();
 $counts = ['verde' => 0, 'amarillo' => 0, 'rojo' => 0];

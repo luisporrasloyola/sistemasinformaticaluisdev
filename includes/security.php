@@ -74,6 +74,37 @@ function require_login(): void
     }
 }
 
+function current_user_role(): string
+{
+    return (string) ($_SESSION['user']['role'] ?? 'Administrador');
+}
+
+function current_user_worker_id(): ?int
+{
+    $workerId = $_SESSION['user']['worker_id'] ?? null;
+    return $workerId ? (int) $workerId : null;
+}
+
+function is_admin(): bool
+{
+    return current_user_role() === 'Administrador';
+}
+
+function is_personal_role(): bool
+{
+    return current_user_role() === 'Personal';
+}
+
+function require_role(array|string $roles): void
+{
+    require_login();
+    $allowed = is_array($roles) ? $roles : [$roles];
+    if (!in_array(current_user_role(), $allowed, true)) {
+        http_response_code(403);
+        exit('No tiene permisos para acceder a esta seccion.');
+    }
+}
+
 function json_response(array $payload, int $status = 200): never
 {
     http_response_code($status);

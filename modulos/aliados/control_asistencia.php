@@ -2,7 +2,7 @@
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/asistencia.php';
-require_login();
+require_role('Administrador');
 ensure_attendance_schema();
 
 $records = db()->query('SELECT * FROM attendance_control ORDER BY fecha DESC, nombre_apellido ASC')->fetchAll();

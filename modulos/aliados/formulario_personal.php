@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
-require_login();
+require_role('Administrador');
 
 $id = isset($_GET['id']) ? (int) $_GET['id'] : 0;
 $worker = [

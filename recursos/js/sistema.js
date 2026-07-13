@@ -56,6 +56,10 @@ document.addEventListener('DOMContentLoaded', () => {
     initDashboardEjecutivo();
     initUsuariosModule();
     initAttendanceControl();
+    initControlPersonalSchedules();
+    initControlPersonalLocations();
+    initControlPersonalAssignments();
+    initControlPersonalMarking();
     initNotifications();
 
     if (window.jQuery && $.fn.DataTable) {
@@ -1987,6 +1991,29 @@ function initUsuariosModule() {
     const modal = new bootstrap.Modal(document.getElementById('usuarioModal'));
     const password = document.getElementById('usuarioPassword');
     const passwordHelp = document.getElementById('usuarioPasswordHelp');
+    const roleSelect = document.getElementById('usuarioRole');
+    const workerGroup = document.getElementById('usuarioWorkerGroup');
+    const workerSelect = document.getElementById('usuarioWorkerId');
+    const nameInput = document.getElementById('usuarioName');
+    const emailInput = document.getElementById('usuarioEmail');
+
+    function fillUserFromSelectedWorker() {
+        if (!workerSelect || roleSelect?.value !== 'Personal') return;
+        const option = workerSelect.selectedOptions?.[0];
+        if (!option || !option.value) return;
+        if (nameInput) nameInput.value = option.dataset.name || '';
+        if (emailInput) emailInput.value = option.dataset.email || '';
+    }
+
+    function toggleUserWorkerField() {
+        const isPersonal = roleSelect?.value === 'Personal';
+        workerGroup?.classList.toggle('d-none', !isPersonal);
+        if (workerSelect) {
+            workerSelect.required = isPersonal;
+            if (!isPersonal) workerSelect.value = '';
+            if (isPersonal) fillUserFromSelectedWorker();
+        }
+    }
 
     document.getElementById('nuevoUsuarioBtn')?.addEventListener('click', () => {
         form.reset();
@@ -1994,6 +2021,7 @@ function initUsuariosModule() {
         document.getElementById('usuarioId').value = '';
         document.getElementById('usuarioModalTitle').textContent = 'Nuevo usuario';
         password.required = true;
+        toggleUserWorkerField();
         passwordHelp.textContent = 'Mínimo 8 caracteres.';
         modal.show();
     });
@@ -2005,13 +2033,18 @@ function initUsuariosModule() {
             document.getElementById('usuarioId').value = button.dataset.id || '';
             document.getElementById('usuarioName').value = button.dataset.name || '';
             document.getElementById('usuarioEmail').value = button.dataset.email || '';
-            document.getElementById('usuarioRole').value = button.dataset.role || 'Usuario';
+            document.getElementById('usuarioRole').value = button.dataset.role || 'Administrador';
+            if (workerSelect) workerSelect.value = button.dataset.workerId || '';
             document.getElementById('usuarioModalTitle').textContent = 'Editar usuario';
             password.required = false;
+            toggleUserWorkerField();
             passwordHelp.textContent = 'Dejar vacío para mantener la contraseña actual.';
             modal.show();
         });
     });
+
+    roleSelect?.addEventListener('change', toggleUserWorkerField);
+    workerSelect?.addEventListener('change', fillUserFromSelectedWorker);
 
     document.querySelectorAll('.js-eliminar-usuario').forEach((button) => {
         button.addEventListener('click', async () => {
@@ -2310,6 +2343,545 @@ function initNotifications() {
     setInterval(loadNotifications, 20000); // Poll every 20 seconds
 }
 
+function initControlPersonalSchedules() {
+    const form = document.getElementById('scheduleForm');
+    if (!form) return;
+
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('scheduleModal'));
+    const dayForm = document.getElementById('scheduleDayForm');
+    const dayModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('scheduleDayModal'));
+
+    document.getElementById('newScheduleBtn')?.addEventListener('click', () => {
+        form.reset();
+        form.classList.remove('was-validated');
+        document.getElementById('scheduleId').value = '';
+        document.getElementById('scheduleModalTitle').textContent = 'Nuevo horario';
+        modal.show();
+    });
+
+    document.querySelectorAll('.js-edit-schedule').forEach((button) => {
+        button.addEventListener('click', () => {
+            form.reset();
+            form.classList.remove('was-validated');
+            document.getElementById('scheduleId').value = button.dataset.id || '';
+            document.getElementById('scheduleName').value = button.dataset.name || '';
+            document.getElementById('scheduleModalTitle').textContent = 'Editar horario';
+            modal.show();
+        });
+    });
+
+    document.querySelectorAll('.js-delete-schedule').forEach((button) => {
+        button.addEventListener('click', async () => {
+            if (!await confirmAction('¿Eliminar horario?')) return;
+            const body = new FormData();
+            body.append('csrf_token', csrf);
+            body.append('id', button.dataset.id || '');
+            const response = await fetch(`${BASE_URL}/servicios/control_personal/eliminar_horario.php`, { method: 'POST', body });
+            const data = await response.json();
+            if (data.ok) window.location.href = `${BASE_URL}/modulos/control_personal/horarios.php`;
+            else Swal.fire('Atención', data.message || 'No se pudo eliminar el horario.', 'warning');
+        });
+    });
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (!form.checkValidity()) {
+            form.classList.add('was-validated');
+            return;
+        }
+        const response = await fetch(`${BASE_URL}/servicios/control_personal/guardar_horario.php`, { method: 'POST', body: new FormData(form) });
+        const data = await response.json();
+        if (!data.ok) {
+            Swal.fire('Atención', data.message || 'No se pudo guardar el horario.', 'warning');
+            return;
+        }
+        window.location.href = `${BASE_URL}/modulos/control_personal/horarios.php?id=${data.id}`;
+    });
+
+    document.querySelectorAll('.js-config-schedule-day').forEach((button) => {
+        button.addEventListener('click', () => {
+            dayForm.reset();
+            dayForm.classList.remove('was-validated');
+            document.getElementById('scheduleDayModalTitle').textContent = `Configurar ${button.dataset.dayLabel || 'día'}`;
+            document.getElementById('scheduleDayScheduleId').value = button.dataset.scheduleId || '';
+            document.getElementById('scheduleDayNumber').value = button.dataset.day || '';
+            document.getElementById('entryStart').value = button.dataset.entryStart || '';
+            document.getElementById('entryEnd').value = button.dataset.entryEnd || '';
+            document.getElementById('breakStart').value = button.dataset.breakStart || '';
+            document.getElementById('breakEnd').value = button.dataset.breakEnd || '';
+            document.getElementById('exitStart').value = button.dataset.exitStart || '';
+            document.getElementById('exitEnd').value = button.dataset.exitEnd || '';
+            document.getElementById('toleranceMinutes').value = button.dataset.tolerance || '0';
+            dayModal.show();
+        });
+    });
+
+    dayForm?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (!dayForm.checkValidity()) {
+            dayForm.classList.add('was-validated');
+            return;
+        }
+        const response = await fetch(`${BASE_URL}/servicios/control_personal/guardar_horario_dia.php`, { method: 'POST', body: new FormData(dayForm) });
+        const data = await response.json();
+        if (!data.ok) {
+            Swal.fire('Atención', data.message || 'No se pudo guardar el día.', 'warning');
+            return;
+        }
+        window.location.reload();
+    });
+
+    document.getElementById('clearScheduleDayBtn')?.addEventListener('click', async () => {
+        if (!await confirmAction('¿Quitar horario de este día?')) return;
+        const body = new FormData();
+        body.append('csrf_token', csrf);
+        body.append('schedule_id', document.getElementById('scheduleDayScheduleId')?.value || '');
+        body.append('day_of_week', document.getElementById('scheduleDayNumber')?.value || '');
+        const response = await fetch(`${BASE_URL}/servicios/control_personal/eliminar_horario_dia.php`, { method: 'POST', body });
+        const data = await response.json();
+        if (data.ok) window.location.reload();
+        else Swal.fire('Atención', data.message || 'No se pudo quitar el día.', 'warning');
+    });
+}
+
+function initControlPersonalLocations() {
+    const form = document.getElementById('locationForm');
+    if (!form) return;
+
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('locationModal'));
+    const radius = document.getElementById('locationRadius');
+    const radiusLabel = document.getElementById('locationRadiusLabel');
+    const latInput = document.getElementById('locationLatitude');
+    const lngInput = document.getElementById('locationLongitude');
+    const addressInput = document.getElementById('locationAddress');
+    let map = null;
+    let marker = null;
+    let circle = null;
+
+    function updateRadiusLabel() {
+        if (radiusLabel && radius) radiusLabel.textContent = `${radius.value} metros`;
+    }
+
+    function setMapPoint(lat, lng) {
+        if (!window.L || !map || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
+        const point = [lat, lng];
+        if (!marker) marker = L.marker(point).addTo(map);
+        marker.setLatLng(point);
+        if (!circle) circle = L.circle(point, { radius: Number(radius?.value || 100), color: '#1457d9', fillColor: '#1457d9', fillOpacity: 0.12 }).addTo(map);
+        circle.setLatLng(point);
+        circle.setRadius(Number(radius?.value || 100));
+        map.setView(point, 16);
+    }
+
+    async function reverseAddress(lat, lng) {
+        if (!addressInput || addressInput.value.trim() !== '') return;
+        try {
+            const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`);
+            const data = await response.json();
+            if (data.display_name) addressInput.value = data.display_name;
+        } catch (error) {
+            // La dirección puede ingresarse manualmente si el servicio externo no responde.
+        }
+    }
+
+    function initMap() {
+        if (!window.L) return;
+        if (!map) {
+            map = L.map('locationMap').setView([-12.0464, -77.0428], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; OpenStreetMap'
+            }).addTo(map);
+            map.on('click', (event) => {
+                const lat = Number(event.latlng.lat.toFixed(8));
+                const lng = Number(event.latlng.lng.toFixed(8));
+                latInput.value = lat;
+                lngInput.value = lng;
+                addressInput.value = '';
+                setMapPoint(lat, lng);
+                reverseAddress(lat, lng);
+            });
+        }
+        setTimeout(() => {
+            map.invalidateSize();
+            const lat = Number(latInput.value || -12.0464);
+            const lng = Number(lngInput.value || -77.0428);
+            setMapPoint(lat, lng);
+        }, 250);
+    }
+
+    function openLocationModal(data = {}) {
+        form.reset();
+        form.classList.remove('was-validated');
+        document.getElementById('locationId').value = data.id || '';
+        document.getElementById('locationName').value = data.name || '';
+        latInput.value = data.latitude || '';
+        lngInput.value = data.longitude || '';
+        addressInput.value = data.address || '';
+        radius.value = data.radius || '100';
+        updateRadiusLabel();
+        document.getElementById('locationModalTitle').textContent = data.id ? 'Editar punto de marcación' : 'Nuevo punto de marcación';
+        modal.show();
+        initMap();
+    }
+
+    document.getElementById('newLocationBtn')?.addEventListener('click', () => openLocationModal());
+    document.querySelectorAll('.js-edit-location').forEach((button) => {
+        button.addEventListener('click', () => openLocationModal(button.dataset));
+    });
+
+    radius?.addEventListener('input', () => {
+        updateRadiusLabel();
+        setMapPoint(Number(latInput.value), Number(lngInput.value));
+    });
+    [latInput, lngInput].forEach((input) => input?.addEventListener('change', () => {
+        const lat = Number(latInput.value);
+        const lng = Number(lngInput.value);
+        setMapPoint(lat, lng);
+        reverseAddress(lat, lng);
+    }));
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (!form.checkValidity()) {
+            form.classList.add('was-validated');
+            return;
+        }
+        const response = await fetch(`${BASE_URL}/servicios/control_personal/guardar_punto_marcacion.php`, { method: 'POST', body: new FormData(form) });
+        const data = await response.json();
+        if (!data.ok) {
+            Swal.fire('Atención', data.message || 'No se pudo guardar el punto.', 'warning');
+            return;
+        }
+        window.location.reload();
+    });
+
+    document.querySelectorAll('.js-delete-location').forEach((button) => {
+        button.addEventListener('click', async () => {
+            if (!await confirmAction('¿Eliminar punto de marcación?')) return;
+            const body = new FormData();
+            body.append('csrf_token', csrf);
+            body.append('id', button.dataset.id || '');
+            const response = await fetch(`${BASE_URL}/servicios/control_personal/eliminar_punto_marcacion.php`, { method: 'POST', body });
+            const data = await response.json();
+            if (data.ok) window.location.reload();
+            else Swal.fire('Atención', data.message || 'No se pudo eliminar el punto.', 'warning');
+        });
+    });
+}
+
+function initControlPersonalAssignments() {
+    const form = document.getElementById('assignmentForm');
+    if (!form) return;
+
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('assignmentModal'));
+
+    document.getElementById('newAssignmentBtn')?.addEventListener('click', () => {
+        form.reset();
+        form.classList.remove('was-validated');
+        document.getElementById('assignmentId').value = '';
+        document.getElementById('assignmentModalTitle').textContent = 'Nueva asignación';
+        modal.show();
+    });
+
+    document.querySelectorAll('.js-edit-assignment').forEach((button) => {
+        button.addEventListener('click', () => {
+            form.reset();
+            form.classList.remove('was-validated');
+            document.getElementById('assignmentId').value = button.dataset.id || '';
+            document.getElementById('assignmentWorkerId').value = button.dataset.workerId || '';
+            document.getElementById('assignmentLocationId').value = button.dataset.locationId || '';
+            document.getElementById('assignmentScheduleId').value = button.dataset.scheduleId || '';
+            document.getElementById('assignmentActivity').value = button.dataset.activity || '';
+            document.getElementById('assignmentModalTitle').textContent = 'Editar asignación';
+            modal.show();
+        });
+    });
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (!form.checkValidity()) {
+            form.classList.add('was-validated');
+            return;
+        }
+        const response = await fetch(`${BASE_URL}/servicios/control_personal/guardar_asignacion.php`, { method: 'POST', body: new FormData(form) });
+        const data = await response.json();
+        if (!data.ok) {
+            Swal.fire('Atención', data.message || 'No se pudo guardar la asignación.', 'warning');
+            return;
+        }
+        window.location.reload();
+    });
+
+    document.querySelectorAll('.js-delete-assignment').forEach((button) => {
+        button.addEventListener('click', async () => {
+            if (!await confirmAction('¿Eliminar asignación?')) return;
+            const body = new FormData();
+            body.append('csrf_token', csrf);
+            body.append('id', button.dataset.id || '');
+            const response = await fetch(`${BASE_URL}/servicios/control_personal/eliminar_asignacion.php`, { method: 'POST', body });
+            const data = await response.json();
+            if (data.ok) window.location.reload();
+            else Swal.fire('Atención', data.message || 'No se pudo eliminar la asignación.', 'warning');
+        });
+    });
+}
+
+function initControlPersonalMarking() {
+    const workerField = document.getElementById('markWorkerId');
+    const entryBtn = document.getElementById('markEntryBtn');
+    const exitBtn = document.getElementById('markExitBtn');
+    const camera = document.getElementById('markCamera');
+    const canvas = document.getElementById('markCanvas');
+    const photoPreview = document.getElementById('markPhotoPreview');
+    const mapElement = document.getElementById('markMap');
+    if (!workerField || !entryBtn || !exitBtn || !camera || !canvas || !mapElement) return;
+
+    let context = null;
+    let map = null;
+    let locationMarker = null;
+    let currentMarker = null;
+    let radiusCircle = null;
+    let currentPosition = null;
+    let cameraStream = null;
+    let photoData = '';
+
+    function value(id, text) {
+        const element = document.getElementById(id);
+        if (element) element.textContent = text || '-';
+    }
+
+    function renderStatuses(items) {
+        const panel = document.getElementById('markStatusPanel');
+        if (!panel) return;
+        panel.innerHTML = items.map((item) => `<span class="badge ${item.className}">${escapeHtml(item.text)}</span>`).join('');
+    }
+
+    function formatTime(time) {
+        return time ? String(time).slice(0, 5) : '-';
+    }
+
+    function metersBetween(lat1, lon1, lat2, lon2) {
+        const earthRadius = 6371000;
+        const toRad = (number) => number * Math.PI / 180;
+        const dLat = toRad(lat2 - lat1);
+        const dLon = toRad(lon2 - lon1);
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+        return earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    function initMarkMap() {
+        if (!window.L || map) return;
+        map = L.map('markMap').setView([-12.0464, -77.0428], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; OpenStreetMap'
+        }).addTo(map);
+    }
+
+    function updateMap() {
+        initMarkMap();
+        if (!map || !context?.assignment) return;
+
+        const assignment = context.assignment;
+        const locationLat = Number(assignment.latitude);
+        const locationLng = Number(assignment.longitude);
+        const radius = Number(assignment.radius_meters || 100);
+        const locationPoint = [locationLat, locationLng];
+
+        if (!locationMarker) locationMarker = L.marker(locationPoint).addTo(map);
+        locationMarker.setLatLng(locationPoint).bindPopup('Punto asignado');
+
+        if (!radiusCircle) {
+            radiusCircle = L.circle(locationPoint, { radius, color: '#1457d9', fillColor: '#1457d9', fillOpacity: 0.12 }).addTo(map);
+        }
+        radiusCircle.setLatLng(locationPoint);
+        radiusCircle.setRadius(radius);
+
+        if (currentPosition) {
+            const currentPoint = [currentPosition.latitude, currentPosition.longitude];
+            if (!currentMarker) currentMarker = L.marker(currentPoint).addTo(map);
+            currentMarker.setLatLng(currentPoint).bindPopup('Ubicación actual');
+            map.fitBounds(L.latLngBounds([locationPoint, currentPoint]).pad(0.35));
+        } else {
+            map.setView(locationPoint, 16);
+        }
+        setTimeout(() => map.invalidateSize(), 150);
+    }
+
+    async function loadMarkContext() {
+        const workerId = workerField.value || '';
+        if (!workerId) {
+            context = null;
+            renderStatuses([{ text: 'Seleccione trabajador', className: 'text-bg-secondary' }]);
+            return;
+        }
+
+        const response = await fetch(`${BASE_URL}/servicios/control_personal/contexto_marcacion.php?worker_id=${encodeURIComponent(workerId)}`);
+        const data = await response.json();
+        if (!data.ok) {
+            context = null;
+            renderStatuses([{ text: data.message || 'Sin asignación activa', className: 'text-bg-warning' }]);
+            return;
+        }
+
+        context = data;
+        const assignment = data.assignment;
+        const day = data.schedule_day || {};
+        value('markWorkerName', `${assignment.full_name} - ${assignment.document_number}`);
+        value('markLocationName', assignment.location_name);
+        value('markScheduleName', assignment.schedule_name);
+        value('markActivity', assignment.activity || '-');
+        value('markEntryWindow', `${formatTime(day.entry_start)} - ${formatTime(day.entry_end)} (${Number(day.tolerance_minutes || 0)} min tolerancia)`);
+        value('markExitWindow', `${formatTime(day.exit_start)} - ${formatTime(day.exit_end)}`);
+        value('markRadius', `${assignment.radius_meters} metros`);
+        entryBtn.disabled = data.marks.some((mark) => mark.mark_type === 'entrada');
+        exitBtn.disabled = data.marks.some((mark) => mark.mark_type === 'salida') || !data.marks.some((mark) => mark.mark_type === 'entrada');
+        renderStatuses([
+            { text: day.id ? 'Horario disponible' : 'Sin horario para hoy', className: day.id ? 'text-bg-success' : 'text-bg-warning' },
+            { text: entryBtn.disabled ? 'Entrada registrada' : 'Entrada pendiente', className: entryBtn.disabled ? 'text-bg-primary' : 'text-bg-secondary' },
+            { text: exitBtn.disabled ? 'Salida no disponible/registrada' : 'Salida disponible', className: exitBtn.disabled ? 'text-bg-secondary' : 'text-bg-primary' },
+        ]);
+        updateMap();
+    }
+
+    function requestPosition() {
+        return new Promise((resolve, reject) => {
+            if (!navigator.geolocation) {
+                reject(new Error('El navegador no soporta ubicacion GPS.'));
+                return;
+            }
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+                enableHighAccuracy: true,
+                timeout: 20000,
+                maximumAge: 0
+            });
+        });
+    }
+
+    async function requestCamera() {
+        if (!window.isSecureContext) {
+            throw new Error('La camara del celular requiere HTTPS. En una IP local como 192.168.1.5 el navegador bloquea el acceso por seguridad.');
+        }
+        if (!navigator.mediaDevices?.getUserMedia) {
+            throw new Error('El navegador no soporta acceso a camara.');
+        }
+        if (cameraStream) {
+            return cameraStream;
+        }
+        cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+        camera.srcObject = cameraStream;
+        await camera.play();
+        return cameraStream;
+    }
+
+    function capturePhoto() {
+        const width = camera.videoWidth || 640;
+        const height = camera.videoHeight || 480;
+        canvas.width = width;
+        canvas.height = height;
+        const context2d = canvas.getContext('2d');
+        context2d.drawImage(camera, 0, 0, width, height);
+        photoData = canvas.toDataURL('image/jpeg', 0.86);
+        if (photoPreview) {
+            photoPreview.src = photoData;
+            photoPreview.classList.remove('d-none');
+        }
+        return photoData;
+    }
+
+    async function reverseCurrentAddress(lat, lng) {
+        try {
+            const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`);
+            const data = await response.json();
+            return data.display_name || '';
+        } catch (error) {
+            return '';
+        }
+    }
+
+    async function prepareMarking() {
+        if (!context) {
+            await loadMarkContext();
+        }
+        if (!context?.assignment) {
+            throw new Error('No hay asignacion activa para marcar.');
+        }
+
+        await requestCamera();
+        const position = await requestPosition();
+        currentPosition = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+        };
+
+        const assignment = context.assignment;
+        const distance = metersBetween(
+            currentPosition.latitude,
+            currentPosition.longitude,
+            Number(assignment.latitude),
+            Number(assignment.longitude)
+        );
+
+        value('markAccuracy', `${Math.round(currentPosition.accuracy)} metros`);
+        value('markDistance', `${Math.round(distance)} metros`);
+
+        const within = distance <= Number(assignment.radius_meters || 0);
+        const precise = currentPosition.accuracy <= Number(assignment.radius_meters || 0);
+        renderStatuses([
+            { text: within ? 'Dentro del radio' : 'Fuera del radio', className: within ? 'text-bg-success' : 'text-bg-danger' },
+            { text: precise ? 'GPS preciso' : 'GPS impreciso', className: precise ? 'text-bg-success' : 'text-bg-warning' },
+        ]);
+
+        updateMap();
+        const address = await reverseCurrentAddress(currentPosition.latitude, currentPosition.longitude);
+        return { distance, address };
+    }
+
+    async function mark(type) {
+        const button = type === 'entrada' ? entryBtn : exitBtn;
+        button.disabled = true;
+        const originalText = button.innerHTML;
+        button.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Marcando...';
+
+        try {
+            const prepared = await prepareMarking();
+            const image = capturePhoto();
+            const form = new FormData();
+            form.append('csrf_token', csrf);
+            form.append('worker_id', workerField.value || '');
+            form.append('mark_type', type);
+            form.append('latitude', String(currentPosition.latitude));
+            form.append('longitude', String(currentPosition.longitude));
+            form.append('accuracy', String(currentPosition.accuracy));
+            form.append('distance_meters', String(prepared.distance));
+            form.append('address', prepared.address || '');
+            form.append('observations', document.getElementById('markObservations')?.value || '');
+            form.append('photo_data', image);
+
+            const response = await fetch(`${BASE_URL}/servicios/control_personal/registrar_marcacion.php`, { method: 'POST', body: form });
+            const data = await response.json();
+            if (!data.ok) {
+                Swal.fire('Atención', data.message || 'No se pudo registrar la marcación.', 'warning');
+                return;
+            }
+            await Swal.fire('Registrado', `${data.message}<br>Distancia: ${data.distance_meters} m<br>Estado: ${data.status}`, 'success');
+            window.location.reload();
+        } catch (error) {
+            Swal.fire('Atención', `${error.message || 'No se pudo marcar.'} Debe habilitar ubicación y cámara para registrar asistencia.`, 'warning');
+        } finally {
+            button.disabled = false;
+            button.innerHTML = originalText;
+            loadMarkContext();
+        }
+    }
+
+    workerField.addEventListener('change', loadMarkContext);
+    entryBtn.addEventListener('click', () => mark('entrada'));
+    exitBtn.addEventListener('click', () => mark('salida'));
+    if (workerField.value) loadMarkContext();
+}
 
 
 
