@@ -61,6 +61,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initControlPersonalAssignments();
     initControlPersonalMarking();
     initNotifications();
+    initDevelopmentPhaseLinks();
 
     if (window.jQuery && $.fn.DataTable) {
         $('.data-table').DataTable({
@@ -85,6 +86,23 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
+function initDevelopmentPhaseLinks() {
+    const adminControlMenu = document.querySelector('#controlPersonalMenu a[href*="/modulos/control_personal/dashboard_asistencia.php"]');
+    if (!adminControlMenu) return;
+
+    document.querySelectorAll('#controlPersonalMenu a[href*="/modulos/control_personal/"]').forEach((link) => {
+        link.addEventListener('click', (event) => {
+            event.preventDefault();
+            Swal.fire({
+                icon: 'info',
+                title: 'Módulo en desarrollo',
+                text: 'Esta opción estará disponible en la siguiente fase.',
+                confirmButtonText: 'Entendido'
+            });
+        });
+    });
+}
 
 function bindWorkerFileDelete() {
     document.querySelectorAll('.js-delete-worker-file').forEach((button) => {
