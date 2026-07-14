@@ -121,13 +121,12 @@ function save_requirement_record(int $workerId, int $positionId, int $requiremen
             : '';
         $stmt = db()->prepare('UPDATE worker_requirements
             SET registration_date = :registration_date, start_date = :start_date, end_date = :end_date,
-                observations = :observations, file_path = :file_path, original_file_name = :original_file_name' . $extraStatusSql . '
+                file_path = :file_path, original_file_name = :original_file_name' . $extraStatusSql . '
             WHERE id = :id');
         $stmt->execute([
             'registration_date' => $registrationDate,
             'start_date' => $startDate,
             'end_date' => $endDate,
-            'observations' => 'Carga masiva PMI',
             'file_path' => $uploaded['path'],
             'original_file_name' => $uploaded['name'],
             'id' => (int) $current['id'],
@@ -146,7 +145,7 @@ function save_requirement_record(int $workerId, int $positionId, int $requiremen
         'registration_date' => $registrationDate,
         'start_date' => $startDate,
         'end_date' => $endDate,
-        'observations' => 'Carga masiva PMI',
+        'observations' => '',
         'file_path' => $uploaded['path'],
         'original_file_name' => $uploaded['name'],
         'registered_by_user_id' => (int) (current_user()['id'] ?? 0) ?: null,

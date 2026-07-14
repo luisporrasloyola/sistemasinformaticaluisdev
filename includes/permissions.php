@@ -137,11 +137,34 @@ function permission_catalog_items(): array
     return $items;
 }
 
+function permission_default_documents_all(): array
+{
+    $permissions = [];
+    foreach (permission_catalog_items() as $scopeKey => $scope) {
+        foreach ($scope['items'] as $item) {
+            $catalogId = (string) (int) $item['id'];
+            $permissions[$scopeKey][$catalogId] = [
+                'view' => true,
+                'upload' => true,
+                'manage' => true,
+            ];
+        }
+    }
+    return $permissions;
+}
+
 function permission_payload_for_user(int $userId, string $role): array
 {
     $defaultModules = permission_default_modules_for_role($role);
     $modulePermissions = $defaultModules;
     $documentPermissions = [];
+
+    if ($role === 'Administrador') {
+        return [
+            'modules' => array_keys(array_filter($defaultModules)),
+            'documents' => permission_default_documents_all(),
+        ];
+    }
 
     if ($userId > 0) {
         try {

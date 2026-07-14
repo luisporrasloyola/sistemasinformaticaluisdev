@@ -3344,6 +3344,13 @@ function initUsuariosModule() {
         return permissions;
     }
 
+    function permissionsForUserPayload(userId, role) {
+        if (role === 'Administrador') {
+            return defaultPermissionsForRole('Administrador');
+        }
+        return permissionData.users?.[String(userId)] || defaultPermissionsForRole(role);
+    }
+
     function defaultPermissionsForRole(role) {
         if (role === 'Administrador') {
             return { modules: allModuleKeys, documents: buildAllDocumentPermissions() };
@@ -3486,7 +3493,7 @@ function initUsuariosModule() {
             if (workerSelect) workerSelect.value = button.dataset.workerId || '';
             document.getElementById('usuarioModalTitle').textContent = 'Editar usuario';
             password.required = false;
-            applyPermissions(permissionData.users?.[String(button.dataset.id)] || defaultPermissionsForRole(button.dataset.role || 'Administrador'));
+            applyPermissions(permissionsForUserPayload(button.dataset.id || '', button.dataset.role || 'Administrador'));
             toggleUserWorkerField();
             bootstrap.Tab.getOrCreateInstance(document.getElementById('usuarioDatosTab'))?.show();
             passwordHelp.textContent = 'Dejar vacio para mantener la contrasena actual.';
