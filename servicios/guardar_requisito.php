@@ -43,6 +43,7 @@ try {
         }
 
         $canEditObservations = is_admin();
+        $postedObservation = trim((string) ($_POST['observations'] ?? ''));
         $sql = 'UPDATE worker_requirements SET requirement_id=:requirement_id, registration_date=:registration_date,
             start_date=:start_date, end_date=:end_date';
         $params = [
@@ -54,7 +55,7 @@ try {
         ];
         if ($canEditObservations) {
             $sql .= ', observations=:observations';
-            $params['observations'] = trim((string) ($_POST['observations'] ?? ''));
+            $params['observations'] = $postedObservation;
         }
         if ($pdf['path']) {
             delete_uploaded_file($current['file_path'] ?? null);
@@ -78,14 +79,22 @@ try {
         if ((string) $current['end_date'] !== $endDate) {
             $changes[] = 'cambió F. Fin';
         }
-        if ($canEditObservations && trim((string) ($current['observations'] ?? '')) !== trim((string) ($_POST['observations'] ?? ''))) {
+        $observationChanged = $canEditObservations && trim((string) ($current['observations'] ?? '')) !== $postedObservation;
+        if ($observationChanged) {
             $changes[] = 'modificó observaciones';
         }
         if ($pdf['path']) {
             $changes[] = 'subió un nuevo documento PDF: ' . (string) $pdf['name'];
         }
 
-        if ($changes && in_array((string) ($current['observation_status'] ?? 'none'), ['observed', 'corrected'], true)) {
+        $currentObservationStatus = (string) ($current['observation_status'] ?? 'none');
+        if ($canEditObservations && $observationChanged) {
+            $sql .= ", observation_status=:observation_status, observation_by_user_id=:observation_by_user_id, observation_at=:observation_at,
+                observation_resolved_by_user_id=NULL, observation_resolved_at=NULL";
+            $params['observation_status'] = $postedObservation !== '' ? 'observed' : 'none';
+            $params['observation_by_user_id'] = $postedObservation !== '' ? $currentUserId : null;
+            $params['observation_at'] = $postedObservation !== '' ? date('Y-m-d H:i:s') : null;
+        } elseif ($changes && in_array($currentObservationStatus, ['observed', 'corrected'], true)) {
             $sql .= ", observation_status='corrected'";
         }
 
@@ -103,9 +112,13 @@ try {
             ]);
         }
     } else {
+        $initialObservation = trim((string) ($_POST['observations'] ?? ''));
+        $hasInitialObservation = $initialObservation !== '';
         $stmt = $pdo->prepare('INSERT INTO worker_requirements
-            (worker_id, position_id, requirement_id, registration_date, start_date, end_date, observations, file_path, original_file_name, registered_by_user_id)
-            VALUES (:worker_id, :position_id, :requirement_id, :registration_date, :start_date, :end_date, :observations, :file_path, :original_file_name, :registered_by_user_id)');
+            (worker_id, position_id, requirement_id, registration_date, start_date, end_date, observations, file_path, original_file_name, registered_by_user_id,
+                observation_status, observation_by_user_id, observation_at)
+            VALUES (:worker_id, :position_id, :requirement_id, :registration_date, :start_date, :end_date, :observations, :file_path, :original_file_name, :registered_by_user_id,
+                :observation_status, :observation_by_user_id, :observation_at)');
         $stmt->execute([
             'worker_id' => $workerId,
             'position_id' => $positionId,
@@ -113,10 +126,13 @@ try {
             'registration_date' => $registrationDate,
             'start_date' => $startDate,
             'end_date' => $endDate,
-            'observations' => trim((string) ($_POST['observations'] ?? '')),
+            'observations' => $initialObservation,
             'file_path' => $pdf['path'],
             'original_file_name' => $pdf['name'],
             'registered_by_user_id' => $currentUserId,
+            'observation_status' => $hasInitialObservation ? 'observed' : 'none',
+            'observation_by_user_id' => $hasInitialObservation ? $currentUserId : null,
+            'observation_at' => $hasInitialObservation ? date('Y-m-d H:i:s') : null,
         ]);
         $newId = (int) $pdo->lastInsertId();
         $log = $pdo->prepare('INSERT INTO worker_requirement_activity_log (worker_requirement_id, user_id, action_type, description)
@@ -127,6 +143,14 @@ try {
             'action_type' => 'registro_creado',
             'description' => $pdf['path'] ? 'Registro creado con documento PDF: ' . (string) $pdf['name'] . '.' : 'Registro creado.',
         ]);
+        if ($hasInitialObservation) {
+            $log->execute([
+                'worker_requirement_id' => $newId,
+                'user_id' => $currentUserId,
+                'action_type' => 'observacion',
+                'description' => 'Registro observado al crear el requisito.',
+            ]);
+        }
     }
     json_response(['ok' => true]);
 } catch (PDOException $e) {

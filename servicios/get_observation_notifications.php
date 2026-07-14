@@ -33,6 +33,7 @@ try {
             wr.observations,
             wr.observation_status,
             wr.observation_at,
+            wr.created_at,
             wr.updated_at,
             w.full_name,
             rc.name AS requirement_name,
@@ -44,19 +45,23 @@ try {
         LEFT JOIN users observed_by ON observed_by.id = wr.observation_by_user_id
         LEFT JOIN users registered_by ON registered_by.id = wr.registered_by_user_id
         WHERE (
-            wr.observation_status = 'observed'
+            (
+                wr.observation_status = 'observed'
+                OR (
+                    COALESCE(wr.observation_status, 'none') = 'none'
+                    AND TRIM(COALESCE(wr.observations, '')) <> ''
+                )
+            )
             AND wr.registered_by_user_id = :user_id
-            AND (wr.observation_by_user_id IS NULL OR wr.observation_by_user_id <> :observer_excluded_user_id)
         )
         OR (
             wr.observation_status = 'corrected'
             AND wr.observation_by_user_id = :reviewer_user_id
         )
-        ORDER BY COALESCE(wr.observation_at, wr.updated_at) DESC, wr.id DESC
+        ORDER BY COALESCE(wr.observation_at, wr.updated_at, wr.created_at) DESC, wr.id DESC
         LIMIT 30");
     $stmt->execute([
         'user_id' => $userId,
-        'observer_excluded_user_id' => $userId,
         'reviewer_user_id' => $userId,
     ]);
 
@@ -71,9 +76,9 @@ try {
             'full_name' => (string) $row['full_name'],
             'requirement' => (string) $row['requirement_name'],
             'observation' => $observation,
-            'observed_by' => (string) ($row['observed_by'] ?? ''),
+            'observed_by' => (string) ($row['observed_by'] ?: ($row['registered_by'] ?? '')),
             'registered_by' => (string) ($row['registered_by'] ?? ''),
-            'created_at' => (string) ($row['observation_at'] ?: $row['updated_at']),
+            'created_at' => (string) ($row['observation_at'] ?: ($row['updated_at'] ?: $row['created_at'])),
         ];
     }
 

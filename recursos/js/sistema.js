@@ -3901,6 +3901,7 @@ function initObservationNotifications() {
 
         list.innerHTML = filtered.map((row) => {
             const statusClass = row.status === 'corrected' ? 'obs-status-corrected' : 'obs-status-observed';
+            const observedBy = row.observed_by || row.registered_by || 'Usuario';
             return `
                 <div class="notif-item unread observation-notif-item" data-id="${escapeHtml(row.id)}">
                     <div class="notif-icon-container ${statusClass}">
@@ -3913,7 +3914,7 @@ function initObservationNotifications() {
                             <span class="notif-observation-text d-block">Observación: ${escapeHtml(row.observation || '')}</span>
                         </div>
                         <div class="notif-time">
-                            <span>${escapeHtml(row.status_label || '')}${row.observed_by ? ' por ' + escapeHtml(row.observed_by) : ''} - ${escapeHtml(formatDate(row.created_at))}</span>
+                            <span>Observado por: ${escapeHtml(observedBy)} - ${escapeHtml(formatDate(row.created_at))}</span>
                         </div>
                     </div>
                 </div>
