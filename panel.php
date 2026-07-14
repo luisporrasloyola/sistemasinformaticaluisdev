@@ -20,13 +20,15 @@ $rows = db()->query("SELECT
         COALESCE(c.name, 'Sin empresa') AS company,
         p.id AS position_id,
         p.name AS position_name,
-        rc.name AS requirement_name
+        rc.name AS requirement_name,
+        u.name AS registered_by
     FROM workers w
     LEFT JOIN companies c ON c.id = w.company_id
     LEFT JOIN worker_positions wp ON wp.worker_id = w.id
     LEFT JOIN positions p ON p.id = wp.position_id
     LEFT JOIN worker_requirements wr ON wr.worker_id = w.id AND wr.position_id = p.id
     LEFT JOIN requirements_catalog rc ON rc.id = wr.requirement_id
+    LEFT JOIN users u ON u.id = wr.registered_by_user_id
     ORDER BY c.name, w.full_name, p.name, rc.name")->fetchAll();
 
 $dashboardRows = [];
@@ -85,6 +87,7 @@ foreach ($rows as $row) {
         'state_key' => $stateKey,
         'state_text' => $stateText,
         'state_class' => $stateClass,
+        'registered_by' => $hasRequirement ? (string) ($row['registered_by'] ?? '') : '',
     ];
 }
 ksort($companies);
@@ -292,6 +295,7 @@ require __DIR__ . '/includes/header.php';
                 <th>Puesto de trabajo</th>
                 <th>Requisito</th>
                 <th>Estado</th>
+                <th>Registrado por</th>
             </tr>
             </thead>
             <tbody>
@@ -305,6 +309,7 @@ require __DIR__ . '/includes/header.php';
                     <td><?= e($item['position']) ?></td>
                     <td><?= e($item['requirement']) ?></td>
                     <td><span class="badge <?= e($item['state_class']) ?>"><?= e($item['state_text']) ?></span></td>
+                    <td><?= e($item['registered_by']) ?></td>
                 </tr>
             <?php endforeach; ?>
             </tbody>
