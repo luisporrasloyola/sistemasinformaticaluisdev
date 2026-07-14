@@ -3509,6 +3509,22 @@ body {
     color: #475569;
 }
 
+.notif-icon-container.obs-status-observed {
+    background: #fef3c7 !important;
+    color: #d97706 !important;
+}
+
+.notif-icon-container.obs-status-corrected {
+    background: #e0f2fe !important;
+    color: #0284c7 !important;
+}
+
+.notif-observation-text {
+    color: #0f172a !important;
+    font-size: 0.78rem !important;
+    margin-top: 3px !important;
+}
+
 .notif-content {
     flex: 1;
     min-width: 0;

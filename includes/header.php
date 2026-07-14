@@ -30,6 +30,27 @@ $user = current_user();
             <header class="topbar">
                 <button class="sidebar-toggle-btn" id="sidebarToggle" type="button" aria-label="Alternar menú"><i class="fa-solid fa-bars"></i></button>
                 <div class="topbar-spacer"></div>
+
+                <div class="topbar-notif-container" id="obsNotifContainer">
+                    <button class="topbar-notif-btn" id="obsNotifBtn" type="button" aria-label="Observaciones">
+                        <i class="fa-solid fa-comment-dots"></i>
+                        <span class="topbar-notif-badge" id="obsNotifBadge" style="display: none;">0</span>
+                    </button>
+                    <div class="topbar-notif-dropdown" id="obsNotifDropdown">
+                        <div class="notif-dropdown-header">
+                            Observaciones recientes
+                        </div>
+                        <div class="notif-search-container">
+                            <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                            <input type="text" id="obsNotifSearchInput" placeholder="Buscar observación...">
+                        </div>
+                        <div class="notif-dropdown-list" id="obsNotifList">
+                            <div class="notif-loading text-center p-3 text-muted">
+                                <i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 
                 <div class="topbar-notif-container" id="notifContainer">
                     <button class="topbar-notif-btn" id="notifBellBtn" type="button" aria-label="Notificaciones">

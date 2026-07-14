@@ -65,6 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initControlPersonalAssignments();
     initControlPersonalMarking();
     initNotifications();
+    initObservationNotifications();
     initDevelopmentPhaseLinks();
 
     if (window.jQuery && $.fn.DataTable) {
@@ -3841,6 +3842,114 @@ function initNotifications() {
     // Load initially and start polling
     loadNotifications();
     setInterval(loadNotifications, 20000); // Poll every 20 seconds
+}
+
+function initObservationNotifications() {
+    const container = document.getElementById('obsNotifContainer');
+    const button = document.getElementById('obsNotifBtn');
+    const badge = document.getElementById('obsNotifBadge');
+    const list = document.getElementById('obsNotifList');
+    const searchInput = document.getElementById('obsNotifSearchInput');
+
+    if (!container || !button || !badge || !list) return;
+
+    let rows = [];
+    let query = '';
+
+    function formatDate(dateStr) {
+        if (!dateStr) return '';
+        const parts = String(dateStr).split(/[- :]/);
+        if (parts.length < 3) return dateStr;
+        const time = parts.length >= 5 ? ` - ${parts[3]}:${parts[4]}` : '';
+        return `${parts[2]}/${parts[1]}/${parts[0]}${time}`;
+    }
+
+    function setBadge(count) {
+        if (count > 0) {
+            badge.textContent = count > 99 ? '99+' : String(count);
+            badge.style.display = 'flex';
+            return;
+        }
+        badge.style.display = 'none';
+    }
+
+    function render() {
+        const term = query.toLowerCase().trim();
+        const filtered = term
+            ? rows.filter((row) => {
+                return [row.full_name, row.requirement, row.observation, row.status_label, row.observed_by]
+                    .some((value) => String(value || '').toLowerCase().includes(term));
+            })
+            : rows;
+
+        if (!filtered.length) {
+            list.innerHTML = `
+                <div class="notif-empty">
+                    <i class="fa-regular fa-comment-dots"></i>
+                    <span>${term ? 'No se encontraron observaciones' : 'No hay observaciones pendientes'}</span>
+                </div>
+            `;
+            return;
+        }
+
+        list.innerHTML = filtered.map((row) => {
+            const statusClass = row.status === 'corrected' ? 'obs-status-corrected' : 'obs-status-observed';
+            return `
+                <div class="notif-item unread observation-notif-item" data-id="${escapeHtml(row.id)}">
+                    <div class="notif-icon-container ${statusClass}">
+                        <i class="fa-solid fa-comment-dots"></i>
+                    </div>
+                    <div class="notif-content">
+                        <div class="notif-body">
+                            <strong>Nombre de personal:</strong> <span class="notif-worker-name">${escapeHtml(row.full_name || '')}</span>
+                            <span class="notif-missing-fields d-block">Requisito: ${escapeHtml(row.requirement || '')}</span>
+                            <span class="notif-observation-text d-block">Observación: ${escapeHtml(row.observation || '')}</span>
+                        </div>
+                        <div class="notif-time">
+                            <span>${escapeHtml(row.status_label || '')}${row.observed_by ? ' por ' + escapeHtml(row.observed_by) : ''} - ${escapeHtml(formatDate(row.created_at))}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    async function load() {
+        try {
+            const response = await fetch(`${BASE_URL}/servicios/get_observation_notifications.php?t=${Date.now()}`);
+            const data = await response.json();
+            if (!data.ok) return;
+            rows = data.notifications || [];
+            setBadge(data.unread_count || 0);
+            render();
+        } catch (error) {
+            console.error('Error fetching observation notifications:', error);
+        }
+    }
+
+    searchInput?.addEventListener('input', (event) => {
+        query = event.target.value || '';
+        render();
+    });
+    searchInput?.addEventListener('click', (event) => event.stopPropagation());
+
+    button.addEventListener('click', (event) => {
+        event.stopPropagation();
+        document.getElementById('notifContainer')?.classList.remove('active');
+        container.classList.toggle('active');
+        if (container.classList.contains('active')) {
+            setTimeout(() => searchInput?.focus(), 50);
+        }
+    });
+
+    document.addEventListener('click', (event) => {
+        if (!container.contains(event.target)) {
+            container.classList.remove('active');
+        }
+    });
+
+    load();
+    setInterval(load, 20000);
 }
 
 function initControlPersonalSchedules() {
