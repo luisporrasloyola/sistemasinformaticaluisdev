@@ -56,6 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initEmpresaModuloDatos();
     initEmpresaModuloDocumentos();
     initEmpresaSeguridadDocumentos();
+    initEmpresaGenericModules();
     initDashboardEjecutivo();
     initUsuariosModule();
     initAttendanceControl();
@@ -2443,6 +2444,299 @@ async function downloadCompanySecurityZip(selectedIds = []) {
     if (selectedIds.length) {
         document.querySelectorAll('.company-security-download-check:checked').forEach((check) => { check.checked = false; });
     }
+}
+
+function initEmpresaGenericModules() {
+    document.querySelectorAll('.company-generic-module').forEach((root) => {
+        const module = root.dataset.companyModule;
+        const moduleTitle = root.dataset.moduleTitle || 'Documentos';
+        const search = root.querySelector('.js-company-generic-search');
+        const workspace = root.querySelector('.js-company-generic-workspace');
+        const photo = root.querySelector('.js-company-generic-photo');
+        const modalElement = root.querySelector('.js-company-generic-modal');
+        const modal = modalElement ? new bootstrap.Modal(modalElement) : null;
+        const form = root.querySelector('.js-company-generic-form');
+        const select = root.querySelector('.js-company-generic-select');
+        let currentCompanyId = null;
+
+        if (!module || !search || !modal || !form || !select) return;
+
+        if (window.jQuery && $.fn.select2) {
+            $(search).select2({ theme: 'bootstrap4', width: '100%', placeholder: 'Escriba razon social o RUC' });
+            $(search).on('select2:select', (event) => loadCompany(event.params.data.id));
+            $(select).select2({ theme: 'bootstrap4', dropdownParent: $(modalElement), width: '100%', placeholder: 'Buscar documento' });
+        }
+
+        search.addEventListener('change', (event) => {
+            if (event.target.value) loadCompany(event.target.value);
+        });
+
+        root.querySelector('.js-company-generic-photo-btn')?.addEventListener('click', () => {
+            if (!currentCompanyId) return Swal.fire('Atención', 'Seleccione una empresa.', 'warning');
+            root.querySelector('.js-company-generic-photo-input')?.click();
+        });
+        root.querySelector('.js-company-generic-photo-input')?.addEventListener('change', uploadPhoto);
+        root.querySelector('.js-company-generic-add')?.addEventListener('click', openAdd);
+        root.querySelector('.js-company-generic-download-all')?.addEventListener('click', () => downloadZip());
+        root.querySelector('.js-company-generic-download-selected')?.addEventListener('click', downloadSelected);
+        root.querySelector('.js-company-generic-new-catalog')?.addEventListener('click', addCatalog);
+        root.querySelector('.js-company-generic-delete-catalog')?.addEventListener('click', deleteCatalog);
+        form.addEventListener('submit', saveDocument);
+
+        async function loadCompany(id) {
+            currentCompanyId = id;
+            const response = await fetch(`${BASE_URL}/servicios/empresa/perfil_empresa.php?id=${id}`);
+            const data = await response.json();
+            if (!data.ok) return;
+            const company = data.empresa;
+            workspace?.classList.remove('d-none');
+            if (photo) photo.src = company.foto_path ? `${BASE_URL}/${company.foto_path}` : `${BASE_URL}/recursos/imagen_referencial.php`;
+            root.querySelector('.js-company-generic-name').textContent = company.razon_social || '';
+            root.querySelector('.js-company-generic-ruc').textContent = company.ruc || '';
+            root.querySelector('.js-company-generic-address').textContent = company.direccion || '';
+            loadRows();
+        }
+
+        async function uploadPhoto(event) {
+            const input = event.currentTarget;
+            const file = input.files?.[0];
+            if (!file || !currentCompanyId) return;
+            const body = new FormData();
+            body.append('csrf_token', csrf);
+            body.append('empresa_id', currentCompanyId);
+            body.append('foto', file);
+            const response = await fetch(`${BASE_URL}/servicios/empresa/subir_foto_empresa.php`, { method: 'POST', body });
+            const data = await response.json();
+            input.value = '';
+            if (!data.ok) return Swal.fire('Atención', data.message || 'No se pudo cambiar la foto.', 'warning');
+            if (photo) photo.src = `${data.path}?v=${Date.now()}`;
+            Swal.fire('Actualizado', 'Foto de empresa actualizada.', 'success');
+        }
+
+        async function loadRows() {
+            const response = await fetch(`${BASE_URL}/servicios/empresa/documentos_genericos_empresa.php?action=list&module=${module}&empresa_id=${currentCompanyId}`);
+            const data = await response.json();
+            const tbody = root.querySelector('.js-company-generic-tbody');
+            tbody.innerHTML = '';
+            (data.rows || []).forEach((row) => {
+                const hasPdf = !!row.archivo_path;
+                const downloadName = escapeHtml(row.archivo_nombre_original || `${row.documento}.pdf`);
+                const downloadButton = hasPdf ? `<a class="btn btn-sm btn-outline-success" href="${BASE_URL}/${row.archivo_path}" download="${downloadName}" title="Descargar documento"><i class="fa-solid fa-download"></i></a>` : '';
+                tbody.insertAdjacentHTML('beforeend', `
+                    <tr>
+                        <td class="text-center"><input class="form-check-input js-company-generic-check" type="checkbox" value="${row.id}" ${hasPdf ? '' : 'disabled'}></td>
+                        <td>${escapeHtml(row.documento)}</td>
+                        <td>${row.fecha_registro}</td>
+                        <td>${row.fecha_inicio}</td>
+                        <td>${row.fecha_fin}</td>
+                        <td><span class="badge ${row.status.class}">${row.status.label}</span></td>
+                        <td class="text-nowrap">
+                            <button class="btn btn-sm btn-outline-primary js-generic-edit" type="button" data-id="${row.id}"><i class="fa-solid fa-pen"></i></button>
+                            <button class="btn btn-sm btn-outline-secondary js-generic-view" type="button" data-id="${row.id}"><i class="fa-solid fa-eye"></i></button>
+                            <button class="btn btn-sm btn-outline-danger js-generic-delete" type="button" data-id="${row.id}"><i class="fa-solid fa-trash"></i></button>
+                            ${downloadButton}
+                        </td>
+                    </tr>`);
+            });
+            tbody.querySelectorAll('.js-generic-edit').forEach((button) => button.addEventListener('click', () => openEdit(button.dataset.id)));
+            tbody.querySelectorAll('.js-generic-view').forEach((button) => button.addEventListener('click', () => openView(button.dataset.id)));
+            tbody.querySelectorAll('.js-generic-delete').forEach((button) => button.addEventListener('click', () => deleteDocument(button.dataset.id)));
+        }
+
+        function openAdd() {
+            if (!currentCompanyId) return Swal.fire('Atención', 'Seleccione una empresa.', 'warning');
+            form.reset();
+            form.classList.remove('was-validated');
+            setReadonly(false);
+            root.querySelector('.js-company-generic-modal-title').textContent = 'Agregar documentos';
+            root.querySelector('.js-company-generic-id').value = '';
+            root.querySelector('.js-company-generic-company-id').value = currentCompanyId;
+            root.querySelector('.js-company-generic-registration').value = localDateValue();
+            $(select).val('').trigger('change');
+            renderPdf(null);
+            modal.show();
+        }
+
+        async function openEdit(id) {
+            await fillModal(id);
+            setReadonly(false);
+            root.querySelector('.js-company-generic-modal-title').textContent = 'Editar documentos';
+            modal.show();
+        }
+
+        async function openView(id) {
+            await fillModal(id);
+            setReadonly(true);
+            root.querySelector('.js-company-generic-modal-title').textContent = 'Visualizar documentos';
+            modal.show();
+        }
+
+        async function fillModal(id) {
+            const response = await fetch(`${BASE_URL}/servicios/empresa/documentos_genericos_empresa.php?action=get&module=${module}&id=${id}`);
+            const data = await response.json();
+            const row = data.row;
+            root.querySelector('.js-company-generic-id').value = row.id;
+            root.querySelector('.js-company-generic-company-id').value = row.empresa_id;
+            select.value = row.documento_id;
+            $(select).trigger('change');
+            root.querySelector('.js-company-generic-registration').value = row.fecha_registro;
+            root.querySelector('.js-company-generic-start').value = row.fecha_inicio;
+            root.querySelector('.js-company-generic-end').value = row.fecha_fin;
+            root.querySelector('.js-company-generic-observations').value = row.observaciones || '';
+            renderPdf(row);
+        }
+
+        function renderPdf(row) {
+            const box = root.querySelector('.js-company-generic-current-pdf');
+            if (!box) return;
+            if (!row || !row.archivo_path) {
+                box.classList.add('d-none');
+                box.innerHTML = '';
+                return;
+            }
+            box.classList.remove('d-none');
+            box.innerHTML = `<i class="fa-solid fa-file-pdf text-danger me-2"></i><strong>${escapeHtml(row.archivo_nombre_original || 'archivo.pdf')}</strong><div class="d-flex gap-2 mt-2"><a class="btn btn-sm btn-outline-primary" target="_blank" href="${BASE_URL}/${row.archivo_path}"><i class="fa-solid fa-up-right-from-square me-1"></i>Abrir</a><button class="btn btn-sm btn-outline-danger js-delete-current-pdf" type="button"><i class="fa-solid fa-trash me-1"></i>Eliminar</button></div>`;
+            box.querySelector('.js-delete-current-pdf')?.addEventListener('click', () => deletePdf(row.id));
+        }
+
+        function setReadonly(state) {
+            form.querySelectorAll('input, textarea, select').forEach((el) => {
+                if (el.name === 'csrf_token' || el.type === 'hidden') return;
+                el.disabled = state;
+            });
+            form.querySelector('button[type="submit"]')?.classList.toggle('d-none', state);
+            root.querySelector('.js-company-generic-pdf-input')?.classList.toggle('d-none', state);
+            root.querySelector('.js-company-generic-new-catalog')?.classList.toggle('d-none', state);
+            root.querySelector('.js-company-generic-delete-catalog')?.classList.toggle('d-none', state);
+        }
+
+        async function saveDocument(event) {
+            event.preventDefault();
+            if (!form.checkValidity()) {
+                form.classList.add('was-validated');
+                return;
+            }
+            const submitButton = form.querySelector('button[type="submit"]');
+            const progressBox = root.querySelector('.js-company-generic-progress');
+            const progressBar = progressBox?.querySelector('.progress-bar');
+            const progressLabel = progressBox?.querySelector('small');
+            const renderProgress = (percent) => {
+                if (!progressBox || !progressBar || !progressLabel) return;
+                progressBox.classList.remove('d-none');
+                progressBar.style.width = `${percent}%`;
+                progressLabel.textContent = percent < 100 ? `Subiendo archivo: ${percent}%` : 'Procesando archivo...';
+            };
+            submitButton.disabled = true;
+            renderProgress(0);
+            try {
+                const data = await postFormWithProgress(`${BASE_URL}/servicios/empresa/documentos_genericos_empresa.php?action=save`, new FormData(form), renderProgress);
+                if (!data.ok) return Swal.fire('Atención', data.message || 'No se pudo guardar.', 'warning');
+                modal.hide();
+                loadRows();
+            } catch (error) {
+                Swal.fire('Atención', error.message || 'No se pudo guardar.', 'warning');
+            } finally {
+                submitButton.disabled = false;
+                progressBox?.classList.add('d-none');
+                if (progressBar) progressBar.style.width = '0%';
+                if (progressLabel) progressLabel.textContent = 'Subiendo archivo: 0%';
+            }
+        }
+
+        async function deleteDocument(id) {
+            const ok = await confirmAction('¿Eliminar documento?');
+            if (!ok) return;
+            const body = new FormData();
+            body.append('csrf_token', csrf);
+            body.append('module', module);
+            body.append('id', id);
+            const response = await fetch(`${BASE_URL}/servicios/empresa/documentos_genericos_empresa.php?action=delete`, { method: 'POST', body });
+            const data = await response.json();
+            if (data.ok) loadRows();
+        }
+
+        async function deletePdf(id) {
+            const ok = await confirmAction('¿Eliminar PDF?');
+            if (!ok) return;
+            const body = new FormData();
+            body.append('csrf_token', csrf);
+            body.append('module', module);
+            body.append('id', id);
+            const response = await fetch(`${BASE_URL}/servicios/empresa/documentos_genericos_empresa.php?action=delete_pdf`, { method: 'POST', body });
+            const data = await response.json();
+            if (data.ok) {
+                renderPdf(null);
+                loadRows();
+            }
+        }
+
+        async function addCatalog() {
+            const result = await Swal.fire({ title: 'Nuevo documento', input: 'text', inputPlaceholder: 'Nombre del documento', showCancelButton: true, confirmButtonText: 'Agregar', cancelButtonText: 'Cancelar' });
+            if (!result.value) return;
+            const body = new FormData();
+            body.append('csrf_token', csrf);
+            body.append('module', module);
+            body.append('nombre', result.value);
+            const response = await fetch(`${BASE_URL}/servicios/empresa/documentos_genericos_empresa.php?action=catalog_save`, { method: 'POST', body });
+            const data = await response.json();
+            if (!data.ok) return Swal.fire('Atención', data.message || 'No se pudo agregar el documento.', 'warning');
+            const existing = Array.from(select.options).find((option) => option.value === String(data.id));
+            if (existing) existing.textContent = data.text;
+            else select.append(new Option(data.text, data.id, false, false));
+            $(select).val(String(data.id)).trigger('change');
+        }
+
+        async function deleteCatalog() {
+            const documentId = select.value || '';
+            const documentText = select.selectedOptions?.[0]?.textContent?.trim() || '';
+            if (!documentId) return Swal.fire('Atención', 'Seleccione un documento para eliminar.', 'warning');
+            const result = await Swal.fire({ title: '¿Eliminar documento?', text: `Se quitará "${documentText}" del catálogo si no tiene registros asociados.`, icon: 'warning', showCancelButton: true, confirmButtonText: 'Sí, eliminar', cancelButtonText: 'Cancelar' });
+            if (!result.isConfirmed) return;
+            const body = new FormData();
+            body.append('csrf_token', csrf);
+            body.append('module', module);
+            body.append('id', documentId);
+            const response = await fetch(`${BASE_URL}/servicios/empresa/documentos_genericos_empresa.php?action=catalog_delete`, { method: 'POST', body });
+            const data = await response.json();
+            if (!data.ok) return Swal.fire('Atención', data.message || 'No se pudo eliminar el documento.', 'warning');
+            Array.from(select.options).find((option) => option.value === String(documentId))?.remove();
+            $(select).val('').trigger('change');
+            Swal.fire('Eliminado', data.message || 'Documento eliminado.', 'success');
+        }
+
+        async function downloadSelected() {
+            if (!currentCompanyId) return Swal.fire('Atención', 'Seleccione una empresa.', 'warning');
+            const selectedIds = Array.from(root.querySelectorAll('.js-company-generic-check:checked')).map((check) => check.value);
+            if (!selectedIds.length) return Swal.fire('Atención', 'Seleccione al menos un documento para descargar.', 'warning');
+            await downloadZip(selectedIds);
+        }
+
+        async function downloadZip(selectedIds = []) {
+            if (!currentCompanyId) return Swal.fire('Atención', 'Seleccione una empresa.', 'warning');
+            const params = new URLSearchParams({ action: 'download', module, empresa_id: currentCompanyId });
+            if (selectedIds.length) params.set('ids', selectedIds.join(','));
+            const response = await fetch(`${BASE_URL}/servicios/empresa/documentos_genericos_empresa.php?${params.toString()}`);
+            if (!response.ok) {
+                const data = await response.json().catch(() => ({ message: 'No se pudo generar la descarga.' }));
+                return Swal.fire('Atención', data.message || 'No se pudo generar la descarga.', 'warning');
+            }
+            const blob = await response.blob();
+            const disposition = response.headers.get('Content-Disposition') || '';
+            const match = disposition.match(/filename="([^"]+)"/);
+            const fileName = match ? match[1] : `${moduleTitle}_empresa.zip`;
+            const objectUrl = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = objectUrl;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(objectUrl);
+            if (selectedIds.length) {
+                root.querySelectorAll('.js-company-generic-check:checked').forEach((check) => { check.checked = false; });
+            }
+        }
+    });
 }
 function initDashboardEjecutivo() {
     const table = document.getElementById('dashboardPersonalTable');
