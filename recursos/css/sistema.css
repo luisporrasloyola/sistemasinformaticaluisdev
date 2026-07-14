@@ -3095,6 +3095,24 @@ body {
     background-color: #f8fafc !important;
 }
 
+.dashboard-table tbody tr.dashboard-row-observed {
+    background: #fff7d6 !important;
+    box-shadow: inset 4px 0 0 #f59e0b !important;
+}
+
+.dashboard-table tbody tr.dashboard-row-observed:hover {
+    background: #fff1bd !important;
+}
+
+.dashboard-table tbody tr.dashboard-row-corrected {
+    background: #e0f7ff !important;
+    box-shadow: inset 4px 0 0 #0ea5e9 !important;
+}
+
+.dashboard-table tbody tr.dashboard-row-corrected:hover {
+    background: #cff1ff !important;
+}
+
 .dashboard-table tbody td strong {
     color: #000000 !important; /* Nombres en negro sólido */
     font-weight: 700 !important;
@@ -3141,7 +3159,16 @@ body {
     border-color: #bd2130 !important;
 }
 
-.dashboard-pdf-preview-btn {
+.dashboard-action-group {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    white-space: nowrap !important;
+}
+
+.dashboard-pdf-preview-btn,
+.dashboard-observation-btn,
+.dashboard-approve-observation-btn {
     width: 34px !important;
     height: 34px !important;
     display: inline-flex !important;
@@ -3151,8 +3178,83 @@ body {
     padding: 0 !important;
 }
 
-.dashboard-pdf-preview-btn i {
+.dashboard-pdf-preview-btn i,
+.dashboard-observation-btn i,
+.dashboard-approve-observation-btn i {
     font-size: 1rem !important;
+}
+
+.dashboard-observation-btn.btn-outline-info {
+    border-color: #0ea5e9 !important;
+    color: #0284c7 !important;
+    background: #f0f9ff !important;
+}
+
+.dashboard-observation-btn.btn-outline-info:hover {
+    background: #0ea5e9 !important;
+    color: #ffffff !important;
+}
+
+.dashboard-observation-summary {
+    background: #f8fafc !important;
+    border: 1px solid #dbe3ef !important;
+    border-radius: 8px !important;
+    padding: 10px 12px !important;
+}
+
+.dashboard-observation-summary strong,
+.dashboard-observation-summary span {
+    display: block !important;
+}
+
+.dashboard-observation-summary strong {
+    color: #0f172a !important;
+    font-size: 0.92rem !important;
+    font-weight: 700 !important;
+}
+
+.dashboard-observation-summary span {
+    color: #475569 !important;
+    font-size: 0.82rem !important;
+    margin-top: 2px !important;
+}
+
+.dashboard-observation-status,
+.requirement-audit-box {
+    background: #fffbeb !important;
+    border: 1px solid #fde68a !important;
+    border-radius: 8px !important;
+    padding: 10px 12px !important;
+}
+
+.requirement-audit-box h6 {
+    color: #0f172a !important;
+    font-size: 0.86rem !important;
+    font-weight: 800 !important;
+    margin: 0 0 8px !important;
+}
+
+.requirement-audit-item {
+    border-top: 1px solid #fde68a !important;
+    padding: 8px 0 !important;
+}
+
+.requirement-audit-item:first-of-type {
+    border-top: 0 !important;
+    padding-top: 0 !important;
+}
+
+.requirement-audit-item strong {
+    color: #0f172a !important;
+    display: block !important;
+    font-size: 0.82rem !important;
+}
+
+.requirement-audit-item span {
+    color: #475569 !important;
+    display: block !important;
+    font-size: 0.78rem !important;
+    margin-top: 2px !important;
 }
 
 .dashboard-pdf-modal .modal-content {

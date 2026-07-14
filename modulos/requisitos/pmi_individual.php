@@ -105,9 +105,13 @@ require __DIR__ . '/../../includes/header.php';
                         <label class="form-label">F. Fin</label>
                         <input class="form-control" type="date" name="end_date" id="endDate" required>
                     </div>
-                    <div class="col-md-12">
-                        <label class="form-label">Observaciones</label>
+                    <div class="col-md-12" id="requirementObservationBlock">
+                        <label class="form-label" id="requirementObservationLabel">Observaciones</label>
                         <textarea class="form-control" name="observations" id="observations" rows="3"></textarea>
+                        <div class="requirement-audit-box mt-2 d-none" id="requirementAuditBox">
+                            <h6>Historial de observación y cambios</h6>
+                            <div id="requirementAuditList"></div>
+                        </div>
                     </div>
                     <div class="col-md-12">
                         <label class="form-label">Adjunto PDF</label>
@@ -129,6 +133,9 @@ require __DIR__ . '/../../includes/header.php';
         </form>
     </div>
 </div>
+<script>
+window.canManageRequirementObservations = <?= is_admin() ? 'true' : 'false' ?>;
+</script>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>
 
 

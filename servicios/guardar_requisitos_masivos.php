@@ -104,7 +104,7 @@ try {
 
 function save_requirement_record(int $workerId, int $positionId, int $requirementId, string $registrationDate, string $startDate, string $endDate, array $uploaded): void
 {
-    $currentStmt = db()->prepare('SELECT id, file_path FROM worker_requirements
+    $currentStmt = db()->prepare('SELECT id, file_path, observation_status FROM worker_requirements
         WHERE worker_id = :worker_id AND position_id = :position_id AND requirement_id = :requirement_id
         LIMIT 1');
     $currentStmt->execute([
@@ -116,9 +116,12 @@ function save_requirement_record(int $workerId, int $positionId, int $requiremen
 
     if ($current) {
         delete_uploaded_file($current['file_path'] ?? null);
+        $extraStatusSql = in_array((string) ($current['observation_status'] ?? 'none'), ['observed', 'corrected'], true)
+            ? ", observation_status = 'corrected'"
+            : '';
         $stmt = db()->prepare('UPDATE worker_requirements
             SET registration_date = :registration_date, start_date = :start_date, end_date = :end_date,
-                observations = :observations, file_path = :file_path, original_file_name = :original_file_name
+                observations = :observations, file_path = :file_path, original_file_name = :original_file_name' . $extraStatusSql . '
             WHERE id = :id');
         $stmt->execute([
             'registration_date' => $registrationDate,
@@ -129,6 +132,7 @@ function save_requirement_record(int $workerId, int $positionId, int $requiremen
             'original_file_name' => $uploaded['name'],
             'id' => (int) $current['id'],
         ]);
+        log_bulk_requirement_activity((int) $current['id'], 'documento_actualizado', 'Carga masiva PMI actualizó el documento PDF: ' . (string) $uploaded['name'] . '.');
         return;
     }
 
@@ -146,6 +150,23 @@ function save_requirement_record(int $workerId, int $positionId, int $requiremen
         'file_path' => $uploaded['path'],
         'original_file_name' => $uploaded['name'],
         'registered_by_user_id' => (int) (current_user()['id'] ?? 0) ?: null,
+    ]);
+    log_bulk_requirement_activity((int) db()->lastInsertId(), 'registro_creado', 'Carga masiva PMI creó el registro con documento PDF: ' . (string) $uploaded['name'] . '.');
+}
+
+function log_bulk_requirement_activity(int $requirementRowId, string $actionType, string $description): void
+{
+    if ($requirementRowId <= 0) {
+        return;
+    }
+
+    $stmt = db()->prepare('INSERT INTO worker_requirement_activity_log (worker_requirement_id, user_id, action_type, description)
+        VALUES (:worker_requirement_id, :user_id, :action_type, :description)');
+    $stmt->execute([
+        'worker_requirement_id' => $requirementRowId,
+        'user_id' => (int) (current_user()['id'] ?? 0) ?: null,
+        'action_type' => $actionType,
+        'description' => $description,
     ]);
 }
 

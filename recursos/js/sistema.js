@@ -708,6 +708,7 @@ function openAddRequirement() {
     form.reset();
     form.classList.remove('was-validated');
     setRequirementReadonly(false);
+    setRequirementObservationVisibility(false);
     document.getElementById('requirementModalTitle').textContent = 'Agregar Requisito';
     document.getElementById('requirementId').value = '';
     document.getElementById('requirementWorkerId').value = currentWorkerId;
@@ -715,6 +716,7 @@ function openAddRequirement() {
     document.getElementById('registrationDate').value = localDateValue();
     $('#requirementSelect').val(null).trigger('change');
     renderCurrentPdf(null);
+    renderRequirementAudit(null, []);
     requirementModal.show();
 }
 
@@ -722,6 +724,7 @@ async function openEditRequirement(id) {
     readOnlyMode = false;
     await fillRequirementModal(id);
     setRequirementReadonly(false);
+    setRequirementObservationVisibility(false);
     document.getElementById('requirementModalTitle').textContent = 'Editar Requisito';
     requirementModal.show();
 }
@@ -730,6 +733,7 @@ async function openViewRequirement(id) {
     readOnlyMode = true;
     await fillRequirementModal(id);
     setRequirementReadonly(true);
+    setRequirementObservationVisibility(true);
     document.getElementById('requirementModalTitle').textContent = 'Visualizar Requisito';
     requirementModal.show();
 }
@@ -748,6 +752,90 @@ async function fillRequirementModal(id) {
     const option = new Option(row.requirement, row.requirement_id, true, true);
     $('#requirementSelect').append(option).trigger('change');
     renderCurrentPdf(row);
+    renderRequirementAudit(row, data.activity || []);
+}
+
+function renderRequirementAudit(row, activity) {
+    const box = document.getElementById('requirementAuditBox');
+    const list = document.getElementById('requirementAuditList');
+    if (!box || !list) return;
+
+    const hasObservationContext = row?.observation_status && row.observation_status !== 'none' && row?.observation_at;
+    if (!hasObservationContext) {
+        box.classList.add('d-none');
+        list.innerHTML = '';
+        return;
+    }
+
+    const items = [];
+    items.push({
+        title: row.observation_status === 'corrected' ? 'Corregido por revisar' : (row.observation_status === 'approved' ? 'Conforme' : 'Observado'),
+        body: `${row.observation_by || 'Administrador'} - ${formatAuditDate(row.observation_at)}`
+    });
+
+    if (row?.observation_resolved_at) {
+        items.push({
+            title: 'Conformidad registrada',
+            body: `${row.observation_resolved_by || 'Administrador'} - ${formatAuditDate(row.observation_resolved_at)}`
+        });
+    }
+    const observationTime = parseAuditDate(row.observation_at);
+    (activity || []).filter((entry) => {
+        if (['observacion', 'observacion_retirada', 'conformidad'].includes(entry.action_type || '')) {
+            return true;
+        }
+        const entryTime = parseAuditDate(entry.created_at);
+        return observationTime && entryTime && entryTime >= observationTime;
+    }).forEach((entry) => {
+        const userName = entry.user_name || 'Sistema';
+        items.push({
+            title: `${userName} hizo modificaciones: ${normalizeAuditActivityText(entry.description || 'actividad registrada')}`,
+            body: formatAuditDate(entry.created_at)
+        });
+    });
+
+    if (!items.length) {
+        box.classList.add('d-none');
+        list.innerHTML = '';
+        return;
+    }
+
+    box.classList.remove('d-none');
+    list.innerHTML = items.map((item) => `
+        <div class="requirement-audit-item">
+            <strong>${escapeHtml(item.title)}</strong>
+            <span>${escapeHtml(item.body)}</span>
+        </div>
+    `).join('');
+}
+
+function formatAuditDate(value) {
+    if (!value) return '';
+    const date = parseAuditDate(value);
+    if (!date) return value;
+    return date.toLocaleString('es-PE', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+function parseAuditDate(value) {
+    if (!value) return null;
+    const date = new Date(String(value).replace(' ', 'T'));
+    return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function normalizeAuditActivityText(value) {
+    let text = String(value || '').trim();
+    if (!text) return 'actividad registrada.';
+    text = text
+        .replace(/^modificó observaciones;\s*/i, '')
+        .replace(/;\s*modificó observaciones\.?$/i, '.')
+        .replace(/;\s*modificó observaciones;\s*/i, '; ');
+    return text.charAt(0).toLowerCase() + text.slice(1);
 }
 
 function renderCurrentPdf(row) {
@@ -776,6 +864,22 @@ function setRequirementReadonly(state) {
     document.getElementById('pdfInput').classList.toggle('d-none', state);
     document.getElementById('newCatalogRequirementBtn')?.classList.toggle('d-none', state);
     document.getElementById('deleteCatalogRequirementBtn')?.classList.toggle('d-none', state);
+}
+
+function setRequirementObservationVisibility(viewMode) {
+    const block = document.getElementById('requirementObservationBlock');
+    const observations = document.getElementById('observations');
+    const label = document.getElementById('requirementObservationLabel');
+    if (!block || !observations) return;
+
+    const canManage = window.canManageRequirementObservations === true;
+    const hasContent = String(observations.value || '').trim() !== '';
+    const visible = canManage || viewMode || hasContent;
+    block.classList.toggle('d-none', !visible);
+    observations.disabled = readOnlyMode || !canManage || !visible;
+    if (label) {
+        label.textContent = canManage ? 'Observaciones' : 'Observación del administrador';
+    }
 }
 
 async function saveRequirementLegacy(event) {

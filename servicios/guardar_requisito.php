@@ -28,32 +28,82 @@ if (strtotime($endDate) < strtotime($startDate)) {
 
 try {
     $pdf = upload_file($_FILES['pdf'] ?? [], 'requisitos', ['application/pdf']);
+    $pdo = db();
+    $currentUserId = (int) (current_user()['id'] ?? 0) ?: null;
 
     if ($id > 0) {
-        $currentStmt = db()->prepare('SELECT file_path FROM worker_requirements WHERE id = :id');
+        $currentStmt = $pdo->prepare('SELECT wr.*, rc.name AS requirement_name
+            FROM worker_requirements wr
+            LEFT JOIN requirements_catalog rc ON rc.id = wr.requirement_id
+            WHERE wr.id = :id');
         $currentStmt->execute(['id' => $id]);
         $current = $currentStmt->fetch();
+        if (!$current) {
+            json_response(['ok' => false, 'message' => 'El requisito no existe.'], 404);
+        }
 
+        $canEditObservations = is_admin();
         $sql = 'UPDATE worker_requirements SET requirement_id=:requirement_id, registration_date=:registration_date,
-            start_date=:start_date, end_date=:end_date, observations=:observations';
+            start_date=:start_date, end_date=:end_date';
         $params = [
             'requirement_id' => $requirementId,
             'registration_date' => $registrationDate,
             'start_date' => $startDate,
             'end_date' => $endDate,
-            'observations' => trim((string) ($_POST['observations'] ?? '')),
             'id' => $id,
         ];
+        if ($canEditObservations) {
+            $sql .= ', observations=:observations';
+            $params['observations'] = trim((string) ($_POST['observations'] ?? ''));
+        }
         if ($pdf['path']) {
             delete_uploaded_file($current['file_path'] ?? null);
             $sql .= ', file_path=:file_path, original_file_name=:original_file_name';
             $params['file_path'] = $pdf['path'];
             $params['original_file_name'] = $pdf['name'];
         }
+
+        $changes = [];
+        if ((int) $current['requirement_id'] !== $requirementId) {
+            $newRequirementStmt = $pdo->prepare('SELECT name FROM requirements_catalog WHERE id = :id');
+            $newRequirementStmt->execute(['id' => $requirementId]);
+            $changes[] = 'cambió el requisito de "' . (string) ($current['requirement_name'] ?? '') . '" a "' . (string) $newRequirementStmt->fetchColumn() . '"';
+        }
+        if ((string) $current['registration_date'] !== $registrationDate) {
+            $changes[] = 'cambió F. Registro';
+        }
+        if ((string) $current['start_date'] !== $startDate) {
+            $changes[] = 'cambió F. Inicio';
+        }
+        if ((string) $current['end_date'] !== $endDate) {
+            $changes[] = 'cambió F. Fin';
+        }
+        if ($canEditObservations && trim((string) ($current['observations'] ?? '')) !== trim((string) ($_POST['observations'] ?? ''))) {
+            $changes[] = 'modificó observaciones';
+        }
+        if ($pdf['path']) {
+            $changes[] = 'subió un nuevo documento PDF: ' . (string) $pdf['name'];
+        }
+
+        if ($changes && in_array((string) ($current['observation_status'] ?? 'none'), ['observed', 'corrected'], true)) {
+            $sql .= ", observation_status='corrected'";
+        }
+
         $sql .= ' WHERE id=:id';
-        db()->prepare($sql)->execute($params);
+        $pdo->prepare($sql)->execute($params);
+
+        if ($changes) {
+            $log = $pdo->prepare('INSERT INTO worker_requirement_activity_log (worker_requirement_id, user_id, action_type, description)
+                VALUES (:worker_requirement_id, :user_id, :action_type, :description)');
+            $log->execute([
+                'worker_requirement_id' => $id,
+                'user_id' => $currentUserId,
+                'action_type' => $pdf['path'] ? 'documento_actualizado' : 'registro_editado',
+                'description' => ucfirst(implode('; ', $changes)) . '.',
+            ]);
+        }
     } else {
-        $stmt = db()->prepare('INSERT INTO worker_requirements
+        $stmt = $pdo->prepare('INSERT INTO worker_requirements
             (worker_id, position_id, requirement_id, registration_date, start_date, end_date, observations, file_path, original_file_name, registered_by_user_id)
             VALUES (:worker_id, :position_id, :requirement_id, :registration_date, :start_date, :end_date, :observations, :file_path, :original_file_name, :registered_by_user_id)');
         $stmt->execute([
@@ -66,7 +116,16 @@ try {
             'observations' => trim((string) ($_POST['observations'] ?? '')),
             'file_path' => $pdf['path'],
             'original_file_name' => $pdf['name'],
-            'registered_by_user_id' => (int) (current_user()['id'] ?? 0) ?: null,
+            'registered_by_user_id' => $currentUserId,
+        ]);
+        $newId = (int) $pdo->lastInsertId();
+        $log = $pdo->prepare('INSERT INTO worker_requirement_activity_log (worker_requirement_id, user_id, action_type, description)
+            VALUES (:worker_requirement_id, :user_id, :action_type, :description)');
+        $log->execute([
+            'worker_requirement_id' => $newId,
+            'user_id' => $currentUserId,
+            'action_type' => 'registro_creado',
+            'description' => $pdf['path'] ? 'Registro creado con documento PDF: ' . (string) $pdf['name'] . '.' : 'Registro creado.',
         ]);
     }
     json_response(['ok' => true]);
