@@ -21,6 +21,8 @@ $rows = db()->query("SELECT
         p.id AS position_id,
         p.name AS position_name,
         rc.name AS requirement_name,
+        wr.file_path,
+        wr.original_file_name,
         u.name AS registered_by
     FROM workers w
     LEFT JOIN companies c ON c.id = w.company_id
@@ -88,6 +90,8 @@ foreach ($rows as $row) {
         'state_text' => $stateText,
         'state_class' => $stateClass,
         'registered_by' => $hasRequirement ? (string) ($row['registered_by'] ?? '') : '',
+        'file_path' => $hasRequirement ? (string) ($row['file_path'] ?? '') : '',
+        'file_name' => $hasRequirement ? (string) ($row['original_file_name'] ?? $requirementText . '.pdf') : '',
     ];
 }
 ksort($companies);
@@ -296,6 +300,7 @@ require __DIR__ . '/includes/header.php';
                 <th>Requisito</th>
                 <th>Estado</th>
                 <th>Registrado por</th>
+                <th>Acción</th>
             </tr>
             </thead>
             <tbody>
@@ -310,6 +315,23 @@ require __DIR__ . '/includes/header.php';
                     <td><?= e($item['requirement']) ?></td>
                     <td><span class="badge <?= e($item['state_class']) ?>"><?= e($item['state_text']) ?></span></td>
                     <td><?= e($item['registered_by']) ?></td>
+                    <td>
+                        <?php if ($item['file_path'] !== ''): ?>
+                            <button
+                                class="btn btn-sm btn-outline-danger dashboard-pdf-preview-btn"
+                                type="button"
+                                title="Previsualizar PDF"
+                                data-pdf-url="<?= e(APP_URL . '/' . $item['file_path']) ?>"
+                                data-pdf-title="<?= e($item['file_name']) ?>"
+                            >
+                                <i class="fa-solid fa-file-pdf"></i>
+                            </button>
+                        <?php else: ?>
+                            <button class="btn btn-sm btn-outline-secondary dashboard-pdf-preview-btn" type="button" title="Sin PDF adjunto" disabled>
+                                <i class="fa-solid fa-file-pdf"></i>
+                            </button>
+                        <?php endif; ?>
+                    </td>
                 </tr>
             <?php endforeach; ?>
             </tbody>
@@ -317,9 +339,43 @@ require __DIR__ . '/includes/header.php';
     </div>
 </div>
 
+<div class="modal fade" id="dashboardPdfPreviewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable dashboard-pdf-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="dashboardPdfPreviewTitle">Previsualizar documento</h5>
+                <button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <iframe id="dashboardPdfPreviewFrame" title="Previsualizador PDF"></iframe>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script>
 window.dashboardEjecutivoData = <?= json_encode($chartPayload, JSON_UNESCAPED_UNICODE) ?>;
+
+document.addEventListener('DOMContentLoaded', () => {
+    const modalElement = document.getElementById('dashboardPdfPreviewModal');
+    const frame = document.getElementById('dashboardPdfPreviewFrame');
+    const title = document.getElementById('dashboardPdfPreviewTitle');
+    const modal = modalElement && window.bootstrap ? bootstrap.Modal.getOrCreateInstance(modalElement) : null;
+
+    document.querySelectorAll('.dashboard-pdf-preview-btn[data-pdf-url]').forEach((button) => {
+        button.addEventListener('click', () => {
+            if (!modal || !frame || !title) return;
+            title.textContent = button.dataset.pdfTitle || 'Previsualizar documento';
+            frame.src = button.dataset.pdfUrl || '';
+            modal.show();
+        });
+    });
+
+    modalElement?.addEventListener('hidden.bs.modal', () => {
+        if (frame) frame.src = '';
+    });
+});
 </script>
 <?php require __DIR__ . '/includes/footer.php'; ?>
 
