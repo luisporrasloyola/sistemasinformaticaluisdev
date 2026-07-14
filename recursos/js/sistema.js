@@ -690,6 +690,7 @@ async function loadRequirements() {
                 <td>${row.start_date}</td>
                 <td>${row.end_date}</td>
                 <td><span class="badge ${row.status.class}">${row.status.label}</span></td>
+                <td>${escapeHtml(row.registered_by || '')}</td>
                 <td class="text-nowrap">
                     <button class="btn btn-sm btn-outline-primary" onclick="openEditRequirement(${row.id})"><i class="fa-solid fa-pen"></i></button>
                     <button class="btn btn-sm btn-outline-secondary" onclick="openViewRequirement(${row.id})"><i class="fa-solid fa-eye"></i></button>
@@ -1354,6 +1355,7 @@ async function loadMachineDocuments() {
                 <td>${row.fecha_inicio}</td>
                 <td>${row.fecha_fin}</td>
                 <td><span class="badge ${row.status.class}">${row.status.label}</span></td>
+                <td>${escapeHtml(row.registered_by || '')}</td>
                 <td class="text-nowrap">
                     <button class="btn btn-sm btn-outline-primary" type="button" onclick="openEditMachineDocument(${row.id})"><i class="fa-solid fa-pen"></i></button>
                     <button class="btn btn-sm btn-outline-secondary" type="button" onclick="openViewMachineDocument(${row.id})"><i class="fa-solid fa-eye"></i></button>
@@ -1836,6 +1838,7 @@ async function loadCompanyDocuments() {
                 <td>${row.fecha_inicio}</td>
                 <td>${row.fecha_fin}</td>
                 <td><span class="badge ${row.status.class}">${row.status.label}</span></td>
+                <td>${escapeHtml(row.registered_by || '')}</td>
                 <td class="text-nowrap">
                     <button class="btn btn-sm btn-outline-primary" type="button" onclick="openEditCompanyDocument(${row.id})"><i class="fa-solid fa-pen"></i></button>
                     <button class="btn btn-sm btn-outline-secondary" type="button" onclick="openViewCompanyDocument(${row.id})"><i class="fa-solid fa-eye"></i></button>
@@ -2222,6 +2225,7 @@ async function loadCompanySecurityRows() {
                 <td>${row.fecha_inicio}</td>
                 <td>${row.fecha_fin}</td>
                 <td><span class="badge ${row.status.class}">${row.status.label}</span></td>
+                <td>${escapeHtml(row.registered_by || '')}</td>
                 <td class="text-nowrap">
                     <button class="btn btn-sm btn-outline-primary" type="button" onclick="openEditCompanySecurity(${row.id})"><i class="fa-solid fa-pen"></i></button>
                     <button class="btn btn-sm btn-outline-secondary" type="button" onclick="openViewCompanySecurity(${row.id})"><i class="fa-solid fa-eye"></i></button>
@@ -2530,6 +2534,7 @@ function initEmpresaGenericModules() {
                         <td>${row.fecha_inicio}</td>
                         <td>${row.fecha_fin}</td>
                         <td><span class="badge ${row.status.class}">${row.status.label}</span></td>
+                        <td>${escapeHtml(row.registered_by || '')}</td>
                         <td class="text-nowrap">
                             <button class="btn btn-sm btn-outline-primary js-generic-edit" type="button" data-id="${row.id}"><i class="fa-solid fa-pen"></i></button>
                             <button class="btn btn-sm btn-outline-secondary js-generic-view" type="button" data-id="${row.id}"><i class="fa-solid fa-eye"></i></button>

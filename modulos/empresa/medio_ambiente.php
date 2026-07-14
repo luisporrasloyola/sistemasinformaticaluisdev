@@ -54,7 +54,7 @@ require __DIR__ . '/../../includes/header.php';
                 </div>
                 <div class="table-responsive">
                     <table class="table table-hover align-middle">
-                        <thead><tr><th>Seleccionar</th><th>Documentos</th><th>F. Registro</th><th>F. Inicio</th><th>F. Fin</th><th>Estado</th><th>Acciones</th></tr></thead>
+                        <thead><tr><th>Seleccionar</th><th>Documentos</th><th>F. Registro</th><th>F. Inicio</th><th>F. Fin</th><th>Estado</th><th>Registrado por</th><th>Acciones</th></tr></thead>
                         <tbody class="js-company-generic-tbody"></tbody>
                     </table>
                 </div>

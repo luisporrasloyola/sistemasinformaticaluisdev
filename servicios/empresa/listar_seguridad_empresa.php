@@ -14,9 +14,10 @@ function empresa_seguridad_status(string $endDate): array
 }
 
 $empresaId = (int) ($_GET['empresa_id'] ?? 0);
-$stmt = db()->prepare("SELECT ed.*, edc.nombre AS documento
+$stmt = db()->prepare("SELECT ed.*, edc.nombre AS documento, COALESCE(u.name, '') AS registered_by
     FROM empresa_seguridad_documentos ed
     JOIN empresa_seguridad_catalogo edc ON edc.id = ed.documento_id
+    LEFT JOIN users u ON u.id = ed.registered_by_user_id
     WHERE ed.empresa_id = :empresa_id
     ORDER BY edc.id");
 $stmt->execute(['empresa_id' => $empresaId]);

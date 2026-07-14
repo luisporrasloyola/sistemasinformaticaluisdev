@@ -21,9 +21,10 @@ function maquinaria_document_status(string $endDate, string $startDate): array
 }
 
 $maquinariaId = (int) ($_GET['maquinaria_id'] ?? 0);
-$stmt = db()->prepare("SELECT md.*, mdc.nombre AS documento
+$stmt = db()->prepare("SELECT md.*, mdc.nombre AS documento, COALESCE(u.name, '') AS registered_by
     FROM maquinaria_documentos md
     JOIN maquinaria_documentos_catalogo mdc ON mdc.id = md.documento_id
+    LEFT JOIN users u ON u.id = md.registered_by_user_id
     WHERE md.maquinaria_id = :maquinaria_id
     ORDER BY mdc.nombre");
 $stmt->execute(['maquinaria_id' => $maquinariaId]);

@@ -133,8 +133,8 @@ function save_requirement_record(int $workerId, int $positionId, int $requiremen
     }
 
     $stmt = db()->prepare('INSERT INTO worker_requirements
-        (worker_id, position_id, requirement_id, registration_date, start_date, end_date, observations, file_path, original_file_name)
-        VALUES (:worker_id, :position_id, :requirement_id, :registration_date, :start_date, :end_date, :observations, :file_path, :original_file_name)');
+        (worker_id, position_id, requirement_id, registration_date, start_date, end_date, observations, file_path, original_file_name, registered_by_user_id)
+        VALUES (:worker_id, :position_id, :requirement_id, :registration_date, :start_date, :end_date, :observations, :file_path, :original_file_name, :registered_by_user_id)');
     $stmt->execute([
         'worker_id' => $workerId,
         'position_id' => $positionId,
@@ -145,6 +145,7 @@ function save_requirement_record(int $workerId, int $positionId, int $requiremen
         'observations' => 'Carga masiva PMI',
         'file_path' => $uploaded['path'],
         'original_file_name' => $uploaded['name'],
+        'registered_by_user_id' => (int) (current_user()['id'] ?? 0) ?: null,
     ]);
 }
 

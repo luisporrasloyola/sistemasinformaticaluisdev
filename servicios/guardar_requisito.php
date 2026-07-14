@@ -54,8 +54,8 @@ try {
         db()->prepare($sql)->execute($params);
     } else {
         $stmt = db()->prepare('INSERT INTO worker_requirements
-            (worker_id, position_id, requirement_id, registration_date, start_date, end_date, observations, file_path, original_file_name)
-            VALUES (:worker_id, :position_id, :requirement_id, :registration_date, :start_date, :end_date, :observations, :file_path, :original_file_name)');
+            (worker_id, position_id, requirement_id, registration_date, start_date, end_date, observations, file_path, original_file_name, registered_by_user_id)
+            VALUES (:worker_id, :position_id, :requirement_id, :registration_date, :start_date, :end_date, :observations, :file_path, :original_file_name, :registered_by_user_id)');
         $stmt->execute([
             'worker_id' => $workerId,
             'position_id' => $positionId,
@@ -66,6 +66,7 @@ try {
             'observations' => trim((string) ($_POST['observations'] ?? '')),
             'file_path' => $pdf['path'],
             'original_file_name' => $pdf['name'],
+            'registered_by_user_id' => (int) (current_user()['id'] ?? 0) ?: null,
         ]);
     }
     json_response(['ok' => true]);

@@ -61,9 +61,10 @@ function generic_company_status(string $endDate): array
 function generic_company_list(array $config): never
 {
     $empresaId = (int) ($_GET['empresa_id'] ?? 0);
-    $stmt = db()->prepare("SELECT d.*, c.nombre AS documento
+    $stmt = db()->prepare("SELECT d.*, c.nombre AS documento, COALESCE(u.name, '') AS registered_by
         FROM {$config['documents']} d
         JOIN {$config['catalog']} c ON c.id = d.documento_id
+        LEFT JOIN users u ON u.id = d.registered_by_user_id
         WHERE d.empresa_id = :empresa_id
         ORDER BY c.id");
     $stmt->execute(['empresa_id' => $empresaId]);
@@ -134,8 +135,8 @@ function generic_company_save(array $config, string $module): never
             $sql .= ' WHERE id = :id';
             db()->prepare($sql)->execute($params);
         } else {
-            $stmt = db()->prepare("INSERT INTO {$config['documents']} (empresa_id, documento_id, fecha_registro, fecha_inicio, fecha_fin, observaciones, archivo_path, archivo_nombre_original)
-                VALUES (:empresa_id, :documento_id, :fecha_registro, :fecha_inicio, :fecha_fin, :observaciones, :archivo_path, :archivo_nombre_original)");
+            $stmt = db()->prepare("INSERT INTO {$config['documents']} (empresa_id, documento_id, fecha_registro, fecha_inicio, fecha_fin, observaciones, archivo_path, archivo_nombre_original, registered_by_user_id)
+                VALUES (:empresa_id, :documento_id, :fecha_registro, :fecha_inicio, :fecha_fin, :observaciones, :archivo_path, :archivo_nombre_original, :registered_by_user_id)");
             $stmt->execute([
                 'empresa_id' => $empresaId,
                 'documento_id' => $documentoId,
@@ -145,6 +146,7 @@ function generic_company_save(array $config, string $module): never
                 'observaciones' => $observaciones ?: null,
                 'archivo_path' => $pdf['path'],
                 'archivo_nombre_original' => $pdf['name'],
+                'registered_by_user_id' => (int) (current_user()['id'] ?? 0) ?: null,
             ]);
         }
         json_response(['ok' => true]);

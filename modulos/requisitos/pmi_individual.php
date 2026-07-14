@@ -59,6 +59,7 @@ require __DIR__ . '/../../includes/header.php';
                         <th>F. Inicio</th>
                         <th>F. Fin</th>
                         <th>Estado</th>
+                        <th>Registrado por</th>
                         <th>Acciones</th>
                     </tr>
                     </thead>

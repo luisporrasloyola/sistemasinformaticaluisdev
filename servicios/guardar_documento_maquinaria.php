@@ -52,8 +52,8 @@ try {
         $sql .= ' WHERE id = :id';
         db()->prepare($sql)->execute($params);
     } else {
-        $stmt = db()->prepare('INSERT INTO maquinaria_documentos (maquinaria_id, documento_id, fecha_registro, fecha_inicio, fecha_fin, observaciones, archivo_path, archivo_nombre_original)
-            VALUES (:maquinaria_id, :documento_id, :fecha_registro, :fecha_inicio, :fecha_fin, :observaciones, :archivo_path, :archivo_nombre_original)');
+        $stmt = db()->prepare('INSERT INTO maquinaria_documentos (maquinaria_id, documento_id, fecha_registro, fecha_inicio, fecha_fin, observaciones, archivo_path, archivo_nombre_original, registered_by_user_id)
+            VALUES (:maquinaria_id, :documento_id, :fecha_registro, :fecha_inicio, :fecha_fin, :observaciones, :archivo_path, :archivo_nombre_original, :registered_by_user_id)');
         $stmt->execute([
             'maquinaria_id' => $maquinariaId,
             'documento_id' => $documentoId,
@@ -63,6 +63,7 @@ try {
             'observaciones' => trim((string) ($_POST['observaciones'] ?? '')),
             'archivo_path' => $pdf['path'],
             'archivo_nombre_original' => $pdf['name'],
+            'registered_by_user_id' => (int) (current_user()['id'] ?? 0) ?: null,
         ]);
     }
     json_response(['ok' => true]);
