@@ -70,6 +70,7 @@ $isAdmin = is_admin();
                 <div class="submenu">
                     <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa/datos_generales.php"><i class="fa-solid fa-address-card"></i><span>Datos generales</span></a>
                     <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa/documentos.php"><i class="fa-solid fa-file-lines"></i><span>Documentos</span></a>
+                    <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa/seguridad.php"><i class="fa-solid fa-shield-halved"></i><span>Seguridad</span></a>
                 </div>
             </div>
 
