@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
-require_role('Administrador');
+require_module_access('control_personal.puntos_marcacion');
 
 $locations = db()->query('SELECT * FROM attendance_locations WHERE status = 1 ORDER BY name')->fetchAll();
 

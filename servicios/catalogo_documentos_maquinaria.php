@@ -6,4 +6,5 @@ require_login();
 $q = '%' . trim((string) ($_GET['q'] ?? '')) . '%';
 $stmt = db()->prepare('SELECT id, nombre AS text FROM maquinaria_documentos_catalogo WHERE estado = 1 AND nombre LIKE :q ORDER BY id');
 $stmt->execute(['q' => $q]);
-json_response(['results' => $stmt->fetchAll()]);
+$rows = filter_allowed_documents('maquinaria.documentos', $stmt->fetchAll(), 'id', 'upload');
+json_response(['results' => $rows]);

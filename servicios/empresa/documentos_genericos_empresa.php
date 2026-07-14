@@ -4,7 +4,6 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../includes/upload.php';
 require_once __DIR__ . '/../../config/database.php';
-require_role('Administrador');
 
 $module = (string) ($_REQUEST['module'] ?? '');
 $action = (string) ($_REQUEST['action'] ?? '');
@@ -13,6 +12,8 @@ $config = generic_company_module_config($module);
 if (!$config || $action === '') {
     json_response(['ok' => false, 'message' => 'Solicitud no valida.'], 400);
 }
+
+require_module_access($config['scope']);
 
 match ($action) {
     'list' => generic_company_list($config),
@@ -34,12 +35,14 @@ function generic_company_module_config(string $module): ?array
             'catalog' => 'empresa_calidad_catalogo',
             'folder' => 'empresa_calidad',
             'zip_suffix' => 'calidad',
+            'scope' => 'empresa.calidad',
         ],
         'medio_ambiente' => [
             'documents' => 'empresa_medio_ambiente_documentos',
             'catalog' => 'empresa_medio_ambiente_catalogo',
             'folder' => 'empresa_medio_ambiente',
             'zip_suffix' => 'medio_ambiente',
+            'scope' => 'empresa.medio_ambiente',
         ],
         default => null,
     };
@@ -97,6 +100,9 @@ function generic_company_save(array $config, string $module): never
 
     if (!$empresaId || !$documentoId || !$fechaRegistro || !$fechaInicio || !$fechaFin) {
         json_response(['ok' => false, 'message' => 'Complete todos los campos obligatorios.'], 400);
+    }
+    if (!current_user_can_document($config['scope'], $documentoId, 'upload')) {
+        json_response(['ok' => false, 'message' => 'No tiene permisos para guardar este documento.'], 403);
     }
     if (strtotime($fechaFin) < strtotime($fechaInicio)) {
         json_response(['ok' => false, 'message' => 'La fecha fin no puede ser menor a la fecha inicio.'], 400);
@@ -183,6 +189,14 @@ function generic_company_catalog_save(array $config): never
     verify_csrf($_POST['csrf_token'] ?? null);
     $nombre = trim((string) ($_POST['nombre'] ?? ''));
     if ($nombre === '') json_response(['ok' => false, 'message' => 'Ingrese un documento.'], 400);
+    if (!current_user_can_manage_scope($config['scope'])) {
+        json_response(['ok' => false, 'message' => 'No tiene permisos para agregar documentos.'], 403);
+    }
+    $exists = db()->prepare("SELECT id FROM {$config['catalog']} WHERE LOWER(nombre) = LOWER(:nombre) LIMIT 1");
+    $exists->execute(['nombre' => $nombre]);
+    if ($exists->fetch()) {
+        json_response(['ok' => false, 'message' => 'Este documento ya existe.'], 409);
+    }
     $stmt = db()->prepare("INSERT INTO {$config['catalog']} (nombre, estado) VALUES (:nombre, 1) ON DUPLICATE KEY UPDATE estado = 1, id = LAST_INSERT_ID(id)");
     $stmt->execute(['nombre' => $nombre]);
     json_response(['ok' => true, 'id' => (int) db()->lastInsertId(), 'text' => $nombre]);
@@ -193,6 +207,9 @@ function generic_company_catalog_delete(array $config): never
     verify_csrf($_POST['csrf_token'] ?? null);
     $id = (int) ($_POST['id'] ?? 0);
     if ($id <= 0) json_response(['ok' => false, 'message' => 'Seleccione un documento valido.'], 400);
+    if (!current_user_can_document($config['scope'], $id, 'manage')) {
+        json_response(['ok' => false, 'message' => 'No tiene permisos para eliminar este documento.'], 403);
+    }
     $used = db()->prepare("SELECT COUNT(*) FROM {$config['documents']} WHERE documento_id = :id");
     $used->execute(['id' => $id]);
     if ((int) $used->fetchColumn() > 0) {

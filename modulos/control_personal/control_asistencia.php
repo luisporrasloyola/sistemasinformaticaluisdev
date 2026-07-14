@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
-require_role(['Administrador', 'Personal']);
+require_module_access('control_personal.control_asistencia');
 
 $isAdmin = is_admin();
 $currentWorkerId = current_user_worker_id();

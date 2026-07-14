@@ -18,6 +18,10 @@ if (!$requirement) {
     json_response(['ok' => false, 'message' => 'El requisito no existe.'], 404);
 }
 
+if (!current_user_can_document('requisitos.pmi_individual', $id, 'manage')) {
+    json_response(['ok' => false, 'message' => 'No tiene permisos para eliminar este requisito.'], 403);
+}
+
 $usedStmt = db()->prepare('SELECT COUNT(*) FROM worker_requirements WHERE requirement_id = :id');
 $usedStmt->execute(['id' => $id]);
 

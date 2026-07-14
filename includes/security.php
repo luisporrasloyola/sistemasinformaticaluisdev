@@ -95,6 +95,160 @@ function is_personal_role(): bool
     return current_user_role() === 'Personal';
 }
 
+function is_gestor_role(): bool
+{
+    return current_user_role() === 'Gestor';
+}
+
+function current_user_can_module(string $moduleKey): bool
+{
+    if (is_admin()) {
+        return true;
+    }
+
+    if (is_personal_role()) {
+        return in_array($moduleKey, ['control_personal', 'control_personal.control_asistencia'], true);
+    }
+
+    if (!is_gestor_role()) {
+        return false;
+    }
+
+    $userId = (int) ($_SESSION['user']['id'] ?? 0);
+    if ($userId <= 0) {
+        return false;
+    }
+
+    require_once __DIR__ . '/../config/database.php';
+    try {
+        $stmt = db()->prepare('SELECT 1 FROM user_module_permissions WHERE user_id = :user_id AND module_key = :module_key AND can_access = 1 LIMIT 1');
+        $stmt->execute(['user_id' => $userId, 'module_key' => $moduleKey]);
+        return (bool) $stmt->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function current_user_can_document(string $scopeKey, int $catalogId, string $mode = 'view'): bool
+{
+    if (is_admin()) {
+        return true;
+    }
+
+    if (!is_gestor_role() || $catalogId <= 0) {
+        return false;
+    }
+
+    $column = match ($mode) {
+        'upload' => 'can_upload',
+        'manage' => 'can_manage_catalog',
+        default => 'can_view',
+    };
+    $userId = (int) ($_SESSION['user']['id'] ?? 0);
+    if ($userId <= 0) {
+        return false;
+    }
+
+    require_once __DIR__ . '/../config/database.php';
+    try {
+        $stmt = db()->prepare("SELECT 1 FROM user_document_permissions WHERE user_id = :user_id AND scope_key = :scope_key AND catalog_id = :catalog_id AND {$column} = 1 LIMIT 1");
+        $stmt->execute(['user_id' => $userId, 'scope_key' => $scopeKey, 'catalog_id' => $catalogId]);
+        return (bool) $stmt->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function filter_allowed_documents(string $scopeKey, array $rows, string $idKey = 'id', string $mode = 'view'): array
+{
+    if (is_admin()) {
+        return $rows;
+    }
+    return array_values(array_filter($rows, static fn(array $row): bool => current_user_can_document($scopeKey, (int) ($row[$idKey] ?? 0), $mode)));
+}
+
+function current_user_can_manage_scope(string $scopeKey): bool
+{
+    if (is_admin()) {
+        return true;
+    }
+
+    if (!is_gestor_role()) {
+        return false;
+    }
+
+    $userId = (int) ($_SESSION['user']['id'] ?? 0);
+    if ($userId <= 0) {
+        return false;
+    }
+
+    require_once __DIR__ . '/../config/database.php';
+    try {
+        $stmt = db()->prepare('SELECT 1 FROM user_document_permissions WHERE user_id = :user_id AND scope_key = :scope_key AND can_manage_catalog = 1 LIMIT 1');
+        $stmt->execute(['user_id' => $userId, 'scope_key' => $scopeKey]);
+        return (bool) $stmt->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function require_module_access(string $moduleKey): void
+{
+    require_login();
+    if (!current_user_can_module($moduleKey)) {
+        http_response_code(403);
+        exit('No tiene permisos para acceder a esta seccion.');
+    }
+}
+
+function require_any_module_access(array $moduleKeys): void
+{
+    require_login();
+    foreach ($moduleKeys as $moduleKey) {
+        if (current_user_can_module((string) $moduleKey)) {
+            return;
+        }
+    }
+    http_response_code(403);
+    exit('No tiene permisos para acceder a esta seccion.');
+}
+
+function default_user_landing_path(): string
+{
+    if (is_personal_role()) {
+        return 'modulos/control_personal/control_asistencia.php';
+    }
+
+    $paths = [
+        'dashboard' => 'panel.php',
+        'control_personal.dashboard' => 'modulos/control_personal/dashboard_asistencia.php',
+        'control_personal.personal' => 'modulos/aliados/personal.php',
+        'control_personal.horarios' => 'modulos/control_personal/horarios.php',
+        'control_personal.puntos_marcacion' => 'modulos/control_personal/puntos_marcacion.php',
+        'control_personal.asignaciones' => 'modulos/control_personal/asignaciones.php',
+        'control_personal.control_asistencia' => 'modulos/control_personal/control_asistencia.php',
+        'control_personal.reportes' => 'modulos/control_personal/reportes.php',
+        'requisitos.pmi_individual' => 'modulos/requisitos/pmi_individual.php',
+        'requisitos.pmi_masivo' => 'modulos/requisitos/pmi_masivo.php',
+        'maquinaria.datos_generales' => 'modulos/maquinaria/datos_generales.php',
+        'maquinaria.documentos' => 'modulos/maquinaria/documentos.php',
+        'empresa.datos_generales' => 'modulos/empresa/datos_generales.php',
+        'empresa.documentos' => 'modulos/empresa/documentos.php',
+        'empresa.seguridad' => 'modulos/empresa/seguridad.php',
+        'empresa.calidad' => 'modulos/empresa/calidad.php',
+        'empresa.medio_ambiente' => 'modulos/empresa/medio_ambiente.php',
+        'usuarios' => 'modulos/usuario/usuarios.php',
+    ];
+
+    foreach ($paths as $moduleKey => $path) {
+        if (current_user_can_module($moduleKey)) {
+            return $path;
+        }
+    }
+
+    return 'modulos/control_personal/control_asistencia.php';
+}
+
 function require_role(array|string $roles): void
 {
     require_login();

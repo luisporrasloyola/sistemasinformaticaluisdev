@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
-require_role('Administrador');
+require_module_access('empresa.seguridad');
 
 $empresaId = (int) ($_GET['empresa_id'] ?? 0);
 $selectedIds = array_values(array_filter(array_map('intval', explode(',', (string) ($_GET['ids'] ?? '')))));

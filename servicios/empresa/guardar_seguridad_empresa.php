@@ -2,7 +2,7 @@
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../includes/upload.php';
 require_once __DIR__ . '/../../config/database.php';
-require_role('Administrador');
+require_module_access('empresa.seguridad');
 
 verify_csrf($_POST['csrf_token'] ?? null);
 
@@ -16,6 +16,9 @@ $observaciones = trim((string) ($_POST['observaciones'] ?? ''));
 
 if (!$empresaId || !$documentoId || !$fechaRegistro || !$fechaInicio || !$fechaFin) {
     json_response(['ok' => false, 'message' => 'Complete todos los campos obligatorios.'], 400);
+}
+if (!current_user_can_document('empresa.seguridad', $documentoId, 'upload')) {
+    json_response(['ok' => false, 'message' => 'No tiene permisos para guardar este documento.'], 403);
 }
 if (strtotime($fechaFin) < strtotime($fechaInicio)) {
     json_response(['ok' => false, 'message' => 'La fecha fin no puede ser menor a la fecha inicio.'], 400);

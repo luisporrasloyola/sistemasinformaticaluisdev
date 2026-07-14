@@ -18,6 +18,10 @@ if (!$documento) {
     json_response(['ok' => false, 'message' => 'El documento no existe.'], 404);
 }
 
+if (!current_user_can_document('maquinaria.documentos', $id, 'manage')) {
+    json_response(['ok' => false, 'message' => 'No tiene permisos para eliminar este documento.'], 403);
+}
+
 $used = db()->prepare('SELECT COUNT(*) FROM maquinaria_documentos WHERE documento_id = :id');
 $used->execute(['id' => $id]);
 

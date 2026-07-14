@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
-require_role('Administrador');
+require_module_access('control_personal.asignaciones');
 
 $assignments = db()->query("SELECT aa.*, w.full_name, w.document_number, l.name AS location_name, s.name AS schedule_name,
         GROUP_CONCAT(p.name ORDER BY p.name SEPARATOR ', ') AS positions

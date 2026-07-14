@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
-require_role('Administrador');
+require_module_access('maquinaria.documentos');
 $stmtMaquinarias = db()->query("SELECT m.id, m.equipo, m.serie_placa, c.name AS empresa
     FROM maquinarias m
     LEFT JOIN companies c ON c.id = m.company_id
@@ -87,8 +87,10 @@ require __DIR__ . '/../../includes/header.php';
                         <label class="form-label">Documentos</label>
                         <div class="input-group">
                             <select class="form-select" name="documento_id" id="machineDocumentSelect" required></select>
-                            <button class="btn btn-outline-primary" type="button" id="newMachineCatalogDocumentBtn" title="Agregar documento"><i class="fa-solid fa-plus"></i></button>
-                            <button class="btn btn-outline-danger" type="button" id="deleteMachineCatalogDocumentBtn" title="Eliminar documento"><i class="fa-solid fa-trash"></i></button>
+                            <?php if (current_user_can_manage_scope('maquinaria.documentos')): ?>
+                                <button class="btn btn-outline-primary" type="button" id="newMachineCatalogDocumentBtn" title="Agregar documento"><i class="fa-solid fa-plus"></i></button>
+                                <button class="btn btn-outline-danger" type="button" id="deleteMachineCatalogDocumentBtn" title="Eliminar documento"><i class="fa-solid fa-trash"></i></button>
+                            <?php endif; ?>
                         </div>
                     </div>
                     <div class="col-md-4">

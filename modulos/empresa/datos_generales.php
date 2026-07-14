@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
-require_role('Administrador');
+require_module_access('empresa.datos_generales');
 
 $empresas = db()->query('SELECT * FROM empresas WHERE status = 1 ORDER BY razon_social')->fetchAll();
 require __DIR__ . '/../../includes/header.php';

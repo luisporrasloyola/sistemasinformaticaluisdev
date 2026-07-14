@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
-require_role('Administrador');
+require_module_access('maquinaria.datos_generales');
 
 $stmt = db()->query('SELECT m.*, c.name AS empresa
     FROM maquinarias m

@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
-require_role('Administrador');
+require_module_access('empresa.documentos');
 
 $id = (int) ($_GET['id'] ?? 0);
 $stmt = db()->prepare("SELECT ed.*, edc.nombre AS documento

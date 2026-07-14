@@ -642,8 +642,8 @@ function initRequirementsModule() {
     document.getElementById('downloadRequirementsBtn').addEventListener('click', downloadRequirementsBundle);
     document.getElementById('downloadSelectedRequirementsBtn')?.addEventListener('click', downloadSelectedRequirementsBundle);
     document.getElementById('requirementForm').addEventListener('submit', saveRequirement);
-    document.getElementById('newCatalogRequirementBtn').addEventListener('click', addCatalogRequirement);
-    document.getElementById('deleteCatalogRequirementBtn').addEventListener('click', deleteCatalogRequirement);
+    document.getElementById('newCatalogRequirementBtn')?.addEventListener('click', addCatalogRequirement);
+    document.getElementById('deleteCatalogRequirementBtn')?.addEventListener('click', deleteCatalogRequirement);
     document.getElementById('quickPhotoInput').addEventListener('change', uploadQuickPhoto);
 }
 
@@ -773,8 +773,8 @@ function setRequirementReadonly(state) {
     });
     document.querySelector('#requirementForm button[type="submit"]').classList.toggle('d-none', state);
     document.getElementById('pdfInput').classList.toggle('d-none', state);
-    document.getElementById('newCatalogRequirementBtn').classList.toggle('d-none', state);
-    document.getElementById('deleteCatalogRequirementBtn').classList.toggle('d-none', state);
+    document.getElementById('newCatalogRequirementBtn')?.classList.toggle('d-none', state);
+    document.getElementById('deleteCatalogRequirementBtn')?.classList.toggle('d-none', state);
 }
 
 async function saveRequirementLegacy(event) {
@@ -3185,6 +3185,285 @@ function initUsuariosModule() {
         const data = await response.json();
         if (!data.ok) {
             Swal.fire('Atención', data.message || 'No se pudo guardar el usuario.', 'warning');
+            return;
+        }
+        modal.hide();
+        window.location.reload();
+    });
+}
+
+function initUsuariosModule() {
+    const table = document.getElementById('usuariosTable');
+    if (!table) return;
+
+    const form = document.getElementById('usuarioForm');
+    const modal = new bootstrap.Modal(document.getElementById('usuarioModal'));
+    const password = document.getElementById('usuarioPassword');
+    const passwordHelp = document.getElementById('usuarioPasswordHelp');
+    const roleSelect = document.getElementById('usuarioRole');
+    const workerGroup = document.getElementById('usuarioWorkerGroup');
+    const workerSelect = document.getElementById('usuarioWorkerId');
+    const nameInput = document.getElementById('usuarioName');
+    const emailInput = document.getElementById('usuarioEmail');
+    const selectAllModules = document.getElementById('usuarioSelectAllModules');
+    const permissionNote = document.getElementById('usuarioPermissionNote');
+    const moduleChecks = Array.from(document.querySelectorAll('.usuario-module-permission'));
+    const viewChecks = Array.from(document.querySelectorAll('.usuario-document-view'));
+    const uploadChecks = Array.from(document.querySelectorAll('.usuario-document-upload'));
+    const manageChecks = Array.from(document.querySelectorAll('.usuario-document-manage'));
+    const scopeAllChecks = Array.from(document.querySelectorAll('.usuario-document-scope-all'));
+    const permissionData = window.usuarioPermisos || { users: {} };
+    const allModuleKeys = moduleChecks.map((check) => check.value);
+
+    function fillUserFromSelectedWorker() {
+        if (!workerSelect || roleSelect?.value !== 'Personal') return;
+        const option = workerSelect.selectedOptions?.[0];
+        if (!option || !option.value) return;
+        if (nameInput) nameInput.value = option.dataset.name || '';
+        if (emailInput) emailInput.value = option.dataset.email || '';
+    }
+
+    function buildAllDocumentPermissions() {
+        const permissions = {};
+        viewChecks.forEach((check) => {
+            const scope = check.dataset.scope;
+            const id = check.dataset.catalogId;
+            permissions[scope] = permissions[scope] || {};
+            permissions[scope][id] = { view: true, upload: true, manage: true };
+        });
+        return permissions;
+    }
+
+    function defaultPermissionsForRole(role) {
+        if (role === 'Administrador') {
+            return { modules: allModuleKeys, documents: buildAllDocumentPermissions() };
+        }
+        if (role === 'Personal') {
+            return { modules: ['control_personal', 'control_personal.control_asistencia'], documents: {} };
+        }
+        return { modules: [], documents: {} };
+    }
+
+    function setPermissionsEnabled(enabled) {
+        moduleChecks.forEach((check) => { check.disabled = !enabled; });
+        viewChecks.forEach((check) => { check.disabled = !enabled; });
+        uploadChecks.forEach((check) => { check.disabled = !enabled; });
+        manageChecks.forEach((check) => { check.disabled = !enabled; });
+        scopeAllChecks.forEach((check) => { check.disabled = !enabled; });
+        if (selectAllModules) selectAllModules.disabled = !enabled;
+    }
+
+    function syncSelectAllModules() {
+        if (!selectAllModules) return;
+        selectAllModules.checked = moduleChecks.length > 0 && moduleChecks.every((check) => check.checked);
+    }
+
+    function syncScopeAll(scope) {
+        const scopeViews = viewChecks.filter((check) => check.dataset.scope === scope);
+        const scopeUploads = uploadChecks.filter((check) => check.dataset.scope === scope);
+        const scopeManages = manageChecks.filter((check) => check.dataset.scope === scope);
+        const scopeAll = scopeAllChecks.find((check) => check.dataset.scope === scope);
+        if (!scopeAll) return;
+        const allChecks = scopeViews.concat(scopeUploads, scopeManages);
+        scopeAll.checked = allChecks.length > 0 && allChecks.every((check) => check.checked);
+    }
+
+    function syncAllScopeToggles() {
+        scopeAllChecks.forEach((check) => syncScopeAll(check.dataset.scope));
+    }
+
+    function applyPermissions(payload) {
+        const selectedModules = new Set(payload?.modules || []);
+        moduleChecks.forEach((check) => {
+            check.checked = selectedModules.has(check.value);
+        });
+        viewChecks.forEach((check) => {
+            const scope = check.dataset.scope;
+            const id = check.dataset.catalogId;
+            check.checked = !!payload?.documents?.[scope]?.[id]?.view;
+        });
+        uploadChecks.forEach((check) => {
+            const scope = check.dataset.scope;
+            const id = check.dataset.catalogId;
+            check.checked = !!payload?.documents?.[scope]?.[id]?.upload;
+            if (check.checked) {
+                const view = viewChecks.find((item) => item.dataset.scope === scope && item.dataset.catalogId === id);
+                if (view) view.checked = true;
+            }
+        });
+        manageChecks.forEach((check) => {
+            const scope = check.dataset.scope;
+            const id = check.dataset.catalogId;
+            check.checked = !!payload?.documents?.[scope]?.[id]?.manage;
+            if (check.checked) {
+                const view = viewChecks.find((item) => item.dataset.scope === scope && item.dataset.catalogId === id);
+                const upload = uploadChecks.find((item) => item.dataset.scope === scope && item.dataset.catalogId === id);
+                if (view) view.checked = true;
+                if (upload) upload.checked = true;
+            }
+        });
+        syncSelectAllModules();
+        syncAllScopeToggles();
+    }
+
+    function syncParentModules(changedCheck) {
+        const parentKey = changedCheck.dataset.parent;
+        const parent = moduleChecks.find((check) => check.value === parentKey);
+        if (parent && changedCheck.value !== parentKey && changedCheck.checked) {
+            parent.checked = true;
+        }
+        if (parent && changedCheck.value === parentKey && changedCheck.checked) {
+            moduleChecks.filter((check) => check.dataset.parent === parentKey && check.value !== parentKey).forEach((child) => {
+                child.checked = true;
+            });
+        }
+        if (parent && changedCheck.value === parentKey && !changedCheck.checked) {
+            moduleChecks.filter((check) => check.dataset.parent === parentKey && check.value !== parentKey).forEach((child) => {
+                child.checked = false;
+            });
+        }
+        syncSelectAllModules();
+    }
+
+    function toggleUserWorkerField() {
+        const role = roleSelect?.value || 'Administrador';
+        const isPersonal = role === 'Personal';
+        workerGroup?.classList.toggle('d-none', !isPersonal);
+        if (workerSelect) {
+            workerSelect.required = isPersonal;
+            if (!isPersonal) workerSelect.value = '';
+            if (isPersonal) fillUserFromSelectedWorker();
+        }
+        if (!permissionNote) return;
+        if (role === 'Administrador') {
+            permissionNote.className = 'permission-role-note mb-3 alert alert-primary';
+            permissionNote.textContent = 'Administrador tiene acceso total al sistema. Los permisos quedan seleccionados por defecto.';
+            setPermissionsEnabled(false);
+            return;
+        }
+        if (role === 'Personal') {
+            permissionNote.className = 'permission-role-note mb-3 alert alert-info';
+            permissionNote.textContent = 'Personal solo tiene acceso a Control de personal - Control de asistencia.';
+            setPermissionsEnabled(false);
+            return;
+        }
+        permissionNote.className = 'permission-role-note mb-3 alert alert-warning';
+        permissionNote.textContent = 'Gestor usa permisos personalizados por modulo y por tipo de requisito/documento.';
+        setPermissionsEnabled(true);
+    }
+
+    document.getElementById('nuevoUsuarioBtn')?.addEventListener('click', () => {
+        form.reset();
+        form.classList.remove('was-validated');
+        document.getElementById('usuarioId').value = '';
+        document.getElementById('usuarioModalTitle').textContent = 'Nuevo usuario';
+        password.required = true;
+        applyPermissions(defaultPermissionsForRole(roleSelect?.value || 'Administrador'));
+        toggleUserWorkerField();
+        bootstrap.Tab.getOrCreateInstance(document.getElementById('usuarioDatosTab'))?.show();
+        passwordHelp.textContent = 'Minimo 8 caracteres.';
+        modal.show();
+    });
+
+    document.querySelectorAll('.js-editar-usuario').forEach((button) => {
+        button.addEventListener('click', () => {
+            form.reset();
+            form.classList.remove('was-validated');
+            document.getElementById('usuarioId').value = button.dataset.id || '';
+            document.getElementById('usuarioName').value = button.dataset.name || '';
+            document.getElementById('usuarioEmail').value = button.dataset.email || '';
+            document.getElementById('usuarioRole').value = button.dataset.role || 'Administrador';
+            if (workerSelect) workerSelect.value = button.dataset.workerId || '';
+            document.getElementById('usuarioModalTitle').textContent = 'Editar usuario';
+            password.required = false;
+            applyPermissions(permissionData.users?.[String(button.dataset.id)] || defaultPermissionsForRole(button.dataset.role || 'Administrador'));
+            toggleUserWorkerField();
+            bootstrap.Tab.getOrCreateInstance(document.getElementById('usuarioDatosTab'))?.show();
+            passwordHelp.textContent = 'Dejar vacio para mantener la contrasena actual.';
+            modal.show();
+        });
+    });
+
+    roleSelect?.addEventListener('change', () => {
+        applyPermissions(defaultPermissionsForRole(roleSelect.value));
+        toggleUserWorkerField();
+    });
+    workerSelect?.addEventListener('change', fillUserFromSelectedWorker);
+    selectAllModules?.addEventListener('change', () => {
+        moduleChecks.forEach((check) => { check.checked = selectAllModules.checked; });
+    });
+    moduleChecks.forEach((check) => {
+        check.addEventListener('change', () => syncParentModules(check));
+    });
+    uploadChecks.forEach((check) => {
+        check.addEventListener('change', () => {
+            const view = viewChecks.find((item) => item.dataset.scope === check.dataset.scope && item.dataset.catalogId === check.dataset.catalogId);
+            if (check.checked && view) view.checked = true;
+            if (!check.checked) {
+                const manage = manageChecks.find((item) => item.dataset.scope === check.dataset.scope && item.dataset.catalogId === check.dataset.catalogId);
+                if (manage) manage.checked = false;
+            }
+            syncScopeAll(check.dataset.scope);
+        });
+    });
+    viewChecks.forEach((check) => {
+        check.addEventListener('change', () => {
+            const upload = uploadChecks.find((item) => item.dataset.scope === check.dataset.scope && item.dataset.catalogId === check.dataset.catalogId);
+            if (!check.checked && upload) upload.checked = false;
+            if (!check.checked) {
+                const manage = manageChecks.find((item) => item.dataset.scope === check.dataset.scope && item.dataset.catalogId === check.dataset.catalogId);
+                if (manage) manage.checked = false;
+            }
+            syncScopeAll(check.dataset.scope);
+        });
+    });
+    manageChecks.forEach((check) => {
+        check.addEventListener('change', () => {
+            const view = viewChecks.find((item) => item.dataset.scope === check.dataset.scope && item.dataset.catalogId === check.dataset.catalogId);
+            const upload = uploadChecks.find((item) => item.dataset.scope === check.dataset.scope && item.dataset.catalogId === check.dataset.catalogId);
+            if (check.checked) {
+                if (view) view.checked = true;
+                if (upload) upload.checked = true;
+            }
+            syncScopeAll(check.dataset.scope);
+        });
+    });
+    scopeAllChecks.forEach((check) => {
+        check.addEventListener('change', () => {
+            const scope = check.dataset.scope;
+            viewChecks.filter((item) => item.dataset.scope === scope).forEach((item) => { item.checked = check.checked; });
+            uploadChecks.filter((item) => item.dataset.scope === scope).forEach((item) => { item.checked = check.checked; });
+            manageChecks.filter((item) => item.dataset.scope === scope).forEach((item) => { item.checked = check.checked; });
+        });
+    });
+
+    document.querySelectorAll('.js-eliminar-usuario').forEach((button) => {
+        button.addEventListener('click', async () => {
+            const ok = await confirmAction('Eliminar usuario?');
+            if (!ok) return;
+            const body = new FormData();
+            body.append('csrf_token', csrf);
+            body.append('id', button.dataset.id);
+            const response = await fetch(`${BASE_URL}/servicios/eliminar_usuario.php`, { method: 'POST', body });
+            const data = await response.json();
+            if (data.ok) {
+                window.location.reload();
+                return;
+            }
+            Swal.fire('Atencion', data.message || 'No se pudo eliminar el usuario.', 'warning');
+        });
+    });
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (!form.checkValidity()) {
+            form.classList.add('was-validated');
+            return;
+        }
+        const response = await fetch(`${BASE_URL}/servicios/guardar_usuario.php`, { method: 'POST', body: new FormData(form) });
+        const data = await response.json();
+        if (!data.ok) {
+            Swal.fire('Atencion', data.message || 'No se pudo guardar el usuario.', 'warning');
             return;
         }
         modal.hide();

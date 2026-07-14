@@ -1,10 +1,10 @@
 <?php
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
-require_role('Administrador');
+require_module_access('empresa.medio_ambiente');
 
 $empresas = db()->query('SELECT id, razon_social, ruc FROM empresas WHERE status = 1 ORDER BY razon_social')->fetchAll();
-$catalogo = db()->query('SELECT id, nombre FROM empresa_medio_ambiente_catalogo WHERE estado = 1 ORDER BY id')->fetchAll();
+$catalogo = filter_allowed_documents('empresa.medio_ambiente', db()->query('SELECT id, nombre FROM empresa_medio_ambiente_catalogo WHERE estado = 1 ORDER BY id')->fetchAll(), 'id', 'upload');
 require __DIR__ . '/../../includes/header.php';
 ?>
 <div class="page-title">
@@ -84,8 +84,10 @@ require __DIR__ . '/../../includes/header.php';
                                         <option value="<?= (int) $documento['id'] ?>"><?= e($documento['nombre']) ?></option>
                                     <?php endforeach; ?>
                                 </select>
-                                <button class="btn btn-outline-primary js-company-generic-new-catalog" type="button" title="Agregar documento"><i class="fa-solid fa-plus"></i></button>
-                                <button class="btn btn-outline-danger js-company-generic-delete-catalog" type="button" title="Eliminar documento"><i class="fa-solid fa-trash"></i></button>
+                                <?php if (current_user_can_manage_scope('empresa.medio_ambiente')): ?>
+                                    <button class="btn btn-outline-primary js-company-generic-new-catalog" type="button" title="Agregar documento"><i class="fa-solid fa-plus"></i></button>
+                                    <button class="btn btn-outline-danger js-company-generic-delete-catalog" type="button" title="Eliminar documento"><i class="fa-solid fa-trash"></i></button>
+                                <?php endif; ?>
                             </div>
                         </div>
                         <div class="col-md-4"><label class="form-label">F. Registro</label><input class="form-control js-company-generic-registration" type="date" name="fecha_registro" required></div>

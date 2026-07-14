@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
-require_role('Administrador');
+require_module_access('control_personal.personal');
 
 $sql = "SELECT w.*, c.name AS company,
         GROUP_CONCAT(p.name ORDER BY p.name SEPARATOR ', ') AS positions

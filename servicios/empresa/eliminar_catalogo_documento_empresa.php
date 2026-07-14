@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
-require_role('Administrador');
+require_module_access('empresa.documentos');
 
 verify_csrf($_POST['csrf_token'] ?? null);
 $id = (int) ($_POST['id'] ?? 0);
@@ -16,6 +16,10 @@ $documento = $stmt->fetch();
 
 if (!$documento) {
     json_response(['ok' => false, 'message' => 'El documento no existe.'], 404);
+}
+
+if (!current_user_can_document('empresa.documentos', $id, 'manage')) {
+    json_response(['ok' => false, 'message' => 'No tiene permisos para eliminar este documento.'], 403);
 }
 
 $used = db()->prepare('SELECT COUNT(*) FROM empresa_documentos WHERE documento_id = :id');

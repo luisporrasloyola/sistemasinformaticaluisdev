@@ -4221,6 +4221,124 @@ input[type="checkbox"]:active {
     padding: 0.42rem 0.62rem;
 }
 
+.usuario-tabs {
+    background: #eef2f7;
+    border-radius: 8px;
+    display: inline-flex;
+    gap: 4px;
+    padding: 4px;
+}
+
+.usuario-tabs .nav-link {
+    border-radius: 6px;
+    color: #475569;
+    font-weight: 700;
+}
+
+.usuario-tabs .nav-link.active {
+    background: #ffffff;
+    color: #0f172a;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+}
+
+.permission-section {
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 14px;
+    background: #ffffff;
+}
+
+.permission-module-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 12px;
+}
+
+.permission-card {
+    border: 1px solid #d7e0ea;
+    border-radius: 8px;
+    padding: 12px;
+    background: #f8fafc;
+}
+
+.permission-parent {
+    font-weight: 800;
+    color: #0f172a;
+}
+
+.permission-child-list {
+    border-top: 1px solid #e2e8f0;
+    margin-top: 8px;
+    padding-top: 8px;
+}
+
+.permission-child-list .form-check {
+    margin-bottom: 6px;
+}
+
+.permission-table th {
+    background: #f8fafc;
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    color: #334155;
+}
+
+.permission-table td,
+.permission-table th {
+    padding: 0.65rem 0.75rem;
+}
+
+.permission-scope-header {
+    position: relative;
+}
+
+.permission-scope-header .accordion-button {
+    padding-right: 118px;
+}
+
+.permission-scope-all {
+    align-items: center;
+    display: flex;
+    gap: 4px;
+    margin: 0;
+    padding-left: 0;
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 3;
+}
+
+.permission-scope-all .form-check-input {
+    height: 1.15em;
+    margin: 0;
+    min-width: 2.25em;
+    width: 2.25em;
+}
+
+.permission-scope-all .form-check-label {
+    color: #334155;
+    font-size: 0.72rem;
+    font-weight: 800;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+@media (max-width: 575px) {
+    .permission-scope-header .accordion-button {
+        padding-right: 1.25rem;
+    }
+
+    .permission-scope-all {
+        background: #eef4ff;
+        border-top: 1px solid #cbd5e1;
+        justify-content: flex-end;
+        padding: 8px 12px;
+        position: static;
+        transform: none;
+    }
+}
+
 @media (min-width: 992px) {
     .company-generic-module .machine-profile-col {
         flex: 0 0 29% !important;

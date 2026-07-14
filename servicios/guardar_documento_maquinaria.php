@@ -16,6 +16,9 @@ $fechaFin = (string) ($_POST['fecha_fin'] ?? '');
 if (!$maquinariaId || !$documentoId || !$fechaRegistro || !$fechaInicio || !$fechaFin) {
     json_response(['ok' => false, 'message' => 'Complete todos los campos obligatorios.'], 400);
 }
+if (!current_user_can_document('maquinaria.documentos', $documentoId, 'upload')) {
+    json_response(['ok' => false, 'message' => 'No tiene permisos para guardar este documento.'], 403);
+}
 if (strtotime($fechaFin) < strtotime($fechaInicio)) {
     json_response(['ok' => false, 'message' => 'La fecha fin no puede ser menor a la fecha inicio.'], 400);
 }

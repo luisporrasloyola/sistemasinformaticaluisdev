@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../../includes/security.php';
-require_role('Administrador');
+require_module_access('requisitos.pmi_individual');
 require __DIR__ . '/../../includes/header.php';
 ?>
 <div class="page-title">
@@ -86,8 +86,10 @@ require __DIR__ . '/../../includes/header.php';
                         <label class="form-label">Requisito</label>
                         <div class="input-group">
                             <select class="form-select" name="requirement_id" id="requirementSelect" required></select>
-                            <button class="btn btn-outline-primary" type="button" id="newCatalogRequirementBtn" title="Agregar requisito"><i class="fa-solid fa-plus"></i></button>
-                            <button class="btn btn-outline-danger" type="button" id="deleteCatalogRequirementBtn" title="Eliminar requisito"><i class="fa-solid fa-trash"></i></button>
+                            <?php if (current_user_can_manage_scope('requisitos.pmi_individual')): ?>
+                                <button class="btn btn-outline-primary" type="button" id="newCatalogRequirementBtn" title="Agregar requisito"><i class="fa-solid fa-plus"></i></button>
+                                <button class="btn btn-outline-danger" type="button" id="deleteCatalogRequirementBtn" title="Eliminar requisito"><i class="fa-solid fa-trash"></i></button>
+                            <?php endif; ?>
                         </div>
                     </div>
                     <div class="col-md-4">

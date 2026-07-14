@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/security.php';
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../includes/permissions.php';
 require_role('Administrador');
 
 verify_csrf($_POST['csrf_token'] ?? null);
@@ -11,7 +12,7 @@ $email = trim((string) ($_POST['email'] ?? ''));
 $role = trim((string) ($_POST['role'] ?? ''));
 $workerId = (int) ($_POST['worker_id'] ?? 0);
 $password = (string) ($_POST['password'] ?? '');
-$allowedRoles = ['Administrador', 'Personal'];
+$allowedRoles = ['Administrador', 'Gestor', 'Personal'];
 
 if ($name === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || !in_array($role, $allowedRoles, true)) {
     json_response(['ok' => false, 'message' => 'Complete los campos obligatorios.'], 400);
@@ -46,6 +47,7 @@ if ($id > 0 && $password !== '' && strlen($password) < 8) {
 }
 
 try {
+    db()->beginTransaction();
     if ($id > 0) {
         $sql = 'UPDATE users SET name = :name, email = :email, role = :role, worker_id = :worker_id';
         $params = [
@@ -61,6 +63,7 @@ try {
         }
         $sql .= ' WHERE id = :id';
         db()->prepare($sql)->execute($params);
+        $userId = $id;
     } else {
         $stmt = db()->prepare('INSERT INTO users (name, email, role, worker_id, password, status)
             VALUES (:name, :email, :role, :worker_id, :password, 1)');
@@ -71,12 +74,23 @@ try {
             'worker_id' => $workerId ?: null,
             'password' => password_hash($password, PASSWORD_DEFAULT),
         ]);
+        $userId = (int) db()->lastInsertId();
     }
 
+    save_user_permissions($userId, $role, $_POST);
+    db()->commit();
     json_response(['ok' => true]);
 } catch (PDOException $e) {
+    if (db()->inTransaction()) {
+        db()->rollBack();
+    }
     if ($e->getCode() === '23000') {
         json_response(['ok' => false, 'message' => 'El correo electronico o trabajador vinculado ya existe.'], 409);
     }
     json_response(['ok' => false, 'message' => 'No se pudo guardar el usuario.'], 400);
+} catch (Throwable $e) {
+    if (db()->inTransaction()) {
+        db()->rollBack();
+    }
+    json_response(['ok' => false, 'message' => 'No se pudo guardar los permisos del usuario.'], 400);
 }

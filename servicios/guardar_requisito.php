@@ -18,6 +18,10 @@ if (!$workerId || !$positionId || !$requirementId || !$registrationDate || !$sta
     json_response(['ok' => false, 'message' => 'Complete todos los campos obligatorios.'], 400);
 }
 
+if (!current_user_can_document('requisitos.pmi_individual', $requirementId, 'upload')) {
+    json_response(['ok' => false, 'message' => 'No tiene permisos para guardar este requisito.'], 403);
+}
+
 if (strtotime($endDate) < strtotime($startDate)) {
     json_response(['ok' => false, 'message' => 'La fecha fin no puede ser menor a la fecha inicio.'], 400);
 }
