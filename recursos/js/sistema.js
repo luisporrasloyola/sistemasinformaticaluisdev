@@ -2876,7 +2876,9 @@ function initDashboardEjecutivo() {
                 && (!position || normalizarTexto(row.dataset.position).includes(position))
                 && (!requirement || normalizarTexto(row.dataset.requirement).includes(requirement))
                 && (!state || row.dataset.state === state)
-                && (!observationState || row.dataset.observationState === observationState);
+                && (!observationState
+                    || row.dataset.observationState === observationState
+                    || (observationState === 'approved' && ['none', 'approved'].includes(row.dataset.observationState || 'none')));
             row.classList.toggle('d-none', !visible);
         });
     };
