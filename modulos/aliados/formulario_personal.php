@@ -7,7 +7,7 @@ $id = isset($_GET['id']) ? (int) $_GET['id'] : 0;
 $worker = [
     'id' => 0, 'company_id' => '', 'full_name' => '', 'document_type' => 'DNI', 'document_number' => '',
     'blood_type' => '', 'address' => '', 'phone' => '', 'email' => '', 'birth_date' => '', 'status' => 1,
-    'photo_path' => '', 'signature_path' => '',
+    'photo_path' => '', 'signature_path' => '', 'personal_observations' => '',
 ];
 $selectedPositions = [];
 
@@ -154,6 +154,11 @@ require __DIR__ . '/../../includes/header.php';
                         </div>
                         <div class="invalid-feedback d-block puestos-error d-none">Seleccione al menos un puesto.</div>
                     </div>
+                </div>
+                <div class="col-md-12">
+                    <label class="form-label" for="personalObservations">Observaciones</label>
+                    <textarea class="form-control" id="personalObservations" name="personal_observations" rows="4" maxlength="1200" placeholder="Ingrese observaciones internas del personal, si corresponde."><?= e($worker['personal_observations'] ?? '') ?></textarea>
+                    <div class="form-text">Campo opcional para notas administrativas del personal.</div>
                 </div>
             </div>
         </div>

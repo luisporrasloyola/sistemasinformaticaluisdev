@@ -48,6 +48,7 @@ CREATE TABLE workers (
     phone VARCHAR(40) NULL,
     email VARCHAR(160) NULL,
     birth_date DATE NULL,
+    personal_observations TEXT NULL,
     status TINYINT(1) NOT NULL DEFAULT 1,
     photo_path VARCHAR(255) NULL,
     signature_path VARCHAR(255) NULL,

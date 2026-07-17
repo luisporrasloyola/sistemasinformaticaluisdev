@@ -55,7 +55,10 @@ function resolve_catalog_id(string $table, string $input): int
 
 function personal_completo(array $workerData, array $positions, ?string $photoPath, ?string $signaturePath): bool
 {
-    foreach ($workerData as $value) {
+    foreach ($workerData as $field => $value) {
+        if ($field === 'personal_observations') {
+            continue;
+        }
         if ($value === null || trim((string) $value) === '') {
             return false;
         }
@@ -79,6 +82,7 @@ try {
         'phone' => trim((string) ($_POST['phone'] ?? '')),
         'email' => $email,
         'birth_date' => ($_POST['birth_date'] ?? '') ?: null,
+        'personal_observations' => trim((string) ($_POST['personal_observations'] ?? '')),
     ];
 
     if ($id > 0) {
@@ -92,7 +96,7 @@ try {
 
         $sql = 'UPDATE workers SET company_id=:company_id, full_name=:full_name, document_type=:document_type,
                 document_number=:document_number, blood_type=:blood_type, address=:address, phone=:phone,
-                email=:email, birth_date=:birth_date, status=:status';
+                email=:email, birth_date=:birth_date, personal_observations=:personal_observations, status=:status';
         $params = $workerData + [
             'status' => $calculatedStatus,
             'id' => $id,
@@ -113,8 +117,8 @@ try {
     } else {
         $calculatedStatus = personal_completo($workerData, $positionInputs, $photo['path'], $signature['path']) ? 1 : 0;
         $stmt = db()->prepare('INSERT INTO workers
-            (company_id, full_name, document_type, document_number, blood_type, address, phone, email, birth_date, status, photo_path, signature_path)
-            VALUES (:company_id, :full_name, :document_type, :document_number, :blood_type, :address, :phone, :email, :birth_date, :status, :photo_path, :signature_path)');
+            (company_id, full_name, document_type, document_number, blood_type, address, phone, email, birth_date, personal_observations, status, photo_path, signature_path)
+            VALUES (:company_id, :full_name, :document_type, :document_number, :blood_type, :address, :phone, :email, :birth_date, :personal_observations, :status, :photo_path, :signature_path)');
         $stmt->execute($workerData + [
             'status' => $calculatedStatus,
             'photo_path' => $photo['path'],
