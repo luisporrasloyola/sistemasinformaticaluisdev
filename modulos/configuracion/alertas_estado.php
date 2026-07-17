@@ -5,7 +5,7 @@ require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../includes/status_alerts.php';
 require_module_access('configuracion.alertas_estado');
 
-$message = '';
+$message = isset($_GET['guardado']) ? 'Configuracion guardada correctamente.' : '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verify_csrf($_POST['csrf_token'] ?? null);
@@ -48,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    $message = 'Configuracion guardada correctamente.';
+    redirect('modulos/configuracion/alertas_estado.php?guardado=1');
 }
 
 $catalogItems = status_alert_catalog_items();
