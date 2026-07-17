@@ -6,6 +6,7 @@ $requisitosOpen = str_contains($currentPath, '/modulos/requisitos/');
 $maquinariaOpen = str_contains($currentPath, '/modulos/maquinaria/');
 $empresaOpen = str_contains($currentPath, '/modulos/empresa/');
 $usuarioOpen = str_contains($currentPath, '/modulos/usuario/');
+$configuracionOpen = str_contains($currentPath, '/modulos/configuracion/');
 $isAdmin = is_admin();
 ?>
 <aside class="sidebar" id="sidebar">
@@ -79,6 +80,14 @@ $isAdmin = is_admin();
             </div>
 
             <a class="nav-link <?= $usuarioOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/usuario/usuarios.php"><i class="fa-solid fa-users-gear"></i><span>Usuarios</span></a>
+            <button class="nav-link nav-parent <?= $configuracionOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#configuracionMenu" aria-expanded="<?= $configuracionOpen ? 'true' : 'false' ?>" aria-controls="configuracionMenu">
+                <i class="fa-solid fa-gear"></i><span>Configuración</span><i class="fa-solid fa-chevron-down nav-caret"></i>
+            </button>
+            <div class="collapse <?= $configuracionOpen ? 'show' : '' ?>" id="configuracionMenu">
+                <div class="submenu">
+                    <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/configuracion/alertas_estado.php"><i class="fa-solid fa-triangle-exclamation"></i><span>Alertas del estado</span></a>
+                </div>
+            </div>
         <?php endif; ?>
 
         <?php if (is_gestor_role()): ?>
@@ -123,6 +132,12 @@ $isAdmin = is_admin();
             <?php endif; ?>
             <?php if (current_user_can_module('usuarios')): ?>
                 <a class="nav-link <?= $usuarioOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/usuario/usuarios.php"><i class="fa-solid fa-users-gear"></i><span>Usuarios</span></a>
+            <?php endif; ?>
+            <?php if (current_user_can_module('configuracion')): ?>
+                <button class="nav-link nav-parent <?= $configuracionOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#configuracionMenuGestor" aria-expanded="<?= $configuracionOpen ? 'true' : 'false' ?>" aria-controls="configuracionMenuGestor"><i class="fa-solid fa-gear"></i><span>Configuración</span><i class="fa-solid fa-chevron-down nav-caret"></i></button>
+                <div class="collapse <?= $configuracionOpen ? 'show' : '' ?>" id="configuracionMenuGestor"><div class="submenu">
+                    <?php if (current_user_can_module('configuracion.alertas_estado')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/configuracion/alertas_estado.php"><i class="fa-solid fa-triangle-exclamation"></i><span>Alertas del estado</span></a><?php endif; ?>
+                </div></div>
             <?php endif; ?>
         <?php endif; ?>
 

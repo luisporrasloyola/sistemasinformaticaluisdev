@@ -1,23 +1,15 @@
 <?php
 require_once __DIR__ . '/../includes/security.php';
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../includes/status_alerts.php';
 require_login();
 
-function requirement_status(string $endDate, string $startDate): array
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+
+function requirement_status(string $endDate, string $startDate, int $requirementId): array
 {
-    $today = new DateTimeImmutable('today');
-    $end = new DateTimeImmutable($endDate);
-    $warningLimit = $today->modify('+30 days');
-
-    if ($end < $today) {
-        return ['label' => 'NO APTO', 'class' => 'text-bg-danger'];
-    }
-
-    if ($end <= $warningLimit) {
-        return ['label' => 'POR VENCER', 'class' => 'text-bg-warning'];
-    }
-
-    return ['label' => 'APTO', 'class' => 'text-bg-success'];
+    return status_alert_document_status($endDate, 'requisitos.pmi_individual', $requirementId);
 }
 
 $workerId = (int) ($_GET['trabajador_id'] ?? 0);
@@ -33,7 +25,7 @@ $stmt->execute(['worker_id' => $workerId, 'position_id' => $positionId]);
 $rows = $stmt->fetchAll();
 
 foreach ($rows as &$row) {
-    $row['status'] = requirement_status($row['end_date'], $row['start_date']);
+    $row['status'] = requirement_status($row['end_date'], $row['start_date'], (int) $row['requirement_id']);
 }
 
 json_response(['ok' => true, 'rows' => $rows]);

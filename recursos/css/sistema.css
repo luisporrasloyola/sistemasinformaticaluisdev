@@ -4638,6 +4638,62 @@ input[type="checkbox"]:active {
     }
 }
 
+.state-alert-icon {
+    align-items: center;
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    border-radius: 8px;
+    color: #f59e0b;
+    display: inline-flex;
+    flex: 0 0 auto;
+    font-size: 1.25rem;
+    height: 42px;
+    justify-content: center;
+    width: 42px;
+}
+
+.state-alert-rules {
+    display: grid;
+    gap: 4px;
+    font-size: .875rem;
+}
+
+.config-alert-accordion {
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.config-alert-accordion .accordion-button {
+    font-weight: 700;
+}
+
+.config-alert-table th {
+    color: #27364a;
+    font-size: .75rem;
+    text-transform: uppercase;
+}
+
+.config-alert-days-input {
+    display: inline-block;
+    max-width: 120px;
+    text-align: center;
+}
+
+.sticky-form-actions {
+    align-items: center;
+    background: rgba(248, 250, 252, .96);
+    border-top: 1px solid #cbd5e1;
+    bottom: 0;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 16px;
+    padding: 12px 0;
+    position: sticky;
+    z-index: 4;
+}
+
 /* Ajuste definitivo: mostrar imagen completa dentro del cuadrado sin deformar */
 #requirementsWorkspace .worker-card img,
 #machineDocumentsWorkspace .worker-card img,

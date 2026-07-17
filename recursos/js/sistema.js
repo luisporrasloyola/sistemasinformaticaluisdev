@@ -671,7 +671,7 @@ async function loadWorker(id) {
 
 async function loadRequirements() {
     if (!currentWorkerId || !currentPositionId) return;
-    const response = await fetch(`${BASE_URL}/servicios/listar_requisitos.php?trabajador_id=${currentWorkerId}&puesto_id=${currentPositionId}`);
+    const response = await fetch(`${BASE_URL}/servicios/listar_requisitos.php?trabajador_id=${currentWorkerId}&puesto_id=${currentPositionId}&t=${Date.now()}`);
     const data = await response.json();
     const tbody = document.querySelector('#requirementsTable tbody');
     tbody.innerHTML = '';
@@ -1440,7 +1440,7 @@ async function loadMachine(id) {
 
 async function loadMachineDocuments() {
     if (!currentMachineId) return;
-    const response = await fetch(`${BASE_URL}/servicios/listar_documentos_maquinaria.php?maquinaria_id=${currentMachineId}`);
+    const response = await fetch(`${BASE_URL}/servicios/listar_documentos_maquinaria.php?maquinaria_id=${currentMachineId}&t=${Date.now()}`);
     const data = await response.json();
     const tbody = document.querySelector('#machineDocumentsTable tbody');
     tbody.innerHTML = '';
@@ -1923,7 +1923,7 @@ async function loadCompanyModule(id) {
 
 async function loadCompanyDocuments() {
     if (!currentCompanyModuleId) return;
-    const response = await fetch(`${BASE_URL}/servicios/empresa/listar_documentos_empresa.php?empresa_id=${currentCompanyModuleId}`);
+    const response = await fetch(`${BASE_URL}/servicios/empresa/listar_documentos_empresa.php?empresa_id=${currentCompanyModuleId}&t=${Date.now()}`);
     const data = await response.json();
     const tbody = document.querySelector('#companyDocumentsTable tbody');
     tbody.innerHTML = '';
@@ -2314,7 +2314,7 @@ async function uploadCompanySecurityPhoto(event) {
 
 async function loadCompanySecurityRows() {
     if (!currentCompanySecurityId) return;
-    const response = await fetch(`${BASE_URL}/servicios/empresa/listar_seguridad_empresa.php?empresa_id=${currentCompanySecurityId}`);
+    const response = await fetch(`${BASE_URL}/servicios/empresa/listar_seguridad_empresa.php?empresa_id=${currentCompanySecurityId}&t=${Date.now()}`);
     const data = await response.json();
     const tbody = document.querySelector('#companySecurityTable tbody');
     tbody.innerHTML = '';
@@ -2623,7 +2623,7 @@ function initEmpresaGenericModules() {
         }
 
         async function loadRows() {
-            const response = await fetch(`${BASE_URL}/servicios/empresa/documentos_genericos_empresa.php?action=list&module=${module}&empresa_id=${currentCompanyId}`);
+            const response = await fetch(`${BASE_URL}/servicios/empresa/documentos_genericos_empresa.php?action=list&module=${module}&empresa_id=${currentCompanyId}&t=${Date.now()}`);
             const data = await response.json();
             const tbody = root.querySelector('.js-company-generic-tbody');
             tbody.innerHTML = '';

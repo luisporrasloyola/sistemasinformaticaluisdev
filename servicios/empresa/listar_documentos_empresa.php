@@ -1,21 +1,15 @@
 <?php
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../includes/status_alerts.php';
 require_module_access('empresa.documentos');
 
-function empresa_document_status(string $endDate): array
-{
-    $today = new DateTimeImmutable('today');
-    $end = new DateTimeImmutable($endDate);
-    $warningLimit = $today->modify('+30 days');
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
 
-    if ($end < $today) {
-        return ['label' => 'NO APTO', 'class' => 'text-bg-danger'];
-    }
-    if ($end <= $warningLimit) {
-        return ['label' => 'POR VENCER', 'class' => 'text-bg-warning'];
-    }
-    return ['label' => 'APTO', 'class' => 'text-bg-success'];
+function empresa_document_status(string $endDate, int $documentId): array
+{
+    return status_alert_document_status($endDate, 'empresa.documentos', $documentId);
 }
 
 $empresaId = (int) ($_GET['empresa_id'] ?? 0);
@@ -28,6 +22,6 @@ $stmt = db()->prepare("SELECT ed.*, edc.nombre AS documento, COALESCE(u.name, ''
 $stmt->execute(['empresa_id' => $empresaId]);
 $rows = $stmt->fetchAll();
 foreach ($rows as &$row) {
-    $row['status'] = empresa_document_status($row['fecha_fin']);
+    $row['status'] = empresa_document_status($row['fecha_fin'], (int) $row['documento_id']);
 }
 json_response(['ok' => true, 'rows' => $rows]);

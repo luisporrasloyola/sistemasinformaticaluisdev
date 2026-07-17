@@ -1,13 +1,14 @@
 <?php
 require_once __DIR__ . '/includes/security.php';
 require_once __DIR__ . '/config/database.php';
+require_once __DIR__ . '/includes/status_alerts.php';
 require_module_access('dashboard');
 
-$documentRows = db()->query("SELECT end_date FROM worker_requirements")->fetchAll();
+$documentRows = db()->query("SELECT end_date, requirement_id FROM worker_requirements")->fetchAll();
 $counts = ['verde' => 0, 'amarillo' => 0, 'rojo' => 0];
 
 foreach ($documentRows as $doc) {
-    $status = dashboard_document_status($doc['end_date']);
+    $status = dashboard_document_status($doc['end_date'], (int) $doc['requirement_id']);
     $counts[$status['key']]++;
 }
 
@@ -37,6 +38,7 @@ $rows = db()->query("SELECT
         COALESCE(c.name, 'Sin empresa') AS company,
         p.id AS position_id,
         p.name AS position_name,
+        wr.requirement_id,
         rc.name AS requirement_name,
         wr.observations,
         {$observationSelect}
@@ -66,7 +68,7 @@ $positionWorkerKeys = [];
 foreach ($rows as $row) {
     $hasRequirement = !empty($row['requirement_row_id']);
     if ($hasRequirement) {
-        $status = dashboard_document_status($row['end_date']);
+        $status = dashboard_document_status($row['end_date'], (int) $row['requirement_id']);
         $stateKey = $status['key'];
         $stateText = $status['label'];
         $stateClass = match ($stateKey) {
@@ -179,21 +181,9 @@ $chartPayload = [
     ],
 ];
 
-function dashboard_document_status(string $endDate): array
+function dashboard_document_status(string $endDate, int $requirementId): array
 {
-    $today = new DateTimeImmutable('today');
-    $end = new DateTimeImmutable($endDate);
-    $warningLimit = $today->modify('+30 days');
-
-    if ($end < $today) {
-        return ['key' => 'rojo', 'label' => 'NO APTO'];
-    }
-
-    if ($end <= $warningLimit) {
-        return ['key' => 'amarillo', 'label' => 'POR VENCER'];
-    }
-
-    return ['key' => 'verde', 'label' => 'APTO'];
+    return status_alert_document_status($endDate, 'requisitos.pmi_individual', $requirementId, true);
 }
 
 function dashboard_db_column_exists(string $table, string $column): bool

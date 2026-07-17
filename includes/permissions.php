@@ -42,6 +42,12 @@ function permission_modules_catalog(): array
             ],
         ],
         'usuarios' => ['label' => 'Usuarios', 'children' => []],
+        'configuracion' => [
+            'label' => 'Configuración',
+            'children' => [
+                'configuracion.alertas_estado' => 'Alertas del estado',
+            ],
+        ],
     ];
 }
 

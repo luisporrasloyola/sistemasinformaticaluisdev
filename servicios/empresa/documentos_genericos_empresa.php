@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../includes/upload.php';
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../includes/status_alerts.php';
 
 $module = (string) ($_REQUEST['module'] ?? '');
 $action = (string) ($_REQUEST['action'] ?? '');
@@ -14,6 +15,11 @@ if (!$config || $action === '') {
 }
 
 require_module_access($config['scope']);
+
+if ($action === 'list') {
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+}
 
 match ($action) {
     'list' => generic_company_list($config),
@@ -48,14 +54,9 @@ function generic_company_module_config(string $module): ?array
     };
 }
 
-function generic_company_status(string $endDate): array
+function generic_company_status(string $endDate, string $scopeKey, int $documentId): array
 {
-    $today = new DateTimeImmutable('today');
-    $end = new DateTimeImmutable($endDate);
-    $warningLimit = $today->modify('+30 days');
-    if ($end < $today) return ['label' => 'NO APTO', 'class' => 'text-bg-danger'];
-    if ($end <= $warningLimit) return ['label' => 'POR VENCER', 'class' => 'text-bg-warning'];
-    return ['label' => 'APTO', 'class' => 'text-bg-success'];
+    return status_alert_document_status($endDate, $scopeKey, $documentId);
 }
 
 function generic_company_list(array $config): never
@@ -70,7 +71,7 @@ function generic_company_list(array $config): never
     $stmt->execute(['empresa_id' => $empresaId]);
     $rows = $stmt->fetchAll();
     foreach ($rows as &$row) {
-        $row['status'] = generic_company_status($row['fecha_fin']);
+        $row['status'] = generic_company_status($row['fecha_fin'], $config['scope'], (int) $row['documento_id']);
     }
     json_response(['ok' => true, 'rows' => $rows]);
 }
