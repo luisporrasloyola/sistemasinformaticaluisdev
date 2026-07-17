@@ -707,6 +707,7 @@ function openAddRequirement() {
     readOnlyMode = false;
     const form = document.getElementById('requirementForm');
     form.reset();
+    resetRequirementFileInput();
     form.classList.remove('was-validated');
     setRequirementReadonly(false);
     setRequirementObservationVisibility(false);
@@ -740,6 +741,7 @@ async function openViewRequirement(id) {
 }
 
 async function fillRequirementModal(id) {
+    resetRequirementFileInput();
     const response = await fetch(`${BASE_URL}/servicios/obtener_requisito.php?id=${id}`);
     const data = await response.json();
     const row = data.row;
@@ -754,6 +756,11 @@ async function fillRequirementModal(id) {
     $('#requirementSelect').append(option).trigger('change');
     renderCurrentPdf(row);
     renderRequirementAudit(row, data.activity || []);
+}
+
+function resetRequirementFileInput() {
+    const input = document.getElementById('pdfInput');
+    if (input) input.value = '';
 }
 
 function renderRequirementAudit(row, activity) {
@@ -895,6 +902,7 @@ async function saveRequirementLegacy(event) {
         Swal.fire('Atención', data.message || 'No se pudo guardar.', 'warning');
         return;
     }
+    resetRequirementFileInput();
     requirementModal.hide();
     loadRequirements();
 }
@@ -931,6 +939,7 @@ async function saveRequirement(event) {
             Swal.fire('Atención', data.message || 'No se pudo guardar.', 'warning');
             return;
         }
+        resetRequirementFileInput();
         requirementModal.hide();
         loadRequirements();
     } catch (error) {
@@ -963,6 +972,7 @@ async function deleteRequirementPdf(id) {
     const response = await fetch(`${BASE_URL}/servicios/eliminar_pdf_requisito.php`, { method: 'POST', body: form });
     const data = await response.json();
     if (data.ok) {
+        resetRequirementFileInput();
         renderCurrentPdf(null);
         loadRequirements();
     }
