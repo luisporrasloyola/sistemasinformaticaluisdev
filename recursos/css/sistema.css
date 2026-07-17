@@ -4694,6 +4694,29 @@ input[type="checkbox"]:active {
     z-index: 4;
 }
 
+.dashboard-filters {
+    grid-template-columns: minmax(150px, .8fr) minmax(210px, 1.15fr) minmax(180px, 1fr) minmax(180px, 1fr) minmax(150px, .78fr) minmax(190px, .95fr) !important;
+}
+
+.dashboard-filter-company {
+    max-width: 220px;
+}
+
+@media (max-width: 1199px) {
+    .dashboard-filters {
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    }
+    .dashboard-filter-company {
+        max-width: none;
+    }
+}
+
+@media (max-width: 767px) {
+    .dashboard-filters {
+        grid-template-columns: 1fr !important;
+    }
+}
+
 /* Ajuste definitivo: mostrar imagen completa dentro del cuadrado sin deformar */
 #requirementsWorkspace .worker-card img,
 #machineDocumentsWorkspace .worker-card img,

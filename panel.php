@@ -353,7 +353,7 @@ require __DIR__ . '/includes/header.php';
     </div>
 
     <div class="dashboard-filters mb-3">
-        <div>
+        <div class="dashboard-filter-company">
             <label class="form-label">Empresa</label>
             <select class="form-select" id="dashboardEmpresaFilter">
                 <option value="">Todas</option>
@@ -394,6 +394,15 @@ require __DIR__ . '/includes/header.php';
                 <option value="sin_estado">SIN ESTADO</option>
             </select>
         </div>
+        <div>
+            <label class="form-label">Estado de observación</label>
+            <select class="form-select" id="dashboardObservationStateFilter">
+                <option value="">Todos</option>
+                <option value="approved">Conforme</option>
+                <option value="observed">Observado</option>
+                <option value="corrected">Corregido por revisar</option>
+            </select>
+        </div>
     </div>
 
     <div class="table-responsive">
@@ -411,7 +420,7 @@ require __DIR__ . '/includes/header.php';
             </thead>
             <tbody>
             <?php foreach ($dashboardRows as $item): ?>
-                <tr class="<?= e($item['observation_row_class']) ?>" data-company="<?= e(mb_strtolower($item['company'], 'UTF-8')) ?>" data-name="<?= e(mb_strtolower($item['name'] . ' ' . $item['document'], 'UTF-8')) ?>" data-position="<?= e(mb_strtolower($item['position'], 'UTF-8')) ?>" data-requirement="<?= e(mb_strtolower($item['requirement'], 'UTF-8')) ?>" data-state="<?= e($item['state_key']) ?>">
+                <tr class="<?= e($item['observation_row_class']) ?>" data-company="<?= e(mb_strtolower($item['company'], 'UTF-8')) ?>" data-name="<?= e(mb_strtolower($item['name'] . ' ' . $item['document'], 'UTF-8')) ?>" data-position="<?= e(mb_strtolower($item['position'], 'UTF-8')) ?>" data-requirement="<?= e(mb_strtolower($item['requirement'], 'UTF-8')) ?>" data-state="<?= e($item['state_key']) ?>" data-observation-state="<?= e($item['observation_status']) ?>">
                     <td><?= e($item['company']) ?></td>
                     <td>
                         <strong><?= e($item['name']) ?></strong>

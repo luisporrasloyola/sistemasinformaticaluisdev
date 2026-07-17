@@ -2858,6 +2858,7 @@ function initDashboardEjecutivo() {
         position: document.getElementById('dashboardPuestoFilter'),
         requirement: document.getElementById('dashboardRequisitoFilter'),
         state: document.getElementById('dashboardEstadoFilter'),
+        observationState: document.getElementById('dashboardObservationStateFilter'),
     };
     const rows = Array.from(table.querySelectorAll('tbody tr'));
 
@@ -2867,13 +2868,15 @@ function initDashboardEjecutivo() {
         const position = normalizarTexto(filters.position?.value || '');
         const requirement = normalizarTexto(filters.requirement?.value || '');
         const state = filters.state?.value || '';
+        const observationState = filters.observationState?.value || '';
 
         rows.forEach((row) => {
             const visible = (!company || normalizarTexto(row.dataset.company).includes(company))
                 && (!name || normalizarTexto(row.dataset.name).includes(name))
                 && (!position || normalizarTexto(row.dataset.position).includes(position))
                 && (!requirement || normalizarTexto(row.dataset.requirement).includes(requirement))
-                && (!state || row.dataset.state === state);
+                && (!state || row.dataset.state === state)
+                && (!observationState || row.dataset.observationState === observationState);
             row.classList.toggle('d-none', !visible);
         });
     };
