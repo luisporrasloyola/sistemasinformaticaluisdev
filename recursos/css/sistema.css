@@ -505,6 +505,28 @@ body {
     background: #f1f5f9;
 }
 
+.attendance-matrix .matrix-day-heading {
+    padding: 6px 4px;
+    line-height: 1.1;
+}
+
+.attendance-matrix .matrix-day-heading span {
+    display: block;
+}
+
+.attendance-matrix .matrix-weekday {
+    margin-bottom: 5px;
+    color: #64748b;
+    font-size: .66rem;
+    font-weight: 800;
+}
+
+.attendance-matrix .matrix-day-number {
+    color: #0f172a;
+    font-size: .74rem;
+    font-weight: 800;
+}
+
 .attendance-matrix .matrix-person strong,
 .attendance-matrix .matrix-person span {
     display: block;
@@ -530,6 +552,70 @@ body {
     background: #fff7ed !important;
     color: #9a3412 !important;
 }
+
+.matrix-absent {
+    background: #fef2f2 !important;
+    color: #dc2626 !important;
+}
+
+.matrix-absent span {
+    font-size: .82rem;
+}
+
+.matrix-day-off {
+    background: #f1f5f9 !important;
+    color: #64748b !important;
+}
+
+.matrix-vacation {
+    background: #ecfeff !important;
+    color: #0e7490 !important;
+}
+
+.attendance-matrix-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+    color: #475569;
+    font-size: .78rem;
+}
+
+.attendance-matrix-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.attendance-matrix-legend strong {
+    min-width: 24px;
+    color: #0f172a;
+}
+
+.calendar-legend {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
+    color: #475569;
+    font-size: .82rem;
+    font-weight: 700;
+}
+
+.calendar-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.calendar-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+}
+
+.calendar-dot-holiday { background: #dc3545; }
+.calendar-dot-off { background: #64748b; }
+.calendar-dot-vacation { background: #0891b2; }
 
 .matrix-empty {
     background: #f8fafc !important;

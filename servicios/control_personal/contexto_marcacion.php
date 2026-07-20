@@ -1,7 +1,8 @@
 <?php
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
-require_role(['Administrador', 'Personal']);
+require_once __DIR__ . '/../../includes/attendance_calendar.php';
+require_module_access('control_personal.control_asistencia');
 
 $requestedWorkerId = (int) ($_GET['worker_id'] ?? 0);
 $workerId = is_personal_role() ? (int) current_user_worker_id() : $requestedWorkerId;
@@ -11,7 +12,7 @@ if ($workerId <= 0) {
 }
 
 $stmt = db()->prepare("SELECT aa.id AS assignment_id, aa.activity,
-        w.id AS worker_id, w.full_name, w.document_number,
+        w.id AS worker_id, w.company_id, w.full_name, w.document_number,
         l.id AS location_id, l.name AS location_name, l.latitude, l.longitude, l.address, l.radius_meters,
         s.id AS schedule_id, s.name AS schedule_name
     FROM attendance_assignments aa
@@ -38,7 +39,13 @@ $stmt->execute([
     'schedule_id' => (int) $assignment['schedule_id'],
     'day_of_week' => $dayOfWeek,
 ]);
-$scheduleDay = $stmt->fetch();
+$weeklyScheduleDay = $stmt->fetch() ?: null;
+$calendarEvent = attendance_calendar_event_for_worker(
+    $today,
+    (int) $assignment['worker_id'],
+    (int) ($assignment['company_id'] ?? 0)
+);
+$scheduleDay = attendance_calendar_effective_schedule($weeklyScheduleDay, $calendarEvent);
 
 $stmt = db()->prepare('SELECT mark_type, mark_time, final_status, photo_path FROM attendance_marks
     WHERE worker_id = :worker_id AND mark_date = :mark_date
@@ -52,6 +59,7 @@ json_response([
     'now' => date('H:i:s'),
     'assignment' => $assignment,
     'schedule_day' => $scheduleDay,
+    'calendar_event' => $calendarEvent,
     'marks' => $marks,
     'is_personal' => is_personal_role(),
 ]);

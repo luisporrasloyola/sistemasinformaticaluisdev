@@ -1,7 +1,8 @@
 <?php
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
-require_role(['Administrador', 'Personal']);
+require_once __DIR__ . '/../../includes/attendance_calendar.php';
+require_module_access('control_personal.control_asistencia');
 
 verify_csrf($_POST['csrf_token'] ?? null);
 
@@ -70,9 +71,11 @@ function meters_between(float $lat1, float $lon1, float $lat2, float $lon2): flo
 
 $stmt = db()->prepare("SELECT aa.id AS assignment_id,
         aa.worker_id, aa.location_id, aa.schedule_id,
+        w.company_id,
         l.latitude AS location_latitude, l.longitude AS location_longitude, l.radius_meters,
         s.name AS schedule_name
     FROM attendance_assignments aa
+    JOIN workers w ON w.id = aa.worker_id
     JOIN attendance_locations l ON l.id = aa.location_id
     JOIN attendance_schedules s ON s.id = aa.schedule_id
     WHERE aa.worker_id = :worker_id AND aa.status = 1
@@ -97,10 +100,19 @@ $stmt->execute([
     'schedule_id' => (int) $assignment['schedule_id'],
     'day_of_week' => $dayOfWeek,
 ]);
-$scheduleDay = $stmt->fetch();
+$weeklyScheduleDay = $stmt->fetch() ?: null;
+$calendarEvent = attendance_calendar_event_for_worker(
+    $today,
+    $workerId,
+    (int) ($assignment['company_id'] ?? 0)
+);
+$scheduleDay = attendance_calendar_effective_schedule($weeklyScheduleDay, $calendarEvent);
 
 if (!$scheduleDay) {
-    json_response(['ok' => false, 'message' => 'No hay horario configurado para hoy.'], 400);
+    $message = $calendarEvent
+        ? attendance_calendar_event_label((string) $calendarEvent['event_type']) . ': ' . (string) $calendarEvent['name'] . '. No corresponde marcar asistencia.'
+        : 'No hay horario configurado para hoy.';
+    json_response(['ok' => false, 'message' => $message], 400);
 }
 
 $duplicate = db()->prepare('SELECT id FROM attendance_marks WHERE worker_id = :worker_id AND mark_date = :mark_date AND mark_type = :mark_type LIMIT 1');

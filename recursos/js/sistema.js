@@ -61,6 +61,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initUsuariosModule();
     initAttendanceControl();
     initControlPersonalSchedules();
+    initControlPersonalCalendar();
     initControlPersonalLocations();
     initControlPersonalAssignments();
     initControlPersonalMarking();
@@ -93,16 +94,14 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function initDevelopmentPhaseLinks() {
-    const adminControlMenu = document.querySelector('#controlPersonalMenu a[href*="/modulos/control_personal/dashboard_asistencia.php"]');
-    if (!adminControlMenu) return;
-
-    document.querySelectorAll('#controlPersonalMenu a[href*="/modulos/control_personal/"]').forEach((link) => {
+    document.querySelectorAll('.js-development-link').forEach((link) => {
+        link.setAttribute('aria-disabled', 'true');
         link.addEventListener('click', (event) => {
             event.preventDefault();
             Swal.fire({
                 icon: 'info',
-                title: 'Módulo en desarrollo',
-                text: 'Esta opción estará disponible en la siguiente fase.',
+                title: 'Funcionalidad en desarrollo',
+                text: 'Este submódulo se encuentra en preparación y estará disponible en una próxima fase del sistema.',
                 confirmButtonText: 'Entendido'
             });
         });
@@ -4076,6 +4075,123 @@ function initControlPersonalSchedules() {
     });
 }
 
+function initControlPersonalCalendar() {
+    const form = document.getElementById('calendarDayForm');
+    if (!form) return;
+
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('calendarDayModal'));
+    const typeField = document.getElementById('calendarEventType');
+    const scopeField = document.getElementById('calendarScopeType');
+    const companyField = document.getElementById('calendarCompanyId');
+    const workerField = document.getElementById('calendarWorkerId');
+    const startDateField = document.getElementById('calendarDate');
+    const endDateField = document.getElementById('calendarEndDate');
+    const nameField = document.getElementById('calendarDayName');
+
+    function syncFields() {
+        const isVacation = typeField.value === 'vacation';
+        if (isVacation) {
+            scopeField.value = 'worker';
+            if (!nameField.value.trim()) nameField.value = 'Vacaciones';
+            if (!endDateField.value) endDateField.value = startDateField.value;
+        } else if (nameField.value.trim() === 'Vacaciones') {
+            nameField.value = '';
+        }
+        document.getElementById('calendarEndDateField')?.classList.toggle('d-none', !isVacation);
+        document.getElementById('calendarDateLabel').textContent = isVacation ? 'Fecha inicial' : 'Fecha';
+        endDateField.disabled = !isVacation;
+        endDateField.required = isVacation;
+        endDateField.min = startDateField.value || '';
+
+        const isCompany = scopeField.value === 'company';
+        const isWorker = scopeField.value === 'worker';
+        document.getElementById('calendarCompanyField')?.classList.toggle('d-none', !isCompany);
+        document.getElementById('calendarWorkerField')?.classList.toggle('d-none', !isWorker);
+        companyField.disabled = !isCompany;
+        companyField.required = isCompany;
+        workerField.disabled = !isWorker;
+        workerField.required = isWorker;
+    }
+
+    function setValue(id, value) {
+        const field = document.getElementById(id);
+        if (field) field.value = value || '';
+    }
+
+    function openCalendarModal(data = {}) {
+        form.reset();
+        form.classList.remove('was-validated');
+        setValue('calendarDayId', data.id);
+        setValue('calendarDate', data.date || localDateValue());
+        setValue('calendarEndDate', data.endDate || data.date || localDateValue());
+        setValue('calendarEventType', data.eventType || 'holiday');
+        setValue('calendarDayName', data.name);
+        setValue('calendarScopeType', data.scopeType || 'all');
+        setValue('calendarCompanyId', data.companyId);
+        setValue('calendarWorkerId', data.workerId);
+        document.getElementById('calendarDayModalTitle').textContent = data.id ? 'Editar dia especial' : 'Nuevo dia especial';
+        syncFields();
+        modal.show();
+    }
+
+    typeField.addEventListener('change', syncFields);
+    scopeField.addEventListener('change', syncFields);
+    startDateField.addEventListener('change', () => {
+        if (!endDateField.value || endDateField.value < startDateField.value) {
+            endDateField.value = startDateField.value;
+        }
+        syncFields();
+    });
+    document.getElementById('newCalendarDayBtn')?.addEventListener('click', () => openCalendarModal());
+    document.querySelectorAll('.js-edit-calendar-day').forEach((button) => {
+        button.addEventListener('click', () => openCalendarModal(button.dataset));
+    });
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        syncFields();
+        if (!form.checkValidity()) {
+            form.classList.add('was-validated');
+            return;
+        }
+
+        const submitButton = form.querySelector('button[type="submit"]');
+        submitButton.disabled = true;
+        try {
+            const response = await fetch(`${BASE_URL}/servicios/control_personal/guardar_calendario_laboral.php`, {
+                method: 'POST',
+                body: new FormData(form)
+            });
+            const data = await response.json();
+            if (!data.ok) {
+                Swal.fire('Atencion', data.message || 'No se pudo guardar el dia.', 'warning');
+                return;
+            }
+            const month = String(document.getElementById('calendarDate').value || '').slice(0, 7);
+            window.location.href = `${BASE_URL}/modulos/control_personal/calendario_laboral.php?mes=${encodeURIComponent(month)}`;
+        } catch (error) {
+            Swal.fire('Atencion', 'No se pudo guardar el dia.', 'warning');
+        } finally {
+            submitButton.disabled = false;
+        }
+    });
+
+    document.querySelectorAll('.js-delete-calendar-day').forEach((button) => {
+        button.addEventListener('click', async () => {
+            if (!await confirmAction('\u00bfEliminar dia del calendario?')) return;
+            const body = new FormData();
+            body.append('csrf_token', csrf);
+            body.append('id', button.dataset.id || '');
+            const response = await fetch(`${BASE_URL}/servicios/control_personal/eliminar_calendario_laboral.php`, { method: 'POST', body });
+            const data = await response.json();
+            if (data.ok) window.location.reload();
+            else Swal.fire('Atencion', data.message || 'No se pudo eliminar el dia.', 'warning');
+        });
+    });
+
+    syncFields();
+}
+
 function initControlPersonalLocations() {
     const form = document.getElementById('locationForm');
     if (!form) return;
@@ -4360,6 +4476,8 @@ function initControlPersonalMarking() {
         context = data;
         const assignment = data.assignment;
         const day = data.schedule_day || {};
+        const calendarEvent = data.calendar_event || null;
+        const hasSchedule = !!day.id;
         value('markWorkerName', `${assignment.full_name} - ${assignment.document_number}`);
         value('markLocationName', assignment.location_name);
         value('markScheduleName', assignment.schedule_name);
@@ -4367,10 +4485,10 @@ function initControlPersonalMarking() {
         value('markEntryWindow', `${formatTime(day.entry_start)} - ${formatTime(day.entry_end)} (${Number(day.tolerance_minutes || 0)} min tolerancia)`);
         value('markExitWindow', `${formatTime(day.exit_start)} - ${formatTime(day.exit_end)}`);
         value('markRadius', `${assignment.radius_meters} metros`);
-        entryBtn.disabled = data.marks.some((mark) => mark.mark_type === 'entrada');
-        exitBtn.disabled = data.marks.some((mark) => mark.mark_type === 'salida') || !data.marks.some((mark) => mark.mark_type === 'entrada');
+        entryBtn.disabled = !hasSchedule || data.marks.some((mark) => mark.mark_type === 'entrada');
+        exitBtn.disabled = !hasSchedule || data.marks.some((mark) => mark.mark_type === 'salida') || !data.marks.some((mark) => mark.mark_type === 'entrada');
         renderStatuses([
-            { text: day.id ? 'Horario disponible' : 'Sin horario para hoy', className: day.id ? 'text-bg-success' : 'text-bg-warning' },
+            { text: hasSchedule ? (calendarEvent?.name || 'Horario disponible') : (calendarEvent?.name || 'Sin horario para hoy'), className: hasSchedule ? 'text-bg-success' : 'text-bg-warning' },
             { text: entryBtn.disabled ? 'Entrada registrada' : 'Entrada pendiente', className: entryBtn.disabled ? 'text-bg-primary' : 'text-bg-secondary' },
             { text: exitBtn.disabled ? 'Salida no disponible/registrada' : 'Salida disponible', className: exitBtn.disabled ? 'text-bg-secondary' : 'text-bg-primary' },
         ]);

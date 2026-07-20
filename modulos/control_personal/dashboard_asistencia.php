@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../includes/attendance_calendar.php';
 require_module_access('control_personal.dashboard');
 
 $today = date('Y-m-d');
@@ -12,6 +13,15 @@ if (!preg_match('/^\d{4}-\d{2}$/', $selectedMonth)) {
 $monthStart = $selectedMonth . '-01';
 $monthEnd = date('Y-m-t', strtotime($monthStart));
 $daysInMonth = (int) date('t', strtotime($monthStart));
+$weekdayAbbreviations = [
+    1 => 'LU',
+    2 => 'MA',
+    3 => 'MI',
+    4 => 'JU',
+    5 => 'VI',
+    6 => 'SA',
+    7 => 'DO',
+];
 
 function cp_time(?string $time): string
 {
@@ -62,8 +72,11 @@ $absentToday = max(0, $activeWorkers - $entriesToday);
 
 $stmt = db()->prepare("SELECT
         aa.id AS assignment_id,
+        aa.schedule_id,
+        DATE(aa.created_at) AS assignment_start_date,
         aa.activity,
         w.id AS worker_id,
+        w.company_id,
         w.full_name,
         w.document_number,
         c.name AS company,
@@ -74,18 +87,22 @@ $stmt = db()->prepare("SELECT
         entrada.distance_meters AS entry_distance,
         salida.mark_time AS exit_time,
         salida.final_status AS exit_status
-    FROM attendance_assignments aa
-    JOIN workers w ON w.id = aa.worker_id
+    FROM workers w
+    LEFT JOIN attendance_assignments aa ON aa.id = (
+        SELECT MAX(active_assignment.id)
+        FROM attendance_assignments active_assignment
+        WHERE active_assignment.worker_id = w.id
+          AND active_assignment.status = 1
+    )
     LEFT JOIN companies c ON c.id = w.company_id
-    JOIN attendance_locations l ON l.id = aa.location_id
-    JOIN attendance_schedules s ON s.id = aa.schedule_id
+    LEFT JOIN attendance_locations l ON l.id = aa.location_id
+    LEFT JOIN attendance_schedules s ON s.id = aa.schedule_id
     LEFT JOIN attendance_marks entrada ON entrada.worker_id = aa.worker_id
         AND entrada.mark_date = :today_entry
         AND entrada.mark_type = 'entrada'
     LEFT JOIN attendance_marks salida ON salida.worker_id = aa.worker_id
         AND salida.mark_date = :today_exit
         AND salida.mark_type = 'salida'
-    WHERE aa.status = 1
     ORDER BY w.full_name");
 $stmt->execute(['today_entry' => $today, 'today_exit' => $today]);
 $todayRows = $stmt->fetchAll();
@@ -112,20 +129,60 @@ foreach ($stmt->fetchAll() as $row) {
 }
 $maxTrendValue = max(1, ...array_values(array_map(static fn(array $row): int => max($row), $trend)));
 
+$scheduleDaysBySchedule = [];
+$scheduleDayRows = db()->query('SELECT schedule_id, day_of_week
+    FROM attendance_schedule_days
+    WHERE status = 1')->fetchAll();
+foreach ($scheduleDayRows as $scheduleDayRow) {
+    $scheduleDaysBySchedule[(int) $scheduleDayRow['schedule_id']][(int) $scheduleDayRow['day_of_week']] = true;
+}
+
+$calendarEvents = attendance_calendar_events_between($monthStart, $monthEnd);
+$todayCalendarEvents = $today >= $monthStart && $today <= $monthEnd
+    ? $calendarEvents
+    : attendance_calendar_events_between($today, $today);
+
+$absentToday = 0;
+$todayWeekday = (int) date('N', strtotime($today));
+foreach ($todayRows as $todayRow) {
+    if (empty($todayRow['assignment_id']) || $today < (string) $todayRow['assignment_start_date']) {
+        continue;
+    }
+    $todayEvent = attendance_calendar_resolve_event(
+        $todayCalendarEvents,
+        $today,
+        (int) $todayRow['worker_id'],
+        (int) ($todayRow['company_id'] ?? 0)
+    );
+    $todayEventType = (string) ($todayEvent['event_type'] ?? '');
+    $hasScheduleToday = !in_array($todayEventType, ['holiday', 'non_working', 'vacation'], true)
+        && isset($scheduleDaysBySchedule[(int) $todayRow['schedule_id']][$todayWeekday]);
+    if ($hasScheduleToday && empty($todayRow['entry_time'])) {
+        $absentToday++;
+    }
+}
+
 $stmt = db()->prepare("SELECT
-        aa.worker_id,
+        w.id AS worker_id,
+        w.company_id,
         w.full_name,
         c.name AS company,
+        aa.schedule_id,
+        DATE(aa.created_at) AS assignment_start_date,
         am.mark_date,
         am.mark_type,
         am.mark_time,
         am.final_status
-    FROM attendance_assignments aa
-    JOIN workers w ON w.id = aa.worker_id
+    FROM workers w
     LEFT JOIN companies c ON c.id = w.company_id
-    LEFT JOIN attendance_marks am ON am.worker_id = aa.worker_id
+    LEFT JOIN attendance_assignments aa ON aa.id = (
+        SELECT MAX(active_assignment.id)
+        FROM attendance_assignments active_assignment
+        WHERE active_assignment.worker_id = w.id
+          AND active_assignment.status = 1
+    )
+    LEFT JOIN attendance_marks am ON am.worker_id = w.id
         AND am.mark_date BETWEEN :month_start AND :month_end
-    WHERE aa.status = 1
     ORDER BY w.full_name, am.mark_date, am.mark_type");
 $stmt->execute([
     'month_start' => $monthStart,
@@ -137,6 +194,10 @@ foreach ($stmt->fetchAll() as $row) {
     $matrixRows[$workerId] ??= [
         'name' => (string) $row['full_name'],
         'company' => (string) ($row['company'] ?? ''),
+        'worker_id' => $workerId,
+        'company_id' => (int) ($row['company_id'] ?? 0),
+        'schedule_id' => (int) ($row['schedule_id'] ?? 0),
+        'assignment_start_date' => (string) ($row['assignment_start_date'] ?? ''),
         'days' => [],
     ];
 
@@ -214,12 +275,29 @@ require __DIR__ . '/../../includes/header.php';
                     <tbody>
                     <?php foreach ($todayRows as $row): ?>
                         <?php
-                        $status = 'ausente';
-                        $label = 'Sin entrada';
-                        if (!empty($row['entry_time']) && !empty($row['exit_time'])) {
+                        $todayEvent = attendance_calendar_resolve_event(
+                            $todayCalendarEvents,
+                            $today,
+                            (int) $row['worker_id'],
+                            (int) ($row['company_id'] ?? 0)
+                        );
+                        $todayEventType = (string) ($todayEvent['event_type'] ?? '');
+                        $hasScheduleToday = !empty($row['assignment_id'])
+                            && $today >= (string) $row['assignment_start_date']
+                            && !in_array($todayEventType, ['holiday', 'non_working', 'vacation'], true)
+                            && isset($scheduleDaysBySchedule[(int) $row['schedule_id']][$todayWeekday]);
+                        $status = empty($row['assignment_id']) ? 'sin_asignar' : ($hasScheduleToday ? 'ausente' : 'sin_horario');
+                        $label = empty($row['assignment_id'])
+                            ? 'Sin asignar'
+                            : ($hasScheduleToday
+                                ? 'Sin entrada'
+                                : ($todayEvent
+                                    ? attendance_calendar_event_label((string) $todayEvent['event_type'])
+                                    : 'Sin horario'));
+                        if ($hasScheduleToday && !empty($row['entry_time']) && !empty($row['exit_time'])) {
                             $status = $row['entry_status'] === 'tardanza' ? 'tardanza' : 'completo';
                             $label = $row['entry_status'] === 'tardanza' ? 'Tardanza' : 'Completo';
-                        } elseif (!empty($row['entry_time'])) {
+                        } elseif ($hasScheduleToday && !empty($row['entry_time'])) {
                             $status = $row['entry_status'] === 'tardanza' ? 'tardanza' : 'en_jornada';
                             $label = $row['entry_status'] === 'tardanza' ? 'Tardanza' : 'En jornada';
                         }
@@ -229,15 +307,15 @@ require __DIR__ . '/../../includes/header.php';
                                 <strong><?= e($row['full_name']) ?></strong>
                                 <span class="text-muted small d-block"><?= e($row['document_number']) ?></span>
                             </td>
-                            <td><?= e($row['company'] ?? '') ?></td>
-                            <td><?= e($row['location_name']) ?></td>
+                            <td><?= e($row['company'] ?: '-') ?></td>
+                            <td><?= e($row['location_name'] ?: '-') ?></td>
                             <td><?= e(cp_time($row['entry_time'] ?? null)) ?></td>
                             <td><?= e(cp_time($row['exit_time'] ?? null)) ?></td>
                             <td><span class="badge <?= cp_badge_class($status) ?>"><?= e($label) ?></span></td>
                         </tr>
                     <?php endforeach; ?>
                     <?php if (!$todayRows): ?>
-                        <tr><td colspan="6" class="text-muted">No hay asignaciones activas.</td></tr>
+                        <tr><td colspan="6" class="text-muted">No hay personal registrado.</td></tr>
                     <?php endif; ?>
                     </tbody>
                 </table>
@@ -272,13 +350,26 @@ require __DIR__ . '/../../includes/header.php';
         <h2 class="mb-0">Matriz mensual</h2>
         <span class="text-muted small"><?= e(date('d/m/Y', strtotime($monthStart))) ?> - <?= e(date('d/m/Y', strtotime($monthEnd))) ?></span>
     </div>
+    <div class="attendance-matrix-legend mb-3" aria-label="Leyenda de la matriz mensual">
+        <span><strong>F</strong> Falta</span>
+        <span><strong>FE</strong> Feriado</span>
+        <span><strong>NL</strong> No laborable</span>
+        <span><strong>V</strong> Vacaciones</span>
+    </div>
     <div class="table-responsive attendance-matrix-wrap">
         <table class="table table-sm attendance-matrix">
             <thead>
             <tr>
                 <th class="matrix-person">Personal</th>
                 <?php for ($day = 1; $day <= $daysInMonth; $day++): ?>
-                    <th><?= $day ?></th>
+                    <?php
+                    $dayDate = sprintf('%s-%02d', $selectedMonth, $day);
+                    $weekdayNumber = (int) date('N', strtotime($dayDate));
+                    ?>
+                    <th class="matrix-day-heading">
+                        <span class="matrix-weekday"><?= e($weekdayAbbreviations[$weekdayNumber]) ?></span>
+                        <span class="matrix-day-number"><?= $day ?></span>
+                    </th>
                 <?php endfor; ?>
             </tr>
             </thead>
@@ -294,11 +385,45 @@ require __DIR__ . '/../../includes/header.php';
                         $cell = $worker['days'][$day] ?? [];
                         $entry = $cell['entrada'] ?? null;
                         $exit = $cell['salida'] ?? null;
-                        $cellClass = $entry ? ($entry['status'] === 'tardanza' ? 'matrix-late' : 'matrix-ok') : 'matrix-empty';
+                        $cellDate = sprintf('%s-%02d', $selectedMonth, $day);
+                        $weekdayNumber = (int) date('N', strtotime($cellDate));
+                        $scheduleId = (int) $worker['schedule_id'];
+                        $assignmentStartDate = (string) $worker['assignment_start_date'];
+                        $calendarEvent = attendance_calendar_resolve_event(
+                            $calendarEvents,
+                            $cellDate,
+                            (int) $worker['worker_id'],
+                            (int) $worker['company_id']
+                        );
+                        $calendarEventType = (string) ($calendarEvent['event_type'] ?? '');
+                        $isVacation = $calendarEventType === 'vacation';
+                        $isNonWorkingDay = in_array($calendarEventType, ['holiday', 'non_working', 'vacation'], true);
+                        $isAssignedPeriod = $scheduleId > 0
+                            && $assignmentStartDate !== ''
+                            && $cellDate >= $assignmentStartDate;
+                        $isWeeklyScheduled = isset($scheduleDaysBySchedule[$scheduleId][$weekdayNumber]);
+                        $isRestDay = $isAssignedPeriod
+                            && !$calendarEvent
+                            && !$isWeeklyScheduled;
+                        $isScheduledDay = $isAssignedPeriod && !$isNonWorkingDay && $isWeeklyScheduled;
+                        $isAbsence = !$entry && !$exit && $cellDate < $today && $isScheduledDay;
+                        $cellClass = $isAbsence
+                            ? 'matrix-absent'
+                            : ($entry
+                                ? ($entry['status'] === 'tardanza' ? 'matrix-late' : 'matrix-ok')
+                                : ($isVacation
+                                    ? 'matrix-vacation'
+                                    : (($isNonWorkingDay || $isRestDay) ? 'matrix-day-off' : 'matrix-empty')));
                         ?>
                         <td class="<?= e($cellClass) ?>">
-                            <?php if ($entry): ?>
+                            <?php if ($isAbsence): ?>
+                                <span title="Falta: no registró marcación">F</span>
+                            <?php elseif ($entry): ?>
                                 <span>E <?= e($entry['time']) ?></span>
+                            <?php elseif ($isNonWorkingDay): ?>
+                                <span title="<?= e($calendarEvent['name'] ?? '') ?>"><?= $calendarEventType === 'holiday' ? 'FE' : ($isVacation ? 'V' : 'NL') ?></span>
+                            <?php elseif ($isRestDay): ?>
+                                <span title="D&iacute;a sin horario asignado">NL</span>
                             <?php endif; ?>
                             <?php if ($exit): ?>
                                 <span>S <?= e($exit['time']) ?></span>
