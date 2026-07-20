@@ -4,14 +4,6 @@ require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/includes/status_alerts.php';
 require_module_access('dashboard');
 
-$documentRows = db()->query("SELECT end_date, requirement_id FROM worker_requirements")->fetchAll();
-$counts = ['verde' => 0, 'amarillo' => 0, 'rojo' => 0];
-
-foreach ($documentRows as $doc) {
-    $status = dashboard_document_status($doc['end_date'], (int) $doc['requirement_id']);
-    $counts[$status['key']]++;
-}
-
 $hasObservationAudit = dashboard_db_column_exists('worker_requirements', 'observation_status');
 $observationSelect = $hasObservationAudit
     ? "wr.observation_status,
@@ -61,6 +53,7 @@ $positionCounts = [];
 $companies = [];
 $positions = [];
 $requirements = [];
+$counts = ['verde' => 0, 'amarillo' => 0, 'rojo' => 0];
 
 $companyWorkerKeys = [];
 $positionWorkerKeys = [];
@@ -71,6 +64,7 @@ foreach ($rows as $row) {
         $status = dashboard_document_status($row['end_date'], (int) $row['requirement_id']);
         $stateKey = $status['key'];
         $stateText = $status['label'];
+        $counts[$stateKey]++;
         $stateClass = match ($stateKey) {
             'rojo' => 'text-bg-danger',
             'amarillo' => 'text-bg-warning',
