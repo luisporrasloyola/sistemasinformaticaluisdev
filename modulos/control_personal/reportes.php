@@ -95,10 +95,10 @@ $rows = $stmt->fetchAll();
 
 if ($export) {
     header('Content-Type: text/csv; charset=utf-8');
-    header('Content-Disposition: attachment; filename="reporte_asistencia_' . $dateFrom . '_' . $dateTo . '.csv"');
+    header('Content-Disposition: attachment; filename="reporte_marcaciones_' . $dateFrom . '_' . $dateTo . '.csv"');
     echo "\xEF\xBB\xBF";
     $out = fopen('php://output', 'w');
-    fputcsv($out, ['Fecha', 'Hora', 'Trabajador', 'Documento', 'Empresa', 'Tipo', 'Punto', 'Horario', 'Distancia m', 'Precision m', 'Estado', 'Observaciones']);
+    fputcsv($out, ['Fecha', 'Hora', 'Trabajador', 'Documento', 'Empresa', 'Tipo', 'Lugar de marcación', 'Horario', 'Distancia m', 'Precision m', 'Estado', 'Observaciones']);
     foreach ($rows as $row) {
         fputcsv($out, [
             date('d/m/Y', strtotime((string) $row['mark_date'])),
@@ -164,7 +164,7 @@ require __DIR__ . '/../../includes/header.php';
 ?>
 <div class="page-title dashboard-title">
     <div>
-        <h1>Reportes de asistencia</h1>
+        <h1>Reporte de marcaciones</h1>
         <p>Consulta, filtrado y exportación de marcaciones registradas.</p>
     </div>
     <a class="btn btn-success" href="<?= APP_URL ?>/modulos/control_personal/reportes.php?<?= e(http_build_query($queryForExport)) ?>">
@@ -203,7 +203,7 @@ require __DIR__ . '/../../includes/header.php';
             </select>
         </div>
         <div class="col-md-4 col-xl-2">
-            <label class="form-label">Punto</label>
+            <label class="form-label">Lugar de marcación</label>
             <select class="form-select" name="punto_id">
                 <option value="0">Todos</option>
                 <?php foreach ($locations as $location): ?>
@@ -236,7 +236,7 @@ require __DIR__ . '/../../includes/header.php';
 </div>
 
 <div class="row g-3">
-    <div class="col-xl-4">
+    <div class="col-xl-4 order-2">
         <div class="work-panel h-100">
             <h2>Resumen por fecha</h2>
             <div class="table-responsive">
@@ -266,18 +266,19 @@ require __DIR__ . '/../../includes/header.php';
             </div>
         </div>
     </div>
-    <div class="col-xl-8">
+    <div class="col-12 order-1">
         <div class="work-panel h-100">
             <h2>Detalle de marcaciones</h2>
             <div class="table-responsive">
                 <table class="table table-hover align-middle dashboard-table">
                     <thead>
                     <tr>
-                        <th>Fecha/Hora</th>
+                        <th>Fecha</th>
+                        <th>Hora</th>
+                        <th>Tipo</th>
                         <th>Personal</th>
                         <th>Empresa</th>
-                        <th>Tipo</th>
-                        <th>Punto</th>
+                        <th>Lugar</th>
                         <th>Distancia</th>
                         <th>Estado</th>
                         <th>Foto</th>
@@ -286,13 +287,14 @@ require __DIR__ . '/../../includes/header.php';
                     <tbody>
                     <?php foreach ($rows as $row): ?>
                         <tr>
-                            <td><?= e(date('d/m/Y - H:i', strtotime((string) $row['marked_at']))) ?></td>
+                            <td class="text-nowrap"><?= e(date('d/m/Y', strtotime((string) $row['mark_date']))) ?></td>
+                            <td class="text-nowrap"><?= e(report_time($row['mark_time'] ?? null)) ?></td>
+                            <td><?= e(ucfirst((string) $row['mark_type'])) ?></td>
                             <td>
                                 <strong><?= e($row['full_name']) ?></strong>
                                 <span class="text-muted small d-block"><?= e($row['document_number']) ?></span>
                             </td>
                             <td><?= e($row['company'] ?? '') ?></td>
-                            <td><?= e(ucfirst((string) $row['mark_type'])) ?></td>
                             <td><?= e($row['location_name']) ?></td>
                             <td><?= e((string) round((float) $row['distance_meters'], 2)) ?> m</td>
                             <td><span class="badge <?= report_badge_class($row['final_status'] ?? '') ?>"><?= e(report_status_label($row['final_status'] ?? '')) ?></span></td>
@@ -304,7 +306,7 @@ require __DIR__ . '/../../includes/header.php';
                         </tr>
                     <?php endforeach; ?>
                     <?php if (!$rows): ?>
-                        <tr><td colspan="8" class="text-muted">No hay marcaciones para los filtros seleccionados.</td></tr>
+                        <tr><td colspan="9" class="text-muted">No hay marcaciones para los filtros seleccionados.</td></tr>
                     <?php endif; ?>
                     </tbody>
                 </table>

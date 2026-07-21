@@ -72,6 +72,33 @@ try {
     $photo = upload_file($_FILES['photo'] ?? [], 'fotos', ['image/jpeg','image/png','image/webp']);
     $signature = upload_file($_FILES['signature'] ?? [], 'firmas', ['image/jpeg','image/png','image/webp']);
 
+    $linkedUser = null;
+    if ($id > 0) {
+        $linkedUserStmt = db()->prepare('SELECT id, email FROM users WHERE worker_id = :worker_id LIMIT 1 FOR UPDATE');
+        $linkedUserStmt->execute(['worker_id' => $id]);
+        $linkedUser = $linkedUserStmt->fetch() ?: null;
+
+        if ($linkedUser) {
+            if ($email === '') {
+                $email = (string) $linkedUser['email'];
+            } elseif (strcasecmp($email, (string) $linkedUser['email']) !== 0) {
+                $duplicateUserEmailStmt = db()->prepare('SELECT id FROM users WHERE email = :email AND id <> :id LIMIT 1');
+                $duplicateUserEmailStmt->execute([
+                    'email' => $email,
+                    'id' => (int) $linkedUser['id'],
+                ]);
+                if ($duplicateUserEmailStmt->fetch()) {
+                    throw new DomainException('El correo ya pertenece a otro usuario del sistema.');
+                }
+
+                db()->prepare('UPDATE users SET email = :email WHERE id = :id')->execute([
+                    'email' => $email,
+                    'id' => (int) $linkedUser['id'],
+                ]);
+            }
+        }
+    }
+
     $workerData = [
         'company_id' => $companyId,
         'full_name' => $fullName,
@@ -136,6 +163,12 @@ try {
 
     db()->commit();
     redirect('modulos/aliados/personal.php');
+} catch (DomainException $e) {
+    if (db()->inTransaction()) {
+        db()->rollBack();
+    }
+    $target = 'modulos/aliados/formulario_personal.php' . ($id > 0 ? '?id=' . $id . '&error=' : '?error=') . urlencode($e->getMessage());
+    redirect($target);
 } catch (PDOException $e) {
     if (db()->inTransaction()) {
         db()->rollBack();

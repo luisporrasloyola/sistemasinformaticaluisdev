@@ -228,6 +228,7 @@ function default_user_landing_path(): string
         'control_personal.asignaciones' => 'modulos/control_personal/asignaciones.php',
         'control_personal.control_asistencia' => 'modulos/control_personal/control_asistencia.php',
         'control_personal.reportes' => 'modulos/control_personal/reportes.php',
+        'control_personal.reporte_asistencias' => 'modulos/control_personal/reporte_asistencias.php',
         'requisitos.pmi_individual' => 'modulos/requisitos/pmi_individual.php',
         'requisitos.pmi_masivo' => 'modulos/requisitos/pmi_masivo.php',
         'maquinaria.datos_generales' => 'modulos/maquinaria/datos_generales.php',

@@ -14,21 +14,6 @@ if ($isAdmin) {
         ORDER BY w.full_name")->fetchAll();
 }
 
-$marksSql = "SELECT am.*, w.full_name, w.document_number, l.name AS location_name, s.name AS schedule_name
-    FROM attendance_marks am
-    JOIN workers w ON w.id = am.worker_id
-    JOIN attendance_locations l ON l.id = am.location_id
-    JOIN attendance_schedules s ON s.id = am.schedule_id";
-$params = [];
-if (!$isAdmin) {
-    $marksSql .= ' WHERE am.worker_id = :worker_id';
-    $params['worker_id'] = (int) $currentWorkerId;
-}
-$marksSql .= ' ORDER BY am.marked_at DESC LIMIT 80';
-$stmt = db()->prepare($marksSql);
-$stmt->execute($params);
-$marks = $stmt->fetchAll();
-
 require __DIR__ . '/../../includes/header.php';
 ?>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
@@ -39,9 +24,9 @@ require __DIR__ . '/../../includes/header.php';
     </div>
 </div>
 
-<div class="row g-3">
+<div class="row g-3 attendance-marking-layout">
     <div class="col-xl-4">
-        <div class="work-panel h-100">
+        <div class="work-panel h-100 attendance-marking-panel">
             <h2>Marcación</h2>
             <?php if ($isAdmin): ?>
                 <label class="form-label">Trabajador</label>
@@ -61,14 +46,27 @@ require __DIR__ . '/../../includes/header.php';
 
             <dl class="info-list">
                 <dt>Trabajador</dt><dd id="markWorkerName">-</dd>
-                <dt>Lugar asignado</dt><dd id="markLocationName">-</dd>
+                <dt>Lugar</dt><dd id="markLocationName">-</dd>
                 <dt>Horario</dt><dd id="markScheduleName">-</dd>
                 <dt>Actividad</dt><dd id="markActivity">-</dd>
-                <dt>Entrada</dt><dd id="markEntryWindow">-</dd>
-                <dt>Salida</dt><dd id="markExitWindow">-</dd>
+                <dt>Hora de entrada</dt>
+                <dd class="attendance-time-value">
+                    <span class="attendance-time-main">
+                        <span id="markEntryOfficial">-</span>
+                        <span class="attendance-time-separator">|</span>
+                        <span>Marcación: <span id="markEntryWindow">-</span></span>
+                    </span>
+                    <small class="d-block text-muted" id="markEntryTolerance"></small>
+                </dd>
+                <dt>Hora de salida</dt>
+                <dd class="attendance-time-value">
+                    <span class="attendance-time-main">
+                        <span id="markExitOfficial">-</span>
+                        <span class="attendance-time-separator">|</span>
+                        <span>Marcación: <span id="markExitWindow">-</span></span>
+                    </span>
+                </dd>
                 <dt>Radio permitido</dt><dd id="markRadius">-</dd>
-                <dt>Precisión GPS</dt><dd id="markAccuracy">-</dd>
-                <dt>Distancia</dt><dd id="markDistance">-</dd>
             </dl>
 
             <label class="form-label">Observaciones</label>
@@ -103,39 +101,40 @@ require __DIR__ . '/../../includes/header.php';
         <div class="work-panel">
             <h2>Registros recientes</h2>
             <div class="table-responsive">
-                <table class="table table-hover align-middle">
+                <table class="table table-hover align-middle attendance-recent-table">
                     <thead>
                     <tr>
-                        <th>Fecha/Hora</th>
-                        <th>Trabajador</th>
+                        <th>Fecha</th>
+                        <th>Hora</th>
                         <th>Tipo</th>
+                        <th>Trabajador</th>
                         <th>Lugar</th>
                         <th>Distancia</th>
                         <th>Estado</th>
                         <th>Foto</th>
                     </tr>
                     </thead>
-                    <tbody>
-                    <?php foreach ($marks as $mark): ?>
-                        <tr>
-                            <td><?= e(date('d/m/Y - H:i', strtotime((string) $mark['marked_at']))) ?></td>
-                            <td><?= e($mark['full_name']) ?></td>
-                            <td><?= e(ucfirst($mark['mark_type'])) ?></td>
-                            <td><?= e($mark['location_name']) ?></td>
-                            <td><?= e((string) round((float) $mark['distance_meters'], 2)) ?> m</td>
-                            <td><span class="badge text-bg-primary"><?= e($mark['final_status']) ?></span></td>
-                            <td>
-                                <?php if (!empty($mark['photo_path'])): ?>
-                                    <a class="btn btn-sm btn-outline-secondary" href="<?= APP_URL . '/' . e($mark['photo_path']) ?>" target="_blank"><i class="fa-solid fa-image"></i></a>
-                                <?php endif; ?>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                    <?php if (!$marks): ?>
-                        <tr><td colspan="7" class="text-muted">No hay marcaciones registradas.</td></tr>
-                    <?php endif; ?>
+                    <tbody id="recentAttendanceMarks">
+                        <tr><td colspan="8" class="text-muted text-center py-4">Seleccione un trabajador para consultar sus registros recientes.</td></tr>
                     </tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="attendancePhotoModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="attendancePhotoModalTitle">Foto de marcación</h5>
+                <button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body bg-light text-center">
+                <img class="img-fluid rounded" id="attendancePhotoModalImage" src="" alt="Foto de marcación" style="max-height: 72vh; object-fit: contain;">
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cerrar</button>
             </div>
         </div>
     </div>

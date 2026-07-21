@@ -12,10 +12,11 @@ function permission_modules_catalog(): array
                 'control_personal.personal' => 'Personal',
                 'control_personal.horarios' => 'Horarios',
                 'control_personal.calendario_laboral' => 'Calendario laboral',
-                'control_personal.puntos_marcacion' => 'Puntos de marcacion',
+                'control_personal.puntos_marcacion' => 'Lugares de marcación',
                 'control_personal.asignaciones' => 'Asignaciones',
                 'control_personal.control_asistencia' => 'Control de asistencia',
-                'control_personal.reportes' => 'Reportes',
+                'control_personal.reportes' => 'Reporte de marcaciones',
+                'control_personal.reporte_asistencias' => 'Reporte de asistencias',
             ],
         ],
         'requisitos' => [

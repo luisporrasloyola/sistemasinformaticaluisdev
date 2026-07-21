@@ -3257,12 +3257,12 @@ function initUsuariosModule() {
     const nameInput = document.getElementById('usuarioName');
     const emailInput = document.getElementById('usuarioEmail');
 
-    function fillUserFromSelectedWorker() {
+    function fillUserFromSelectedWorker(force = false) {
         if (!workerSelect || roleSelect?.value !== 'Personal') return;
         const option = workerSelect.selectedOptions?.[0];
         if (!option || !option.value) return;
-        if (nameInput) nameInput.value = option.dataset.name || '';
-        if (emailInput) emailInput.value = option.dataset.email || '';
+        if (nameInput && (force || !nameInput.value.trim())) nameInput.value = option.dataset.name || '';
+        if (emailInput && (force || !emailInput.value.trim())) emailInput.value = option.dataset.email || '';
     }
 
     function toggleUserWorkerField() {
@@ -3304,7 +3304,7 @@ function initUsuariosModule() {
     });
 
     roleSelect?.addEventListener('change', toggleUserWorkerField);
-    workerSelect?.addEventListener('change', fillUserFromSelectedWorker);
+    workerSelect?.addEventListener('change', () => fillUserFromSelectedWorker(true));
 
     document.querySelectorAll('.js-eliminar-usuario').forEach((button) => {
         button.addEventListener('click', async () => {
@@ -3363,12 +3363,12 @@ function initUsuariosModule() {
     const permissionData = window.usuarioPermisos || { users: {} };
     const allModuleKeys = moduleChecks.map((check) => check.value);
 
-    function fillUserFromSelectedWorker() {
+    function fillUserFromSelectedWorker(force = false) {
         if (!workerSelect || roleSelect?.value !== 'Personal') return;
         const option = workerSelect.selectedOptions?.[0];
         if (!option || !option.value) return;
-        if (nameInput) nameInput.value = option.dataset.name || '';
-        if (emailInput) emailInput.value = option.dataset.email || '';
+        if (nameInput && (force || !nameInput.value.trim())) nameInput.value = option.dataset.name || '';
+        if (emailInput && (force || !emailInput.value.trim())) emailInput.value = option.dataset.email || '';
     }
 
     function buildAllDocumentPermissions() {
@@ -3543,7 +3543,7 @@ function initUsuariosModule() {
         applyPermissions(defaultPermissionsForRole(roleSelect.value));
         toggleUserWorkerField();
     });
-    workerSelect?.addEventListener('change', fillUserFromSelectedWorker);
+    workerSelect?.addEventListener('change', () => fillUserFromSelectedWorker(true));
     selectAllModules?.addEventListener('change', () => {
         moduleChecks.forEach((check) => { check.checked = selectAllModules.checked; });
     });
@@ -4305,7 +4305,7 @@ function initControlPersonalLocations() {
         addressInput.value = data.address || '';
         radius.value = data.radius || '100';
         updateRadiusLabel();
-        document.getElementById('locationModalTitle').textContent = data.id ? 'Editar punto de marcación' : 'Nuevo punto de marcación';
+        document.getElementById('locationModalTitle').textContent = data.id ? 'Editar lugar de marcación' : 'Nuevo lugar de marcación';
         modal.show();
         initMap();
     }
@@ -4343,7 +4343,7 @@ function initControlPersonalLocations() {
 
     document.querySelectorAll('.js-delete-location').forEach((button) => {
         button.addEventListener('click', async () => {
-            if (!await confirmAction('¿Eliminar punto de marcación?')) return;
+            if (!await confirmAction('¿Eliminar lugar de marcación?')) return;
             const body = new FormData();
             body.append('csrf_token', csrf);
             body.append('id', button.dataset.id || '');
@@ -4502,6 +4502,13 @@ function initControlPersonalMarking() {
     const canvas = document.getElementById('markCanvas');
     const photoPreview = document.getElementById('markPhotoPreview');
     const mapElement = document.getElementById('markMap');
+    const recentMarksBody = document.getElementById('recentAttendanceMarks');
+    const attendancePhotoModalElement = document.getElementById('attendancePhotoModal');
+    const attendancePhotoModal = attendancePhotoModalElement
+        ? bootstrap.Modal.getOrCreateInstance(attendancePhotoModalElement)
+        : null;
+    const attendancePhotoModalImage = document.getElementById('attendancePhotoModalImage');
+    const attendancePhotoModalTitle = document.getElementById('attendancePhotoModalTitle');
     if (!workerField || !entryBtn || !exitBtn || !camera || !canvas || !mapElement) return;
 
     let context = null;
@@ -4512,6 +4519,7 @@ function initControlPersonalMarking() {
     let currentPosition = null;
     let cameraStream = null;
     let photoData = '';
+    let recentMarksRequestId = 0;
 
     function value(id, text) {
         const element = document.getElementById(id);
@@ -4527,6 +4535,96 @@ function initControlPersonalMarking() {
     function formatTime(time) {
         return time ? String(time).slice(0, 5) : '-';
     }
+
+    function renderRecentPhoto(mark, type) {
+        if (!mark?.photo_path) {
+            return `<span class="btn btn-sm btn-outline-secondary disabled" title="Sin foto de ${type}"><i class="fa-solid fa-image"></i></span>`;
+        }
+        const colorClass = type === 'entrada' ? 'btn-outline-success' : 'btn-outline-primary';
+        const photoUrl = `${BASE_URL}/${encodeURI(mark.photo_path)}`;
+        const title = `Foto de ${type}`;
+        return `<button class="btn btn-sm ${colorClass} js-view-attendance-photo" type="button" data-photo-url="${escapeHtml(photoUrl)}" data-photo-title="${escapeHtml(title)}" title="Ver ${escapeHtml(title.toLowerCase())}"><i class="fa-solid fa-image"></i></button>`;
+    }
+
+    function renderRecentMarks(rows, emptyMessage = 'No hay marcaciones registradas para este trabajador.') {
+        if (!recentMarksBody) return;
+        const marks = rows.flatMap((row) => {
+            const common = {
+                date: row.date,
+                worker: row.worker,
+                location: row.location
+            };
+            return [
+                row.entry ? { ...common, ...row.entry, type: 'Entrada', typeKey: 'entrada' } : null,
+                row.exit ? { ...common, ...row.exit, type: 'Salida', typeKey: 'salida' } : null
+            ].filter(Boolean);
+        });
+
+        if (!marks.length) {
+            recentMarksBody.innerHTML = `<tr><td colspan="8" class="text-muted text-center py-4">${escapeHtml(emptyMessage)}</td></tr>`;
+            return;
+        }
+
+        const statusMeta = (status) => ({
+            puntual: { label: 'Puntual', class: 'text-bg-success' },
+            tardanza: { label: 'Tardanza', class: 'text-bg-warning' },
+            salida_valida: { label: 'Salida válida', class: 'text-bg-success' },
+            salida_anticipada: { label: 'Salida anticipada', class: 'text-bg-warning' },
+            fuera_del_radio: { label: 'Fuera del radio', class: 'text-bg-danger' }
+        }[status] || { label: '-', class: 'text-bg-secondary' });
+
+        recentMarksBody.innerHTML = marks.map((mark) => {
+            const status = statusMeta(mark.status);
+            return `<tr>
+                <td class="text-nowrap">${escapeHtml(mark.date)}</td>
+                <td><strong>${escapeHtml(mark.time)}</strong></td>
+                <td><span class="attendance-mark-type attendance-mark-type-${escapeHtml(mark.typeKey)}">${escapeHtml(mark.type)}</span></td>
+                <td>${escapeHtml(mark.worker)}</td>
+                <td>${escapeHtml(mark.location)}</td>
+                <td class="text-nowrap">${escapeHtml(mark.distance)} m</td>
+                <td><span class="badge ${escapeHtml(status.class)}">${escapeHtml(status.label)}</span></td>
+                <td><div class="d-flex">${renderRecentPhoto(mark, mark.typeKey)}</div></td>
+            </tr>`;
+        }).join('');
+    }
+
+    async function loadRecentMarks(workerId) {
+        if (!recentMarksBody) return;
+        const requestId = ++recentMarksRequestId;
+        if (!workerId) {
+            renderRecentMarks([], 'Seleccione un trabajador para consultar sus registros recientes.');
+            return;
+        }
+
+        recentMarksBody.innerHTML = '<tr><td colspan="8" class="text-muted text-center py-4"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando registros...</td></tr>';
+        try {
+            const response = await fetch(`${BASE_URL}/servicios/control_personal/listar_marcaciones_recientes.php?worker_id=${encodeURIComponent(workerId)}`);
+            const data = await response.json();
+            if (requestId !== recentMarksRequestId) return;
+            if (!data.ok) {
+                renderRecentMarks([], data.message || 'No se pudieron cargar los registros recientes.');
+                return;
+            }
+            renderRecentMarks(data.rows || []);
+        } catch (error) {
+            if (requestId !== recentMarksRequestId) return;
+            renderRecentMarks([], 'No se pudieron cargar los registros recientes.');
+        }
+    }
+
+    recentMarksBody?.addEventListener('click', (event) => {
+        const button = event.target.closest('.js-view-attendance-photo');
+        if (!button || !attendancePhotoModal || !attendancePhotoModalImage) return;
+        const title = button.dataset.photoTitle || 'Foto de marcación';
+        attendancePhotoModalImage.src = button.dataset.photoUrl || '';
+        attendancePhotoModalImage.alt = title;
+        if (attendancePhotoModalTitle) attendancePhotoModalTitle.textContent = title;
+        attendancePhotoModal.show();
+    });
+
+    attendancePhotoModalElement?.addEventListener('hidden.bs.modal', () => {
+        if (attendancePhotoModalImage) attendancePhotoModalImage.src = '';
+    });
 
     function metersBetween(lat1, lon1, lat2, lon2) {
         const earthRadius = 6371000;
@@ -4581,8 +4679,11 @@ function initControlPersonalMarking() {
         if (!workerId) {
             context = null;
             renderStatuses([{ text: 'Seleccione trabajador', className: 'text-bg-secondary' }]);
+            loadRecentMarks('');
             return;
         }
+
+        loadRecentMarks(workerId);
 
         const response = await fetch(`${BASE_URL}/servicios/control_personal/contexto_marcacion.php?worker_id=${encodeURIComponent(workerId)}`);
         const data = await response.json();
@@ -4601,15 +4702,20 @@ function initControlPersonalMarking() {
         value('markLocationName', assignment.location_name);
         value('markScheduleName', assignment.schedule_name);
         value('markActivity', assignment.activity || '-');
-        value('markEntryWindow', `Hora: ${formatTime(day.entry_time || day.entry_start)} | Marcación: ${formatTime(day.entry_start)} - ${formatTime(day.entry_end)} (${Number(day.tolerance_minutes || 0)} min tolerancia)`);
-        value('markExitWindow', `Hora: ${formatTime(day.exit_time || day.exit_start)} | Marcación: ${formatTime(day.exit_start)} - ${formatTime(day.exit_end)}`);
+        value('markEntryOfficial', formatTime(day.entry_time || day.entry_start));
+        value('markEntryWindow', `${formatTime(day.entry_start)}-${formatTime(day.entry_end)}`);
+        value('markEntryTolerance', `(${Number(day.tolerance_minutes || 0)} min tolerancia)`);
+        value('markExitOfficial', formatTime(day.exit_time || day.exit_start));
+        value('markExitWindow', `${formatTime(day.exit_start)}-${formatTime(day.exit_end)}`);
         value('markRadius', `${assignment.radius_meters} metros`);
-        entryBtn.disabled = !hasSchedule || data.marks.some((mark) => mark.mark_type === 'entrada');
-        exitBtn.disabled = !hasSchedule || data.marks.some((mark) => mark.mark_type === 'salida') || !data.marks.some((mark) => mark.mark_type === 'entrada');
+        const hasEntryMark = data.marks.some((mark) => mark.mark_type === 'entrada');
+        const hasExitMark = data.marks.some((mark) => mark.mark_type === 'salida');
+        entryBtn.disabled = !hasSchedule || hasEntryMark;
+        exitBtn.disabled = !hasSchedule || hasExitMark || !hasEntryMark;
         renderStatuses([
             { text: hasSchedule ? (calendarEvent?.name || 'Horario disponible') : (calendarEvent?.name || 'Sin horario para hoy'), className: hasSchedule ? 'text-bg-success' : 'text-bg-warning' },
-            { text: entryBtn.disabled ? 'Entrada registrada' : 'Entrada pendiente', className: entryBtn.disabled ? 'text-bg-primary' : 'text-bg-secondary' },
-            { text: exitBtn.disabled ? 'Salida no disponible/registrada' : 'Salida disponible', className: exitBtn.disabled ? 'text-bg-secondary' : 'text-bg-primary' },
+            { text: hasEntryMark ? 'Entrada registrada' : 'Entrada no registrada', className: hasEntryMark ? 'text-bg-primary' : 'text-bg-secondary' },
+            { text: hasExitMark ? 'Salida registrada' : 'Salida no registrada', className: hasExitMark ? 'text-bg-primary' : 'text-bg-secondary' },
         ]);
         updateMap();
     }
@@ -4692,9 +4798,6 @@ function initControlPersonalMarking() {
             Number(assignment.latitude),
             Number(assignment.longitude)
         );
-
-        value('markAccuracy', `${Math.round(currentPosition.accuracy)} metros`);
-        value('markDistance', `${Math.round(distance)} metros`);
 
         const within = distance <= Number(assignment.radius_meters || 0);
         const precise = currentPosition.accuracy <= Number(assignment.radius_meters || 0);

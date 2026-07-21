@@ -10,10 +10,10 @@ require __DIR__ . '/../../includes/header.php';
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <div class="page-title">
     <div>
-        <h1>Puntos de marcación</h1>
+        <h1>Lugares de marcación</h1>
         <p>Lugares autorizados para registrar asistencia.</p>
     </div>
-    <button class="btn btn-primary" type="button" id="newLocationBtn"><i class="fa-solid fa-plus me-2"></i>Nuevo punto</button>
+    <button class="btn btn-primary" type="button" id="newLocationBtn"><i class="fa-solid fa-plus me-2"></i>Nuevo lugar</button>
 </div>
 
 <div class="work-panel">
@@ -57,7 +57,7 @@ require __DIR__ . '/../../includes/header.php';
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
         <form class="modal-content needs-validation" id="locationForm" novalidate>
             <div class="modal-header">
-                <h5 class="modal-title" id="locationModalTitle">Nuevo punto de marcación</h5>
+                <h5 class="modal-title" id="locationModalTitle">Nuevo lugar de marcación</h5>
                 <button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
             <div class="modal-body">

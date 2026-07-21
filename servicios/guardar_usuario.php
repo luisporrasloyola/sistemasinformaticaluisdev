@@ -77,6 +77,14 @@ try {
         $userId = (int) db()->lastInsertId();
     }
 
+    if ($role === 'Personal' && $workerId > 0) {
+        $syncWorkerEmail = db()->prepare('UPDATE workers SET email = :email WHERE id = :worker_id');
+        $syncWorkerEmail->execute([
+            'email' => $email,
+            'worker_id' => $workerId,
+        ]);
+    }
+
     save_user_permissions($userId, $role, $_POST);
     db()->commit();
     json_response(['ok' => true]);
