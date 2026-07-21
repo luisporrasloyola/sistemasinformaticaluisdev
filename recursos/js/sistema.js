@@ -1513,6 +1513,7 @@ function openAddMachineDocument() {
     machineReadOnlyMode = false;
     const form = document.getElementById('machineDocumentForm');
     form.reset();
+    resetMachineDocumentFileInput();
     form.classList.remove('was-validated');
     setMachineDocumentReadonly(false);
     document.getElementById('machineDocumentModalTitle').textContent = 'Agregar documentos';
@@ -1543,6 +1544,7 @@ async function openViewMachineDocument(id) {
 }
 
 async function fillMachineDocumentModal(id) {
+    resetMachineDocumentFileInput();
     const response = await fetch(`${BASE_URL}/servicios/obtener_documento_maquinaria.php?id=${id}`);
     const data = await response.json();
     const row = data.row;
@@ -1555,6 +1557,13 @@ async function fillMachineDocumentModal(id) {
     const option = new Option(row.documento, row.documento_id, true, true);
     $('#machineDocumentSelect').append(option).trigger('change');
     renderMachineCurrentPdf(row);
+}
+
+function resetMachineDocumentFileInput() {
+    const input = document.getElementById('machinePdfInput');
+    if (!input) return;
+    input.value = '';
+    input.classList.remove('is-valid', 'is-invalid');
 }
 
 function renderMachineCurrentPdf(row) {
@@ -1995,6 +2004,7 @@ function openAddCompanyDocument() {
     }
     const form = document.getElementById('companyDocumentForm');
     form.reset();
+    resetCompanyDocumentFileInput();
     form.classList.remove('was-validated');
     setCompanyDocumentReadonly(false);
     document.getElementById('companyDocumentModalTitle').textContent = 'Agregar documentos';
@@ -2023,6 +2033,7 @@ async function openViewCompanyDocument(id) {
 }
 
 async function fillCompanyDocumentModal(id) {
+    resetCompanyDocumentFileInput();
     const response = await fetch(`${BASE_URL}/servicios/empresa/obtener_documento_empresa.php?id=${id}`);
     const data = await response.json();
     const row = data.row;
@@ -2037,6 +2048,13 @@ async function fillCompanyDocumentModal(id) {
     document.getElementById('companyEndDate').value = row.fecha_fin;
     document.getElementById('companyObservations').value = row.observaciones || '';
     renderCompanyCurrentPdf(row);
+}
+
+function resetCompanyDocumentFileInput() {
+    const input = document.getElementById('companyPdfInput');
+    if (!input) return;
+    input.value = '';
+    input.classList.remove('is-valid', 'is-invalid');
 }
 
 function renderCompanyCurrentPdf(row) {
@@ -2382,6 +2400,7 @@ function openAddCompanySecurity() {
     }
     const form = document.getElementById('companySecurityForm');
     form.reset();
+    resetCompanySecurityFileInput();
     form.classList.remove('was-validated');
     setCompanySecurityReadonly(false);
     document.getElementById('companySecurityModalTitle').textContent = 'Agregar documentos';
@@ -2410,6 +2429,7 @@ async function openViewCompanySecurity(id) {
 }
 
 async function fillCompanySecurityModal(id) {
+    resetCompanySecurityFileInput();
     const response = await fetch(`${BASE_URL}/servicios/empresa/obtener_seguridad_empresa.php?id=${id}`);
     const data = await response.json();
     const row = data.row;
@@ -2424,6 +2444,13 @@ async function fillCompanySecurityModal(id) {
     document.getElementById('companySecurityEndDate').value = row.fecha_fin;
     document.getElementById('companySecurityObservations').value = row.observaciones || '';
     renderCompanySecurityPdf(row);
+}
+
+function resetCompanySecurityFileInput() {
+    const input = document.getElementById('companySecurityPdfInput');
+    if (!input) return;
+    input.value = '';
+    input.classList.remove('is-valid', 'is-invalid');
 }
 
 function renderCompanySecurityPdf(row) {
@@ -2487,11 +2514,29 @@ async function saveCompanySecurity(event) {
 }
 
 async function addCompanySecurityCatalog() {
-    const result = await Swal.fire({ title: 'Nuevo documento', input: 'text', inputPlaceholder: 'Nombre del documento', showCancelButton: true, confirmButtonText: 'Agregar', cancelButtonText: 'Cancelar' });
-    if (!result.value) return;
+    const focusTrap = companySecurityModal?._focustrap;
+    focusTrap?.deactivate?.();
+
+    let value = null;
+    try {
+        const result = await Swal.fire({
+            title: 'Nuevo documento',
+            input: 'text',
+            inputPlaceholder: 'Nombre del documento',
+            showCancelButton: true,
+            confirmButtonText: 'Agregar',
+            cancelButtonText: 'Cancelar',
+            didOpen: () => Swal.getInput()?.focus()
+        });
+        value = result.value;
+    } finally {
+        setTimeout(() => focusTrap?.activate?.(), 0);
+    }
+
+    if (!value) return;
     const form = new FormData();
     form.append('csrf_token', csrf);
-    form.append('nombre', result.value);
+    form.append('nombre', value);
     const response = await fetch(`${BASE_URL}/servicios/empresa/guardar_catalogo_seguridad_empresa.php`, { method: 'POST', body: form });
     const data = await response.json();
     if (!data.ok) return Swal.fire('Atención', data.message || 'No se pudo agregar el documento.', 'warning');
@@ -2599,6 +2644,7 @@ function initEmpresaGenericModules() {
         const modal = modalElement ? new bootstrap.Modal(modalElement) : null;
         const form = root.querySelector('.js-company-generic-form');
         const select = root.querySelector('.js-company-generic-select');
+        const pdfInput = root.querySelector('.js-company-generic-pdf-input');
         let currentCompanyId = null;
 
         if (!module || !search || !modal || !form || !select) return;
@@ -2687,6 +2733,7 @@ function initEmpresaGenericModules() {
         }
 
         function openAdd() {
+            resetGenericFileInput();
             if (!currentCompanyId) return Swal.fire('Atención', 'Seleccione una empresa.', 'warning');
             form.reset();
             form.classList.remove('was-validated');
@@ -2715,6 +2762,7 @@ function initEmpresaGenericModules() {
         }
 
         async function fillModal(id) {
+            resetGenericFileInput();
             const response = await fetch(`${BASE_URL}/servicios/empresa/documentos_genericos_empresa.php?action=get&module=${module}&id=${id}`);
             const data = await response.json();
             const row = data.row;
@@ -2727,6 +2775,12 @@ function initEmpresaGenericModules() {
             root.querySelector('.js-company-generic-end').value = row.fecha_fin;
             root.querySelector('.js-company-generic-observations').value = row.observaciones || '';
             renderPdf(row);
+        }
+
+        function resetGenericFileInput() {
+            if (!pdfInput) return;
+            pdfInput.value = '';
+            pdfInput.classList.remove('is-valid', 'is-invalid');
         }
 
         function renderPdf(row) {
@@ -2814,12 +2868,30 @@ function initEmpresaGenericModules() {
         }
 
         async function addCatalog() {
-            const result = await Swal.fire({ title: 'Nuevo documento', input: 'text', inputPlaceholder: 'Nombre del documento', showCancelButton: true, confirmButtonText: 'Agregar', cancelButtonText: 'Cancelar' });
-            if (!result.value) return;
+            const focusTrap = modal?._focustrap;
+            focusTrap?.deactivate?.();
+
+            let value = null;
+            try {
+                const result = await Swal.fire({
+                    title: 'Nuevo documento',
+                    input: 'text',
+                    inputPlaceholder: 'Nombre del documento',
+                    showCancelButton: true,
+                    confirmButtonText: 'Agregar',
+                    cancelButtonText: 'Cancelar',
+                    didOpen: () => Swal.getInput()?.focus()
+                });
+                value = result.value;
+            } finally {
+                setTimeout(() => focusTrap?.activate?.(), 0);
+            }
+
+            if (!value) return;
             const body = new FormData();
             body.append('csrf_token', csrf);
             body.append('module', module);
-            body.append('nombre', result.value);
+            body.append('nombre', value);
             const response = await fetch(`${BASE_URL}/servicios/empresa/documentos_genericos_empresa.php?action=catalog_save`, { method: 'POST', body });
             const data = await response.json();
             if (!data.ok) return Swal.fire('Atención', data.message || 'No se pudo agregar el documento.', 'warning');
