@@ -37,6 +37,7 @@ function initSidebarActiveLink() {
 
 document.addEventListener('DOMContentLoaded', () => {
     initSidebarActiveLink();
+    initDevelopmentPhaseLinks();
     document.querySelectorAll('.needs-validation').forEach((form) => {
         form.addEventListener('submit', (event) => {
             const puestosValidos = validarPuestosTrabajo(form);
