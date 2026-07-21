@@ -39,7 +39,7 @@ require __DIR__ . '/../../includes/header.php';
             <tr>
                 <th>Personal</th>
                 <th>Puesto</th>
-                <th>Lugar asignado</th>
+                <th>Lugar de marcaci&oacute;n</th>
                 <th>Horario</th>
                 <th>Actividad</th>
                 <th>Acciones</th>
@@ -82,6 +82,14 @@ require __DIR__ . '/../../includes/header.php';
                 <input type="hidden" name="id" id="assignmentId">
                 <div class="row g-3">
                     <div class="col-md-12">
+                        <label class="form-label">Aplicar a</label>
+                        <select class="form-select" name="scope_type" id="assignmentScopeType" required>
+                            <option value="all">Todo el personal</option>
+                            <option value="worker">Un trabajador</option>
+                            <option value="selected">Seleccionar trabajadores</option>
+                        </select>
+                    </div>
+                    <div class="col-md-12 d-none" id="assignmentWorkerField">
                         <label class="form-label">Personal</label>
                         <select class="form-select" name="worker_id" id="assignmentWorkerId" required>
                             <option value="">Seleccione</option>
@@ -89,6 +97,31 @@ require __DIR__ . '/../../includes/header.php';
                                 <option value="<?= (int) $worker['id'] ?>"><?= e($worker['full_name'] . ' - ' . $worker['document_number'] . (!empty($worker['company']) ? ' - ' . $worker['company'] : '')) ?></option>
                             <?php endforeach; ?>
                         </select>
+                    </div>
+                    <div class="col-12 d-none" id="assignmentWorkersField">
+                        <div class="assignment-workers-box">
+                            <div class="assignment-workers-toolbar">
+                                <div>
+                                    <strong>Trabajadores</strong>
+                                    <small class="text-muted d-block">Seleccione a quienes se aplicar&aacute; esta asignaci&oacute;n.</small>
+                                </div>
+                                <label class="form-check mb-0">
+                                    <input class="form-check-input" type="checkbox" id="assignmentSelectAllWorkers">
+                                    <span class="form-check-label">Seleccionar todos</span>
+                                </label>
+                            </div>
+                            <input class="form-control form-control-sm mb-2" type="search" id="assignmentWorkerSearch" placeholder="Buscar por nombre, documento o empresa">
+                            <div class="assignment-workers-grid" id="assignmentWorkersGrid">
+                                <?php foreach ($workers as $worker): ?>
+                                    <?php $workerLabel = $worker['full_name'] . ' - ' . $worker['document_number'] . (!empty($worker['company']) ? ' - ' . $worker['company'] : ''); ?>
+                                    <label class="assignment-worker-option" data-search="<?= e(strtolower($workerLabel)) ?>">
+                                        <input class="form-check-input assignment-worker-check" type="checkbox" name="worker_ids[]" value="<?= (int) $worker['id'] ?>">
+                                        <span><?= e($workerLabel) ?></span>
+                                    </label>
+                                <?php endforeach; ?>
+                            </div>
+                            <div class="invalid-feedback d-block d-none" id="assignmentWorkersError">Seleccione al menos un trabajador.</div>
+                        </div>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Lugar de marcación</label>

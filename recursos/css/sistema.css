@@ -190,6 +190,19 @@ body {
     margin-bottom: 18px;
 }
 
+.attendance-dashboard-content {
+    display: flex;
+    flex-direction: column;
+}
+
+.attendance-dashboard-matrix {
+    order: 1;
+}
+
+.attendance-dashboard-secondary {
+    order: 2;
+}
+
 .page-title {
     display: flex;
     justify-content: space-between;
@@ -4724,6 +4737,19 @@ input[type="checkbox"]:active {
     }
 }
 
+/* Estado actual del submodulo: visible sin competir con el modulo padre. */
+.sidebar .sub-link.active {
+    background: rgba(148, 163, 184, 0.14) !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    box-shadow: inset 3px 0 0 #60a5fa !important;
+    transform: none !important;
+}
+
+.sidebar .sub-link.active i:first-child {
+    color: #ffffff !important;
+}
+
 .state-alert-icon {
     align-items: center;
     background: #fff7ed;
@@ -4800,6 +4826,76 @@ input[type="checkbox"]:active {
 @media (max-width: 767px) {
     .dashboard-filters {
         grid-template-columns: 1fr !important;
+    }
+}
+
+/* Reportes ya organiza sus controles con la grilla de Bootstrap. */
+.attendance-report-filters {
+    display: block !important;
+}
+
+.attendance-report-filters > .row {
+    width: auto;
+}
+
+.attendance-report-filters .form-label {
+    display: block;
+    white-space: nowrap;
+}
+
+.assignment-workers-box {
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 14px;
+    background: #f8fafc;
+}
+
+.assignment-workers-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+
+.assignment-workers-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.assignment-worker-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    min-width: 0;
+    padding: 9px 10px;
+    border: 1px solid #dbe3ee;
+    border-radius: 6px;
+    background: #ffffff;
+    cursor: pointer;
+}
+
+.assignment-worker-option:hover {
+    border-color: #93b4ef;
+    background: #f3f7ff;
+}
+
+.assignment-worker-option span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 767px) {
+    .assignment-workers-toolbar {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .assignment-workers-grid {
+        grid-template-columns: 1fr;
     }
 }
 

@@ -12,7 +12,31 @@ function localDateValue(date = new Date()) {
     return year + '-' + month + '-' + day;
 }
 
+function initSidebarActiveLink() {
+    const currentPath = decodeURIComponent(window.location.pathname).replace(/\/+$/, '').toLowerCase();
+
+    document.querySelectorAll('#sidebar a.nav-link[href]').forEach((link) => {
+        const linkPath = decodeURIComponent(new URL(link.href, window.location.origin).pathname)
+            .replace(/\/+$/, '')
+            .toLowerCase();
+        if (linkPath !== currentPath) return;
+
+        link.classList.add('active');
+        link.setAttribute('aria-current', 'page');
+
+        const collapse = link.closest('.collapse');
+        if (!collapse?.id) return;
+        collapse.classList.add('show');
+
+        const parent = document.querySelector(`#sidebar [data-bs-target="#${collapse.id}"]`);
+        parent?.classList.add('active');
+        parent?.classList.remove('collapsed');
+        parent?.setAttribute('aria-expanded', 'true');
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    initSidebarActiveLink();
     document.querySelectorAll('.needs-validation').forEach((form) => {
         form.addEventListener('submit', (event) => {
             const puestosValidos = validarPuestosTrabajo(form);
@@ -67,7 +91,6 @@ document.addEventListener('DOMContentLoaded', () => {
     initControlPersonalMarking();
     initNotifications();
     initObservationNotifications();
-    initDevelopmentPhaseLinks();
 
     if (window.jQuery && $.fn.DataTable) {
         $('.data-table').DataTable({
@@ -3981,6 +4004,25 @@ function initControlPersonalSchedules() {
     const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('scheduleModal'));
     const dayForm = document.getElementById('scheduleDayForm');
     const dayModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('scheduleDayModal'));
+    const entryTimeInput = document.getElementById('entryTime');
+    const entryStartInput = document.getElementById('entryStart');
+    const entryEndInput = document.getElementById('entryEnd');
+    const toleranceInput = document.getElementById('toleranceMinutes');
+
+    const updateScheduleTolerance = () => {
+        if (!entryTimeInput || !entryEndInput || !toleranceInput) return;
+        const [startHour, startMinute] = String(entryTimeInput.value || '').split(':').map(Number);
+        const [endHour, endMinute] = String(entryEndInput.value || '').split(':').map(Number);
+        if (![startHour, startMinute, endHour, endMinute].every(Number.isFinite)) {
+            toleranceInput.value = '0';
+            return;
+        }
+        const minutes = (endHour * 60 + endMinute) - (startHour * 60 + startMinute);
+        toleranceInput.value = String(Math.max(0, minutes));
+    };
+
+    entryTimeInput?.addEventListener('input', updateScheduleTolerance);
+    entryEndInput?.addEventListener('input', updateScheduleTolerance);
 
     document.getElementById('newScheduleBtn')?.addEventListener('click', () => {
         form.reset();
@@ -4036,13 +4078,13 @@ function initControlPersonalSchedules() {
             document.getElementById('scheduleDayModalTitle').textContent = `Configurar ${button.dataset.dayLabel || 'día'}`;
             document.getElementById('scheduleDayScheduleId').value = button.dataset.scheduleId || '';
             document.getElementById('scheduleDayNumber').value = button.dataset.day || '';
+            document.getElementById('entryTime').value = button.dataset.entryTime || '';
             document.getElementById('entryStart').value = button.dataset.entryStart || '';
             document.getElementById('entryEnd').value = button.dataset.entryEnd || '';
-            document.getElementById('breakStart').value = button.dataset.breakStart || '';
-            document.getElementById('breakEnd').value = button.dataset.breakEnd || '';
+            document.getElementById('exitTime').value = button.dataset.exitTime || '';
             document.getElementById('exitStart').value = button.dataset.exitStart || '';
             document.getElementById('exitEnd').value = button.dataset.exitEnd || '';
-            document.getElementById('toleranceMinutes').value = button.dataset.tolerance || '0';
+            updateScheduleTolerance();
             dayModal.show();
         });
     });
@@ -4082,7 +4124,6 @@ function initControlPersonalCalendar() {
     const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('calendarDayModal'));
     const typeField = document.getElementById('calendarEventType');
     const scopeField = document.getElementById('calendarScopeType');
-    const companyField = document.getElementById('calendarCompanyId');
     const workerField = document.getElementById('calendarWorkerId');
     const startDateField = document.getElementById('calendarDate');
     const endDateField = document.getElementById('calendarEndDate');
@@ -4103,12 +4144,8 @@ function initControlPersonalCalendar() {
         endDateField.required = isVacation;
         endDateField.min = startDateField.value || '';
 
-        const isCompany = scopeField.value === 'company';
         const isWorker = scopeField.value === 'worker';
-        document.getElementById('calendarCompanyField')?.classList.toggle('d-none', !isCompany);
         document.getElementById('calendarWorkerField')?.classList.toggle('d-none', !isWorker);
-        companyField.disabled = !isCompany;
-        companyField.required = isCompany;
         workerField.disabled = !isWorker;
         workerField.required = isWorker;
     }
@@ -4127,7 +4164,6 @@ function initControlPersonalCalendar() {
         setValue('calendarEventType', data.eventType || 'holiday');
         setValue('calendarDayName', data.name);
         setValue('calendarScopeType', data.scopeType || 'all');
-        setValue('calendarCompanyId', data.companyId);
         setValue('calendarWorkerId', data.workerId);
         document.getElementById('calendarDayModalTitle').textContent = data.id ? 'Editar dia especial' : 'Nuevo dia especial';
         syncFields();
@@ -4323,11 +4359,70 @@ function initControlPersonalAssignments() {
     if (!form) return;
 
     const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('assignmentModal'));
+    const scopeField = document.getElementById('assignmentScopeType');
+    const workerField = document.getElementById('assignmentWorkerId');
+    const workerFieldBox = document.getElementById('assignmentWorkerField');
+    const workersFieldBox = document.getElementById('assignmentWorkersField');
+    const workerChecks = Array.from(document.querySelectorAll('.assignment-worker-check'));
+    const selectAllWorkers = document.getElementById('assignmentSelectAllWorkers');
+    const workerSearch = document.getElementById('assignmentWorkerSearch');
+    const workersError = document.getElementById('assignmentWorkersError');
+
+    function syncAssignmentScope() {
+        const isWorker = scopeField.value === 'worker';
+        const isSelected = scopeField.value === 'selected';
+        workerFieldBox?.classList.toggle('d-none', !isWorker);
+        workersFieldBox?.classList.toggle('d-none', !isSelected);
+        workerField.disabled = !isWorker;
+        workerField.required = isWorker;
+        workerChecks.forEach((check) => {
+            check.disabled = !isSelected;
+        });
+        workersError?.classList.add('d-none');
+    }
+
+    function updateAssignmentSelectAll() {
+        const visibleChecks = workerChecks.filter((check) => !check.closest('.assignment-worker-option')?.classList.contains('d-none'));
+        selectAllWorkers.checked = visibleChecks.length > 0 && visibleChecks.every((check) => check.checked);
+        selectAllWorkers.indeterminate = visibleChecks.some((check) => check.checked) && !selectAllWorkers.checked;
+    }
+
+    scopeField.addEventListener('change', syncAssignmentScope);
+    selectAllWorkers?.addEventListener('change', () => {
+        workerChecks.forEach((check) => {
+            if (!check.closest('.assignment-worker-option')?.classList.contains('d-none')) {
+                check.checked = selectAllWorkers.checked;
+            }
+        });
+        workersError?.classList.add('d-none');
+    });
+    workerChecks.forEach((check) => check.addEventListener('change', () => {
+        updateAssignmentSelectAll();
+        workersError?.classList.add('d-none');
+    }));
+    workerSearch?.addEventListener('input', () => {
+        const query = normalizarTexto(workerSearch.value);
+        document.querySelectorAll('.assignment-worker-option').forEach((option) => {
+            option.classList.toggle('d-none', query !== '' && !normalizarTexto(option.dataset.search).includes(query));
+        });
+        updateAssignmentSelectAll();
+    });
+    syncAssignmentScope();
 
     document.getElementById('newAssignmentBtn')?.addEventListener('click', () => {
         form.reset();
         form.classList.remove('was-validated');
         document.getElementById('assignmentId').value = '';
+        scopeField.disabled = false;
+        scopeField.value = 'all';
+        workerChecks.forEach((check) => { check.checked = false; });
+        if (selectAllWorkers) {
+            selectAllWorkers.checked = false;
+            selectAllWorkers.indeterminate = false;
+        }
+        if (workerSearch) workerSearch.value = '';
+        document.querySelectorAll('.assignment-worker-option').forEach((option) => option.classList.remove('d-none'));
+        syncAssignmentScope();
         document.getElementById('assignmentModalTitle').textContent = 'Nueva asignación';
         modal.show();
     });
@@ -4337,10 +4432,13 @@ function initControlPersonalAssignments() {
             form.reset();
             form.classList.remove('was-validated');
             document.getElementById('assignmentId').value = button.dataset.id || '';
-            document.getElementById('assignmentWorkerId').value = button.dataset.workerId || '';
+            scopeField.value = 'worker';
+            scopeField.disabled = true;
+            workerField.value = button.dataset.workerId || '';
             document.getElementById('assignmentLocationId').value = button.dataset.locationId || '';
             document.getElementById('assignmentScheduleId').value = button.dataset.scheduleId || '';
             document.getElementById('assignmentActivity').value = button.dataset.activity || '';
+            syncAssignmentScope();
             document.getElementById('assignmentModalTitle').textContent = 'Editar asignación';
             modal.show();
         });
@@ -4351,6 +4449,26 @@ function initControlPersonalAssignments() {
         if (!form.checkValidity()) {
             form.classList.add('was-validated');
             return;
+        }
+        if (scopeField.value === 'selected' && !workerChecks.some((check) => check.checked)) {
+            workersError?.classList.remove('d-none');
+            workersFieldBox?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            return;
+        }
+        const isMultipleAssignment = !document.getElementById('assignmentId').value && ['all', 'selected'].includes(scopeField.value);
+        if (isMultipleAssignment) {
+            const selectedCount = workerChecks.filter((check) => check.checked).length;
+            const confirmed = await Swal.fire({
+                title: scopeField.value === 'all' ? 'Aplicar a todo el personal' : 'Aplicar a trabajadores seleccionados',
+                text: scopeField.value === 'all'
+                    ? 'Se reemplazara la asignacion activa de cada trabajador con el lugar, horario y actividad seleccionados.'
+                    : `Se reemplazara la asignacion activa de ${selectedCount} trabajador(es) seleccionado(s).`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Si, aplicar',
+                cancelButtonText: 'Cancelar'
+            });
+            if (!confirmed.isConfirmed) return;
         }
         const response = await fetch(`${BASE_URL}/servicios/control_personal/guardar_asignacion.php`, { method: 'POST', body: new FormData(form) });
         const data = await response.json();
@@ -4482,8 +4600,8 @@ function initControlPersonalMarking() {
         value('markLocationName', assignment.location_name);
         value('markScheduleName', assignment.schedule_name);
         value('markActivity', assignment.activity || '-');
-        value('markEntryWindow', `${formatTime(day.entry_start)} - ${formatTime(day.entry_end)} (${Number(day.tolerance_minutes || 0)} min tolerancia)`);
-        value('markExitWindow', `${formatTime(day.exit_start)} - ${formatTime(day.exit_end)}`);
+        value('markEntryWindow', `Hora: ${formatTime(day.entry_time || day.entry_start)} | Marcación: ${formatTime(day.entry_start)} - ${formatTime(day.entry_end)} (${Number(day.tolerance_minutes || 0)} min tolerancia)`);
+        value('markExitWindow', `Hora: ${formatTime(day.exit_time || day.exit_start)} | Marcación: ${formatTime(day.exit_start)} - ${formatTime(day.exit_end)}`);
         value('markRadius', `${assignment.radius_meters} metros`);
         entryBtn.disabled = !hasSchedule || data.marks.some((mark) => mark.mark_type === 'entrada');
         exitBtn.disabled = !hasSchedule || data.marks.some((mark) => mark.mark_type === 'salida') || !data.marks.some((mark) => mark.mark_type === 'entrada');

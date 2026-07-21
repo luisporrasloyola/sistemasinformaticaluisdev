@@ -140,11 +140,11 @@ if (!$withinRadius) {
 
 $scheduleStatus = 'puntual';
 if ($markType === 'entrada') {
-    $entryLimit = strtotime($today . ' ' . $scheduleDay['entry_end']) + ((int) $scheduleDay['tolerance_minutes'] * 60);
+    $entryLimit = strtotime($today . ' ' . $scheduleDay['entry_end']);
     $scheduleStatus = strtotime($markedAt) <= $entryLimit ? 'puntual' : 'tardanza';
 } else {
-    $exitStart = strtotime($today . ' ' . $scheduleDay['exit_start']);
-    $scheduleStatus = strtotime($markedAt) >= $exitStart ? 'salida_valida' : 'salida_anticipada';
+    $exitTime = strtotime($today . ' ' . ($scheduleDay['exit_time'] ?? $scheduleDay['exit_start']));
+    $scheduleStatus = strtotime($markedAt) >= $exitTime ? 'salida_valida' : 'salida_anticipada';
 }
 
 $locationStatus = $withinRadius ? 'dentro_del_radio' : 'fuera_del_radio';

@@ -12,7 +12,6 @@ $endDate = trim((string) ($_POST['end_date'] ?? ''));
 $eventType = trim((string) ($_POST['event_type'] ?? ''));
 $name = trim((string) ($_POST['name'] ?? ''));
 $scopeType = trim((string) ($_POST['scope_type'] ?? 'all'));
-$companyId = (int) ($_POST['company_id'] ?? 0);
 $workerId = (int) ($_POST['worker_id'] ?? 0);
 
 $parsedDate = DateTimeImmutable::createFromFormat('!Y-m-d', $date);
@@ -22,11 +21,8 @@ if (!$parsedDate || $parsedDate->format('Y-m-d') !== $date) {
 if (!in_array($eventType, ['holiday', 'non_working', 'vacation'], true)) {
     json_response(['ok' => false, 'message' => 'Seleccione un tipo de dia valido.'], 400);
 }
-if (!in_array($scopeType, ['all', 'company', 'worker'], true) || $name === '') {
+if (!in_array($scopeType, ['all', 'worker'], true) || $name === '') {
     json_response(['ok' => false, 'message' => 'Complete el motivo y el alcance.'], 400);
-}
-if ($scopeType === 'company' && $companyId <= 0) {
-    json_response(['ok' => false, 'message' => 'Seleccione la empresa.'], 400);
 }
 if ($scopeType === 'worker' && $workerId <= 0) {
     json_response(['ok' => false, 'message' => 'Seleccione el trabajador.'], 400);
@@ -44,7 +40,7 @@ if ($parsedDate->diff($parsedEndDate)->days > 366) {
     json_response(['ok' => false, 'message' => 'El periodo no puede superar 366 dias.'], 400);
 }
 
-$companyId = $scopeType === 'company' ? $companyId : 0;
+$companyId = 0;
 $workerId = $scopeType === 'worker' ? $workerId : 0;
 $duplicate = db()->prepare("SELECT id FROM attendance_calendar_days
     WHERE calendar_date <= :end_date

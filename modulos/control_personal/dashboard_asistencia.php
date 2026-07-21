@@ -253,7 +253,8 @@ require __DIR__ . '/../../includes/header.php';
     </div>
 </div>
 
-<div class="row g-3">
+<div class="attendance-dashboard-content">
+<div class="row g-3 attendance-dashboard-secondary">
     <div class="col-xl-7">
         <div class="work-panel h-100">
             <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
@@ -345,7 +346,7 @@ require __DIR__ . '/../../includes/header.php';
     </div>
 </div>
 
-<div class="work-panel">
+<div class="work-panel attendance-dashboard-matrix">
     <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
         <h2 class="mb-0">Matriz mensual</h2>
         <span class="text-muted small"><?= e(date('d/m/Y', strtotime($monthStart))) ?> - <?= e(date('d/m/Y', strtotime($monthEnd))) ?></span>
@@ -438,5 +439,6 @@ require __DIR__ . '/../../includes/header.php';
             </tbody>
         </table>
     </div>
+</div>
 </div>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>

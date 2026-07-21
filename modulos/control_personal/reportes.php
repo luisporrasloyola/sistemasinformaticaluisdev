@@ -172,7 +172,7 @@ require __DIR__ . '/../../includes/header.php';
     </a>
 </div>
 
-<form class="dashboard-filters" method="get">
+<form class="dashboard-filters attendance-report-filters" method="get">
     <div class="row g-3">
         <div class="col-md-3 col-xl-2">
             <label class="form-label">Desde</label>

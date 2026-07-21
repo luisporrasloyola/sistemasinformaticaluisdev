@@ -11,10 +11,12 @@ CREATE TABLE attendance_schedule_days (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     schedule_id INT UNSIGNED NOT NULL,
     day_of_week TINYINT UNSIGNED NOT NULL,
+    entry_time TIME NULL,
     entry_start TIME NULL,
     entry_end TIME NULL,
     break_start TIME NULL,
     break_end TIME NULL,
+    exit_time TIME NULL,
     exit_start TIME NULL,
     exit_end TIME NULL,
     tolerance_minutes INT UNSIGNED NOT NULL DEFAULT 0,
@@ -66,4 +68,3 @@ CREATE TABLE attendance_holidays (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uq_attendance_holiday_date (holiday_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-

@@ -21,7 +21,7 @@ require __DIR__ . '/../../includes/header.php';
         <table class="table table-hover align-middle data-table" id="locationsTable">
             <thead>
             <tr>
-                <th>Lugar</th>
+                <th>Lugar de marcaci&oacute;n</th>
                 <th>Coordenadas</th>
                 <th>Dirección</th>
                 <th>Radio</th>
@@ -65,7 +65,7 @@ require __DIR__ . '/../../includes/header.php';
                 <input type="hidden" name="id" id="locationId">
                 <div class="row g-3">
                     <div class="col-md-6">
-                        <label class="form-label">Nombre del lugar</label>
+                        <label class="form-label">Lugar de marcación</label>
                         <input class="form-control" name="name" id="locationName" maxlength="160" required>
                     </div>
                     <div class="col-md-3">

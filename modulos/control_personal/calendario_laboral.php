@@ -25,7 +25,6 @@ $stmt = db()->prepare("SELECT acd.*, c.name AS company_name, w.full_name AS work
 $stmt->execute(['month_start' => $monthStart, 'month_end' => $monthEnd]);
 $calendarDays = $stmt->fetchAll();
 
-$companies = db()->query('SELECT id, name FROM companies ORDER BY name')->fetchAll();
 $workers = db()->query("SELECT w.id, w.full_name, w.document_number, c.name AS company
     FROM workers w
     LEFT JOIN companies c ON c.id = w.company_id
@@ -164,22 +163,12 @@ require __DIR__ . '/../../includes/header.php';
                         <label class="form-label">Aplicar a</label>
                         <select class="form-select" name="scope_type" id="calendarScopeType" required>
                             <option value="all">Todo el personal</option>
-                            <option value="company">Una empresa</option>
                             <option value="worker">Un trabajador</option>
                         </select>
                     </div>
                     <div class="col-12">
                         <label class="form-label">Motivo o nombre</label>
                         <input class="form-control" name="name" id="calendarDayName" maxlength="180" placeholder="Ej. Fiestas Patrias" required>
-                    </div>
-                    <div class="col-12 d-none" id="calendarCompanyField">
-                        <label class="form-label">Empresa</label>
-                        <select class="form-select" name="company_id" id="calendarCompanyId">
-                            <option value="">Seleccione</option>
-                            <?php foreach ($companies as $company): ?>
-                                <option value="<?= (int) $company['id'] ?>"><?= e($company['name']) ?></option>
-                            <?php endforeach; ?>
-                        </select>
                     </div>
                     <div class="col-12 d-none" id="calendarWorkerField">
                         <label class="form-label">Personal</label>

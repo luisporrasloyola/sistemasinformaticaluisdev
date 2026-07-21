@@ -94,21 +94,20 @@ require __DIR__ . '/../../includes/header.php';
                                     data-schedule-id="<?= (int) $selectedScheduleId ?>"
                                     data-day="<?= (int) $number ?>"
                                     data-day-label="<?= e($label) ?>"
+                                    data-entry-time="<?= e(short_time($day['entry_time'] ?? $day['entry_start'] ?? null)) ?>"
                                     data-entry-start="<?= e(short_time($day['entry_start'] ?? null)) ?>"
                                     data-entry-end="<?= e(short_time($day['entry_end'] ?? null)) ?>"
-                                    data-break-start="<?= e(short_time($day['break_start'] ?? null)) ?>"
-                                    data-break-end="<?= e(short_time($day['break_end'] ?? null)) ?>"
+                                    data-exit-time="<?= e(short_time($day['exit_time'] ?? $day['exit_start'] ?? null)) ?>"
                                     data-exit-start="<?= e(short_time($day['exit_start'] ?? null)) ?>"
                                     data-exit-end="<?= e(short_time($day['exit_end'] ?? null)) ?>"
                                     data-tolerance="<?= (int) ($day['tolerance_minutes'] ?? 0) ?>"
                                     title="Configurar"><i class="fa-solid fa-gear"></i></button>
                             </div>
                             <?php if ($day): ?>
-                                <div class="schedule-pill schedule-entry">Entrada: <?= e(short_time($day['entry_start'])) ?> - <?= e(short_time($day['entry_end'])) ?></div>
-                                <?php if (!empty($day['break_start']) || !empty($day['break_end'])): ?>
-                                    <div class="schedule-pill schedule-break">Refrigerio: <?= e(short_time($day['break_start'])) ?> - <?= e(short_time($day['break_end'])) ?></div>
-                                <?php endif; ?>
-                                <div class="schedule-pill schedule-exit">Salida: <?= e(short_time($day['exit_start'])) ?> - <?= e(short_time($day['exit_end'])) ?></div>
+                                <div class="schedule-pill schedule-entry">Hora de entrada: <?= e(short_time($day['entry_time'] ?? $day['entry_start'])) ?></div>
+                                <small class="text-muted d-block">Marcación: <?= e(short_time($day['entry_start'])) ?> - <?= e(short_time($day['entry_end'])) ?></small>
+                                <div class="schedule-pill schedule-exit mt-2">Hora de salida: <?= e(short_time($day['exit_time'] ?? $day['exit_start'])) ?></div>
+                                <small class="text-muted d-block">Marcación: <?= e(short_time($day['exit_start'])) ?> - <?= e(short_time($day['exit_end'])) ?></small>
                                 <small class="text-muted">Tolerancia: <?= (int) $day['tolerance_minutes'] ?> min</small>
                             <?php else: ?>
                                 <div class="empty-day">Sin horario</div>
@@ -156,33 +155,44 @@ require __DIR__ . '/../../includes/header.php';
                 <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                 <input type="hidden" name="schedule_id" id="scheduleDayScheduleId">
                 <input type="hidden" name="day_of_week" id="scheduleDayNumber">
-                <div class="row g-3">
-                    <div class="col-md-4">
-                        <label class="form-label">Entrada desde</label>
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <i class="fa-solid fa-right-to-bracket text-success"></i>
+                    <h6 class="mb-0">Hora de Entrada</h6>
+                </div>
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label">Hora de entrada</label>
+                        <input class="form-control" type="time" name="entry_time" id="entryTime" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Marcación desde</label>
                         <input class="form-control" type="time" name="entry_start" id="entryStart" required>
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Entrada hasta</label>
+                    <div class="col-md-3">
+                        <label class="form-label">Marcación hasta</label>
                         <input class="form-control" type="time" name="entry_end" id="entryEnd" required>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label class="form-label">Tolerancia (min)</label>
-                        <input class="form-control" type="number" name="tolerance_minutes" id="toleranceMinutes" min="0" max="180" value="0" required>
+                        <input class="form-control" type="number" name="tolerance_minutes" id="toleranceMinutes" min="0" max="180" value="0" readonly tabindex="-1">
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Refrigerio desde</label>
-                        <input class="form-control" type="time" name="break_start" id="breakStart">
+                </div>
+                <hr class="my-4">
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <i class="fa-solid fa-right-from-bracket text-primary"></i>
+                    <h6 class="mb-0">Hora de Salida</h6>
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Hora de salida</label>
+                        <input class="form-control" type="time" name="exit_time" id="exitTime" required>
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Refrigerio hasta</label>
-                        <input class="form-control" type="time" name="break_end" id="breakEnd">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Salida desde</label>
+                    <div class="col-md-4">
+                        <label class="form-label">Marcación desde</label>
                         <input class="form-control" type="time" name="exit_start" id="exitStart" required>
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Salida hasta</label>
+                    <div class="col-md-4">
+                        <label class="form-label">Marcación hasta</label>
                         <input class="form-control" type="time" name="exit_end" id="exitEnd" required>
                     </div>
                 </div>
