@@ -5016,19 +5016,105 @@ input[type="checkbox"]:active {
 }
 
 .dashboard-filters {
-    grid-template-columns: minmax(150px, .8fr) minmax(210px, 1.15fr) minmax(180px, 1fr) minmax(180px, 1fr) minmax(150px, .78fr) minmax(190px, .95fr) !important;
+    grid-template-columns: minmax(0, .8fr) minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, .78fr) minmax(0, .95fr) !important;
 }
 
 .dashboard-filter-company {
     max-width: 220px;
 }
 
-@media (max-width: 1199px) {
+@media (max-width: 1399px) {
     .dashboard-filters {
         grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
     }
     .dashboard-filter-company {
         max-width: none;
+    }
+}
+
+.dashboard-detail-panel,
+.dashboard-detail-panel .dashboard-filters,
+.dashboard-detail-panel .dashboard-filters > div,
+.dashboard-detail-panel .table-responsive {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.dashboard-detail-panel .dashboard-filters .form-control,
+.dashboard-detail-panel .dashboard-filters .form-select {
+    width: 100%;
+    max-width: 100%;
+}
+
+.dashboard-detail-panel .table-responsive {
+    overflow-x: auto;
+}
+
+@media (max-width: 1279px) {
+    .dashboard-detail-panel .table-responsive {
+        overflow-x: auto;
+        padding-bottom: 4px;
+    }
+
+    .dashboard-detail-panel .dashboard-table {
+        min-width: 1000px;
+    }
+}
+
+@media (min-width: 1280px) {
+    .dashboard-detail-panel .table-responsive {
+        overflow-x: hidden;
+    }
+
+    .dashboard-detail-panel .dashboard-table {
+        width: 100% !important;
+        min-width: 0 !important;
+        table-layout: fixed !important;
+    }
+
+    .dashboard-detail-panel .dashboard-table th,
+    .dashboard-detail-panel .dashboard-table td {
+        padding: 10px 8px !important;
+        white-space: normal !important;
+        overflow-wrap: anywhere;
+    }
+
+    .dashboard-detail-panel .dashboard-table th {
+        letter-spacing: 0 !important;
+    }
+
+    .dashboard-detail-panel .dashboard-table th:nth-child(1),
+    .dashboard-detail-panel .dashboard-table td:nth-child(1) { width: 14%; }
+    .dashboard-detail-panel .dashboard-table th:nth-child(2),
+    .dashboard-detail-panel .dashboard-table td:nth-child(2) { width: 18%; }
+    .dashboard-detail-panel .dashboard-table th:nth-child(3),
+    .dashboard-detail-panel .dashboard-table td:nth-child(3) { width: 17%; }
+    .dashboard-detail-panel .dashboard-table th:nth-child(4),
+    .dashboard-detail-panel .dashboard-table td:nth-child(4) { width: 14%; }
+    .dashboard-detail-panel .dashboard-table th:nth-child(5),
+    .dashboard-detail-panel .dashboard-table td:nth-child(5) { width: 12%; }
+    .dashboard-detail-panel .dashboard-table th:nth-child(6),
+    .dashboard-detail-panel .dashboard-table td:nth-child(6) { width: 14%; }
+    .dashboard-detail-panel .dashboard-table th:nth-child(7),
+    .dashboard-detail-panel .dashboard-table td:nth-child(7) { width: 11%; }
+
+    .dashboard-detail-panel .dashboard-action-group {
+        display: flex !important;
+        flex-wrap: nowrap;
+        justify-content: center;
+        width: 100%;
+        gap: 3px !important;
+    }
+
+    .dashboard-detail-panel .dashboard-action-group .btn {
+        flex: 0 0 28px;
+        width: 28px;
+        min-width: 28px;
+        max-width: 28px;
+        height: 28px;
+        min-height: 28px;
+        padding: 0 !important;
+        font-size: .72rem !important;
     }
 }
 
@@ -5144,6 +5230,54 @@ input[type="checkbox"]:active {
 
     .attendance-summary-table {
         min-width: 900px;
+    }
+}
+
+/* Sidebar de escritorio: menu desplazable sin superponerse al pie. */
+@media (min-width: 992px) {
+    .sidebar,
+    body.sidebar-collapsed .sidebar {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    .sidebar-brand,
+    .sidebar .nav-caption,
+    .sidebar-footer {
+        flex: 0 0 auto;
+    }
+
+    .sidebar-menu,
+    body.sidebar-collapsed .sidebar-menu {
+        display: block !important;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-gutter: stable;
+        padding-bottom: 24px !important;
+    }
+
+    .sidebar-footer,
+    body.sidebar-collapsed .sidebar-footer {
+        position: static;
+        margin-top: 0;
+        padding: 12px 14px;
+        background: #071426;
+        line-height: 1.35;
+    }
+
+    .sidebar-menu::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .sidebar-menu::-webkit-scrollbar-thumb {
+        border-radius: 6px;
+        background: rgba(148, 163, 184, .38);
     }
 }
 
