@@ -18,7 +18,7 @@ $parsedDate = DateTimeImmutable::createFromFormat('!Y-m-d', $date);
 if (!$parsedDate || $parsedDate->format('Y-m-d') !== $date) {
     json_response(['ok' => false, 'message' => 'Ingrese una fecha valida.'], 400);
 }
-if (!in_array($eventType, ['holiday', 'non_working', 'vacation'], true)) {
+if (!in_array($eventType, ['holiday', 'non_working', 'vacation', 'permission', 'rest'], true)) {
     json_response(['ok' => false, 'message' => 'Seleccione un tipo de dia valido.'], 400);
 }
 if (!in_array($scopeType, ['all', 'worker'], true) || $name === '') {
@@ -27,8 +27,8 @@ if (!in_array($scopeType, ['all', 'worker'], true) || $name === '') {
 if ($scopeType === 'worker' && $workerId <= 0) {
     json_response(['ok' => false, 'message' => 'Seleccione el trabajador.'], 400);
 }
-if ($eventType === 'vacation' && $scopeType !== 'worker') {
-    json_response(['ok' => false, 'message' => 'Las vacaciones deben asignarse a un trabajador.'], 400);
+if (in_array($eventType, ['vacation', 'permission'], true) && $scopeType !== 'worker') {
+    json_response(['ok' => false, 'message' => 'Las vacaciones y permisos deben asignarse a un trabajador.'], 400);
 }
 
 $endDate = $eventType === 'vacation' ? $endDate : $date;

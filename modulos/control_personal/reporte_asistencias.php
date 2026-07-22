@@ -38,6 +38,8 @@ function attendance_report_state(string $key): array
         'late' => ['label' => 'Asistió', 'class' => 'state-attended'],
         'absent' => ['label' => 'Faltó', 'class' => 'state-absent'],
         'vacation' => ['label' => 'Vacaciones', 'class' => 'state-vacation'],
+        'permission' => ['label' => 'Permiso', 'class' => 'state-permission'],
+        'rest' => ['label' => 'Descanso', 'class' => 'state-rest'],
         'holiday' => ['label' => 'Feriado', 'class' => 'state-holiday'],
         'non_working' => ['label' => 'No laborable', 'class' => 'state-non-working'],
         'incomplete' => ['label' => 'Marcación incompleta', 'class' => 'state-incomplete'],
@@ -149,14 +151,16 @@ foreach ($assignedWorkers as $worker) {
             } else {
                 $stateKey = 'attended';
             }
-        } elseif (in_array($eventType, ['holiday', 'non_working', 'vacation'], true)) {
+        } elseif (attendance_calendar_is_non_working_event($eventType)) {
             $stateKey = match ($eventType) {
                 'holiday' => 'holiday',
                 'vacation' => 'vacation',
+                'permission' => 'permission',
+                'rest' => 'rest',
                 default => 'non_working',
             };
         } elseif (!$hasSchedule) {
-            $stateKey = 'non_working';
+            $stateKey = 'rest';
         } elseif ($date < $today) {
             $stateKey = 'absent';
         } else {
@@ -253,6 +257,8 @@ $statusOptions = [
     'late' => 'Asistió con tardanza',
     'absent' => 'Faltó',
     'vacation' => 'Vacaciones',
+    'permission' => 'Permiso',
+    'rest' => 'Descanso',
     'holiday' => 'Feriado',
     'non_working' => 'No laborable',
     'incomplete' => 'Marcación incompleta',

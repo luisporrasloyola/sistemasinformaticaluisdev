@@ -12,7 +12,7 @@ function attendance_calendar_events_between(string $startDate, string $endDate):
         LEFT JOIN workers w ON w.id = acd.worker_id
         LEFT JOIN users u ON u.id = acd.created_by_user_id
         WHERE acd.status = 1
-          AND acd.event_type IN ('holiday', 'non_working', 'vacation')
+          AND acd.event_type IN ('holiday', 'non_working', 'vacation', 'permission', 'rest')
           AND acd.calendar_date <= :end_date
           AND COALESCE(acd.end_date, acd.calendar_date) >= :start_date
         ORDER BY acd.calendar_date, acd.id");
@@ -89,6 +89,25 @@ function attendance_calendar_event_label(string $eventType): string
         'holiday' => 'Feriado',
         'non_working' => 'No laborable',
         'vacation' => 'Vacaciones',
+        'permission' => 'Permiso',
+        'rest' => 'Descanso',
         default => 'Evento laboral',
     };
+}
+
+function attendance_calendar_event_abbreviation(string $eventType): string
+{
+    return match ($eventType) {
+        'vacation' => 'VAC',
+        'permission' => 'PER',
+        'rest' => 'D',
+        'holiday' => 'FER',
+        'non_working' => 'NL',
+        default => '',
+    };
+}
+
+function attendance_calendar_is_non_working_event(string $eventType): bool
+{
+    return in_array($eventType, ['holiday', 'non_working', 'vacation', 'permission', 'rest'], true);
 }

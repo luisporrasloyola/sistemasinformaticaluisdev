@@ -5,14 +5,38 @@ require_once __DIR__ . '/../../includes/attendance_calendar.php';
 require_module_access('control_personal.dashboard');
 
 $today = date('Y-m-d');
-$selectedMonth = (string) ($_GET['mes'] ?? date('Y-m'));
-if (!preg_match('/^\d{4}-\d{2}$/', $selectedMonth)) {
-    $selectedMonth = date('Y-m');
+$defaultRangeStart = date('Y-m-01');
+$defaultRangeEnd = date('Y-m-t');
+$rangeStart = (string) ($_GET['desde'] ?? $defaultRangeStart);
+$rangeEnd = (string) ($_GET['hasta'] ?? $defaultRangeEnd);
+
+$isValidDate = static function (string $value): bool {
+    $date = DateTimeImmutable::createFromFormat('!Y-m-d', $value);
+    return $date !== false && $date->format('Y-m-d') === $value;
+};
+
+if (!$isValidDate($rangeStart)) {
+    $rangeStart = $defaultRangeStart;
+}
+if (!$isValidDate($rangeEnd)) {
+    $rangeEnd = $defaultRangeEnd;
+}
+if ($rangeStart > $rangeEnd) {
+    [$rangeStart, $rangeEnd] = [$rangeEnd, $rangeStart];
 }
 
-$monthStart = $selectedMonth . '-01';
-$monthEnd = date('Y-m-t', strtotime($monthStart));
-$daysInMonth = (int) date('t', strtotime($monthStart));
+$rangeDates = [];
+$cursor = new DateTimeImmutable($rangeStart);
+$lastDate = new DateTimeImmutable($rangeEnd);
+while ($cursor <= $lastDate) {
+    $rangeDates[] = $cursor->format('Y-m-d');
+    $cursor = $cursor->modify('+1 day');
+}
+$rangeSpansMonths = substr($rangeStart, 0, 7) !== substr($rangeEnd, 0, 7);
+
+$monthStart = $rangeStart;
+$monthEnd = $rangeEnd;
+$daysInMonth = count($rangeDates);
 $weekdayAbbreviations = [
     1 => 'LU',
     2 => 'MA',
@@ -155,7 +179,7 @@ foreach ($todayRows as $todayRow) {
         (int) ($todayRow['company_id'] ?? 0)
     );
     $todayEventType = (string) ($todayEvent['event_type'] ?? '');
-    $hasScheduleToday = !in_array($todayEventType, ['holiday', 'non_working', 'vacation'], true)
+    $hasScheduleToday = !attendance_calendar_is_non_working_event($todayEventType)
         && isset($scheduleDaysBySchedule[(int) $todayRow['schedule_id']][$todayWeekday]);
     if ($hasScheduleToday && empty($todayRow['entry_time'])) {
         $absentToday++;
@@ -202,11 +226,87 @@ foreach ($stmt->fetchAll() as $row) {
     ];
 
     if (!empty($row['mark_date'])) {
-        $day = (int) date('j', strtotime((string) $row['mark_date']));
-        $matrixRows[$workerId]['days'][$day][(string) $row['mark_type']] = [
+        $markDate = (string) $row['mark_date'];
+        $matrixRows[$workerId]['days'][$markDate][(string) $row['mark_type']] = [
             'time' => cp_time($row['mark_time'] ?? null),
             'status' => (string) ($row['final_status'] ?? ''),
         ];
+    }
+}
+
+$matrixSummary = [];
+foreach ($matrixRows as $workerId => $worker) {
+    $matrixSummary[$workerId] = [
+        'name' => (string) $worker['name'],
+        'company' => (string) $worker['company'],
+        'attendances' => 0,
+        'late' => 0,
+        'early_exit' => 0,
+        'late_early_exit' => 0,
+        'absences' => 0,
+    ];
+}
+
+$attendancePeriodTotals = [
+    'attendances' => 0,
+    'late' => 0,
+    'early_exit' => 0,
+    'late_early_exit' => 0,
+    'absences' => 0,
+];
+
+foreach ($matrixRows as $workerId => $worker) {
+    foreach ($rangeDates as $cellDate) {
+        $cell = $worker['days'][$cellDate] ?? [];
+        $entry = $cell['entrada'] ?? null;
+        $exit = $cell['salida'] ?? null;
+        $weekdayNumber = (int) date('N', strtotime($cellDate));
+        $scheduleId = (int) $worker['schedule_id'];
+        $assignmentStartDate = (string) $worker['assignment_start_date'];
+        $calendarEvent = attendance_calendar_resolve_event(
+            $calendarEvents,
+            $cellDate,
+            (int) $worker['worker_id'],
+            (int) $worker['company_id']
+        );
+        $isNonWorkingDay = attendance_calendar_is_non_working_event((string) ($calendarEvent['event_type'] ?? ''));
+        $isAssignedPeriod = $scheduleId > 0
+            && $assignmentStartDate !== ''
+            && $cellDate >= $assignmentStartDate;
+        $isWeeklyScheduled = isset($scheduleDaysBySchedule[$scheduleId][$weekdayNumber]);
+        $isScheduledDay = $isAssignedPeriod && !$isNonWorkingDay && $isWeeklyScheduled;
+        $isAbsence = !$entry && !$exit && $cellDate < $today && $isScheduledDay;
+        $isLate = ($entry['status'] ?? '') === 'tardanza';
+        $isEarlyExit = ($exit['status'] ?? '') === 'salida_anticipada';
+
+        $attendanceCode = '';
+        if ($isAbsence) {
+            $attendanceCode = 'F';
+        } elseif ($entry || $exit) {
+            if ($isLate && $isEarlyExit) {
+                $attendanceCode = 'ATSA';
+            } elseif ($isLate) {
+                $attendanceCode = 'T';
+            } elseif ($isEarlyExit) {
+                $attendanceCode = 'ASA';
+            } else {
+                $attendanceCode = 'A';
+            }
+        }
+
+        $summaryKey = match ($attendanceCode) {
+            'A' => 'attendances',
+            'T' => 'late',
+            'ASA' => 'early_exit',
+            'ATSA' => 'late_early_exit',
+            'F' => 'absences',
+            default => null,
+        };
+
+        if ($summaryKey !== null) {
+            $matrixSummary[$workerId][$summaryKey]++;
+            $attendancePeriodTotals[$summaryKey]++;
+        }
     }
 }
 
@@ -215,46 +315,56 @@ require __DIR__ . '/../../includes/header.php';
 <div class="page-title dashboard-title">
     <div>
         <h1>Dashboard de asistencia</h1>
-        <p>Resumen operativo de marcaciones, puntualidad y cobertura diaria.</p>
+        <p>Resumen operativo de asistencias, faltas, tardanzas y cobertura diaria.</p>
     </div>
-    <form class="d-flex gap-2 align-items-end" method="get">
+    <form class="d-flex flex-wrap gap-2 align-items-end" method="get">
         <div>
-            <label class="form-label small fw-bold text-muted">Mes</label>
-            <input class="form-control" type="month" name="mes" value="<?= e($selectedMonth) ?>">
+            <label class="form-label small fw-bold text-muted">Desde</label>
+            <input class="form-control" type="date" name="desde" value="<?= e($rangeStart) ?>" required>
+        </div>
+        <div>
+            <label class="form-label small fw-bold text-muted">Hasta</label>
+            <input class="form-control" type="date" name="hasta" value="<?= e($rangeEnd) ?>" required>
         </div>
         <button class="btn btn-primary" type="submit"><i class="fa-solid fa-filter me-2"></i>Filtrar</button>
     </form>
 </div>
 
-<div class="attendance-kpi-grid mb-3">
-    <div class="attendance-kpi-card kpi-blue">
-        <span>Asignados activos</span>
-        <strong><?= $activeAssignments ?></strong>
-        <small><?= $activeWorkers ?> trabajadores</small>
-        <i class="fa-solid fa-users"></i>
-    </div>
+<div class="attendance-kpi-grid attendance-kpi-grid-five mb-3">
     <div class="attendance-kpi-card kpi-green">
-        <span>Entradas de hoy</span>
-        <strong><?= $entriesToday ?></strong>
-        <small><?= date('d/m/Y') ?></small>
-        <i class="fa-solid fa-right-to-bracket"></i>
+        <span>Asistencias</span>
+        <strong><?= $attendancePeriodTotals['attendances'] ?></strong>
+        <small>Jornadas sin incidencias</small>
+        <i class="fa-solid fa-circle-check"></i>
     </div>
-    <div class="attendance-kpi-card kpi-orange">
+    <div class="attendance-kpi-card kpi-red">
+        <span>Faltas</span>
+        <strong><?= $attendancePeriodTotals['absences'] ?></strong>
+        <small>Ausencias del periodo</small>
+        <i class="fa-solid fa-user-xmark"></i>
+    </div>
+    <div class="attendance-kpi-card kpi-yellow">
         <span>Tardanzas</span>
-        <strong><?= $lateToday ?></strong>
+        <strong><?= $attendancePeriodTotals['late'] ?></strong>
         <small>Entradas fuera de tolerancia</small>
         <i class="fa-solid fa-clock"></i>
     </div>
-    <div class="attendance-kpi-card kpi-red">
-        <span>Sin entrada</span>
-        <strong><?= $absentToday ?></strong>
-        <small>Asignados pendientes</small>
+    <div class="attendance-kpi-card kpi-orange">
+        <span>Asisti&oacute; con salida anticipada</span>
+        <strong><?= $attendancePeriodTotals['early_exit'] ?></strong>
+        <small>Salidas antes del horario</small>
+        <i class="fa-solid fa-arrow-right-from-bracket"></i>
+    </div>
+    <div class="attendance-kpi-card kpi-rose">
+        <span>Asistió con tardanza y salida anticipada</span>
+        <strong><?= $attendancePeriodTotals['late_early_exit'] ?></strong>
+        <small>Jornadas con ambas incidencias</small>
         <i class="fa-solid fa-triangle-exclamation"></i>
     </div>
 </div>
 
 <div class="attendance-dashboard-content">
-<div class="row g-3 attendance-dashboard-secondary">
+<div class="row g-3 attendance-dashboard-secondary d-none" aria-hidden="true">
     <div class="col-xl-7">
         <div class="work-panel h-100">
             <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
@@ -285,7 +395,7 @@ require __DIR__ . '/../../includes/header.php';
                         $todayEventType = (string) ($todayEvent['event_type'] ?? '');
                         $hasScheduleToday = !empty($row['assignment_id'])
                             && $today >= (string) $row['assignment_start_date']
-                            && !in_array($todayEventType, ['holiday', 'non_working', 'vacation'], true)
+                            && !attendance_calendar_is_non_working_event($todayEventType)
                             && isset($scheduleDaysBySchedule[(int) $row['schedule_id']][$todayWeekday]);
                         $status = empty($row['assignment_id']) ? 'sin_asignar' : ($hasScheduleToday ? 'ausente' : 'sin_horario');
                         $label = empty($row['assignment_id'])
@@ -352,26 +462,32 @@ require __DIR__ . '/../../includes/header.php';
         <span class="text-muted small"><?= e(date('d/m/Y', strtotime($monthStart))) ?> - <?= e(date('d/m/Y', strtotime($monthEnd))) ?></span>
     </div>
     <div class="attendance-matrix-legend mb-3" aria-label="Leyenda de la matriz mensual">
-        <span><strong>F</strong> Falta</span>
-        <span><strong>FE</strong> Feriado</span>
-        <span><strong>NL</strong> No laborable</span>
-        <span><strong>V</strong> Vacaciones</span>
+        <span class="legend-attended"><strong>A</strong> Asisti&oacute;</span>
+        <span class="legend-absent"><strong>F</strong> Falta</span>
+        <span class="legend-attendance-warning"><strong>T</strong> Tarde</span>
+        <span class="legend-early-exit"><strong>ASA</strong> Asisti&oacute; con salida anticipada</span>
+        <span class="legend-attendance-critical"><strong>ATSA</strong> Asistió con tardanza y salida anticipada</span>
+        <span class="legend-vacation"><strong>VAC</strong> Vacaciones</span>
+        <span class="legend-permission"><strong>PER</strong> Permiso</span>
+        <span class="legend-rest"><strong>D</strong> Descanso</span>
+        <span class="legend-holiday"><strong>FER</strong> Feriado</span>
+        <span class="legend-non-working"><strong>NL</strong> No laborable</span>
     </div>
     <div class="table-responsive attendance-matrix-wrap">
-        <table class="table table-sm attendance-matrix">
+                <table class="table table-sm attendance-matrix" style="--matrix-days: <?= count($rangeDates) ?>;">
             <thead>
             <tr>
                 <th class="matrix-person">Personal</th>
-                <?php for ($day = 1; $day <= $daysInMonth; $day++): ?>
+                <?php foreach ($rangeDates as $dayDate): ?>
                     <?php
-                    $dayDate = sprintf('%s-%02d', $selectedMonth, $day);
                     $weekdayNumber = (int) date('N', strtotime($dayDate));
+                    $dayLabel = $rangeSpansMonths ? date('j/n', strtotime($dayDate)) : date('j', strtotime($dayDate));
                     ?>
                     <th class="matrix-day-heading">
                         <span class="matrix-weekday"><?= e($weekdayAbbreviations[$weekdayNumber]) ?></span>
-                        <span class="matrix-day-number"><?= $day ?></span>
+                        <span class="matrix-day-number"><?= e($dayLabel) ?></span>
                     </th>
-                <?php endfor; ?>
+                <?php endforeach; ?>
             </tr>
             </thead>
             <tbody>
@@ -381,12 +497,11 @@ require __DIR__ . '/../../includes/header.php';
                         <strong><?= e($worker['name']) ?></strong>
                         <span><?= e($worker['company']) ?></span>
                     </td>
-                    <?php for ($day = 1; $day <= $daysInMonth; $day++): ?>
+                    <?php foreach ($rangeDates as $cellDate): ?>
                         <?php
-                        $cell = $worker['days'][$day] ?? [];
+                        $cell = $worker['days'][$cellDate] ?? [];
                         $entry = $cell['entrada'] ?? null;
                         $exit = $cell['salida'] ?? null;
-                        $cellDate = sprintf('%s-%02d', $selectedMonth, $day);
                         $weekdayNumber = (int) date('N', strtotime($cellDate));
                         $scheduleId = (int) $worker['schedule_id'];
                         $assignmentStartDate = (string) $worker['assignment_start_date'];
@@ -397,8 +512,7 @@ require __DIR__ . '/../../includes/header.php';
                             (int) $worker['company_id']
                         );
                         $calendarEventType = (string) ($calendarEvent['event_type'] ?? '');
-                        $isVacation = $calendarEventType === 'vacation';
-                        $isNonWorkingDay = in_array($calendarEventType, ['holiday', 'non_working', 'vacation'], true);
+                        $isNonWorkingDay = attendance_calendar_is_non_working_event($calendarEventType);
                         $isAssignedPeriod = $scheduleId > 0
                             && $assignmentStartDate !== ''
                             && $cellDate >= $assignmentStartDate;
@@ -408,29 +522,79 @@ require __DIR__ . '/../../includes/header.php';
                             && !$isWeeklyScheduled;
                         $isScheduledDay = $isAssignedPeriod && !$isNonWorkingDay && $isWeeklyScheduled;
                         $isAbsence = !$entry && !$exit && $cellDate < $today && $isScheduledDay;
-                        $cellClass = $isAbsence
-                            ? 'matrix-absent'
-                            : ($entry
-                                ? ($entry['status'] === 'tardanza' ? 'matrix-late' : 'matrix-ok')
-                                : ($isVacation
-                                    ? 'matrix-vacation'
-                                    : (($isNonWorkingDay || $isRestDay) ? 'matrix-day-off' : 'matrix-empty')));
+                        $isLate = ($entry['status'] ?? '') === 'tardanza';
+                        $isEarlyExit = ($exit['status'] ?? '') === 'salida_anticipada';
+                        $attendanceCode = '';
+                        $attendanceLabel = '';
+                        $incidents = [];
+
+                        if ($isAbsence) {
+                            $attendanceCode = 'F';
+                            $attendanceLabel = 'Faltó';
+                            $incidents[] = 'No registró asistencia';
+                        } elseif ($entry || $exit) {
+                            if ($isLate) $incidents[] = 'Tardanza';
+                            if ($isEarlyExit) $incidents[] = 'Salida anticipada';
+                            if (!$entry) $incidents[] = 'Entrada no registrada';
+                            if (!$exit) $incidents[] = 'Salida no registrada';
+
+                            if ($isLate && $isEarlyExit) {
+                                $attendanceCode = 'ATSA';
+                                $attendanceLabel = 'Asistió con tardanza y salida anticipada';
+                            } elseif ($isLate) {
+                                $attendanceCode = 'T';
+                                $attendanceLabel = 'Asistió con tardanza';
+                            } elseif ($isEarlyExit) {
+                                $attendanceCode = 'ASA';
+                                $attendanceLabel = 'Asistió con salida anticipada';
+                            } else {
+                                $attendanceCode = 'A';
+                                $attendanceLabel = 'Asistió sin incidencias';
+                            }
+                        }
+
+                        $cellClass = match ($attendanceCode) {
+                            'F' => 'matrix-absent',
+                            'T' => 'matrix-attendance-warning',
+                            'ASA' => 'matrix-early-exit',
+                            'ATSA' => 'matrix-attendance-critical',
+                            'A' => 'matrix-ok',
+                            default => match ($calendarEventType) {
+                                'vacation' => 'matrix-vacation',
+                                'permission' => 'matrix-permission',
+                                'rest' => 'matrix-rest',
+                                'holiday' => 'matrix-holiday',
+                                'non_working' => 'matrix-non-working',
+                                default => 'matrix-empty',
+                            },
+                        };
+                        $calendarLabel = $calendarEvent
+                            ? attendance_calendar_event_label($calendarEventType)
+                            : ($isRestDay ? 'Sin horario configurado' : 'Sin marcaciones');
+                        $detailLabel = $attendanceLabel ?: $calendarLabel;
+                        $detailIncidents = $incidents ? implode(' / ', $incidents) : 'Sin incidencias';
                         ?>
-                        <td class="<?= e($cellClass) ?>">
-                            <?php if ($isAbsence): ?>
-                                <span title="Falta: no registró marcación">F</span>
-                            <?php elseif ($entry): ?>
-                                <span>E <?= e($entry['time']) ?></span>
+                        <td class="<?= e($cellClass) ?> js-attendance-matrix-cell"
+                            role="button"
+                            tabindex="0"
+                            data-date="<?= e(date('d/m/Y', strtotime($cellDate))) ?>"
+                            data-worker="<?= e($worker['name']) ?>"
+                            data-company="<?= e($worker['company']) ?>"
+                            data-entry="<?= e($entry['time'] ?? '-') ?>"
+                            data-exit="<?= e($exit['time'] ?? '-') ?>"
+                            data-code="<?= e($attendanceCode ?: attendance_calendar_event_abbreviation($calendarEventType)) ?>"
+                            data-status="<?= e(strip_tags($detailLabel)) ?>"
+                            data-incidents="<?= e($detailIncidents) ?>"
+                            aria-label="Ver detalle de <?= e($worker['name']) ?> del <?= e(date('d/m/Y', strtotime($cellDate))) ?>">
+                            <?php if ($attendanceCode !== ''): ?>
+                                <span title="<?= e(strip_tags($attendanceLabel)) ?>"><?= e($attendanceCode) ?></span>
                             <?php elseif ($isNonWorkingDay): ?>
-                                <span title="<?= e($calendarEvent['name'] ?? '') ?>"><?= $calendarEventType === 'holiday' ? 'FE' : ($isVacation ? 'V' : 'NL') ?></span>
+                                <span title="<?= e($calendarEvent['name'] ?? '') ?>"><?= e(attendance_calendar_event_abbreviation($calendarEventType)) ?></span>
                             <?php elseif ($isRestDay): ?>
-                                <span title="D&iacute;a sin horario asignado">NL</span>
-                            <?php endif; ?>
-                            <?php if ($exit): ?>
-                                <span>S <?= e($exit['time']) ?></span>
+                                <span title="Sin horario configurado">-</span>
                             <?php endif; ?>
                         </td>
-                    <?php endfor; ?>
+                    <?php endforeach; ?>
                 </tr>
             <?php endforeach; ?>
             <?php if (!$matrixRows): ?>
@@ -440,5 +604,107 @@ require __DIR__ . '/../../includes/header.php';
         </table>
     </div>
 </div>
+
+<section class="work-panel attendance-monthly-summary" aria-labelledby="attendanceMonthlySummaryTitle">
+        <div class="attendance-monthly-summary-header">
+            <div>
+                <h3 id="attendanceMonthlySummaryTitle">Resumen por fechas seleccionadas</h3>
+                <p>Totales por trabajador durante el periodo seleccionado.</p>
+            </div>
+            <span><?= count($matrixSummary) ?> trabajador<?= count($matrixSummary) === 1 ? '' : 'es' ?></span>
+        </div>
+
+        <div class="table-responsive attendance-monthly-summary-wrap">
+            <table class="attendance-monthly-summary-table">
+                <thead>
+                <tr>
+                    <th>Personal</th>
+                    <th>Asistencias</th>
+                    <th>Tardanzas</th>
+                    <th>Faltas</th>
+                    <th>Asisti&oacute; con salida anticipada</th>
+                    <th>Asistió con tardanza y salida anticipada</th>
+                </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($matrixSummary as $summary): ?>
+                    <tr>
+                        <td class="attendance-summary-worker">
+                            <strong><?= e($summary['name']) ?></strong>
+                            <span><?= e($summary['company']) ?></span>
+                        </td>
+                        <td>
+                            <span class="attendance-summary-metric metric-attendance">
+                                <i class="fa-solid fa-check" aria-hidden="true"></i>
+                                <strong><?= (int) $summary['attendances'] ?></strong>
+                            </span>
+                        </td>
+                        <td>
+                            <span class="attendance-summary-metric metric-late">
+                                <i class="fa-solid fa-clock" aria-hidden="true"></i>
+                                <strong><?= (int) $summary['late'] ?></strong>
+                            </span>
+                        </td>
+                        <td>
+                            <span class="attendance-summary-metric metric-absence">
+                                <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                                <strong><?= (int) $summary['absences'] ?></strong>
+                            </span>
+                        </td>
+                        <td>
+                            <span class="attendance-summary-metric metric-early-exit">
+                                <i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i>
+                                <strong><?= (int) $summary['early_exit'] ?></strong>
+                            </span>
+                        </td>
+                        <td>
+                            <span class="attendance-summary-metric metric-late-early-exit">
+                                <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+                                <strong><?= (int) $summary['late_early_exit'] ?></strong>
+                            </span>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                <?php if (!$matrixSummary): ?>
+                    <tr>
+                        <td colspan="6" class="attendance-summary-empty">No hay datos para resumir.</td>
+                    </tr>
+                <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+
+<div class="modal fade" id="attendanceMatrixDetailModal" tabindex="-1" aria-labelledby="attendanceMatrixDetailTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content attendance-matrix-detail-modal">
+            <div class="modal-header">
+                <div>
+                    <h2 class="modal-title" id="attendanceMatrixDetailTitle">Detalle de asistencia</h2>
+                    <small class="text-muted" id="matrixDetailDate"></small>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="attendance-detail-person mb-3">
+                    <strong id="matrixDetailWorker"></strong>
+                    <span id="matrixDetailCompany"></span>
+                </div>
+                <div class="attendance-detail-status mb-3">
+                    <span class="badge" id="matrixDetailBadge"></span>
+                    <strong id="matrixDetailStatus"></strong>
+                </div>
+                <dl class="attendance-detail-grid mb-0">
+                    <dt>Entrada</dt><dd id="matrixDetailEntry"></dd>
+                    <dt>Salida</dt><dd id="matrixDetailExit"></dd>
+                    <dt>Incidencias</dt><dd id="matrixDetailIncidents"></dd>
+                </dl>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
 </div>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>

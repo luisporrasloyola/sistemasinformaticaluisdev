@@ -12,6 +12,53 @@ function localDateValue(date = new Date()) {
     return year + '-' + month + '-' + day;
 }
 
+function initAttendanceMatrixDetail() {
+    const modalElement = document.getElementById('attendanceMatrixDetailModal');
+    if (!modalElement) return;
+
+    const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+    const fields = {
+        date: document.getElementById('matrixDetailDate'),
+        worker: document.getElementById('matrixDetailWorker'),
+        company: document.getElementById('matrixDetailCompany'),
+        badge: document.getElementById('matrixDetailBadge'),
+        status: document.getElementById('matrixDetailStatus'),
+        entry: document.getElementById('matrixDetailEntry'),
+        exit: document.getElementById('matrixDetailExit'),
+        incidents: document.getElementById('matrixDetailIncidents')
+    };
+
+    const openDetail = (cell) => {
+        fields.date.textContent = cell.dataset.date || '';
+        fields.worker.textContent = cell.dataset.worker || '';
+        fields.company.textContent = cell.dataset.company || 'Sin empresa';
+        fields.status.textContent = cell.dataset.status || 'Sin marcaciones';
+        fields.entry.textContent = cell.dataset.entry || '-';
+        fields.exit.textContent = cell.dataset.exit || '-';
+        fields.incidents.textContent = cell.dataset.incidents || 'Sin incidencias';
+
+        const code = cell.dataset.code || '-';
+        fields.badge.textContent = code;
+        fields.badge.className = 'badge attendance-detail-badge';
+        if (code === 'A') fields.badge.classList.add('detail-badge-ok');
+        else if (code === 'T') fields.badge.classList.add('detail-badge-warning');
+        else if (code === 'ASA') fields.badge.classList.add('detail-badge-early-exit');
+        else if (code === 'ATSA' || code === 'F') fields.badge.classList.add('detail-badge-danger');
+        else fields.badge.classList.add('detail-badge-neutral');
+
+        modal.show();
+    };
+
+    document.querySelectorAll('.js-attendance-matrix-cell').forEach((cell) => {
+        cell.addEventListener('click', () => openDetail(cell));
+        cell.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            event.preventDefault();
+            openDetail(cell);
+        });
+    });
+}
+
 function initSidebarActiveLink() {
     const currentPath = decodeURIComponent(window.location.pathname).replace(/\/+$/, '').toLowerCase();
 
@@ -85,6 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initDashboardEjecutivo();
     initUsuariosModule();
     initAttendanceControl();
+    initAttendanceMatrixDetail();
     initControlPersonalSchedules();
     initControlPersonalCalendar();
     initControlPersonalLocations();
@@ -4204,12 +4252,22 @@ function initControlPersonalCalendar() {
 
     function syncFields() {
         const isVacation = typeField.value === 'vacation';
-        if (isVacation) {
+        const isIndividual = isVacation || typeField.value === 'permission';
+        const defaultNames = {
+            vacation: 'Vacaciones',
+            permission: 'Permiso',
+            rest: 'Descanso'
+        };
+        const automaticNames = Object.values(defaultNames);
+
+        if (isIndividual) {
             scopeField.value = 'worker';
-            if (!nameField.value.trim()) nameField.value = 'Vacaciones';
+        }
+        if (!nameField.value.trim() || automaticNames.includes(nameField.value.trim())) {
+            nameField.value = defaultNames[typeField.value] || '';
+        }
+        if (isVacation) {
             if (!endDateField.value) endDateField.value = startDateField.value;
-        } else if (nameField.value.trim() === 'Vacaciones') {
-            nameField.value = '';
         }
         document.getElementById('calendarEndDateField')?.classList.toggle('d-none', !isVacation);
         document.getElementById('calendarDateLabel').textContent = isVacation ? 'Fecha inicial' : 'Fecha';
