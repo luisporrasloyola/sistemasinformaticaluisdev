@@ -6051,6 +6051,27 @@ input[type="checkbox"]:active {
     background: #f8fafc;
 }
 
+.assignment-safety-card {
+    align-items: flex-start;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 10px;
+    display: flex;
+    gap: 12px;
+    padding: 13px;
+}
+
+.assignment-safety-icon {
+    align-items: center;
+    background: #2563eb;
+    border-radius: 8px;
+    color: #fff;
+    display: inline-flex;
+    flex: 0 0 34px;
+    height: 34px;
+    justify-content: center;
+}
+
 .assignment-workers-toolbar {
     display: flex;
     align-items: center;

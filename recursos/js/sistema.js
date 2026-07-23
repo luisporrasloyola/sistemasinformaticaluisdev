@@ -4651,6 +4651,8 @@ function initControlPersonalAssignments() {
     const selectAllWorkers = document.getElementById('assignmentSelectAllWorkers');
     const workerSearch = document.getElementById('assignmentWorkerSearch');
     const workersError = document.getElementById('assignmentWorkersError');
+    const conflictField = document.getElementById('assignmentConflictField');
+    const conflictPolicy = document.getElementById('assignmentConflictPolicy');
 
     function syncAssignmentScope() {
         const isWorker = scopeField.value === 'worker';
@@ -4699,6 +4701,8 @@ function initControlPersonalAssignments() {
         document.getElementById('assignmentId').value = '';
         scopeField.disabled = false;
         scopeField.value = 'all';
+        if (conflictPolicy) conflictPolicy.value = 'skip';
+        conflictField?.classList.remove('d-none');
         workerChecks.forEach((check) => { check.checked = false; });
         if (selectAllWorkers) {
             selectAllWorkers.checked = false;
@@ -4718,6 +4722,7 @@ function initControlPersonalAssignments() {
             document.getElementById('assignmentId').value = button.dataset.id || '';
             scopeField.value = 'worker';
             scopeField.disabled = true;
+            conflictField?.classList.add('d-none');
             workerField.value = button.dataset.workerId || '';
             document.getElementById('assignmentLocationId').value = button.dataset.locationId || '';
             document.getElementById('assignmentScheduleId').value = button.dataset.scheduleId || '';
@@ -4742,14 +4747,17 @@ function initControlPersonalAssignments() {
         const isMultipleAssignment = !document.getElementById('assignmentId').value && ['all', 'selected'].includes(scopeField.value);
         if (isMultipleAssignment) {
             const selectedCount = workerChecks.filter((check) => check.checked).length;
+            const willReplace = conflictPolicy?.value === 'replace';
             const confirmed = await Swal.fire({
-                title: scopeField.value === 'all' ? 'Aplicar a todo el personal' : 'Aplicar a trabajadores seleccionados',
-                text: scopeField.value === 'all'
-                    ? 'Se reemplazara la asignacion activa de cada trabajador con el lugar, horario y actividad seleccionados.'
-                    : `Se reemplazara la asignacion activa de ${selectedCount} trabajador(es) seleccionado(s).`,
-                icon: 'warning',
+                title: willReplace ? 'Confirmar cambio de asignaciones' : 'Confirmar asignación segura',
+                text: willReplace
+                    ? 'Las asignaciones activas involucradas se finalizarán y se crearán nuevas. El historial anterior permanecerá disponible.'
+                    : (scopeField.value === 'all'
+                        ? 'Solo se asignará al personal que actualmente no tenga una asignación activa.'
+                        : `Solo se asignará a los seleccionados sin asignación activa (${selectedCount} seleccionado(s)).`),
+                icon: willReplace ? 'warning' : 'question',
                 showCancelButton: true,
-                confirmButtonText: 'Si, aplicar',
+                confirmButtonText: willReplace ? 'Sí, finalizar y crear' : 'Sí, asignar',
                 cancelButtonText: 'Cancelar'
             });
             if (!confirmed.isConfirmed) return;
@@ -4760,6 +4768,14 @@ function initControlPersonalAssignments() {
             Swal.fire('Atención', data.message || 'No se pudo guardar la asignación.', 'warning');
             return;
         }
+        const details = [`${data.assigned_count || 0} asignación(es) creada(s).`];
+        if ((data.skipped_count || 0) > 0) {
+            details.push(`${data.skipped_count} trabajador(es) omitido(s) porque ya tenían asignación.`);
+        }
+        if ((data.replaced_count || 0) > 0) {
+            details.push(`${data.replaced_count} asignación(es) anterior(es) conservada(s) en el historial.`);
+        }
+        await Swal.fire('Asignaciones actualizadas', details.join(' '), 'success');
         window.location.reload();
     });
 

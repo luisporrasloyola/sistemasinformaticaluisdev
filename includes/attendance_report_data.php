@@ -99,6 +99,8 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
     $workers = $stmt->fetchAll();
 
     $assignmentByWorker = [];
+    $assignmentsByWorker = [];
+    $assignmentsById = [];
     if ($workers) {
         $ids = array_map(static fn(array $worker): int => (int) $worker['id'], $workers);
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
@@ -107,12 +109,17 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
             FROM attendance_assignments aa
             JOIN attendance_schedules s ON s.id = aa.schedule_id
             JOIN attendance_locations l ON l.id = aa.location_id
-            WHERE aa.status = 1 AND aa.worker_id IN ({$placeholders})
-            ORDER BY aa.id DESC");
+            WHERE aa.worker_id IN ({$placeholders})
+            ORDER BY aa.worker_id, aa.created_at, aa.id");
         $stmt->execute($ids);
         foreach ($stmt->fetchAll() as $assignment) {
-            $id = (int) $assignment['worker_id'];
-            $assignmentByWorker[$id] ??= $assignment;
+            $assignmentId = (int) $assignment['id'];
+            $assignmentWorkerId = (int) $assignment['worker_id'];
+            $assignmentsById[$assignmentId] = $assignment;
+            $assignmentsByWorker[$assignmentWorkerId][] = $assignment;
+            if ((int) $assignment['status'] === 1) {
+                $assignmentByWorker[$assignmentWorkerId] = $assignment;
+            }
         }
     }
 
@@ -125,7 +132,7 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
 
     $marksByWorkerAndDate = [];
     $markParams = ['date_from' => $dateFrom, 'date_to' => $dateTo];
-    $markSql = 'SELECT worker_id, mark_date, mark_type, mark_time, schedule_status, final_status, observations
+    $markSql = 'SELECT assignment_id, worker_id, mark_date, mark_type, mark_time, schedule_status, final_status, observations
         FROM attendance_marks WHERE mark_date BETWEEN :date_from AND :date_to';
     if ($workerId > 0) {
         $markSql .= ' AND worker_id = :worker_id';
@@ -146,18 +153,31 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
 
     foreach ($workers as $worker) {
         $id = (int) $worker['id'];
-        $assignment = $assignmentByWorker[$id] ?? null;
-        if (!$assignment) continue;
-        $assignmentStart = new DateTimeImmutable((string) $assignment['assignment_start_date']);
+        $workerAssignments = $assignmentsByWorker[$id] ?? [];
+        if (!$workerAssignments) continue;
+        $assignmentStart = new DateTimeImmutable((string) $workerAssignments[0]['assignment_start_date']);
         $cursor = $assignmentStart > $periodStart ? $assignmentStart : $periodStart;
 
         while ($cursor <= $periodEnd) {
             $date = $cursor->format('Y-m-d');
             $weekday = (int) $cursor->format('N');
-            $scheduleDay = $scheduleDaysBySchedule[(int) $assignment['schedule_id']][$weekday] ?? null;
             $marks = $marksByWorkerAndDate[$id][$date] ?? [];
             $entry = $marks['entrada'] ?? null;
             $exit = $marks['salida'] ?? null;
+            $markAssignmentId = (int) ($entry['assignment_id'] ?? $exit['assignment_id'] ?? 0);
+            $assignment = $markAssignmentId > 0 ? ($assignmentsById[$markAssignmentId] ?? null) : null;
+            if (!$assignment || (int) $assignment['worker_id'] !== $id) {
+                $assignment = null;
+                foreach ($workerAssignments as $candidate) {
+                    if ((string) $candidate['assignment_start_date'] > $date) break;
+                    $assignment = $candidate;
+                }
+            }
+            if (!$assignment) {
+                $cursor = $cursor->modify('+1 day');
+                continue;
+            }
+            $scheduleDay = $scheduleDaysBySchedule[(int) $assignment['schedule_id']][$weekday] ?? null;
             $calendarEvent = attendance_calendar_resolve_event($calendarEvents, $date, $id, (int) $worker['company_id']);
             $eventType = (string) ($calendarEvent['event_type'] ?? '');
             $isNonWorking = attendance_calendar_is_non_working_event($eventType);
@@ -247,6 +267,7 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
             $journey = attendance_report_journey_state($journeyKey);
             $rows[] = [
                 'worker_id' => $id, 'date' => $date, 'weekday' => $weekdayLabels[$weekday],
+                'assignment_id' => (int) $assignment['id'],
                 'worker' => (string) $worker['full_name'], 'document' => (string) $worker['document_number'],
                 'company' => (string) ($worker['company'] ?? ''),
                 'entry' => attendance_report_time($entry['mark_time'] ?? null),
@@ -266,8 +287,19 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
 
     usort($rows, static fn(array $a, array $b): int => strcmp($a['date'], $b['date']) ?: strcasecmp($a['worker'], $b['worker']));
     $selectedWorker = $workerId > 0 ? ($workers[0] ?? null) : null;
-    $selectedAssignment = $workerId > 0 ? ($assignmentByWorker[$workerId] ?? null) : null;
     $individualRows = $workerId > 0 ? array_values(array_filter($rows, static fn(array $row): bool => $row['worker_id'] === $workerId)) : [];
+    $selectedAssignment = $workerId > 0 ? ($assignmentByWorker[$workerId] ?? null) : null;
+    if ($workerId > 0 && $individualRows) {
+        $periodAssignmentIds = array_values(array_unique(array_column($individualRows, 'assignment_id')));
+        if (count($periodAssignmentIds) === 1) {
+            $selectedAssignment = $assignmentsById[(int) $periodAssignmentIds[0]] ?? $selectedAssignment;
+        } elseif (count($periodAssignmentIds) > 1) {
+            $selectedAssignment = [
+                'schedule_name' => 'Varios horarios (ver detalle)',
+                'location_name' => 'Varios lugares (ver detalle)',
+            ];
+        }
+    }
     $summary = ['workdays' => 0, 'attendances' => 0, 'late' => 0, 'absent' => 0, 'leaves' => 0, 'vacations' => 0, 'worked_minutes' => 0, 'late_minutes' => 0, 'overtime_minutes' => 0, 'completed' => 0];
     foreach ($individualRows as $row) {
         if ($row['is_workday']) $summary['workdays']++;

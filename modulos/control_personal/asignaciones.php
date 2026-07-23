@@ -89,6 +89,19 @@ require __DIR__ . '/../../includes/header.php';
                             <option value="selected">Seleccionar trabajadores</option>
                         </select>
                     </div>
+                    <div class="col-md-12" id="assignmentConflictField">
+                        <div class="assignment-safety-card">
+                            <div class="assignment-safety-icon"><i class="fa-solid fa-shield-halved"></i></div>
+                            <div class="flex-grow-1">
+                                <label class="form-label" for="assignmentConflictPolicy">Si el trabajador ya tiene una asignación activa</label>
+                                <select class="form-select" name="conflict_policy" id="assignmentConflictPolicy">
+                                    <option value="skip">Conservarla y omitir al trabajador (recomendado)</option>
+                                    <option value="replace">Finalizar la anterior y crear una nueva asignación</option>
+                                </select>
+                                <small class="text-muted d-block mt-2">Las asignaciones anteriores se conservarán como historial para reportes y marcaciones.</small>
+                            </div>
+                        </div>
+                    </div>
                     <div class="col-md-12 d-none" id="assignmentWorkerField">
                         <label class="form-label">Personal</label>
                         <select class="form-select" name="worker_id" id="assignmentWorkerId" required>
