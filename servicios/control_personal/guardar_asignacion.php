@@ -16,6 +16,7 @@ $locationId = (int) ($_POST['location_id'] ?? 0);
 $scheduleId = (int) ($_POST['schedule_id'] ?? 0);
 $activity = trim((string) ($_POST['activity'] ?? ''));
 $conflictPolicy = trim((string) ($_POST['conflict_policy'] ?? 'skip'));
+$currentUserId = (int) (current_user()['id'] ?? 0) ?: null;
 $assignedCount = 1;
 $skippedCount = 0;
 $replacedCount = 0;
@@ -71,14 +72,18 @@ if ($id > 0) {
         if ($currentWorkerId <= 0) {
             throw new RuntimeException('La asignación ya no está activa.');
         }
-        $pdo->prepare('UPDATE attendance_assignments SET status = 0 WHERE worker_id = :worker_id AND status = 1')
-            ->execute(['worker_id' => $currentWorkerId]);
-        $pdo->prepare('INSERT INTO attendance_assignments (worker_id, location_id, schedule_id, activity, status)
-            VALUES (:worker_id, :location_id, :schedule_id, :activity, 1)')->execute([
+        $pdo->prepare('UPDATE attendance_assignments
+            SET status = 0, deactivated_at = NOW(), deactivated_by_user_id = :user_id
+            WHERE worker_id = :worker_id AND status = 1')
+            ->execute(['worker_id' => $currentWorkerId, 'user_id' => $currentUserId]);
+        $pdo->prepare('INSERT INTO attendance_assignments
+            (worker_id, location_id, schedule_id, activity, status, created_by_user_id)
+            VALUES (:worker_id, :location_id, :schedule_id, :activity, 1, :user_id)')->execute([
                 'worker_id' => $currentWorkerId,
                 'location_id' => $locationId,
                 'schedule_id' => $scheduleId,
                 'activity' => $activity ?: null,
+                'user_id' => $currentUserId,
             ]);
         $replacedCount = 1;
         $pdo->commit();
@@ -118,19 +123,23 @@ if ($id > 0) {
         }
         $assignedCount = count($workerIds);
 
-        $disable = $pdo->prepare('UPDATE attendance_assignments SET status = 0 WHERE worker_id = :worker_id AND status = 1');
-        $insert = $pdo->prepare('INSERT INTO attendance_assignments (worker_id, location_id, schedule_id, activity, status)
-            VALUES (:worker_id, :location_id, :schedule_id, :activity, 1)');
+        $disable = $pdo->prepare('UPDATE attendance_assignments
+            SET status = 0, deactivated_at = NOW(), deactivated_by_user_id = :user_id
+            WHERE worker_id = :worker_id AND status = 1');
+        $insert = $pdo->prepare('INSERT INTO attendance_assignments
+            (worker_id, location_id, schedule_id, activity, status, created_by_user_id)
+            VALUES (:worker_id, :location_id, :schedule_id, :activity, 1, :user_id)');
 
         foreach ($workerIds as $targetWorkerId) {
             if ($conflictPolicy === 'replace') {
-                $disable->execute(['worker_id' => (int) $targetWorkerId]);
+                $disable->execute(['worker_id' => (int) $targetWorkerId, 'user_id' => $currentUserId]);
             }
             $insert->execute([
                 'worker_id' => (int) $targetWorkerId,
                 'location_id' => $locationId,
                 'schedule_id' => $scheduleId,
                 'activity' => $activity ?: null,
+                'user_id' => $currentUserId,
             ]);
         }
         $pdo->commit();

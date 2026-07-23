@@ -4781,14 +4781,79 @@ function initControlPersonalAssignments() {
 
     document.querySelectorAll('.js-delete-assignment').forEach((button) => {
         button.addEventListener('click', async () => {
-            if (!await confirmAction('¿Eliminar asignación?')) return;
+            const confirmation = await Swal.fire({
+                title: '¿Desactivar asignación?',
+                text: 'Se finalizará la asignación actual conservando el horario, lugar y todas sus marcaciones. El trabajador podrá recibir una nueva asignación.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, desactivar',
+                cancelButtonText: 'Cancelar'
+            });
+            if (!confirmation.isConfirmed) return;
             const body = new FormData();
             body.append('csrf_token', csrf);
             body.append('id', button.dataset.id || '');
             const response = await fetch(`${BASE_URL}/servicios/control_personal/eliminar_asignacion.php`, { method: 'POST', body });
             const data = await response.json();
-            if (data.ok) window.location.reload();
-            else Swal.fire('Atención', data.message || 'No se pudo eliminar la asignación.', 'warning');
+            if (data.ok) {
+                await Swal.fire('Asignación desactivada', data.message || 'El historial se conservó correctamente.', 'success');
+                window.location.reload();
+            }
+            else Swal.fire('Atención', data.message || 'No se pudo desactivar la asignación.', 'warning');
+        });
+    });
+
+    const historyModalElement = document.getElementById('assignmentHistoryModal');
+    const historyModal = historyModalElement ? bootstrap.Modal.getOrCreateInstance(historyModalElement) : null;
+    const historyWorker = document.getElementById('assignmentHistoryWorker');
+    const historyList = document.getElementById('assignmentHistoryList');
+    const formatAssignmentDate = (value) => {
+        if (!value) return 'No disponible';
+        const date = new Date(String(value).replace(' ', 'T'));
+        if (Number.isNaN(date.getTime())) return String(value);
+        return date.toLocaleString('es-PE', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    };
+    document.querySelectorAll('.js-assignment-history').forEach((button) => {
+        button.addEventListener('click', async () => {
+            if (!historyModal || !historyList) return;
+            if (historyWorker) historyWorker.textContent = button.dataset.workerName || '';
+            historyList.innerHTML = '<div class="text-center text-muted py-4">Cargando historial...</div>';
+            historyModal.show();
+            try {
+                const response = await fetch(`${BASE_URL}/servicios/control_personal/listar_historial_asignaciones.php?worker_id=${encodeURIComponent(button.dataset.workerId || '')}`);
+                const data = await response.json();
+                if (!data.ok) throw new Error(data.message || 'No se pudo cargar el historial.');
+                const rows = data.history || [];
+                historyList.innerHTML = rows.length ? rows.map((row) => {
+                    const active = Number(row.status) === 1;
+                    return `
+                        <article class="assignment-history-item ${active ? 'is-active' : 'is-finished'}">
+                            <div class="assignment-history-head">
+                                <div>
+                                    <strong>${escapeHtml(row.schedule_name || '-')}</strong>
+                                    <span><i class="fa-solid fa-location-dot"></i> ${escapeHtml(row.location_name || '-')}</span>
+                                </div>
+                                <span class="assignment-history-status">${active ? 'Activa' : 'Finalizada'}</span>
+                            </div>
+                            <div class="assignment-history-meta">
+                                <span><b>Actividad:</b> ${escapeHtml(row.activity || 'Sin actividad')}</span>
+                                <span><b>Inicio:</b> ${escapeHtml(formatAssignmentDate(row.created_at))}</span>
+                                <span><b>Registrada por:</b> ${escapeHtml(row.created_by || 'No disponible')}</span>
+                                <span><b>Finalización:</b> ${active ? '—' : escapeHtml(formatAssignmentDate(row.deactivated_at))}</span>
+                                <span><b>Desactivada por:</b> ${active ? '—' : escapeHtml(row.deactivated_by || 'No disponible')}</span>
+                            </div>
+                        </article>
+                    `;
+                }).join('') : '<div class="text-center text-muted py-4">No existen asignaciones registradas.</div>';
+            } catch (error) {
+                historyList.innerHTML = `<div class="alert alert-warning mb-0">${escapeHtml(error.message || 'No se pudo cargar el historial.')}</div>`;
+            }
         });
     });
 }

@@ -105,6 +105,7 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
         $ids = array_map(static fn(array $worker): int => (int) $worker['id'], $workers);
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
         $stmt = db()->prepare("SELECT aa.*, DATE(aa.created_at) AS assignment_start_date,
+                DATE(aa.deactivated_at) AS assignment_end_date,
                 s.name AS schedule_name, l.name AS location_name, l.address AS location_address
             FROM attendance_assignments aa
             JOIN attendance_schedules s ON s.id = aa.schedule_id
@@ -170,7 +171,10 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 $assignment = null;
                 foreach ($workerAssignments as $candidate) {
                     if ((string) $candidate['assignment_start_date'] > $date) break;
-                    $assignment = $candidate;
+                    $candidateEnd = (string) ($candidate['assignment_end_date'] ?? '');
+                    if ($candidateEnd === '' || $date <= $candidateEnd) {
+                        $assignment = $candidate;
+                    }
                 }
             }
             if (!$assignment) {

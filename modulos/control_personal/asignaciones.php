@@ -61,7 +61,13 @@ require __DIR__ . '/../../includes/header.php';
                             data-schedule-id="<?= (int) $assignment['schedule_id'] ?>"
                             data-activity="<?= e($assignment['activity'] ?? '') ?>"
                             title="Editar"><i class="fa-solid fa-pen"></i></button>
-                        <button class="btn btn-sm btn-outline-danger js-delete-assignment" type="button" data-id="<?= (int) $assignment['id'] ?>" title="Eliminar"><i class="fa-solid fa-trash"></i></button>
+                        <button class="btn btn-sm btn-outline-secondary js-assignment-history" type="button"
+                            data-worker-id="<?= (int) $assignment['worker_id'] ?>"
+                            data-worker-name="<?= e($assignment['full_name']) ?>"
+                            title="Ver historial"><i class="fa-solid fa-clock-rotate-left"></i></button>
+                        <button class="btn btn-sm btn-outline-danger js-delete-assignment" type="button"
+                            data-id="<?= (int) $assignment['id'] ?>"
+                            title="Desactivar"><i class="fa-solid fa-power-off"></i></button>
                     </td>
                 </tr>
             <?php endforeach; ?>
@@ -165,6 +171,28 @@ require __DIR__ . '/../../includes/header.php';
                 <button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk me-2"></i>Guardar</button>
             </div>
         </form>
+    </div>
+</div>
+
+<div class="modal fade" id="assignmentHistoryModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title">Historial de asignaciones</h5>
+                    <small class="text-muted" id="assignmentHistoryWorker"></small>
+                </div>
+                <button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="assignment-history-list" id="assignmentHistoryList">
+                    <div class="text-center text-muted py-4">Cargando historial...</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
     </div>
 </div>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>

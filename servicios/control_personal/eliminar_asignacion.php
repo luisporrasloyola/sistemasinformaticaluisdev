@@ -10,5 +10,12 @@ if ($id <= 0) {
     json_response(['ok' => false, 'message' => 'Asignacion no valida.'], 400);
 }
 
-db()->prepare('UPDATE attendance_assignments SET status = 0 WHERE id = :id')->execute(['id' => $id]);
-json_response(['ok' => true]);
+$userId = (int) (current_user()['id'] ?? 0) ?: null;
+$stmt = db()->prepare('UPDATE attendance_assignments
+    SET status = 0, deactivated_at = NOW(), deactivated_by_user_id = :user_id
+    WHERE id = :id AND status = 1');
+$stmt->execute(['id' => $id, 'user_id' => $userId]);
+if ($stmt->rowCount() === 0) {
+    json_response(['ok' => false, 'message' => 'La asignación ya estaba desactivada o no existe.'], 409);
+}
+json_response(['ok' => true, 'message' => 'Asignación desactivada. El historial de marcaciones se conservó.']);
