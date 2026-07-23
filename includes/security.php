@@ -223,6 +223,7 @@ function default_user_landing_path(): string
         'dashboard' => 'panel.php',
         'control_personal.dashboard' => 'modulos/control_personal/dashboard_asistencia.php',
         'control_personal.personal' => 'modulos/aliados/personal.php',
+        'control_personal.calendario_laboral' => 'modulos/control_personal/calendario_laboral.php',
         'control_personal.horarios' => 'modulos/control_personal/horarios.php',
         'control_personal.puntos_marcacion' => 'modulos/control_personal/puntos_marcacion.php',
         'control_personal.asignaciones' => 'modulos/control_personal/asignaciones.php',
