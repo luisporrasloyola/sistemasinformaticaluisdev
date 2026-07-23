@@ -82,6 +82,10 @@ foreach ($rows as $row) {
     $observationText = $hasRequirement ? (string) ($row['observations'] ?? '') : '';
     $editableObservation = dashboard_editable_observation($observationText);
     $observationStatus = $hasRequirement ? (string) ($row['observation_status'] ?? 'none') : 'none';
+    // Compatibilidad con registros anteriores: "corrected" ahora se presenta como observado.
+    if ($observationStatus === 'corrected') {
+        $observationStatus = 'observed';
+    }
     if ($observationText !== '' && $observationStatus === 'none') {
         $observationStatus = 'observed';
     }
@@ -202,7 +206,7 @@ function dashboard_db_column_exists(string $table, string $column): bool
 
 function dashboard_editable_observation(string $value): string
 {
-    if (str_starts_with($value, 'Administrador ') && str_contains($value, "\n")) {
+    if ((str_starts_with($value, 'Administrador ') || str_starts_with($value, 'Gestor ')) && str_contains($value, "\n")) {
         return trim((string) substr($value, (int) strpos($value, "\n") + 1));
     }
 
@@ -231,13 +235,6 @@ function dashboard_observation_status_meta(string $status): array
             'row_class' => 'dashboard-row-observed',
             'button_class' => 'btn-outline-warning',
             'button_title' => 'Observado',
-        ],
-        'corrected' => [
-            'label' => 'Corregido por revisar',
-            'badge' => 'text-bg-info',
-            'row_class' => 'dashboard-row-corrected',
-            'button_class' => 'btn-outline-info',
-            'button_title' => 'Corregido por revisar',
         ],
         'approved' => [
             'label' => 'Conforme',
@@ -394,7 +391,6 @@ require __DIR__ . '/includes/header.php';
                 <option value="">Todos</option>
                 <option value="approved">Conforme</option>
                 <option value="observed">Observado</option>
-                <option value="corrected">Corregido por revisar</option>
             </select>
         </div>
     </div>
@@ -466,7 +462,7 @@ require __DIR__ . '/includes/header.php';
                                 </button>
                             <?php endif; ?>
 
-                            <?php if ($hasObservationAudit && is_admin() && in_array($item['observation_status'], ['observed', 'corrected'], true)): ?>
+                            <?php if ($hasObservationAudit && is_admin() && $item['observation_status'] === 'observed'): ?>
                                 <button
                                     class="btn btn-sm btn-outline-success dashboard-approve-observation-btn"
                                     type="button"
@@ -486,7 +482,7 @@ require __DIR__ . '/includes/header.php';
 </div>
 
 <div class="modal fade" id="dashboardObservationModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
         <form class="modal-content" id="dashboardObservationForm">
             <div class="modal-header">
                 <h5 class="modal-title">Observación del requisito</h5>
@@ -507,17 +503,21 @@ require __DIR__ . '/includes/header.php';
                     <small class="d-block mt-2" id="dashboardObservationStatusUser"></small>
                     <small class="d-block mt-1" id="dashboardObservationResolvedInfo"></small>
                 </div>
-                <label class="form-label" for="dashboardObservationText">Observación</label>
-                <textarea class="form-control" name="observation" id="dashboardObservationText" rows="5" placeholder="Escriba la observación del administrador..."></textarea>
-                <small class="text-muted d-block mt-2">Esta observación se verá al visualizar el requisito.</small>
-                <div class="requirement-audit-box mt-3 d-none" id="dashboardObservationAuditBox">
-                    <h6>Historial de observación y cambios</h6>
+                <label class="form-label" for="dashboardObservationText">Nueva observación</label>
+                <textarea class="form-control" name="observation" id="dashboardObservationText" rows="3" maxlength="3000" placeholder="Escriba una nueva observación..."></textarea>
+                <small class="text-muted d-block mt-2">Se agregará al historial sin eliminar las observaciones anteriores.</small>
+                <div class="observation-readonly-notice d-none" id="dashboardObservationReadonlyNotice">
+                    <i class="fa-solid fa-lock"></i>
+                    <span>Modo de consulta. Solo los gestores autorizados para este requisito pueden agregar observaciones.</span>
+                </div>
+                <div class="requirement-audit-box observation-history-box mt-3 d-none" id="dashboardObservationAuditBox">
+                    <h6 id="dashboardObservationHistoryTitle">Historial de observaciones</h6>
                     <div id="dashboardObservationAuditList"></div>
                 </div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cerrar</button>
-                <button class="btn btn-primary d-none" type="submit" id="dashboardObservationSubmitBtn"><i class="fa-solid fa-pen-to-square me-2"></i>Actualizar observación</button>
+                <button class="btn btn-primary d-none" type="submit" id="dashboardObservationSubmitBtn"><i class="fa-solid fa-plus me-2"></i>Agregar observación</button>
             </div>
         </form>
     </div>
@@ -540,7 +540,7 @@ require __DIR__ . '/includes/header.php';
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script>
 window.dashboardEjecutivoData = <?= json_encode($chartPayload, JSON_UNESCAPED_UNICODE) ?>;
-window.dashboardCanManageObservations = <?= is_admin() ? 'true' : 'false' ?>;
+window.dashboardCanManageObservations = <?= (is_admin() || is_gestor_role()) ? 'true' : 'false' ?>;
 
 document.addEventListener('DOMContentLoaded', () => {
     const modalElement = document.getElementById('dashboardPdfPreviewModal');
@@ -552,18 +552,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const observationModal = observationModalElement && window.bootstrap ? bootstrap.Modal.getOrCreateInstance(observationModalElement) : null;
     const observationText = document.getElementById('dashboardObservationText');
     const observationSubmitBtn = document.getElementById('dashboardObservationSubmitBtn');
+    const observationReadonlyNotice = document.getElementById('dashboardObservationReadonlyNotice');
     let originalObservationText = '';
+    let canObserveCurrentRequirement = false;
+
+    const setObservationPermission = (allowed) => {
+        canObserveCurrentRequirement = window.dashboardCanManageObservations === true && allowed === true;
+        if (observationText) {
+            observationText.readOnly = !canObserveCurrentRequirement;
+            observationText.classList.toggle('observation-input-locked', !canObserveCurrentRequirement);
+            observationText.placeholder = canObserveCurrentRequirement
+                ? 'Escriba una nueva observación...'
+                : 'No tiene autorización para agregar observaciones a este requisito.';
+        }
+        observationReadonlyNotice?.classList.toggle('d-none', canObserveCurrentRequirement);
+        observationSubmitBtn?.classList.add('d-none');
+    };
 
     const syncObservationSubmit = () => {
-        if (!window.dashboardCanManageObservations) {
+        if (!canObserveCurrentRequirement) {
             observationSubmitBtn?.classList.add('d-none');
             return;
         }
-        const changed = (observationText?.value || '').trim() !== originalObservationText.trim();
+        const changed = (observationText?.value || '').trim() !== '';
         if (observationSubmitBtn) {
-            observationSubmitBtn.innerHTML = originalObservationText.trim() === ''
-                ? '<i class="fa-solid fa-pen-to-square me-2"></i>Registrar observación'
-                : '<i class="fa-solid fa-pen-to-square me-2"></i>Actualizar observación';
+            observationSubmitBtn.innerHTML = '<i class="fa-solid fa-plus me-2"></i>Agregar observación';
         }
         observationSubmitBtn?.classList.toggle('d-none', !changed);
     };
@@ -587,14 +600,9 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('dashboardObservationRequirementId').value = button.dataset.requirementId || '';
             document.getElementById('dashboardObservationWorker').textContent = button.dataset.workerName || '';
             document.getElementById('dashboardObservationRequirement').textContent = button.dataset.requirementName ? `Requisito: ${button.dataset.requirementName}` : '';
-            document.getElementById('dashboardObservationText').value = button.dataset.observations || '';
-            if (observationText) {
-                observationText.readOnly = !window.dashboardCanManageObservations;
-                observationText.placeholder = window.dashboardCanManageObservations
-                    ? 'Escriba la observación del administrador...'
-                    : 'Solo administradores pueden registrar observaciones.';
-            }
-            originalObservationText = button.dataset.observations || '';
+            document.getElementById('dashboardObservationText').value = '';
+            setObservationPermission(false);
+            originalObservationText = '';
             syncObservationSubmit();
 
             const statusBox = document.getElementById('dashboardObservationStatusBox');
@@ -606,11 +614,11 @@ document.addEventListener('DOMContentLoaded', () => {
             statusBox?.classList.toggle('d-none', status === 'none' && !button.dataset.observationAt);
             if (statusBadge) {
                 statusBadge.className = 'badge';
-                statusBadge.classList.add(status === 'corrected' ? 'text-bg-info' : (status === 'approved' ? 'text-bg-success' : 'text-bg-warning'));
+                statusBadge.classList.add(status === 'approved' ? 'text-bg-success' : 'text-bg-warning');
                 statusBadge.textContent = button.dataset.observationLabel || 'Observado';
             }
-            if (statusDate) statusDate.textContent = button.dataset.observationAt ? `Observado: ${button.dataset.observationAt}` : '';
-            if (statusUser) statusUser.textContent = button.dataset.observationBy ? `Observado por: ${button.dataset.observationBy}` : '';
+            if (statusDate) statusDate.textContent = button.dataset.observationAt ? `Actualizado: ${button.dataset.observationAt}` : '';
+            if (statusUser) statusUser.textContent = button.dataset.observationBy ? `Última observación por: ${button.dataset.observationBy}` : '';
             if (resolvedInfo) {
                 resolvedInfo.textContent = button.dataset.resolvedAt
                     ? `Conforme por: ${button.dataset.resolvedBy || 'Administrador'} - ${button.dataset.resolvedAt}`
@@ -623,6 +631,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const response = await fetch(`<?= APP_URL ?>/servicios/obtener_requisito.php?id=${encodeURIComponent(button.dataset.requirementId || '')}`);
                 const data = await response.json();
                 if (data.ok) {
+                    setObservationPermission(data.can_observe === true);
                     renderDashboardObservationAudit(data.row || null, data.activity || []);
                 }
             } catch (error) {
@@ -664,6 +673,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     observationForm?.addEventListener('submit', async (event) => {
         event.preventDefault();
+        if (!canObserveCurrentRequirement) return;
         const submitButton = observationForm.querySelector('button[type="submit"]');
         if (submitButton) submitButton.disabled = true;
 
@@ -692,55 +702,61 @@ document.addEventListener('DOMContentLoaded', () => {
 function renderDashboardObservationAudit(row, activity) {
     const box = document.getElementById('dashboardObservationAuditBox');
     const list = document.getElementById('dashboardObservationAuditList');
+    const title = document.getElementById('dashboardObservationHistoryTitle');
     if (!box || !list) return;
 
-    const hasObservationContext = row?.observation_status && row.observation_status !== 'none' && row?.observation_at;
-    if (!hasObservationContext) {
-        box.classList.add('d-none');
-        list.innerHTML = '';
-        return;
-    }
+    const entries = (activity || [])
+        .filter((entry) => entry.action_type === 'observacion_registrada')
+        .map((entry) => ({
+            author: entry.user_name || 'Usuario',
+            role: observationRoleLabel(entry.user_role),
+            date: entry.created_at,
+            content: cleanLegacyObservation(entry.description)
+        }))
+        .filter((entry) => entry.content !== '');
 
-    const items = [];
-    items.push({
-        title: row.observation_status === 'corrected' ? 'Corregido por revisar' : (row.observation_status === 'approved' ? 'Conforme' : 'Observado'),
-        body: `${row.observation_by || 'Administrador'} - ${formatDashboardAuditDate(row.observation_at)}`
-    });
-
-    if (row?.observation_resolved_at) {
-        items.push({
-            title: 'Conformidad registrada',
-            body: `${row.observation_resolved_by || 'Administrador'} - ${formatDashboardAuditDate(row.observation_resolved_at)}`
+    if (!entries.length && row?.observations) {
+        entries.push({
+            author: row.observation_by || 'Usuario',
+            role: observationRoleLabel(row.observation_by_role),
+            date: row.observation_at,
+            content: cleanLegacyObservation(row.observations)
         });
     }
-    const observationTime = parseDashboardAuditDate(row.observation_at);
-    (activity || []).filter((entry) => {
-        if (['observacion', 'observacion_retirada', 'conformidad'].includes(entry.action_type || '')) {
-            return true;
-        }
-        const entryTime = parseDashboardAuditDate(entry.created_at);
-        return observationTime && entryTime && entryTime >= observationTime;
-    }).forEach((entry) => {
-        const userName = entry.user_name || 'Sistema';
-        items.push({
-            title: `${userName} hizo modificaciones: ${normalizeDashboardActivityText(entry.description || 'actividad registrada')}`,
-            body: formatDashboardAuditDate(entry.created_at)
-        });
-    });
 
-    if (!items.length) {
+    if (!entries.length) {
         box.classList.add('d-none');
         list.innerHTML = '';
         return;
     }
 
     box.classList.remove('d-none');
-    list.innerHTML = items.map((item) => `
-        <div class="requirement-audit-item">
-            <strong>${escapeDashboardHtml(item.title)}</strong>
-            <span>${escapeDashboardHtml(item.body)}</span>
-        </div>
-    `).join('');
+    if (title) title.textContent = `Historial de observaciones (${entries.length})`;
+    list.innerHTML = `<div class="observation-timeline">${entries.map((entry) => `
+        <article class="observation-entry">
+            <div class="observation-entry-header">
+                <span class="observation-avatar"><i class="fa-solid fa-user"></i></span>
+                <div class="observation-author">
+                    <strong>${escapeDashboardHtml(entry.author)}</strong>
+                    <span>${escapeDashboardHtml(entry.role)}</span>
+                </div>
+                <time>${escapeDashboardHtml(formatDashboardAuditDate(entry.date))}</time>
+            </div>
+            <p>${escapeDashboardHtml(entry.content)}</p>
+        </article>
+    `).join('')}</div>`;
+}
+
+function cleanLegacyObservation(value) {
+    const text = String(value || '').trim();
+    return text.replace(/^(?:Administrador|Gestor) .+ tiene esta observaci[oó]n:\s*/iu, '').trim();
+}
+
+function observationRoleLabel(role) {
+    const normalized = String(role || '').trim().toLowerCase();
+    if (normalized === 'admin' || normalized === 'administrador') return 'Administrador';
+    if (normalized === 'gestor') return 'Gestor';
+    return 'Responsable';
 }
 
 function formatDashboardAuditDate(value) {

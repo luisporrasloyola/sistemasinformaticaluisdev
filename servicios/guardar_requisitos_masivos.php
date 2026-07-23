@@ -117,7 +117,7 @@ function save_requirement_record(int $workerId, int $positionId, int $requiremen
     if ($current) {
         delete_uploaded_file($current['file_path'] ?? null);
         $extraStatusSql = in_array((string) ($current['observation_status'] ?? 'none'), ['observed', 'corrected'], true)
-            ? ", observation_status = 'corrected'"
+            ? ", observation_status = 'observed'"
             : '';
         $stmt = db()->prepare('UPDATE worker_requirements
             SET registration_date = :registration_date, start_date = :start_date, end_date = :end_date,

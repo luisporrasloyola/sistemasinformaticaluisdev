@@ -106,10 +106,14 @@ require __DIR__ . '/../../includes/header.php';
                         <input class="form-control" type="date" name="end_date" id="endDate" required>
                     </div>
                     <div class="col-md-12" id="requirementObservationBlock">
-                        <label class="form-label" id="requirementObservationLabel">Observaciones</label>
-                        <textarea class="form-control" name="observations" id="observations" rows="3"></textarea>
-                        <div class="requirement-audit-box mt-2 d-none" id="requirementAuditBox">
-                            <h6>Historial de observación y cambios</h6>
+                        <div class="requirement-observation-heading">
+                            <label class="form-label mb-0" id="requirementObservationLabel">Nueva observación</label>
+                            <span class="requirement-observation-state d-none" id="requirementObservationState"></span>
+                        </div>
+                        <textarea class="form-control mt-2" name="observations" id="observations" rows="3" maxlength="3000" placeholder="Escriba una nueva observación..."></textarea>
+                        <small class="text-muted d-block mt-1">La nueva observación se agregará al historial sin reemplazar las anteriores.</small>
+                        <div class="requirement-audit-box observation-history-box mt-2 d-none" id="requirementAuditBox">
+                            <h6 id="requirementObservationHistoryTitle">Historial de observaciones</h6>
                             <div id="requirementAuditList"></div>
                         </div>
                     </div>
@@ -134,7 +138,7 @@ require __DIR__ . '/../../includes/header.php';
     </div>
 </div>
 <script>
-window.canManageRequirementObservations = <?= is_admin() ? 'true' : 'false' ?>;
+window.canManageRequirementObservations = <?= (is_admin() || is_gestor_role()) ? 'true' : 'false' ?>;
 </script>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>
 

@@ -30,11 +30,19 @@ try {
     $pdf = upload_file($_FILES['pdf'] ?? [], 'requisitos', ['application/pdf']);
     $pdo = db();
     $currentUserId = (int) (current_user()['id'] ?? 0) ?: null;
+    $cleanObservation = static function (string $value): string {
+        $value = trim($value);
+        if (preg_match('/^(?:Administrador|Gestor) .+ tiene esta observaci[oó]n:\R(.*)$/us', $value, $matches)) {
+            return trim((string) ($matches[1] ?? ''));
+        }
+        return $value;
+    };
 
     if ($id > 0) {
-        $currentStmt = $pdo->prepare('SELECT wr.*, rc.name AS requirement_name
+        $currentStmt = $pdo->prepare('SELECT wr.*, rc.name AS requirement_name, registered_by.role AS registered_by_role
             FROM worker_requirements wr
             LEFT JOIN requirements_catalog rc ON rc.id = wr.requirement_id
+            LEFT JOIN users registered_by ON registered_by.id = wr.registered_by_user_id
             WHERE wr.id = :id');
         $currentStmt->execute(['id' => $id]);
         $current = $currentStmt->fetch();
@@ -42,8 +50,17 @@ try {
             json_response(['ok' => false, 'message' => 'El requisito no existe.'], 404);
         }
 
-        $canEditObservations = is_admin();
-        $postedObservation = trim((string) ($_POST['observations'] ?? ''));
+        $registeredByAdmin = in_array(
+            mb_strtolower(trim((string) ($current['registered_by_role'] ?? '')), 'UTF-8'),
+            ['admin', 'administrador'],
+            true
+        );
+        $canEditObservations = is_admin() || (is_gestor_role() && !$registeredByAdmin);
+        $postedObservation = $cleanObservation((string) ($_POST['observations'] ?? ''));
+        $hasNewObservation = $postedObservation !== '';
+        if ($hasNewObservation && !$canEditObservations) {
+            json_response(['ok' => false, 'message' => 'No tiene autorización para agregar observaciones a este requisito.'], 403);
+        }
         $sql = 'UPDATE worker_requirements SET requirement_id=:requirement_id, registration_date=:registration_date,
             start_date=:start_date, end_date=:end_date';
         $params = [
@@ -53,7 +70,7 @@ try {
             'end_date' => $endDate,
             'id' => $id,
         ];
-        if ($canEditObservations) {
+        if ($canEditObservations && $hasNewObservation) {
             $sql .= ', observations=:observations';
             $params['observations'] = $postedObservation;
         }
@@ -79,10 +96,8 @@ try {
         if ((string) $current['end_date'] !== $endDate) {
             $changes[] = 'cambió F. Fin';
         }
-        $observationChanged = $canEditObservations && trim((string) ($current['observations'] ?? '')) !== $postedObservation;
-        if ($observationChanged) {
-            $changes[] = 'modificó observaciones';
-        }
+        $previousObservation = $cleanObservation((string) ($current['observations'] ?? ''));
+        $observationChanged = $canEditObservations && $hasNewObservation;
         if ($pdf['path']) {
             $changes[] = 'subió un nuevo documento PDF: ' . (string) $pdf['name'];
         }
@@ -95,11 +110,40 @@ try {
             $params['observation_by_user_id'] = $postedObservation !== '' ? $currentUserId : null;
             $params['observation_at'] = $postedObservation !== '' ? date('Y-m-d H:i:s') : null;
         } elseif ($changes && in_array($currentObservationStatus, ['observed', 'corrected'], true)) {
-            $sql .= ", observation_status='corrected'";
+            $sql .= ", observation_status='observed'";
         }
 
         $sql .= ' WHERE id=:id';
         $pdo->prepare($sql)->execute($params);
+
+        if ($observationChanged) {
+            $observationLog = $pdo->prepare('INSERT INTO worker_requirement_activity_log
+                (worker_requirement_id, user_id, action_type, description, created_at)
+                VALUES (:worker_requirement_id, :user_id, :action_type, :description, :created_at)');
+            $historyCount = $pdo->prepare("SELECT COUNT(*) FROM worker_requirement_activity_log
+                WHERE worker_requirement_id = :id AND action_type = 'observacion_registrada'");
+            $historyCount->execute(['id' => $id]);
+
+            if ((int) $historyCount->fetchColumn() === 0 && $previousObservation !== '') {
+                $observationLog->execute([
+                    'worker_requirement_id' => $id,
+                    'user_id' => (int) ($current['observation_by_user_id'] ?? 0) ?: null,
+                    'action_type' => 'observacion_registrada',
+                    'description' => $previousObservation,
+                    'created_at' => $current['observation_at'] ?: date('Y-m-d H:i:s'),
+                ]);
+            }
+
+            if ($postedObservation !== '') {
+                $observationLog->execute([
+                    'worker_requirement_id' => $id,
+                    'user_id' => $currentUserId,
+                    'action_type' => 'observacion_registrada',
+                    'description' => $postedObservation,
+                    'created_at' => date('Y-m-d H:i:s'),
+                ]);
+            }
+        }
 
         if ($changes) {
             $log = $pdo->prepare('INSERT INTO worker_requirement_activity_log (worker_requirement_id, user_id, action_type, description)
@@ -112,7 +156,7 @@ try {
             ]);
         }
     } else {
-        $initialObservation = trim((string) ($_POST['observations'] ?? ''));
+        $initialObservation = $cleanObservation((string) ($_POST['observations'] ?? ''));
         $hasInitialObservation = $initialObservation !== '';
         $stmt = $pdo->prepare('INSERT INTO worker_requirements
             (worker_id, position_id, requirement_id, registration_date, start_date, end_date, observations, file_path, original_file_name, registered_by_user_id,
@@ -147,8 +191,8 @@ try {
             $log->execute([
                 'worker_requirement_id' => $newId,
                 'user_id' => $currentUserId,
-                'action_type' => 'observacion',
-                'description' => 'Registro observado al crear el requisito.',
+                'action_type' => 'observacion_registrada',
+                'description' => $initialObservation,
             ]);
         }
     }

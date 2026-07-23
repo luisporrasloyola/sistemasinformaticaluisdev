@@ -25,6 +25,7 @@ let currentWorkerId = null;
 let currentPositionId = null;
 let requirementModal = null;
 let readOnlyMode = false;
+let canObserveCurrentRequirement = true;
 
 function localDateValue(date = new Date()) {
     const year = date.getFullYear();
@@ -879,6 +880,7 @@ async function loadRequirements() {
 
 function openAddRequirement() {
     readOnlyMode = false;
+    canObserveCurrentRequirement = window.canManageRequirementObservations === true;
     const form = document.getElementById('requirementForm');
     form.reset();
     resetRequirementFileInput();
@@ -893,6 +895,7 @@ function openAddRequirement() {
     $('#requirementSelect').val(null).trigger('change');
     renderCurrentPdf(null);
     renderRequirementAudit(null, []);
+    renderRequirementObservationState(null);
     requirementModal.show();
 }
 
@@ -919,17 +922,19 @@ async function fillRequirementModal(id) {
     const response = await fetch(`${BASE_URL}/servicios/obtener_requisito.php?id=${id}`);
     const data = await response.json();
     const row = data.row;
+    canObserveCurrentRequirement = data.can_observe === true;
     document.getElementById('requirementId').value = row.id;
     document.getElementById('requirementWorkerId').value = row.worker_id;
     document.getElementById('requirementPositionId').value = row.position_id;
     document.getElementById('registrationDate').value = row.registration_date;
     document.getElementById('startDate').value = row.start_date;
     document.getElementById('endDate').value = row.end_date;
-    document.getElementById('observations').value = row.observations || '';
+    document.getElementById('observations').value = '';
     const option = new Option(row.requirement, row.requirement_id, true, true);
     $('#requirementSelect').append(option).trigger('change');
     renderCurrentPdf(row);
     renderRequirementAudit(row, data.activity || []);
+    renderRequirementObservationState(row.observation_status);
 }
 
 function resetRequirementFileInput() {
@@ -940,55 +945,63 @@ function resetRequirementFileInput() {
 function renderRequirementAudit(row, activity) {
     const box = document.getElementById('requirementAuditBox');
     const list = document.getElementById('requirementAuditList');
+    const title = document.getElementById('requirementObservationHistoryTitle');
     if (!box || !list) return;
 
-    const hasObservationContext = row?.observation_status && row.observation_status !== 'none' && row?.observation_at;
-    if (!hasObservationContext) {
-        box.classList.add('d-none');
-        list.innerHTML = '';
-        return;
-    }
+    const entries = (activity || [])
+        .filter((entry) => entry.action_type === 'observacion_registrada')
+        .map((entry) => ({
+            author: entry.user_name || 'Usuario',
+            role: requirementObservationRole(entry.user_role),
+            date: entry.created_at,
+            content: cleanRequirementObservation(entry.description)
+        }))
+        .filter((entry) => entry.content !== '');
 
-    const items = [];
-    items.push({
-        title: row.observation_status === 'corrected' ? 'Corregido por revisar' : (row.observation_status === 'approved' ? 'Conforme' : 'Observado'),
-        body: `${row.observation_by || 'Administrador'} - ${formatAuditDate(row.observation_at)}`
-    });
-
-    if (row?.observation_resolved_at) {
-        items.push({
-            title: 'Conformidad registrada',
-            body: `${row.observation_resolved_by || 'Administrador'} - ${formatAuditDate(row.observation_resolved_at)}`
+    if (!entries.length && row?.observations) {
+        entries.push({
+            author: row.observation_by || 'Usuario',
+            role: requirementObservationRole(row.observation_by_role),
+            date: row.observation_at,
+            content: cleanRequirementObservation(row.observations)
         });
     }
-    const observationTime = parseAuditDate(row.observation_at);
-    (activity || []).filter((entry) => {
-        if (['observacion', 'observacion_retirada', 'conformidad'].includes(entry.action_type || '')) {
-            return true;
-        }
-        const entryTime = parseAuditDate(entry.created_at);
-        return observationTime && entryTime && entryTime >= observationTime;
-    }).forEach((entry) => {
-        const userName = entry.user_name || 'Sistema';
-        items.push({
-            title: `${userName} hizo modificaciones: ${normalizeAuditActivityText(entry.description || 'actividad registrada')}`,
-            body: formatAuditDate(entry.created_at)
-        });
-    });
 
-    if (!items.length) {
+    if (!entries.length) {
         box.classList.add('d-none');
         list.innerHTML = '';
         return;
     }
 
     box.classList.remove('d-none');
-    list.innerHTML = items.map((item) => `
-        <div class="requirement-audit-item">
-            <strong>${escapeHtml(item.title)}</strong>
-            <span>${escapeHtml(item.body)}</span>
-        </div>
-    `).join('');
+    if (title) title.textContent = `Historial de observaciones (${entries.length})`;
+    list.innerHTML = `<div class="observation-timeline">${entries.map((entry) => `
+        <article class="observation-entry">
+            <div class="observation-entry-header">
+                <span class="observation-avatar"><i class="fa-solid fa-user"></i></span>
+                <div class="observation-author">
+                    <strong>${escapeHtml(entry.author)}</strong>
+                    <span>${escapeHtml(entry.role)}</span>
+                </div>
+                <time>${escapeHtml(formatAuditDate(entry.date))}</time>
+            </div>
+            <p>${escapeHtml(entry.content)}</p>
+        </article>
+    `).join('')}</div>`;
+}
+
+function cleanRequirementObservation(value) {
+    return String(value || '')
+        .trim()
+        .replace(/^(?:Administrador|Gestor) .+ tiene esta observaci[oó]n:\s*/iu, '')
+        .trim();
+}
+
+function requirementObservationRole(role) {
+    const normalized = String(role || '').trim().toLowerCase();
+    if (normalized === 'admin' || normalized === 'administrador') return 'Administrador';
+    if (normalized === 'gestor') return 'Gestor';
+    return 'Responsable';
 }
 
 function formatAuditDate(value) {
@@ -1054,14 +1067,36 @@ function setRequirementObservationVisibility(viewMode) {
     const label = document.getElementById('requirementObservationLabel');
     if (!block || !observations) return;
 
-    const canManage = window.canManageRequirementObservations === true;
-    const hasContent = String(observations.value || '').trim() !== '';
-    const visible = canManage || viewMode || hasContent;
+    const canManage = window.canManageRequirementObservations === true && canObserveCurrentRequirement;
+    const visible = canManage || viewMode || document.getElementById('requirementId')?.value === '';
     block.classList.toggle('d-none', !visible);
     observations.disabled = readOnlyMode || !canManage || !visible;
+    observations.classList.toggle('observation-input-locked', observations.disabled);
+    observations.placeholder = canManage
+        ? 'Escriba una nueva observación...'
+        : 'No tiene autorización para agregar observaciones a este requisito.';
     if (label) {
-        label.textContent = canManage ? 'Observaciones' : 'Observación del administrador';
+        label.textContent = 'Nueva observación';
     }
+}
+
+function renderRequirementObservationState(status) {
+    const badge = document.getElementById('requirementObservationState');
+    if (!badge) return;
+    const normalized = status === 'corrected' ? 'observed' : String(status || 'none');
+    badge.className = 'requirement-observation-state';
+    if (normalized === 'observed') {
+        badge.classList.add('is-observed');
+        badge.textContent = 'Observado';
+        return;
+    }
+    if (normalized === 'approved') {
+        badge.classList.add('is-approved');
+        badge.textContent = 'Conforme';
+        return;
+    }
+    badge.classList.add('d-none');
+    badge.textContent = '';
 }
 
 async function saveRequirementLegacy(event) {
@@ -4161,7 +4196,7 @@ function initObservationNotifications() {
         }
 
         list.innerHTML = filtered.map((row) => {
-            const statusClass = row.status === 'corrected' ? 'obs-status-corrected' : 'obs-status-observed';
+            const statusClass = 'obs-status-observed';
             const observedBy = row.observed_by || row.registered_by || 'Usuario';
             return `
                 <div class="notif-item unread observation-notif-item" data-id="${escapeHtml(row.id)}">

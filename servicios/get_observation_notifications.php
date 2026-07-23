@@ -68,11 +68,14 @@ try {
     $notifications = [];
     foreach ($stmt->fetchAll() as $row) {
         $status = (string) ($row['observation_status'] ?? '');
+        if ($status === 'corrected') {
+            $status = 'observed';
+        }
         $observation = strip_observation_header((string) ($row['observations'] ?? ''));
         $notifications[] = [
             'id' => (int) $row['id'],
             'status' => $status,
-            'status_label' => $status === 'corrected' ? 'Corregido por revisar' : 'Observado',
+            'status_label' => 'Observado',
             'full_name' => (string) $row['full_name'],
             'requirement' => (string) $row['requirement_name'],
             'observation' => $observation,
