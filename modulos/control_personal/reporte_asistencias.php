@@ -2,9 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../../includes/security.php';
-require_once __DIR__ . '/../../config/database.php';
-require_once __DIR__ . '/../../includes/attendance_calendar.php';
-
+require_once __DIR__ . '/../../includes/attendance_report_data.php';
 require_module_access('control_personal.reporte_asistencias');
 
 $today = date('Y-m-d');
@@ -12,379 +10,129 @@ $defaultFrom = date('Y-m-01');
 $dateFrom = trim((string) ($_GET['desde'] ?? $defaultFrom));
 $dateTo = trim((string) ($_GET['hasta'] ?? $today));
 $workerId = (int) ($_GET['trabajador_id'] ?? 0);
-$companyId = (int) ($_GET['empresa_id'] ?? 0);
-$attendanceStatus = trim((string) ($_GET['estado'] ?? ''));
-$export = (string) ($_GET['exportar'] ?? '') === 'csv';
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom)) $dateFrom = $defaultFrom;
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateTo)) $dateTo = $today;
+if ($dateFrom > $dateTo) [$dateFrom, $dateTo] = [$dateTo, $dateFrom];
 
-if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom)) {
-    $dateFrom = $defaultFrom;
-}
-if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateTo)) {
-    $dateTo = $today;
-}
-if ($dateFrom > $dateTo) {
-    [$dateFrom, $dateTo] = [$dateTo, $dateFrom];
-}
-
-function attendance_report_time(?string $time): string
-{
-    return $time ? substr($time, 0, 5) : '-';
-}
-
-function attendance_report_state(string $key): array
-{
-    return match ($key) {
-        'attended' => ['label' => 'Asistió', 'class' => 'state-attended'],
-        'late' => ['label' => 'Asistió', 'class' => 'state-attended'],
-        'absent' => ['label' => 'Faltó', 'class' => 'state-absent'],
-        'vacation' => ['label' => 'Vacaciones', 'class' => 'state-vacation'],
-        'permission' => ['label' => 'Permiso', 'class' => 'state-permission'],
-        'rest' => ['label' => 'Descanso', 'class' => 'state-rest'],
-        'holiday' => ['label' => 'Feriado', 'class' => 'state-holiday'],
-        'non_working' => ['label' => 'No laborable', 'class' => 'state-non-working'],
-        'incomplete' => ['label' => 'Marcación incompleta', 'class' => 'state-incomplete'],
-        default => ['label' => 'Pendiente', 'class' => 'state-pending'],
-    };
-}
-
-$workers = db()->query("SELECT w.id, w.full_name, w.document_number, w.company_id, c.name AS company
-    FROM workers w
-    LEFT JOIN companies c ON c.id = w.company_id
-    ORDER BY w.full_name")->fetchAll();
-$companies = db()->query('SELECT id, name FROM companies ORDER BY name')->fetchAll();
-
-$assignmentConditions = ['aa.status = 1'];
-$assignmentParams = [];
-if ($workerId > 0) {
-    $assignmentConditions[] = 'w.id = :worker_id';
-    $assignmentParams['worker_id'] = $workerId;
-}
-if ($companyId > 0) {
-    $assignmentConditions[] = 'w.company_id = :company_id';
-    $assignmentParams['company_id'] = $companyId;
-}
-
-$assignmentSql = "SELECT
-        aa.id AS assignment_id,
-        aa.schedule_id,
-        DATE(aa.created_at) AS assignment_start_date,
-        w.id AS worker_id,
-        w.company_id,
-        w.full_name,
-        w.document_number,
-        c.name AS company
-    FROM workers w
-    JOIN attendance_assignments aa ON aa.id = (
-        SELECT MAX(active_assignment.id)
-        FROM attendance_assignments active_assignment
-        WHERE active_assignment.worker_id = w.id
-          AND active_assignment.status = 1
-    )
-    LEFT JOIN companies c ON c.id = w.company_id
-    WHERE " . implode(' AND ', $assignmentConditions) . "
-    ORDER BY w.full_name";
-$stmt = db()->prepare($assignmentSql);
-$stmt->execute($assignmentParams);
-$assignedWorkers = $stmt->fetchAll();
-
-$scheduleDaysBySchedule = [];
-$scheduleRows = db()->query("SELECT schedule_id, day_of_week, entry_time, entry_start, entry_end,
-        exit_time, exit_start, exit_end, tolerance_minutes
-    FROM attendance_schedule_days
-    WHERE status = 1")->fetchAll();
-foreach ($scheduleRows as $scheduleRow) {
-    $scheduleDaysBySchedule[(int) $scheduleRow['schedule_id']][(int) $scheduleRow['day_of_week']] = $scheduleRow;
-}
-
-$markConditions = ['am.mark_date BETWEEN :marks_from AND :marks_to'];
-$markParams = ['marks_from' => $dateFrom, 'marks_to' => $dateTo];
-if ($workerId > 0) {
-    $markConditions[] = 'am.worker_id = :marks_worker_id';
-    $markParams['marks_worker_id'] = $workerId;
-}
-if ($companyId > 0) {
-    $markConditions[] = 'w.company_id = :marks_company_id';
-    $markParams['marks_company_id'] = $companyId;
-}
-$stmt = db()->prepare("SELECT am.worker_id, am.mark_date, am.mark_type, am.mark_time,
-        am.schedule_status, am.final_status
-    FROM attendance_marks am
-    JOIN workers w ON w.id = am.worker_id
-    WHERE " . implode(' AND ', $markConditions) . "
-    ORDER BY am.mark_date, am.mark_time");
-$stmt->execute($markParams);
-$marksByWorkerAndDate = [];
-foreach ($stmt->fetchAll() as $mark) {
-    $marksByWorkerAndDate[(int) $mark['worker_id']][(string) $mark['mark_date']][(string) $mark['mark_type']] = $mark;
-}
-
-$calendarEvents = attendance_calendar_events_between($dateFrom, $dateTo);
-$rows = [];
-$periodStart = new DateTimeImmutable($dateFrom);
-$periodEnd = new DateTimeImmutable($dateTo);
-
-foreach ($assignedWorkers as $worker) {
-    $assignmentStart = new DateTimeImmutable((string) $worker['assignment_start_date']);
-    $cursor = $assignmentStart > $periodStart ? $assignmentStart : $periodStart;
-
-    while ($cursor <= $periodEnd) {
-        $date = $cursor->format('Y-m-d');
-        $weekday = (int) $cursor->format('N');
-        $workerMarks = $marksByWorkerAndDate[(int) $worker['worker_id']][$date] ?? [];
-        $entry = $workerMarks['entrada'] ?? null;
-        $exit = $workerMarks['salida'] ?? null;
-        $calendarEvent = attendance_calendar_resolve_event(
-            $calendarEvents,
-            $date,
-            (int) $worker['worker_id'],
-            (int) ($worker['company_id'] ?? 0)
-        );
-        $eventType = (string) ($calendarEvent['event_type'] ?? '');
-        $hasSchedule = isset($scheduleDaysBySchedule[(int) $worker['schedule_id']][$weekday]);
-
-        if ($entry || $exit) {
-            if (!$entry) {
-                $stateKey = 'incomplete';
-            } elseif (($entry['schedule_status'] ?? '') === 'tardanza'
-                || ($entry['final_status'] ?? '') === 'tardanza') {
-                $stateKey = 'late';
-            } else {
-                $stateKey = 'attended';
-            }
-        } elseif (attendance_calendar_is_non_working_event($eventType)) {
-            $stateKey = match ($eventType) {
-                'holiday' => 'holiday',
-                'vacation' => 'vacation',
-                'permission' => 'permission',
-                'rest' => 'rest',
-                default => 'non_working',
-            };
-        } elseif (!$hasSchedule) {
-            $stateKey = 'rest';
-        } elseif ($date < $today) {
-            $stateKey = 'absent';
-        } else {
-            $stateKey = 'pending';
-        }
-
-        $incidents = [];
-        if ($entry && (($entry['schedule_status'] ?? '') === 'tardanza'
-            || ($entry['final_status'] ?? '') === 'tardanza')) {
-            $incidents[] = 'Tardanza';
-        }
-        if ($exit && (($exit['schedule_status'] ?? '') === 'salida_anticipada'
-            || ($exit['final_status'] ?? '') === 'salida_anticipada')) {
-            $incidents[] = 'Salida anticipada';
-        }
-        if ($entry && !$exit && $date < $today) {
-            $incidents[] = 'Salida no registrada';
-        }
-        if (!$entry && $exit) {
-            $incidents[] = 'Entrada no registrada';
-        }
-
-        if ($attendanceStatus === '' || $attendanceStatus === $stateKey) {
-            $state = attendance_report_state($stateKey);
-            $rows[] = [
-                'date' => $date,
-                'worker' => (string) $worker['full_name'],
-                'document' => (string) $worker['document_number'],
-                'company' => (string) ($worker['company'] ?? ''),
-                'entry' => attendance_report_time($entry['mark_time'] ?? null),
-                'exit' => attendance_report_time($exit['mark_time'] ?? null),
-                'state_key' => $stateKey,
-                'state_label' => $state['label'],
-                'state_class' => $state['class'],
-                'incidents' => $incidents,
-            ];
-        }
-
-        $cursor = $cursor->modify('+1 day');
-    }
-}
-
-usort($rows, static function (array $left, array $right): int {
-    $dateOrder = strcmp((string) $right['date'], (string) $left['date']);
-    return $dateOrder !== 0 ? $dateOrder : strcasecmp((string) $left['worker'], (string) $right['worker']);
-});
-
-$totals = [
-    'evaluated' => 0,
-    'attendances' => 0,
-    'late' => 0,
-    'absent' => 0,
-];
-foreach ($rows as $row) {
-    $key = (string) $row['state_key'];
-    if (in_array($key, ['attended', 'late', 'absent', 'incomplete'], true)) {
-        $totals['evaluated']++;
-    }
-    if (in_array($key, ['attended', 'late'], true)) {
-        $totals['attendances']++;
-    }
-    if ($key === 'late') {
-        $totals['late']++;
-    }
-    if ($key === 'absent') {
-        $totals['absent']++;
-    }
-}
-
-if ($export) {
-    header('Content-Type: text/csv; charset=utf-8');
-    header('Content-Disposition: attachment; filename="reporte_asistencias_' . $dateFrom . '_' . $dateTo . '.csv"');
-    echo "\xEF\xBB\xBF";
-    $output = fopen('php://output', 'w');
-    fputcsv($output, ['Fecha', 'Trabajador', 'Documento', 'Empresa', 'Entrada', 'Salida', 'Estado de asistencia', 'Incidencias']);
-    foreach ($rows as $row) {
-        fputcsv($output, [
-            date('d/m/Y', strtotime((string) $row['date'])),
-            $row['worker'],
-            $row['document'],
-            $row['company'],
-            $row['entry'],
-            $row['exit'],
-            $row['state_label'],
-            $row['incidents'] ? implode(' · ', $row['incidents']) : '-',
-        ]);
-    }
-    fclose($output);
-    exit;
-}
-
-$statusOptions = [
-    'attended' => 'Asistió',
-    'late' => 'Asistió con tardanza',
-    'absent' => 'Faltó',
-    'vacation' => 'Vacaciones',
-    'permission' => 'Permiso',
-    'rest' => 'Descanso',
-    'holiday' => 'Feriado',
-    'non_working' => 'No laborable',
-    'incomplete' => 'Marcación incompleta',
-    'pending' => 'Pendiente',
-];
-$exportQuery = $_GET;
-$exportQuery['exportar'] = 'csv';
+$catalog = attendance_report_build($dateFrom, $dateTo, 0)['workers'];
+$report = $workerId > 0 ? attendance_report_build($dateFrom, $dateTo, $workerId) : null;
+$worker = $report['worker'] ?? null;
+$assignment = $report['assignment'] ?? null;
+$summary = $report['summary'] ?? [];
+$rows = $report['individual_rows'] ?? [];
+$note = $report['note'] ?? null;
+$query = http_build_query(['desde' => $dateFrom, 'hasta' => $dateTo, 'trabajador_id' => $workerId]);
 
 require __DIR__ . '/../../includes/header.php';
 ?>
-<div class="page-title dashboard-title">
+<div class="page-title attendance-report-title">
     <div>
-        <h1>Reporte de asistencias</h1>
-        <p>Resumen diario de asistencia, puntualidad y novedades por trabajador.</p>
+        <h1>Reporte individual de asistencia</h1>
+        <p>Consulta, revisa y genera el informe detallado de cada trabajador.</p>
     </div>
-    <a class="btn btn-success" href="<?= APP_URL ?>/modulos/control_personal/reporte_asistencias.php?<?= e(http_build_query($exportQuery)) ?>">
-        <i class="fa-solid fa-file-csv me-2"></i>Exportar CSV
-    </a>
+    <?php if ($worker): ?>
+        <div class="d-flex flex-wrap gap-2">
+            <a class="btn btn-success" href="<?= APP_URL ?>/servicios/control_personal/descargar_reporte_asistencia_excel.php?<?= e($query) ?>"><i class="fa-solid fa-file-excel me-2"></i>Descargar Excel</a>
+            <a class="btn btn-danger" href="<?= APP_URL ?>/servicios/control_personal/descargar_reporte_asistencia.php?<?= e($query) ?>"><i class="fa-solid fa-file-pdf me-2"></i>Descargar PDF</a>
+        </div>
+    <?php endif; ?>
 </div>
 
-<form class="dashboard-filters attendance-report-filters" method="get">
+<form class="dashboard-filters attendance-report-filters attendance-report-filters-simple" method="get">
     <div class="row g-3 align-items-end">
-        <div class="col-sm-6 col-xl-2">
+        <div class="col-md-6 col-xl-3">
             <label class="form-label">Desde</label>
-            <input class="form-control" type="date" name="desde" value="<?= e($dateFrom) ?>">
+            <input class="form-control" type="date" name="desde" value="<?= e($dateFrom) ?>" required>
         </div>
-        <div class="col-sm-6 col-xl-2">
+        <div class="col-md-6 col-xl-3">
             <label class="form-label">Hasta</label>
-            <input class="form-control" type="date" name="hasta" value="<?= e($dateTo) ?>">
+            <input class="form-control" type="date" name="hasta" value="<?= e($dateTo) ?>" required>
         </div>
-        <div class="col-md-6 col-xl-3">
+        <div class="col-xl-4">
             <label class="form-label">Trabajador</label>
-            <select class="form-select" name="trabajador_id">
-                <option value="0">Todos los trabajadores</option>
-                <?php foreach ($workers as $worker): ?>
-                    <option value="<?= (int) $worker['id'] ?>" <?= $workerId === (int) $worker['id'] ? 'selected' : '' ?>>
-                        <?= e($worker['full_name'] . ' - ' . $worker['document_number']) ?>
-                    </option>
+            <select class="form-select" name="trabajador_id" required>
+                <option value="">Seleccione un trabajador</option>
+                <?php foreach ($catalog as $item): ?>
+                    <option value="<?= (int) $item['id'] ?>" <?= $workerId === (int) $item['id'] ? 'selected' : '' ?>><?= e($item['full_name'] . ' - ' . $item['document_number']) ?></option>
                 <?php endforeach; ?>
             </select>
         </div>
-        <div class="col-md-6 col-xl-2">
-            <label class="form-label">Empresa</label>
-            <select class="form-select" name="empresa_id">
-                <option value="0">Todas las empresas</option>
-                <?php foreach ($companies as $company): ?>
-                    <option value="<?= (int) $company['id'] ?>" <?= $companyId === (int) $company['id'] ? 'selected' : '' ?>><?= e($company['name']) ?></option>
-                <?php endforeach; ?>
-            </select>
-        </div>
-        <div class="col-md-6 col-xl-3">
-            <label class="form-label">Estado de asistencia</label>
-            <select class="form-select" name="estado">
-                <option value="">Todos los estados</option>
-                <?php foreach ($statusOptions as $value => $label): ?>
-                    <option value="<?= e($value) ?>" <?= $attendanceStatus === $value ? 'selected' : '' ?>><?= e($label) ?></option>
-                <?php endforeach; ?>
-            </select>
-        </div>
-        <div class="col-12 d-flex flex-wrap gap-2">
-            <button class="btn btn-primary" type="submit"><i class="fa-solid fa-filter me-2"></i>Aplicar filtros</button>
-            <a class="btn btn-outline-secondary" href="<?= APP_URL ?>/modulos/control_personal/reporte_asistencias.php">Limpiar</a>
+        <div class="col-xl-2 d-grid">
+            <button class="btn btn-primary text-nowrap" type="submit"><i class="fa-solid fa-magnifying-glass me-2"></i>Generar</button>
         </div>
     </div>
 </form>
 
-<div class="attendance-kpi-grid mb-3">
-    <div class="attendance-kpi-card kpi-blue">
-        <span>Jornadas evaluadas</span><strong><?= $totals['evaluated'] ?></strong><small>Días laborables revisados</small><i class="fa-solid fa-calendar-check"></i>
-    </div>
-    <div class="attendance-kpi-card kpi-green">
-        <span>Asistencias</span><strong><?= $totals['attendances'] ?></strong><small>Incluye ingresos con tardanza</small><i class="fa-solid fa-user-check"></i>
-    </div>
-    <div class="attendance-kpi-card kpi-orange">
-        <span>Tardanzas</span><strong><?= $totals['late'] ?></strong><small>Ingresos fuera de tolerancia</small><i class="fa-solid fa-clock"></i>
-    </div>
-    <div class="attendance-kpi-card kpi-red">
-        <span>Faltas</span><strong><?= $totals['absent'] ?></strong><small>Con horario y sin marcación</small><i class="fa-solid fa-user-xmark"></i>
-    </div>
-</div>
-
-<div class="work-panel attendance-summary-panel">
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+<?php if (!$worker): ?>
+    <section class="work-panel attendance-report-empty">
+        <div class="attendance-report-empty-icon"><i class="fa-solid fa-file-circle-check"></i></div>
+        <h2>Seleccione un trabajador</h2>
+        <p>Indique el periodo y el trabajador para preparar su reporte individual de asistencia y descargarlo en PDF.</p>
+    </section>
+<?php else: ?>
+<section class="work-panel individual-report-preview">
+    <div class="individual-report-heading">
         <div>
-            <h2 class="mb-1">Detalle diario</h2>
-            <p class="text-muted mb-0">Un registro por trabajador y día.</p>
+            <span class="report-eyebrow">REPORTE INDIVIDUAL</span>
+            <h2><?= e($worker['full_name']) ?></h2>
+            <p><?= e(date('d/m/Y', strtotime($dateFrom))) ?> al <?= e(date('d/m/Y', strtotime($dateTo))) ?></p>
         </div>
-        <span class="attendance-summary-count"><?= count($rows) ?> registros</span>
+        <span class="report-record-count"><?= count($rows) ?> días registrados</span>
     </div>
+
+    <div class="individual-report-profile">
+        <div><span>Documento</span><strong><?= e(($worker['document_type'] ?: 'Documento') . ': ' . $worker['document_number']) ?></strong></div>
+        <div><span>Empresa</span><strong><?= e($worker['company'] ?: 'Sin empresa') ?></strong></div>
+        <div><span>Cargo</span><strong><?= e($worker['positions'] ?: 'Sin cargo registrado') ?></strong></div>
+        <div><span>Horario</span><strong><?= e($assignment['schedule_name'] ?? 'Sin horario asignado') ?></strong></div>
+        <div><span>Lugar de marcación</span><strong><?= e($assignment['location_name'] ?? 'Sin lugar asignado') ?></strong></div>
+    </div>
+
+    <div class="individual-report-metrics">
+        <div><span>Días laborables</span><strong><?= (int) $summary['workdays'] ?></strong></div>
+        <div class="metric-success"><span>Asistencias</span><strong><?= (int) $summary['attendances'] ?></strong></div>
+        <div class="metric-warning"><span>Tardanzas</span><strong><?= (int) $summary['late'] ?></strong></div>
+        <div class="metric-danger"><span>Faltas</span><strong><?= (int) $summary['absent'] ?></strong></div>
+        <div class="metric-vacation"><span>Vacaciones</span><strong><?= (int) $summary['vacations'] ?></strong></div>
+        <div><span>Horas trabajadas</span><strong><?= e(attendance_report_minutes_label((int) $summary['worked_minutes'])) ?></strong></div>
+    </div>
+
+    <div class="individual-report-indicators">
+        <div><span>Puntualidad</span><strong><?= e((string) $summary['punctuality']) ?>%</strong></div>
+        <div><span>Jornadas finalizadas</span><strong><?= e((string) $summary['compliance']) ?>%</strong></div>
+        <div><span>Minutos de tardanza</span><strong><?= (int) $summary['late_minutes'] ?> min</strong></div>
+        <div><span>Horas extras estimadas</span><strong><?= e(attendance_report_minutes_label((int) $summary['overtime_minutes'])) ?></strong></div>
+    </div>
+
+    <div class="individual-report-section-title"><h3>Detalle diario</h3><p>Marcaciones y novedades del periodo seleccionado.</p></div>
     <div class="table-responsive">
-        <table class="table table-hover align-middle dashboard-table data-table attendance-summary-table" data-order='[[0,"desc"]]'>
-            <thead>
-            <tr>
-                <th>Fecha</th>
-                <th>Trabajador</th>
-                <th>Empresa</th>
-                <th>Entrada</th>
-                <th>Salida</th>
-                <th>Estado de asistencia</th>
-                <th>Incidencias</th>
-            </tr>
-            </thead>
+        <table class="table align-middle individual-report-table">
+            <thead><tr><th>Fecha</th><th>Día</th><th>Horario</th><th>Lugar</th><th>Entrada</th><th>Salida</th><th>Tardanza</th><th>H. extras</th><th>Estado de asistencia</th><th>Estado de jornada</th><th>Observación</th></tr></thead>
             <tbody>
             <?php foreach ($rows as $row): ?>
                 <tr>
-                    <td data-order="<?= e($row['date']) ?>"><?= e(date('d/m/Y', strtotime((string) $row['date']))) ?></td>
-                    <td><strong><?= e($row['worker']) ?></strong><small class="d-block text-muted"><?= e($row['document']) ?></small></td>
-                    <td><?= e($row['company']) ?></td>
-                    <td class="attendance-time-cell"><?= e($row['entry']) ?></td>
-                    <td class="attendance-time-cell"><?= e($row['exit']) ?></td>
-                    <td><span class="attendance-state <?= e($row['state_class']) ?>"><span class="attendance-state-dot"></span><?= e($row['state_label']) ?></span></td>
-                    <td>
-                        <?php if ($row['incidents']): ?>
-                            <span class="attendance-incidence"><span class="attendance-incidence-dot"></span><?= e(implode(' · ', $row['incidents'])) ?></span>
-                        <?php else: ?>
-                            <span class="text-muted">-</span>
-                        <?php endif; ?>
-                    </td>
+                    <td><?= e(date('d/m/Y', strtotime($row['date']))) ?></td><td><?= e($row['weekday']) ?></td><td class="attendance-time-cell text-nowrap"><?= e($row['schedule']) ?></td><td><?= e($row['location']) ?></td>
+                    <td class="attendance-time-cell"><?= e($row['entry']) ?></td><td class="attendance-time-cell"><?= e($row['exit']) ?></td>
+                    <td><?= $row['late_minutes'] > 0 ? e(attendance_report_minutes_label((int) $row['late_minutes'])) : '-' ?></td>
+                    <td><?= $row['overtime_minutes'] > 0 ? e(attendance_report_minutes_label((int) $row['overtime_minutes'])) : '-' ?></td>
+                    <td><span class="attendance-report-state <?= e($row['state_class']) ?>"><strong><?= e($row['state_code']) ?></strong><?= e($row['state_label']) ?></span></td>
+                    <td><span class="journey-state <?= e($row['journey_class']) ?>"><?= e($row['journey_label']) ?></span></td>
+                    <td class="report-observation-cell"><?= e($row['observation']) ?></td>
                 </tr>
             <?php endforeach; ?>
-            <?php if (!$rows): ?>
-                <tr><td colspan="7" class="text-center text-muted py-4">No se encontraron asistencias con los filtros seleccionados.</td></tr>
-            <?php endif; ?>
+            <?php if (!$rows): ?><tr><td colspan="11" class="text-center text-muted py-4">No hay jornadas para este trabajador en el periodo seleccionado.</td></tr><?php endif; ?>
             </tbody>
         </table>
     </div>
-</div>
 
+    <div class="individual-report-bottom">
+        <form id="attendanceReportNoteForm" class="report-note-card report-note-card-full">
+            <input type="hidden" name="worker_id" value="<?= (int) $worker['id'] ?>"><input type="hidden" name="date_from" value="<?= e($dateFrom) ?>"><input type="hidden" name="date_to" value="<?= e($dateTo) ?>">
+            <label for="reportObservation">Observación general del responsable</label>
+            <textarea id="reportObservation" name="observation" rows="4" maxlength="3000" placeholder="Registre aclaraciones, incidencias justificadas o comentarios para este reporte."><?= e($note['observation'] ?? '') ?></textarea>
+            <div><small><?= $note ? 'Última actualización: ' . e(date('d/m/Y H:i', strtotime($note['updated_at']))) : 'Esta observación aparecerá en el PDF.' ?></small><button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk me-2"></i>Guardar observación</button></div>
+        </form>
+    </div>
+</section>
+<?php endif; ?>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>

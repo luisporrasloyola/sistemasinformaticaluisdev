@@ -1,5 +1,26 @@
 const BASE_URL = window.APP_URL || window.location.origin;
 const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+const attendanceReportNoteForm = document.getElementById('attendanceReportNoteForm');
+if (attendanceReportNoteForm) {
+    attendanceReportNoteForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const button = attendanceReportNoteForm.querySelector('button[type="submit"]');
+        const body = new FormData(attendanceReportNoteForm);
+        body.append('csrf_token', csrf);
+        button.disabled = true;
+        try {
+            const response = await fetch(`${window.APP_URL}/servicios/control_personal/guardar_observacion_reporte_asistencia.php`, { method: 'POST', body });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo guardar la observación.');
+            await Swal.fire({ icon: 'success', title: 'Observación guardada', text: 'También se mostrará en el PDF.', timer: 1600, showConfirmButton: false });
+        } catch (error) {
+            Swal.fire('Atención', error.message || 'No se pudo guardar la observación.', 'warning');
+        } finally {
+            button.disabled = false;
+        }
+    });
+}
 let currentWorkerId = null;
 let currentPositionId = null;
 let requirementModal = null;
@@ -25,6 +46,7 @@ function initAttendanceMatrixDetail() {
         status: document.getElementById('matrixDetailStatus'),
         entry: document.getElementById('matrixDetailEntry'),
         exit: document.getElementById('matrixDetailExit'),
+        location: document.getElementById('matrixDetailLocation'),
         incidents: document.getElementById('matrixDetailIncidents')
     };
 
@@ -35,6 +57,7 @@ function initAttendanceMatrixDetail() {
         fields.status.textContent = cell.dataset.status || 'Sin marcaciones';
         fields.entry.textContent = cell.dataset.entry || '-';
         fields.exit.textContent = cell.dataset.exit || '-';
+        fields.location.textContent = cell.dataset.location || '-';
         fields.incidents.textContent = cell.dataset.incidents || 'Sin incidencias';
 
         const code = cell.dataset.code || '-';
@@ -56,6 +79,85 @@ function initAttendanceMatrixDetail() {
             event.preventDefault();
             openDetail(cell);
         });
+    });
+}
+
+function initAttendanceDashboardLiveUpdates() {
+    const versionElement = document.getElementById('attendanceLiveKpis');
+    if (!versionElement) return;
+
+    const liveSectionIds = ['attendanceLiveKpis', 'attendanceLiveMatrix', 'attendanceLiveSummary'];
+    let lastVersion = Number(versionElement.dataset.liveVersion || 0);
+    let refreshing = false;
+
+    const refreshDashboardSections = async (detectedVersion) => {
+        if (refreshing) return;
+        refreshing = true;
+
+        const matrixScrollLeft = document.querySelector('#attendanceLiveMatrix .attendance-matrix-wrap')?.scrollLeft || 0;
+        const summaryScrollLeft = document.querySelector('#attendanceLiveSummary .attendance-monthly-summary-wrap')?.scrollLeft || 0;
+        const pageScrollY = window.scrollY;
+
+        try {
+            const response = await fetch(window.location.href, {
+                cache: 'no-store',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            if (!response.ok) throw new Error('No se pudo actualizar el dashboard.');
+
+            const html = await response.text();
+            const freshDocument = new DOMParser().parseFromString(html, 'text/html');
+            const replacements = liveSectionIds.map((id) => ({
+                current: document.getElementById(id),
+                fresh: freshDocument.getElementById(id)
+            }));
+            if (replacements.some(({ current, fresh }) => !current || !fresh)) {
+                throw new Error('La respuesta del dashboard está incompleta.');
+            }
+
+            replacements.forEach(({ current, fresh }) => current.replaceWith(fresh));
+
+            const freshVersion = Number(document.getElementById('attendanceLiveKpis')?.dataset.liveVersion || detectedVersion);
+            lastVersion = Math.max(detectedVersion, freshVersion);
+            const matrixWrap = document.querySelector('#attendanceLiveMatrix .attendance-matrix-wrap');
+            const summaryWrap = document.querySelector('#attendanceLiveSummary .attendance-monthly-summary-wrap');
+            if (matrixWrap) matrixWrap.scrollLeft = matrixScrollLeft;
+            if (summaryWrap) summaryWrap.scrollLeft = summaryScrollLeft;
+            window.scrollTo({ top: pageScrollY, behavior: 'auto' });
+            initAttendanceMatrixDetail();
+        } catch (error) {
+            console.warn(error.message || error);
+        } finally {
+            refreshing = false;
+        }
+    };
+
+    const checkForUpdates = async () => {
+        if (document.hidden || refreshing) return;
+        try {
+            const response = await fetch(`${BASE_URL}/servicios/control_personal/version_dashboard_asistencia.php`, {
+                cache: 'no-store',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            if (!response.ok) return;
+            const data = await response.json();
+            const detectedVersion = Number(data.version || 0);
+            if (data.ok && detectedVersion > lastVersion) {
+                await refreshDashboardSections(detectedVersion);
+            }
+        } catch (error) {
+            console.warn('No se pudo verificar la actualización de asistencias.', error);
+        }
+    };
+
+    window.setInterval(checkForUpdates, 2000);
+    window.addEventListener('storage', (event) => {
+        if (event.key === 'attendance-marks-updated-at' && event.newValue) {
+            refreshDashboardSections(lastVersion);
+        }
+    });
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) checkForUpdates();
     });
 }
 
@@ -133,6 +235,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initUsuariosModule();
     initAttendanceControl();
     initAttendanceMatrixDetail();
+    initAttendanceDashboardLiveUpdates();
     initControlPersonalSchedules();
     initControlPersonalCalendar();
     initControlPersonalLocations();
@@ -4126,24 +4229,41 @@ function initControlPersonalSchedules() {
     const dayForm = document.getElementById('scheduleDayForm');
     const dayModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('scheduleDayModal'));
     const entryTimeInput = document.getElementById('entryTime');
-    const entryStartInput = document.getElementById('entryStart');
-    const entryEndInput = document.getElementById('entryEnd');
+    const entryAdvanceInput = document.getElementById('entryAdvanceMinutes');
     const toleranceInput = document.getElementById('toleranceMinutes');
+    const exitTimeInput = document.getElementById('exitTime');
+    const entryRulePreview = document.getElementById('entryRulePreview');
+    const exitRulePreview = document.getElementById('exitRulePreview');
 
-    const updateScheduleTolerance = () => {
-        if (!entryTimeInput || !entryEndInput || !toleranceInput) return;
-        const [startHour, startMinute] = String(entryTimeInput.value || '').split(':').map(Number);
-        const [endHour, endMinute] = String(entryEndInput.value || '').split(':').map(Number);
-        if (![startHour, startMinute, endHour, endMinute].every(Number.isFinite)) {
-            toleranceInput.value = '0';
-            return;
-        }
-        const minutes = (endHour * 60 + endMinute) - (startHour * 60 + startMinute);
-        toleranceInput.value = String(Math.max(0, minutes));
+    document.getElementById('scheduleSelector')?.addEventListener('change', (event) => {
+        event.target.form?.submit();
+    });
+
+    const timeWithOffset = (time, offset) => {
+        const [hours, minutes] = String(time || '').split(':').map(Number);
+        if (![hours, minutes].every(Number.isFinite)) return '';
+        const total = (((hours * 60 + minutes + offset) % 1440) + 1440) % 1440;
+        return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
     };
 
-    entryTimeInput?.addEventListener('input', updateScheduleTolerance);
-    entryEndInput?.addEventListener('input', updateScheduleTolerance);
+    const updateScheduleRulePreview = () => {
+        const advance = Math.max(0, Number(entryAdvanceInput?.value || 0));
+        const tolerance = Math.max(0, Number(toleranceInput?.value || 0));
+        if (entryRulePreview) {
+            entryRulePreview.textContent = entryTimeInput?.value
+                ? `Puede marcar desde ${timeWithOffset(entryTimeInput.value, -advance)}. Se considera puntual hasta ${timeWithOffset(entryTimeInput.value, tolerance)}.`
+                : 'Complete la hora de entrada para calcular la ventana.';
+        }
+        if (exitRulePreview) {
+            exitRulePreview.textContent = exitTimeInput?.value
+                ? `Antes de ${exitTimeInput.value} será salida anticipada. Desde ${exitTimeInput.value}, salida normal.`
+                : 'Complete la hora de salida.';
+        }
+    };
+
+    [entryTimeInput, entryAdvanceInput, toleranceInput, exitTimeInput].forEach((input) => {
+        input?.addEventListener('input', updateScheduleRulePreview);
+    });
 
     document.getElementById('newScheduleBtn')?.addEventListener('click', () => {
         form.reset();
@@ -4200,12 +4320,10 @@ function initControlPersonalSchedules() {
             document.getElementById('scheduleDayScheduleId').value = button.dataset.scheduleId || '';
             document.getElementById('scheduleDayNumber').value = button.dataset.day || '';
             document.getElementById('entryTime').value = button.dataset.entryTime || '';
-            document.getElementById('entryStart').value = button.dataset.entryStart || '';
-            document.getElementById('entryEnd').value = button.dataset.entryEnd || '';
+            document.getElementById('entryAdvanceMinutes').value = button.dataset.entryAdvance || '0';
+            document.getElementById('toleranceMinutes').value = button.dataset.tolerance || '0';
             document.getElementById('exitTime').value = button.dataset.exitTime || '';
-            document.getElementById('exitStart').value = button.dataset.exitStart || '';
-            document.getElementById('exitEnd').value = button.dataset.exitEnd || '';
-            updateScheduleTolerance();
+            updateScheduleRulePreview();
             dayModal.show();
         });
     });
@@ -4632,6 +4750,14 @@ function initControlPersonalMarking() {
     const canvas = document.getElementById('markCanvas');
     const photoPreview = document.getElementById('markPhotoPreview');
     const mapElement = document.getElementById('markMap');
+    const observations = document.getElementById('markObservations');
+    const assignmentDetails = document.getElementById('markAssignmentDetails');
+    const emptyState = document.getElementById('markEmptyState');
+    const cameraEmpty = document.getElementById('markCameraEmpty');
+    const mapEmpty = document.getElementById('markMapEmpty');
+    const permissionHelp = document.getElementById('markPermissionHelp');
+    const availabilityNotice = document.getElementById('markAvailabilityNotice');
+    const availabilityText = document.getElementById('markAvailabilityText');
     const recentMarksBody = document.getElementById('recentAttendanceMarks');
     const attendancePhotoModalElement = document.getElementById('attendancePhotoModal');
     const attendancePhotoModal = attendancePhotoModalElement
@@ -4650,6 +4776,7 @@ function initControlPersonalMarking() {
     let cameraStream = null;
     let photoData = '';
     let recentMarksRequestId = 0;
+    let availabilityTimer = null;
 
     function value(id, text) {
         const element = document.getElementById(id);
@@ -4664,6 +4791,42 @@ function initControlPersonalMarking() {
 
     function formatTime(time) {
         return time ? String(time).slice(0, 5) : '-';
+    }
+
+    function setAssignmentAvailability(available, message = '') {
+        if (availabilityTimer) {
+            clearTimeout(availabilityTimer);
+            availabilityTimer = null;
+        }
+        availabilityNotice?.classList.add('d-none');
+        entryBtn.disabled = true;
+        exitBtn.disabled = true;
+        if (observations) {
+            observations.disabled = !available;
+            if (!available) observations.value = '';
+        }
+        assignmentDetails?.classList.toggle('d-none', !available);
+        emptyState?.classList.toggle('d-none', available);
+        cameraEmpty?.classList.toggle('d-none', available);
+        mapEmpty?.classList.toggle('d-none', available);
+        if (permissionHelp) {
+            permissionHelp.textContent = available
+                ? 'El navegador solicitará permisos de ubicación y cámara solo al marcar.'
+                : 'La ubicación y la cámara permanecerán desactivadas hasta tener una asignación activa.';
+        }
+        if (!available) {
+            value('markEmptyStateText', message || 'No tienes un horario ni un lugar de marcación asignados. Comunícate con el administrador para poder registrar tu asistencia.');
+            ['markWorkerName', 'markLocationName', 'markScheduleName', 'markActivity', 'markEntryOfficial', 'markEntryWindow', 'markExitOfficial', 'markExitWindow', 'markRadius'].forEach((id) => value(id, '-'));
+            value('markEntryTolerance', '');
+            currentPosition = null;
+            photoData = '';
+            photoPreview?.classList.add('d-none');
+            if (cameraStream) {
+                cameraStream.getTracks().forEach((track) => track.stop());
+                cameraStream = null;
+                camera.srcObject = null;
+            }
+        }
     }
 
     function renderRecentPhoto(mark, type) {
@@ -4698,8 +4861,8 @@ function initControlPersonalMarking() {
         const statusMeta = (status) => ({
             puntual: { label: 'Puntual', class: 'text-bg-success' },
             tardanza: { label: 'Tardanza', class: 'text-bg-warning' },
-            salida_valida: { label: 'Salida válida', class: 'text-bg-success' },
-            salida_anticipada: { label: 'Salida anticipada', class: 'text-bg-warning' },
+            salida_valida: { label: 'Salida', class: 'text-bg-primary' },
+            salida_anticipada: { label: 'Salida anticipada', class: 'text-bg-early-exit' },
             fuera_del_radio: { label: 'Fuera del radio', class: 'text-bg-danger' }
         }[status] || { label: '-', class: 'text-bg-secondary' });
 
@@ -4808,6 +4971,7 @@ function initControlPersonalMarking() {
         const workerId = workerField.value || '';
         if (!workerId) {
             context = null;
+            setAssignmentAvailability(false, 'Seleccione un trabajador para consultar su asignación y registrar asistencia.');
             renderStatuses([{ text: 'Seleccione trabajador', className: 'text-bg-secondary' }]);
             loadRecentMarks('');
             return;
@@ -4819,11 +4983,13 @@ function initControlPersonalMarking() {
         const data = await response.json();
         if (!data.ok) {
             context = null;
+            setAssignmentAvailability(false, 'No tienes un horario ni un lugar de marcación asignados. Comunícate con el administrador para poder registrar tu asistencia.');
             renderStatuses([{ text: data.message || 'Sin asignación activa', className: 'text-bg-warning' }]);
             return;
         }
 
         context = data;
+        setAssignmentAvailability(true);
         const assignment = data.assignment;
         const day = data.schedule_day || {};
         const calendarEvent = data.calendar_event || null;
@@ -4836,15 +5002,25 @@ function initControlPersonalMarking() {
         value('markEntryWindow', `${formatTime(day.entry_start)}-${formatTime(day.entry_end)}`);
         value('markEntryTolerance', `(${Number(day.tolerance_minutes || 0)} min tolerancia)`);
         value('markExitOfficial', formatTime(day.exit_time || day.exit_start));
-        value('markExitWindow', `${formatTime(day.exit_start)}-${formatTime(day.exit_end)}`);
+        value('markExitWindow', formatTime(day.exit_time || day.exit_start));
         value('markRadius', `${assignment.radius_meters} metros`);
         const hasEntryMark = data.marks.some((mark) => mark.mark_type === 'entrada');
         const hasExitMark = data.marks.some((mark) => mark.mark_type === 'salida');
-        entryBtn.disabled = !hasSchedule || hasEntryMark;
+        const entryAvailability = data.entry_availability || {};
+        const entryTooEarly = hasSchedule && !hasEntryMark && entryAvailability.available === false;
+        entryBtn.disabled = !hasSchedule || hasEntryMark || entryTooEarly;
         exitBtn.disabled = !hasSchedule || hasExitMark || !hasEntryMark;
+        if (entryTooEarly) {
+            const availableFrom = entryAvailability.available_from || formatTime(day.entry_start);
+            const officialEntry = formatTime(day.entry_time || day.entry_start);
+            if (availabilityText) availabilityText.textContent = `Tu hora de entrada es ${officialEntry}. Podrás registrar tu entrada desde las ${availableFrom}.`;
+            availabilityNotice?.classList.remove('d-none');
+            const delay = Math.max(1, Number(entryAvailability.seconds_remaining || 1)) * 1000 + 500;
+            availabilityTimer = setTimeout(loadMarkContext, Math.min(delay, 2147483647));
+        }
         renderStatuses([
             { text: hasSchedule ? (calendarEvent?.name || 'Horario disponible') : (calendarEvent?.name || 'Sin horario para hoy'), className: hasSchedule ? 'text-bg-success' : 'text-bg-warning' },
-            { text: hasEntryMark ? 'Entrada registrada' : 'Entrada no registrada', className: hasEntryMark ? 'text-bg-primary' : 'text-bg-secondary' },
+            { text: hasEntryMark ? 'Entrada registrada' : (entryTooEarly ? `Entrada desde ${entryAvailability.available_from}` : 'Entrada no registrada'), className: hasEntryMark ? 'text-bg-primary' : (entryTooEarly ? 'text-bg-warning' : 'text-bg-secondary') },
             { text: hasExitMark ? 'Salida registrada' : 'Salida no registrada', className: hasExitMark ? 'text-bg-primary' : 'text-bg-secondary' },
         ]);
         updateMap();
@@ -4930,10 +5106,8 @@ function initControlPersonalMarking() {
         );
 
         const within = distance <= Number(assignment.radius_meters || 0);
-        const precise = currentPosition.accuracy <= Number(assignment.radius_meters || 0);
         renderStatuses([
             { text: within ? 'Dentro del radio' : 'Fuera del radio', className: within ? 'text-bg-success' : 'text-bg-danger' },
-            { text: precise ? 'GPS preciso' : 'GPS impreciso', className: precise ? 'text-bg-success' : 'text-bg-warning' },
         ]);
 
         updateMap();
@@ -4957,7 +5131,6 @@ function initControlPersonalMarking() {
             form.append('latitude', String(currentPosition.latitude));
             form.append('longitude', String(currentPosition.longitude));
             form.append('accuracy', String(currentPosition.accuracy));
-            form.append('distance_meters', String(prepared.distance));
             form.append('address', prepared.address || '');
             form.append('observations', document.getElementById('markObservations')?.value || '');
             form.append('photo_data', image);
@@ -4965,15 +5138,20 @@ function initControlPersonalMarking() {
             const response = await fetch(`${BASE_URL}/servicios/control_personal/registrar_marcacion.php`, { method: 'POST', body: form });
             const data = await response.json();
             if (!data.ok) {
-                Swal.fire('Atención', data.message || 'No se pudo registrar la marcación.', 'warning');
+                Swal.fire(data.title || 'Atención', data.message || 'No se pudo registrar la marcación.', 'warning');
                 return;
             }
-            await Swal.fire('Registrado', `${data.message}<br>Distancia: ${data.distance_meters} m<br>Estado: ${data.status}`, 'success');
+            localStorage.setItem('attendance-marks-updated-at', String(Date.now()));
+            await Swal.fire({
+                icon: 'success',
+                title: 'Registrado',
+                html: `${escapeHtml(data.message)}<br>Distancia: <strong>${escapeHtml(data.distance_meters)} m</strong><br>Estado: <strong>${escapeHtml(data.status_label || '-')}</strong>`,
+            });
             window.location.reload();
         } catch (error) {
             Swal.fire('Atención', `${error.message || 'No se pudo marcar.'} Debe habilitar ubicación y cámara para registrar asistencia.`, 'warning');
         } finally {
-            button.disabled = false;
+            button.disabled = true;
             button.innerHTML = originalText;
             loadMarkContext();
         }
@@ -4982,6 +5160,7 @@ function initControlPersonalMarking() {
     workerField.addEventListener('change', loadMarkContext);
     entryBtn.addEventListener('click', () => mark('entrada'));
     exitBtn.addEventListener('click', () => mark('salida'));
+    setAssignmentAvailability(false, workerField.value ? 'Cargando la asignación activa...' : 'Seleccione un trabajador para consultar su asignación y registrar asistencia.');
     if (workerField.value) loadMarkContext();
 }
 

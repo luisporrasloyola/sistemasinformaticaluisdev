@@ -4,6 +4,8 @@ require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/attendance_calendar.php';
 require_module_access('control_personal.dashboard');
 
+$attendanceLiveVersion = (int) db()->query('SELECT COALESCE(MAX(id), 0) FROM attendance_marks')->fetchColumn();
+
 $today = date('Y-m-d');
 $defaultRangeStart = date('Y-m-01');
 $defaultRangeEnd = date('Y-m-t');
@@ -57,7 +59,7 @@ function cp_attendance_label(?string $status): string
     return match ($status) {
         'puntual' => 'Puntual',
         'tardanza' => 'Tardanza',
-        'salida_valida' => 'Salida valida',
+        'salida_valida' => 'Salida',
         'salida_anticipada' => 'Salida anticipada',
         'fuera_del_radio' => 'Fuera de radio',
         'dentro_del_radio' => 'Dentro del radio',
@@ -68,8 +70,10 @@ function cp_attendance_label(?string $status): string
 function cp_badge_class(?string $status): string
 {
     return match ($status) {
-        'puntual', 'salida_valida', 'completo' => 'text-bg-success',
-        'tardanza', 'salida_anticipada', 'en_jornada' => 'text-bg-warning',
+        'puntual', 'completo' => 'text-bg-success',
+        'salida_valida' => 'text-bg-primary',
+        'tardanza', 'en_jornada' => 'text-bg-warning',
+        'salida_anticipada' => 'text-bg-early-exit',
         'fuera_del_radio', 'ausente' => 'text-bg-danger',
         default => 'text-bg-secondary',
     };
@@ -196,7 +200,8 @@ $stmt = db()->prepare("SELECT
         am.mark_date,
         am.mark_type,
         am.mark_time,
-        am.final_status
+        am.final_status,
+        l.name AS location_name
     FROM workers w
     LEFT JOIN companies c ON c.id = w.company_id
     LEFT JOIN attendance_assignments aa ON aa.id = (
@@ -207,6 +212,7 @@ $stmt = db()->prepare("SELECT
     )
     LEFT JOIN attendance_marks am ON am.worker_id = w.id
         AND am.mark_date BETWEEN :month_start AND :month_end
+    LEFT JOIN attendance_locations l ON l.id = am.location_id
     ORDER BY w.full_name, am.mark_date, am.mark_type");
 $stmt->execute([
     'month_start' => $monthStart,
@@ -230,6 +236,7 @@ foreach ($stmt->fetchAll() as $row) {
         $matrixRows[$workerId]['days'][$markDate][(string) $row['mark_type']] = [
             'time' => cp_time($row['mark_time'] ?? null),
             'status' => (string) ($row['final_status'] ?? ''),
+            'location' => (string) ($row['location_name'] ?? ''),
         ];
     }
 }
@@ -330,7 +337,7 @@ require __DIR__ . '/../../includes/header.php';
     </form>
 </div>
 
-<div class="attendance-kpi-grid attendance-kpi-grid-five mb-3">
+<div class="attendance-kpi-grid attendance-kpi-grid-five mb-3" id="attendanceLiveKpis" data-live-version="<?= $attendanceLiveVersion ?>">
     <div class="attendance-kpi-card kpi-green">
         <span>Asistencias</span>
         <strong><?= $attendancePeriodTotals['attendances'] ?></strong>
@@ -456,7 +463,7 @@ require __DIR__ . '/../../includes/header.php';
     </div>
 </div>
 
-<div class="work-panel attendance-dashboard-matrix">
+<div class="work-panel attendance-dashboard-matrix" id="attendanceLiveMatrix">
     <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
         <h2 class="mb-0">Matriz mensual</h2>
         <span class="text-muted small"><?= e(date('d/m/Y', strtotime($monthStart))) ?> - <?= e(date('d/m/Y', strtotime($monthEnd))) ?></span>
@@ -568,11 +575,18 @@ require __DIR__ . '/../../includes/header.php';
                                 default => 'matrix-empty',
                             },
                         };
-                        $calendarLabel = $calendarEvent
-                            ? attendance_calendar_event_label($calendarEventType)
-                            : ($isRestDay ? 'Sin horario configurado' : 'Sin marcaciones');
+                        if (!$isAssignedPeriod && $attendanceCode === '') {
+                            $cellClass = 'matrix-empty';
+                        }
+                        $calendarLabel = !$isAssignedPeriod
+                            ? 'Sin asignación activa para esta fecha'
+                            : ($calendarEvent
+                                ? attendance_calendar_event_label($calendarEventType)
+                                : ($isRestDay ? 'Sin horario configurado' : 'Sin marcaciones'));
                         $detailLabel = $attendanceLabel ?: $calendarLabel;
-                        $detailIncidents = $incidents ? implode(' / ', $incidents) : 'Sin incidencias';
+                        $detailIncidents = !$isAssignedPeriod
+                            ? 'No aplica'
+                            : ($incidents ? implode(' / ', $incidents) : 'Sin incidencias');
                         ?>
                         <td class="<?= e($cellClass) ?> js-attendance-matrix-cell"
                             role="button"
@@ -582,12 +596,15 @@ require __DIR__ . '/../../includes/header.php';
                             data-company="<?= e($worker['company']) ?>"
                             data-entry="<?= e($entry['time'] ?? '-') ?>"
                             data-exit="<?= e($exit['time'] ?? '-') ?>"
+                            data-location="<?= e($exit['location'] ?? $entry['location'] ?? '-') ?>"
                             data-code="<?= e($attendanceCode ?: attendance_calendar_event_abbreviation($calendarEventType)) ?>"
                             data-status="<?= e(strip_tags($detailLabel)) ?>"
                             data-incidents="<?= e($detailIncidents) ?>"
                             aria-label="Ver detalle de <?= e($worker['name']) ?> del <?= e(date('d/m/Y', strtotime($cellDate))) ?>">
                             <?php if ($attendanceCode !== ''): ?>
                                 <span title="<?= e(strip_tags($attendanceLabel)) ?>"><?= e($attendanceCode) ?></span>
+                            <?php elseif (!$isAssignedPeriod): ?>
+                                <span title="Sin asignación activa para esta fecha">-</span>
                             <?php elseif ($isNonWorkingDay): ?>
                                 <span title="<?= e($calendarEvent['name'] ?? '') ?>"><?= e(attendance_calendar_event_abbreviation($calendarEventType)) ?></span>
                             <?php elseif ($isRestDay): ?>
@@ -605,7 +622,7 @@ require __DIR__ . '/../../includes/header.php';
     </div>
 </div>
 
-<section class="work-panel attendance-monthly-summary" aria-labelledby="attendanceMonthlySummaryTitle">
+<section class="work-panel attendance-monthly-summary" id="attendanceLiveSummary" aria-labelledby="attendanceMonthlySummaryTitle">
         <div class="attendance-monthly-summary-header">
             <div>
                 <h3 id="attendanceMonthlySummaryTitle">Resumen por fechas seleccionadas</h3>
@@ -698,6 +715,7 @@ require __DIR__ . '/../../includes/header.php';
                 <dl class="attendance-detail-grid mb-0">
                     <dt>Entrada</dt><dd id="matrixDetailEntry"></dd>
                     <dt>Salida</dt><dd id="matrixDetailExit"></dd>
+                    <dt>Lugar de marcación</dt><dd id="matrixDetailLocation"></dd>
                     <dt>Incidencias</dt><dd id="matrixDetailIncidents"></dd>
                 </dl>
             </div>

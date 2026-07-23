@@ -1150,36 +1150,56 @@ body {
     line-height: 1;
 }
 
-.attendance-matrix-legend .legend-attended { background: #dcfce7; border-color: #86efac; color: #166534; }
-.attendance-matrix-legend .legend-attended strong { background: #15803d; }
-.attendance-matrix-legend .legend-absent { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
-.attendance-matrix-legend .legend-absent strong { background: #dc2626; }
-.attendance-matrix-legend .legend-attendance-warning { background: #fef9c3; border-color: #fde047; color: #854d0e; }
-.attendance-matrix-legend .legend-attendance-warning strong { background: #ca8a04; }
-.attendance-matrix-legend .legend-early-exit { background: #ffedd5; border-color: #fdba74; color: #c2410c; }
-.attendance-matrix-legend .legend-early-exit strong { background: #ea580c; }
-.attendance-matrix-legend .legend-attendance-critical { background: #fce7f3; border-color: #f9a8d4; color: #be185d; }
-.attendance-matrix-legend .legend-attendance-critical strong { background: #e11d48; }
+.attendance-matrix-legend .legend-attended,
+.attendance-report-state.legend-attended { background: #dcfce7; border-color: #86efac; color: #166534; }
+.attendance-matrix-legend .legend-attended strong,
+.attendance-report-state.legend-attended strong { background: #15803d; }
+.attendance-matrix-legend .legend-absent,
+.attendance-report-state.legend-absent { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
+.attendance-matrix-legend .legend-absent strong,
+.attendance-report-state.legend-absent strong { background: #dc2626; }
+.attendance-matrix-legend .legend-attendance-warning,
+.attendance-report-state.legend-attendance-warning { background: #fef9c3; border-color: #fde047; color: #854d0e; }
+.attendance-matrix-legend .legend-attendance-warning strong,
+.attendance-report-state.legend-attendance-warning strong { background: #ca8a04; }
+.attendance-matrix-legend .legend-early-exit,
+.attendance-report-state.legend-early-exit { background: #ffedd5; border-color: #fdba74; color: #c2410c; }
+.attendance-matrix-legend .legend-early-exit strong,
+.attendance-report-state.legend-early-exit strong { background: #ea580c; }
+.attendance-matrix-legend .legend-attendance-critical,
+.attendance-report-state.legend-attendance-critical { background: #fce7f3; border-color: #f9a8d4; color: #be185d; }
+.attendance-matrix-legend .legend-attendance-critical strong,
+.attendance-report-state.legend-attendance-critical strong { background: #e11d48; }
 .attendance-matrix-legend .legend-vacation,
-.calendar-event-chip.legend-vacation { background: #dbeafe; border-color: #93c5fd; color: #1d4ed8; }
+.calendar-event-chip.legend-vacation,
+.attendance-report-state.legend-vacation { background: #dbeafe; border-color: #93c5fd; color: #1d4ed8; }
 .attendance-matrix-legend .legend-vacation strong,
-.calendar-event-chip.legend-vacation strong { background: #2563eb; }
+.calendar-event-chip.legend-vacation strong,
+.attendance-report-state.legend-vacation strong { background: #2563eb; }
 .attendance-matrix-legend .legend-permission,
-.calendar-event-chip.legend-permission { background: #ede9fe; border-color: #c4b5fd; color: #6d28d9; }
+.calendar-event-chip.legend-permission,
+.attendance-report-state.legend-permission { background: #ede9fe; border-color: #c4b5fd; color: #6d28d9; }
 .attendance-matrix-legend .legend-permission strong,
-.calendar-event-chip.legend-permission strong { background: #7c3aed; }
+.calendar-event-chip.legend-permission strong,
+.attendance-report-state.legend-permission strong { background: #7c3aed; }
 .attendance-matrix-legend .legend-rest,
-.calendar-event-chip.legend-rest { background: #e2e8f0; border-color: #64748b; color: #1e293b; }
+.calendar-event-chip.legend-rest,
+.attendance-report-state.legend-rest { background: #e2e8f0; border-color: #64748b; color: #1e293b; }
 .attendance-matrix-legend .legend-rest strong,
-.calendar-event-chip.legend-rest strong { background: #334155; }
+.calendar-event-chip.legend-rest strong,
+.attendance-report-state.legend-rest strong { background: #334155; }
 .attendance-matrix-legend .legend-holiday,
-.calendar-event-chip.legend-holiday { background: #cffafe; border-color: #67e8f9; color: #0e7490; }
+.calendar-event-chip.legend-holiday,
+.attendance-report-state.legend-holiday { background: #cffafe; border-color: #67e8f9; color: #0e7490; }
 .attendance-matrix-legend .legend-holiday strong,
-.calendar-event-chip.legend-holiday strong { background: #0891b2; }
+.calendar-event-chip.legend-holiday strong,
+.attendance-report-state.legend-holiday strong { background: #0891b2; }
 .attendance-matrix-legend .legend-non-working,
-.calendar-event-chip.legend-non-working { background: #f5f5f4; border-color: #a8a29e; color: #44403c; }
+.calendar-event-chip.legend-non-working,
+.attendance-report-state.legend-non-working { background: #f5f5f4; border-color: #a8a29e; color: #44403c; }
 .attendance-matrix-legend .legend-non-working strong,
-.calendar-event-chip.legend-non-working strong { background: #78716c; }
+.calendar-event-chip.legend-non-working strong,
+.attendance-report-state.legend-non-working strong { background: #78716c; }
 
 .calendar-legend {
     display: flex;
@@ -1293,7 +1313,9 @@ body {
 
 .detail-badge-ok { background: #16a34a; color: #fff; }
 .detail-badge-warning { background: #f59e0b; color: #111827; }
-.detail-badge-early-exit { background: #ca8a04; color: #fff; }
+.detail-badge-early-exit { background: #ea580c; color: #fff; }
+.text-bg-early-exit { background-color: #ea580c !important; color: #fff !important; }
+.text-bg-late-early-exit { background-color: #e11d48 !important; color: #fff !important; }
 .detail-badge-danger { background: #dc2626; color: #fff; }
 .detail-badge-neutral { background: #64748b; color: #fff; }
 
@@ -5422,7 +5444,7 @@ input[type="checkbox"]:active {
     background: rgba(148, 163, 184, 0.14) !important;
     color: #ffffff !important;
     font-weight: 700 !important;
-    box-shadow: inset 3px 0 0 #60a5fa !important;
+    box-shadow: none !important;
     transform: none !important;
 }
 
@@ -5604,6 +5626,48 @@ input[type="checkbox"]:active {
     width: auto;
 }
 
+.attendance-report-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.55fr) minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 1.25fr);
+    gap: 16px;
+    align-items: end;
+}
+
+.attendance-report-grid > div,
+.attendance-report-grid .form-control,
+.attendance-report-grid .form-select {
+    min-width: 0;
+    width: 100%;
+}
+
+.attendance-report-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.attendance-report-actions .btn {
+    width: auto;
+}
+
+@media (max-width: 1199px) {
+    .attendance-report-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 767px) {
+    .attendance-report-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .attendance-report-actions {
+        grid-column: auto;
+        flex-wrap: wrap;
+    }
+}
+
 /* Reporte diario de asistencias */
 .attendance-summary-panel {
     margin-bottom: 0 !important;
@@ -5664,6 +5728,78 @@ input[type="checkbox"]:active {
     border-radius: 50%;
     background: #94a3b8;
 }
+
+.attendance-report-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 30px;
+    padding: 3px 9px 3px 4px;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    font-size: .78rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.attendance-report-state strong {
+    min-width: 28px;
+    padding: 3px 5px;
+    border-radius: 4px;
+    color: #fff !important;
+    text-align: center;
+}
+
+.dashboard-table tbody td .attendance-report-state > strong {
+    color: #fff !important;
+}
+
+.report-state-attended { background: #dcfce7; border-color: #86efac; color: #166534; }
+.report-state-attended strong { background: #15803d; }
+.report-state-absent { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
+.report-state-absent strong { background: #dc2626; }
+.report-state-late { background: #fef9c3; border-color: #fde047; color: #854d0e; }
+.report-state-late strong { background: #ca8a04; }
+.report-state-early-exit { background: #ffedd5; border-color: #fdba74; color: #c2410c; }
+.report-state-early-exit strong { background: #ea580c; }
+.report-state-critical { background: #fce7f3; border-color: #f9a8d4; color: #be185d; }
+.report-state-critical strong { background: #e11d48; }
+.report-state-vacation { background: #dbeafe; border-color: #93c5fd; color: #1d4ed8; }
+.report-state-vacation strong { background: #2563eb; }
+.report-state-permission { background: #ede9fe; border-color: #c4b5fd; color: #6d28d9; }
+.report-state-permission strong { background: #7c3aed; }
+.report-state-rest { background: #e2e8f0; border-color: #64748b; color: #1e293b; }
+.report-state-rest strong { background: #334155; }
+.report-state-holiday { background: #cffafe; border-color: #67e8f9; color: #0e7490; }
+.report-state-holiday strong { background: #0891b2; }
+.report-state-non-working { background: #f5f5f4; border-color: #a8a29e; color: #44403c; }
+.report-state-non-working strong { background: #78716c; }
+.report-state-incomplete { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
+.report-state-incomplete strong { background: #d97706; }
+.report-state-unscheduled { background: #f8fafc; border-color: #cbd5e1; color: #475569; }
+.report-state-unscheduled strong { background: #475569; }
+.report-state-pending { background: #f1f5f9; border-color: #cbd5e1; color: #475569; }
+.report-state-pending strong { background: #64748b; }
+
+.journey-state {
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+    padding: 4px 10px;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    font-size: .78rem;
+    font-weight: 700;
+    line-height: 1.15;
+    white-space: nowrap;
+}
+
+.journey-state-pending { background: #f1f5f9; border-color: #cbd5e1; color: #475569; }
+.journey-state-active { background: #dbeafe; border-color: #93c5fd; color: #1d4ed8; }
+.journey-state-completed { background: #dcfce7; border-color: #86efac; color: #166534; }
+.journey-state-exit-pending { background: #ffedd5; border-color: #fdba74; color: #c2410c; }
+.journey-state-exit-incomplete { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
+.journey-state-na { padding-inline: 4px; border-color: transparent; background: transparent; color: #94a3b8; }
 
 .state-attended .attendance-state-dot { background: #22c55e; }
 .state-late .attendance-state-dot { background: #f97316; }
@@ -5848,3 +5984,52 @@ input[type="checkbox"]:active {
     }
 }
 
+/* Reporte individual de asistencia */
+.attendance-report-title{align-items:center}.attendance-report-filters-simple{margin-bottom:20px}.attendance-report-empty{text-align:center;padding:64px 24px}.attendance-report-empty-icon{width:72px;height:72px;border-radius:22px;margin:0 auto 18px;display:grid;place-items:center;background:#eaf2ff;color:#2468e8;font-size:30px}.attendance-report-empty h2{font-size:22px}.attendance-report-empty p{max-width:560px;margin:8px auto 0;color:#66758c}.individual-report-preview{padding:24px}.individual-report-heading{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;padding-bottom:18px;border-bottom:1px solid #d9e2ee}.individual-report-heading h2{margin:4px 0;font-size:26px}.individual-report-heading p{margin:0;color:#67758a}.report-eyebrow{font-size:12px;font-weight:800;color:#2468e8;letter-spacing:.08em}.report-record-count{padding:8px 12px;border:1px solid #d3ddea;border-radius:8px;background:#f7f9fc;color:#40506a;font-weight:700}.individual-report-profile{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:18px 0}.individual-report-profile>div,.individual-report-metrics>div,.individual-report-indicators>div{border:1px solid #d9e2ee;border-radius:10px;padding:12px;background:#f9fbfd}.individual-report-profile span,.individual-report-metrics span,.individual-report-indicators span{display:block;margin-bottom:5px;color:#6b788d;font-size:11px;font-weight:800;text-transform:uppercase}.individual-report-profile strong{font-size:13px}.individual-report-metrics{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}.individual-report-metrics strong{font-size:22px}.individual-report-metrics .metric-success{background:#edfbf4;border-color:#b5ecd0}.individual-report-metrics .metric-warning{background:#fff9e9;border-color:#f5db86}.individual-report-metrics .metric-danger{background:#fff1f2;border-color:#ffc8ce}.individual-report-indicators{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:10px}.individual-report-indicators>div{background:#f2f6fc}.individual-report-indicators strong{font-size:17px;color:#174fae}.individual-report-section-title{margin:24px 0 10px}.individual-report-section-title h3{font-size:18px;margin:0}.individual-report-section-title p{margin:3px 0 0;color:#6c788b}.individual-report-table{min-width:1080px;font-size:13px}.individual-report-table thead th{white-space:nowrap;background:#f1f5fa;color:#263750;border-bottom:2px solid #8da4c3;font-size:11px;text-transform:uppercase}.individual-report-table td{border-color:#dce4ee}.report-observation-cell{min-width:190px;color:#56657b}.individual-report-bottom{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(300px,1fr);gap:18px;margin-top:20px}.report-note-card,.report-signatures-preview{border:1px solid #d9e2ee;border-radius:12px;padding:16px;background:#f9fbfd}.report-note-card label{display:block;font-weight:800;margin-bottom:8px}.report-note-card textarea{width:100%;border:1px solid #cbd7e6;border-radius:8px;padding:10px;resize:vertical;background:white}.report-note-card>div{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:10px}.report-note-card small{color:#6a778b}.report-signatures-preview{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:end}.report-signatures-preview>div{padding-top:32px;border-bottom:1px solid #53627a;padding-bottom:6px;text-align:center}.report-signatures-preview span,.report-signatures-preview small{display:block;color:#718096;font-size:11px}.report-signatures-preview strong{display:block;font-size:13px}
+.individual-report-metrics .metric-vacation{background:#eef5ff;border-color:#91b9ff;color:#174fae}
+.individual-report-metrics .metric-vacation strong{color:#111827}
+.report-note-card-full{grid-column:1/-1}
+.marking-report-table-wrap{max-height:68vh;overflow:auto}.marking-report-table{min-width:1040px}.marking-report-table thead th{position:sticky;top:0;z-index:2;background:#f3f6fa;box-shadow:inset 0 -2px 0 #91a6c3}.marking-photo-button{width:36px;height:36px;display:inline-grid;place-items:center}.marking-report-panel .attendance-summary-count{white-space:nowrap}
+@media(max-width:767px){.marking-report-title{align-items:flex-start}.marking-report-title>div:last-child{width:100%}.marking-report-title .btn{flex:1}}
+
+/* Gestión semanal de horarios */
+.schedule-selector-panel{padding:18px 20px}.schedule-management-toolbar{display:flex;align-items:flex-end;justify-content:space-between;gap:18px}.schedule-picker{width:min(100%,460px)}.schedule-picker form{margin:0}.schedule-selected-actions{display:flex;flex-wrap:wrap;gap:8px}.schedule-overview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:4px 0 20px}.schedule-overview>div{border:1px solid #d8e2ee;border-radius:10px;padding:13px 15px;background:#f7f9fc}.schedule-overview span{display:block;color:#6b788c;font-size:11px;font-weight:800;text-transform:uppercase;margin-bottom:4px}.schedule-overview strong{font-size:20px;color:#12223d}.weekly-schedule-grid{grid-template-columns:repeat(4,minmax(210px,1fr));gap:14px;overflow:visible}.weekly-day{min-height:245px;border-radius:12px;padding:14px;background:#fff;transition:border-color .2s,box-shadow .2s}.weekly-day:hover{border-color:#a9bdd8;box-shadow:0 8px 20px rgba(15,35,65,.07)}.weekly-day-configured{border-top:4px solid #2468e8}.weekly-day-empty{background:#f8fafc}.weekly-day-head{margin-bottom:12px}.weekly-day-head strong{font-size:16px}.weekly-day-head .btn{width:38px;height:38px;display:inline-grid;place-items:center}.schedule-time-block{border-radius:9px;padding:10px 11px;margin-bottom:10px}.schedule-time-block span{display:block;font-size:11px;font-weight:800;text-transform:uppercase;margin-bottom:2px}.schedule-time-block strong{display:block;font-size:18px;margin-bottom:3px}.schedule-time-block small{display:block;font-size:12px}.schedule-time-entry{background:#eafaf1;color:#11633a}.schedule-time-exit{background:#eaf2ff;color:#174fae}.schedule-tolerance{font-size:12px;color:#56657b;padding:2px}.empty-day{height:165px;display:flex;flex-direction:column;text-align:center;gap:7px;padding:18px}.empty-day i{font-size:28px;color:#94a3b8}.empty-day span{font-weight:800;color:#526176}.empty-day small{max-width:190px}.schedule-empty-state{text-align:center;padding:55px 20px;color:#68768a}.schedule-empty-state i{font-size:40px;color:#2468e8;margin-bottom:14px}
+@media(max-width:1199px){.weekly-schedule-grid{grid-template-columns:repeat(3,minmax(210px,1fr))}}
+@media(max-width:991px){.weekly-schedule-grid{grid-template-columns:repeat(2,minmax(210px,1fr))}}
+@media(max-width:767px){.schedule-management-toolbar{align-items:stretch;flex-direction:column}.schedule-picker{width:100%}.schedule-selected-actions .btn{flex:1}.schedule-overview{grid-template-columns:1fr}.weekly-schedule-grid{grid-template-columns:1fr}.weekly-day{min-height:auto}}
+
+/* Paleta visual de horarios */
+.schedule-selector-panel{background:linear-gradient(115deg,#f7faff 0%,#eef5ff 100%);border-color:#bfd3f3;box-shadow:0 9px 24px rgba(36,104,232,.08)}.schedule-picker .form-label{color:#174fae}.schedule-picker .form-select{border-color:#a9c4ef;background-color:#fff;box-shadow:0 3px 9px rgba(36,104,232,.06)}.schedule-selected-actions .btn-outline-primary{background:#fff}.schedule-overview>div{position:relative;overflow:hidden;padding-left:60px;min-height:76px}.schedule-overview>div>i{position:absolute;left:15px;top:50%;transform:translateY(-50%);width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:16px}.schedule-overview-configured{background:#edfbf4!important;border-color:#9fe0bd!important}.schedule-overview-configured>i{background:#c9f2dc;color:#0b8a4a}.schedule-overview-configured strong{color:#08783e!important}.schedule-overview-pending{background:#fff9e8!important;border-color:#f1d57b!important}.schedule-overview-pending>i{background:#ffedb3;color:#b27300}.schedule-overview-pending strong{color:#8a5900!important}.schedule-overview-hours{background:#eef5ff!important;border-color:#9fc1f7!important}.schedule-overview-hours>i{background:#d6e7ff;color:#1b5fd1}.schedule-overview-hours strong{color:#174fae!important}.schedule-color-legend{display:flex;flex-wrap:wrap;gap:8px;margin:-4px 0 16px}.schedule-color-legend span{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:700;border:1px solid}.schedule-legend-entry{background:#eafaf1;border-color:#a6e4c2!important;color:#11633a}.schedule-legend-exit{background:#eaf2ff;border-color:#a9c8f8!important;color:#174fae}.schedule-legend-empty{background:#f1f5f9;border-color:#cbd5e1!important;color:#526176}.weekly-day-configured{border-color:#bdd1ee;border-top-color:#2468e8;background:linear-gradient(180deg,#f5f9ff 0,#fff 62px)}.weekly-day-configured .weekly-day-head strong{color:#173b75}.weekly-day-configured .weekly-day-head .btn{background:#eaf2ff;border-color:#a9c8f8;color:#1b5fd1}.weekly-day-configured .weekly-day-head .btn:hover{background:#2468e8;color:#fff}.weekly-day-empty{border-color:#e0c77b;border-top:4px solid #dfa310;background:linear-gradient(180deg,#fff9e8 0,#fffdf7 62px)}.weekly-day-empty .weekly-day-head strong{color:#805600}.weekly-day-empty .weekly-day-head .btn{background:#fff3c9;border-color:#edca60;color:#9b6800}.weekly-day-empty .empty-day{border-color:#e7cf88;background:rgba(255,249,232,.65)}.schedule-time-entry{border-left:4px solid #18a65e;background:linear-gradient(105deg,#e4f9ed,#effcf5)}.schedule-time-exit{border-left:4px solid #2468e8;background:linear-gradient(105deg,#e5efff,#f1f6ff)}.schedule-tolerance{border-radius:7px;background:#f6f8fb;padding:7px 9px;border:1px solid #e2e8f0}.schedule-tolerance i{color:#8b5d00}
+/* Estado sin asignación en control de asistencia */
+.attendance-availability-notice{display:flex;align-items:flex-start;gap:10px;margin:0 0 14px;padding:11px 12px;border:1px solid #f0c55d;border-radius:10px;background:#fff8df;color:#704b00}
+.attendance-availability-notice>i{width:30px;height:30px;display:grid;place-items:center;flex:0 0 30px;border-radius:9px;background:#e3a300;color:#fff}.attendance-availability-notice strong,.attendance-availability-notice span{display:block}.attendance-availability-notice strong{font-size:13px}.attendance-availability-notice span{margin-top:2px;font-size:12px;color:#755d2b}
+.attendance-no-assignment{display:flex;align-items:flex-start;gap:12px;margin:4px 0 18px;padding:15px;border:1px solid #f0c55d;border-radius:12px;background:linear-gradient(120deg,#fff8df,#fffdf5);color:#704b00}
+.attendance-no-assignment-icon{width:42px;height:42px;display:grid;place-items:center;flex:0 0 42px;border-radius:12px;background:#f4b400;color:#fff;font-size:18px}
+.attendance-no-assignment strong{display:block;margin-bottom:4px;font-size:15px}.attendance-no-assignment p{margin:0;color:#755d2b;font-size:13px;line-height:1.45}
+.camera-box,.attendance-map-wrap{position:relative}.attendance-capture-panel{min-height:440px}.attendance-map-wrap{height:360px;min-height:360px}.attendance-map-wrap .attendance-map{height:360px;min-height:360px}
+.attendance-media-empty{position:absolute;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:7px;padding:24px;text-align:center;border:1px dashed #b9c7d8;border-radius:8px;background:#f4f7fb;color:#63728a}
+.attendance-media-empty>i{width:48px;height:48px;display:grid;place-items:center;border-radius:14px;background:#e4ebf5;color:#718096;font-size:20px}.attendance-media-empty strong{color:#34445c}.attendance-media-empty span{max-width:260px;font-size:13px}
+.attendance-marking-panel .btn:disabled{cursor:not-allowed;filter:saturate(.55);opacity:.58}.attendance-marking-panel textarea:disabled{background:#f1f4f8;cursor:not-allowed}
+
+/* Modal de reglas del horario */
+.schedule-day-modal-content{overflow:hidden;border:0;box-shadow:0 24px 70px rgba(15,35,65,.28)}
+.schedule-day-modal-header{color:#fff;border:0;background:linear-gradient(120deg,#174fae,#2d74ef)}
+.schedule-day-modal-header .modal-title{font-weight:800}.schedule-day-modal-header .btn-close{filter:brightness(0) invert(1);opacity:.9}
+.schedule-rule-modal-body{padding:20px;background:#f4f7fb}
+.schedule-rule-intro{display:flex;align-items:center;gap:12px;margin-bottom:16px;padding:12px 14px;border:1px solid #b8d1f7;border-radius:10px;background:#eaf2ff;color:#174fae}
+.schedule-rule-intro>i{width:36px;height:36px;display:grid;place-items:center;flex:0 0 36px;border-radius:10px;background:#2468e8;color:#fff}
+.schedule-rule-intro strong,.schedule-rule-intro span{display:block}.schedule-rule-intro span{margin-top:2px;font-size:13px;color:#496991}
+.schedule-rule-section{position:relative;margin-top:14px;padding:17px;border:1px solid #d7e1ed;border-radius:12px;background:#fff;box-shadow:0 5px 14px rgba(15,35,65,.05)}
+.schedule-rule-entry{border-left:5px solid #18a65e}.schedule-rule-exit{border-left:5px solid #2468e8}
+.schedule-rule-section-title{display:flex;align-items:center;gap:11px;margin-bottom:14px}.schedule-rule-section-title>i{width:38px;height:38px;display:grid;place-items:center;flex:0 0 38px;border-radius:10px;color:#fff}
+.schedule-rule-entry .schedule-rule-section-title>i{background:#18a65e}.schedule-rule-exit .schedule-rule-section-title>i{background:#2468e8}
+.schedule-rule-section-title h6{margin:0 0 2px;font-size:16px;font-weight:800}.schedule-rule-section-title p{margin:0;color:#6b788c;font-size:13px}
+.schedule-rule-section .form-label{font-weight:700;color:#263750}.schedule-rule-section .form-control,.schedule-rule-section .input-group-text{min-height:42px}
+.schedule-rule-preview{display:flex;align-items:center;gap:8px;margin-top:14px;padding:10px 12px;border-radius:8px;font-size:13px;font-weight:600}
+.schedule-rule-preview-entry{border:1px solid #a6e4c2;background:#eafaf1;color:#11633a}.schedule-rule-preview-exit{border:1px solid #a9c8f8;background:#eaf2ff;color:#174fae}
+.schedule-day-modal-content .modal-footer{border-top:1px solid #dce5ef;background:#fff}
+@media(max-width:575px){.schedule-rule-modal-body{padding:14px}.schedule-rule-section{padding:14px}.schedule-day-modal-content .modal-footer{align-items:stretch;gap:10px}.schedule-day-modal-content .modal-footer>div{display:flex}.schedule-day-modal-content .modal-footer .btn{flex:1}}
+
+@media(max-width:1199px){.individual-report-profile{grid-template-columns:repeat(3,1fr)}.individual-report-metrics{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:767px){.attendance-report-title{align-items:flex-start}.individual-report-preview{padding:16px}.individual-report-heading{display:block}.report-record-count{display:inline-block;margin-top:10px}.individual-report-profile,.individual-report-metrics,.individual-report-indicators,.individual-report-bottom{grid-template-columns:1fr 1fr}.report-note-card{grid-column:1/-1}}
+@media(max-width:520px){.individual-report-profile,.individual-report-metrics,.individual-report-indicators,.individual-report-bottom{grid-template-columns:1fr}}

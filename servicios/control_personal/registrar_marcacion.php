@@ -12,7 +12,6 @@ $latitude = (float) ($_POST['latitude'] ?? 0);
 $longitude = (float) ($_POST['longitude'] ?? 0);
 $accuracy = (float) ($_POST['accuracy'] ?? 0);
 $address = trim((string) ($_POST['address'] ?? ''));
-$distance = (float) ($_POST['distance_meters'] ?? 0);
 $observations = trim((string) ($_POST['observations'] ?? ''));
 $photoData = (string) ($_POST['photo_data'] ?? '');
 $evidenceData = (string) ($_POST['evidence_data'] ?? '');
@@ -115,6 +114,19 @@ if (!$scheduleDay) {
     json_response(['ok' => false, 'message' => $message], 400);
 }
 
+if ($markType === 'entrada' && !empty($scheduleDay['entry_start'])) {
+    $entryAvailableAt = strtotime($today . ' ' . $scheduleDay['entry_start']);
+    if ($entryAvailableAt !== false && strtotime($markedAt) < $entryAvailableAt) {
+        json_response([
+            'ok' => false,
+            'title' => 'Marcación aún no disponible',
+            'message' => 'Tu hora de entrada es ' . substr((string) ($scheduleDay['entry_time'] ?? $scheduleDay['entry_start']), 0, 5)
+                . '. Podrás registrar tu entrada desde las ' . date('H:i', $entryAvailableAt) . '.',
+            'available_from' => date('H:i', $entryAvailableAt),
+        ], 400);
+    }
+}
+
 $duplicate = db()->prepare('SELECT id FROM attendance_marks WHERE worker_id = :worker_id AND mark_date = :mark_date AND mark_type = :mark_type LIMIT 1');
 $duplicate->execute(['worker_id' => $workerId, 'mark_date' => $today, 'mark_type' => $markType]);
 if ($duplicate->fetch()) {
@@ -130,12 +142,17 @@ $serverDistance = meters_between(
 $distance = $serverDistance;
 $withinRadius = $distance <= (float) $assignment['radius_meters'];
 
-if ($accuracy > (float) $assignment['radius_meters']) {
-    json_response(['ok' => false, 'message' => 'La precision GPS supera el radio permitido del punto de marcacion.'], 400);
-}
-
 if (!$withinRadius) {
-    json_response(['ok' => false, 'message' => 'Se encuentra fuera del radio permitido. Distancia: ' . round($distance, 2) . ' m.'], 400);
+    $distanceLabel = number_format($distance, 2, '.', '');
+    $radiusLabel = number_format((float) $assignment['radius_meters'], 0, '.', '');
+    json_response([
+        'ok' => false,
+        'title' => 'Marcación no registrada',
+        'message' => 'Tu ubicación está fuera del área autorizada. Acércate al lugar de trabajo e inténtalo nuevamente. '
+            . 'Distancia actual: ' . $distanceLabel . ' m. Radio permitido: ' . $radiusLabel . ' m.',
+        'distance_meters' => (float) $distanceLabel,
+        'radius_meters' => (float) $radiusLabel,
+    ], 400);
 }
 
 $scheduleStatus = 'puntual';
@@ -192,7 +209,14 @@ try {
         'ok' => true,
         'message' => 'Marcacion registrada correctamente.',
         'status' => $finalStatus,
-        'distance_meters' => round($distance, 2),
+        'status_label' => match ($finalStatus) {
+            'puntual' => 'Puntual',
+            'tardanza' => 'Tardanza',
+            'salida_valida' => 'Salida',
+            'salida_anticipada' => 'Salida anticipada',
+            default => ucfirst(str_replace('_', ' ', $finalStatus)),
+        },
+        'distance_meters' => number_format($distance, 2, '.', ''),
         'marked_at' => $markedAt,
     ]);
 } catch (PDOException $e) {

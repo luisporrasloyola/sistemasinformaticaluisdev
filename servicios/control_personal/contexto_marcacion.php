@@ -53,6 +53,16 @@ $stmt = db()->prepare('SELECT mark_type, mark_time, final_status, photo_path FRO
 $stmt->execute(['worker_id' => $workerId, 'mark_date' => $today]);
 $marks = $stmt->fetchAll();
 
+$entryAvailableFrom = $scheduleDay['entry_start'] ?? null;
+$entryAvailable = true;
+$entrySecondsRemaining = 0;
+if ($scheduleDay && $entryAvailableFrom) {
+    $entryAvailableAt = strtotime($today . ' ' . $entryAvailableFrom);
+    $serverNow = time();
+    $entryAvailable = $entryAvailableAt === false || $serverNow >= $entryAvailableAt;
+    $entrySecondsRemaining = $entryAvailable ? 0 : max(0, $entryAvailableAt - $serverNow);
+}
+
 json_response([
     'ok' => true,
     'today' => $today,
@@ -61,5 +71,10 @@ json_response([
     'schedule_day' => $scheduleDay,
     'calendar_event' => $calendarEvent,
     'marks' => $marks,
+    'entry_availability' => [
+        'available' => $entryAvailable,
+        'available_from' => $entryAvailableFrom ? substr((string) $entryAvailableFrom, 0, 5) : null,
+        'seconds_remaining' => $entrySecondsRemaining,
+    ],
     'is_personal' => is_personal_role(),
 ]);

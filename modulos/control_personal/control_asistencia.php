@@ -44,7 +44,20 @@ require __DIR__ . '/../../includes/header.php';
                 <span class="badge text-bg-secondary">Seleccione trabajador / cargando asignación</span>
             </div>
 
-            <dl class="info-list">
+            <div class="attendance-availability-notice d-none" id="markAvailabilityNotice" role="status">
+                <i class="fa-regular fa-clock"></i>
+                <div><strong>Marcación de entrada aún no disponible</strong><span id="markAvailabilityText"></span></div>
+            </div>
+
+            <div class="attendance-no-assignment d-none" id="markEmptyState" role="status">
+                <span class="attendance-no-assignment-icon"><i class="fa-solid fa-user-clock"></i></span>
+                <div>
+                    <strong id="markEmptyStateTitle">Sin asignación activa</strong>
+                    <p id="markEmptyStateText">No tienes un horario ni un lugar de marcación asignados. Comunícate con el administrador para poder registrar tu asistencia.</p>
+                </div>
+            </div>
+
+            <dl class="info-list" id="markAssignmentDetails">
                 <dt>Trabajador</dt><dd id="markWorkerName">-</dd>
                 <dt>Lugar</dt><dd id="markLocationName">-</dd>
                 <dt>Horario</dt><dd id="markScheduleName">-</dd>
@@ -54,7 +67,7 @@ require __DIR__ . '/../../includes/header.php';
                     <span class="attendance-time-main">
                         <span id="markEntryOfficial">-</span>
                         <span class="attendance-time-separator">|</span>
-                        <span>Marcación: <span id="markEntryWindow">-</span></span>
+                        <span>Ventana: <span id="markEntryWindow">-</span></span>
                     </span>
                     <small class="d-block text-muted" id="markEntryTolerance"></small>
                 </dd>
@@ -63,37 +76,49 @@ require __DIR__ . '/../../includes/header.php';
                     <span class="attendance-time-main">
                         <span id="markExitOfficial">-</span>
                         <span class="attendance-time-separator">|</span>
-                        <span>Marcación: <span id="markExitWindow">-</span></span>
+                        <span>Salida válida desde: <span id="markExitWindow">-</span></span>
                     </span>
                 </dd>
                 <dt>Radio permitido</dt><dd id="markRadius">-</dd>
             </dl>
 
             <label class="form-label">Observaciones</label>
-            <textarea class="form-control mb-3" id="markObservations" rows="3"></textarea>
+            <textarea class="form-control mb-3" id="markObservations" rows="3" disabled></textarea>
 
             <div class="d-grid gap-2">
-                <button class="btn btn-success" type="button" id="markEntryBtn"><i class="fa-solid fa-right-to-bracket me-2"></i>Marcar entrada</button>
-                <button class="btn btn-primary" type="button" id="markExitBtn"><i class="fa-solid fa-right-from-bracket me-2"></i>Marcar salida</button>
+                <button class="btn btn-success" type="button" id="markEntryBtn" disabled><i class="fa-solid fa-right-to-bracket me-2"></i>Marcar entrada</button>
+                <button class="btn btn-primary" type="button" id="markExitBtn" disabled><i class="fa-solid fa-right-from-bracket me-2"></i>Marcar salida</button>
             </div>
-            <div class="form-text mt-2">El navegador solicitará permisos de ubicación y cámara solo al marcar.</div>
+            <div class="form-text mt-2" id="markPermissionHelp">Seleccione un trabajador con asignación activa para marcar.</div>
         </div>
     </div>
 
     <div class="col-xl-8">
-        <div class="work-panel mb-3">
+        <div class="work-panel mb-3 attendance-capture-panel">
             <div class="row g-3">
                 <div class="col-lg-5">
                     <h2>Vista de cámara</h2>
                     <div class="camera-box">
                         <video id="markCamera" autoplay playsinline muted></video>
                         <canvas id="markCanvas" class="d-none"></canvas>
+                        <div class="attendance-media-empty" id="markCameraEmpty">
+                            <i class="fa-solid fa-camera"></i>
+                            <strong>Cámara no disponible</strong>
+                            <span>Se habilitará cuando exista una asignación activa.</span>
+                        </div>
                     </div>
                     <img class="mark-photo-preview d-none mt-2" id="markPhotoPreview" alt="Foto capturada">
                 </div>
                 <div class="col-lg-7">
                     <h2>Mapa</h2>
-                    <div class="attendance-map" id="markMap"></div>
+                    <div class="attendance-map-wrap">
+                        <div class="attendance-map" id="markMap"></div>
+                        <div class="attendance-media-empty attendance-map-empty" id="markMapEmpty">
+                            <i class="fa-solid fa-location-dot"></i>
+                            <strong>Mapa no disponible</strong>
+                            <span>Se mostrará el lugar de marcación asignado.</span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
