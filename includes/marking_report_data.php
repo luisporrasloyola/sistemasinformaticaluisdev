@@ -48,7 +48,7 @@ function marking_report_build(string $dateFrom, string $dateTo, int $workerId = 
             l.name AS location_name, l.radius_meters, s.name AS schedule_name,
             CASE WHEN am.mark_type = 'salida' AND am.final_status = 'salida_anticipada'
                 AND EXISTS (SELECT 1 FROM attendance_marks entry_mark
-                    WHERE entry_mark.worker_id = am.worker_id AND entry_mark.mark_date = am.mark_date
+                    WHERE entry_mark.assignment_id = am.assignment_id AND entry_mark.mark_date = am.mark_date
                     AND entry_mark.mark_type = 'entrada' AND entry_mark.final_status = 'tardanza')
                 THEN 'tardanza_salida_anticipada' ELSE am.final_status END AS display_status
         FROM attendance_marks am

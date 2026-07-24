@@ -14,7 +14,7 @@ if ($workerId <= 0) {
     json_response(['ok' => false, 'message' => 'Seleccione un trabajador.'], 400);
 }
 
-$stmt = db()->prepare("SELECT am.id, am.marked_at, am.mark_type, am.distance_meters,
+$stmt = db()->prepare("SELECT am.id, am.assignment_id, am.marked_at, am.mark_type, am.distance_meters,
         am.final_status, am.photo_path, w.full_name, l.name AS location_name
     FROM attendance_marks am
     JOIN workers w ON w.id = am.worker_id
@@ -27,10 +27,11 @@ $stmt->execute(['worker_id' => $workerId]);
 $grouped = [];
 foreach ($stmt->fetchAll() as $row) {
     $timestamp = strtotime((string) $row['marked_at']);
-    $dateKey = date('Y-m-d', $timestamp);
+    $assignmentId = (int) $row['assignment_id'];
+    $dateKey = date('Y-m-d', $timestamp) . '_' . $assignmentId;
     if (!isset($grouped[$dateKey])) {
         $grouped[$dateKey] = [
-            'date_key' => $dateKey,
+            'date_key' => date('Y-m-d', $timestamp),
             'date' => date('d/m/Y', $timestamp),
             'worker' => (string) $row['full_name'],
             'locations' => [],

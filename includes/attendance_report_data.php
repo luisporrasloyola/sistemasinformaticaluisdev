@@ -131,7 +131,7 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
         $scheduleDaysBySchedule[(int) $scheduleDay['schedule_id']][(int) $scheduleDay['day_of_week']] = $scheduleDay;
     }
 
-    $marksByWorkerAndDate = [];
+    $marksByWorkerAndDateAndAssignment = [];
     $markParams = ['date_from' => $dateFrom, 'date_to' => $dateTo];
     $markSql = 'SELECT assignment_id, worker_id, mark_date, mark_type, mark_time, schedule_status, final_status, observations
         FROM attendance_marks WHERE mark_date BETWEEN :date_from AND :date_to';
@@ -143,7 +143,7 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
     $stmt = db()->prepare($markSql);
     $stmt->execute($markParams);
     foreach ($stmt->fetchAll() as $mark) {
-        $marksByWorkerAndDate[(int) $mark['worker_id']][(string) $mark['mark_date']][(string) $mark['mark_type']] = $mark;
+        $marksByWorkerAndDateAndAssignment[(int) $mark['worker_id']][(string) $mark['mark_date']][(int) $mark['assignment_id']][(string) $mark['mark_type']] = $mark;
     }
 
     $calendarEvents = attendance_calendar_events_between($dateFrom, $dateTo);
@@ -162,32 +162,44 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
         while ($cursor <= $periodEnd) {
             $date = $cursor->format('Y-m-d');
             $weekday = (int) $cursor->format('N');
-            $marks = $marksByWorkerAndDate[$id][$date] ?? [];
-            $entry = $marks['entrada'] ?? null;
-            $exit = $marks['salida'] ?? null;
-            $markAssignmentId = (int) ($entry['assignment_id'] ?? $exit['assignment_id'] ?? 0);
-            $assignment = $markAssignmentId > 0 ? ($assignmentsById[$markAssignmentId] ?? null) : null;
-            if (!$assignment || (int) $assignment['worker_id'] !== $id) {
-                $assignment = null;
+
+            $dateAssignments = [];
+            $markedAssignmentsMap = $marksByWorkerAndDateAndAssignment[$id][$date] ?? [];
+            if ($markedAssignmentsMap) {
+                foreach (array_keys($markedAssignmentsMap) as $aid) {
+                    if (isset($assignmentsById[$aid])) {
+                        $dateAssignments[] = $assignmentsById[$aid];
+                    }
+                }
+            }
+
+            if (empty($dateAssignments)) {
                 foreach ($workerAssignments as $candidate) {
                     if ((string) $candidate['assignment_start_date'] > $date) break;
                     $candidateEnd = (string) ($candidate['assignment_end_date'] ?? '');
                     if ($candidateEnd === '' || $date <= $candidateEnd) {
-                        $assignment = $candidate;
+                        $dateAssignments[] = $candidate;
                     }
                 }
             }
-            if (!$assignment) {
+
+            if (empty($dateAssignments)) {
                 $cursor = $cursor->modify('+1 day');
                 continue;
             }
-            $scheduleDay = $scheduleDaysBySchedule[(int) $assignment['schedule_id']][$weekday] ?? null;
-            $calendarEvent = attendance_calendar_resolve_event($calendarEvents, $date, $id, (int) $worker['company_id']);
-            $eventType = (string) ($calendarEvent['event_type'] ?? '');
-            $isNonWorking = attendance_calendar_is_non_working_event($eventType);
-            $hasSchedule = $scheduleDay !== null;
-            $isLate = $entry && (($entry['schedule_status'] ?? '') === 'tardanza' || ($entry['final_status'] ?? '') === 'tardanza');
-            $isEarlyExit = $exit && (($exit['schedule_status'] ?? '') === 'salida_anticipada' || ($exit['final_status'] ?? '') === 'salida_anticipada');
+
+            foreach ($dateAssignments as $assignment) {
+                $aid = (int) $assignment['id'];
+                $marks = $markedAssignmentsMap[$aid] ?? [];
+                $entry = $marks['entrada'] ?? null;
+                $exit = $marks['salida'] ?? null;
+                $scheduleDay = $scheduleDaysBySchedule[(int) $assignment['schedule_id']][$weekday] ?? null;
+                $calendarEvent = attendance_calendar_resolve_event($calendarEvents, $date, $id, (int) $worker['company_id']);
+                $eventType = (string) ($calendarEvent['event_type'] ?? '');
+                $isNonWorking = attendance_calendar_is_non_working_event($eventType);
+                $hasSchedule = $scheduleDay !== null;
+                $isLate = $entry && (($entry['schedule_status'] ?? '') === 'tardanza' || ($entry['final_status'] ?? '') === 'tardanza');
+                $isEarlyExit = $exit && (($exit['schedule_status'] ?? '') === 'salida_anticipada' || ($exit['final_status'] ?? '') === 'salida_anticipada');
 
             if ($entry || $exit) {
                 $stateKey = !$entry ? 'incomplete'
@@ -285,6 +297,7 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 'observation' => $observations ? implode(' · ', array_unique($observations)) : '-',
                 'is_workday' => $hasSchedule && !$isNonWorking,
             ];
+            }
             $cursor = $cursor->modify('+1 day');
         }
     }
