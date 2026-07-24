@@ -5148,7 +5148,23 @@ function initControlPersonalMarking() {
                 reject(new Error('El navegador no soporta ubicacion GPS.'));
                 return;
             }
-            navigator.geolocation.getCurrentPosition(resolve, reject, {
+            navigator.geolocation.getCurrentPosition(resolve, (error) => {
+                let msg = 'Error en GPS: ';
+                switch(error.code) {
+                    case error.PERMISSION_DENIED:
+                        msg += 'Permiso de ubicación denegado en el navegador o GPS desactivado.';
+                        break;
+                    case error.POSITION_UNAVAILABLE:
+                        msg += 'Señal de ubicación no disponible en esta zona.';
+                        break;
+                    case error.TIMEOUT:
+                        msg += 'Tiempo de espera agotado al obtener ubicación.';
+                        break;
+                    default:
+                        msg += error.message || 'Error desconocido.';
+                }
+                reject(new Error(msg));
+            }, {
                 enableHighAccuracy: true,
                 timeout: 20000,
                 maximumAge: 0
@@ -5166,7 +5182,24 @@ function initControlPersonalMarking() {
         if (cameraStream) {
             return cameraStream;
         }
-        cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+        try {
+            cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+        } catch (err) {
+            console.warn('Fallo facingMode user, intentando video generico...', err);
+            try {
+                cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+            } catch (fallbackErr) {
+                let msg = 'Error en Cámara: ';
+                if (fallbackErr.name === 'NotAllowedError' || fallbackErr.name === 'PermissionDeniedError') {
+                    msg += 'Permiso de cámara denegado.';
+                } else if (fallbackErr.name === 'NotFoundError' || fallbackErr.name === 'DevicesNotFoundError') {
+                    msg += 'No se encontró cámara frontal.';
+                } else {
+                    msg += fallbackErr.message || 'No se pudo acceder a la cámara.';
+                }
+                throw new Error(msg);
+            }
+        }
         camera.srcObject = cameraStream;
         await camera.play();
         return cameraStream;
