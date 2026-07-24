@@ -116,6 +116,16 @@ if (!$scheduleDay) {
 
 if ($markType === 'entrada' && !empty($scheduleDay['entry_start'])) {
     $entryAvailableAt = strtotime($today . ' ' . $scheduleDay['entry_start']);
+    
+    // Si el rango de entrada cruza la medianoche (ej: empieza 23:52 y termina 00:19)
+    // y la hora de marcación es menor o igual al fin de la ventana (madrugada)
+    if (!empty($scheduleDay['entry_end']) && strtotime($scheduleDay['entry_start']) > strtotime($scheduleDay['entry_end'])) {
+        $markTimeFormatted = date('H:i:s', strtotime($markedAt));
+        if ($markTimeFormatted <= $scheduleDay['entry_end']) {
+            $entryAvailableAt = strtotime($today . ' ' . $scheduleDay['entry_start'] . ' -1 day');
+        }
+    }
+    
     if ($entryAvailableAt !== false && strtotime($markedAt) < $entryAvailableAt) {
         json_response([
             'ok' => false,
