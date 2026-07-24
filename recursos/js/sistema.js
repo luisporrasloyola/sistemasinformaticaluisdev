@@ -4893,7 +4893,7 @@ function initControlPersonalMarking() {
     async function runDiagnostics() {
         const diagContainer = document.createElement('div');
         diagContainer.className = 'work-panel mt-3 p-3 bg-light border rounded';
-        diagContainer.innerHTML = '<h6 class="mb-2 text-primary fw-bold"><i class="fa-solid fa-square-poll-horizontal me-2"></i>Estado de Permisos en este Celular</h6><ul id="diagList" class="mb-0 small text-muted d-flex flex-column gap-1" style="list-style:none; padding-left:0;"></ul>';
+        diagContainer.innerHTML = '<h6 class="mb-2 text-primary fw-bold"><i class="fa-solid fa-square-poll-horizontal me-2"></i>Estado de Permisos en este Equipo</h6><ul id="diagList" class="mb-0 small text-muted d-flex flex-column gap-1" style="list-style:none; padding-left:0;"></ul>';
         document.querySelector('.page-title')?.after(diagContainer);
         
         const list = document.getElementById('diagList');
