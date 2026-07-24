@@ -4883,6 +4883,13 @@ function initControlPersonalMarking() {
     const attendancePhotoModalTitle = document.getElementById('attendancePhotoModalTitle');
     if (!workerField || !entryBtn || !exitBtn || !camera || !canvas || !mapElement) return;
 
+    if (window.self !== window.top) {
+        const warningDiv = document.createElement('div');
+        warningDiv.className = 'alert alert-danger mb-3 p-3';
+        warningDiv.innerHTML = '<i class="fa-solid fa-circle-exclamation me-2 fs-5"></i><strong>Atención importante:</strong> Estás ingresando al sistema a través de un dominio enmascarado (redirección por iframe de maquinarias.com). Por políticas estrictas de seguridad de los navegadores móviles, <b>la cámara y la ubicación están bloqueadas</b> en este modo.<br><br>Para registrar tu asistencia, debes ingresar directamente desde este enlace seguro: <a href="https://www.servidorlifemaquinarias.com/modulos/control_personal/control_asistencia.php" target="_top" class="alert-link text-decoration-underline">Click aquí para abrir el enlace directo seguro</a>';
+        document.querySelector('.page-title')?.after(warningDiv);
+    }
+
     let context = null;
     let map = null;
     let locationMarker = null;
@@ -5231,6 +5238,9 @@ function initControlPersonalMarking() {
     }
 
     async function prepareMarking() {
+        if (window.self !== window.top) {
+            throw new Error('El sistema está cargado dentro de un marco (iframe) de redirección. Por seguridad de tu navegador, los accesos a cámara y GPS están bloqueados. Por favor, ingresa desde: https://www.servidorlifemaquinarias.com');
+        }
         if (!context) {
             await loadMarkContext();
         }
