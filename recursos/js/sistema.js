@@ -5350,7 +5350,16 @@ function initControlPersonalMarking() {
             });
             window.location.reload();
         } catch (error) {
-            Swal.fire('Atención', `${error.message || 'No se pudo marcar.'} Debe habilitar ubicación y cámara para registrar asistencia.`, 'warning');
+            console.error('Error al marcar:', error);
+            Swal.fire({
+                icon: 'warning',
+                title: 'Atención',
+                html: `<strong>No se pudo registrar la marcación:</strong><br><br>` +
+                      `<div class="alert alert-danger text-start small mb-0">` +
+                      `${escapeHtml(error.message || String(error))}` +
+                      `</div><br>` +
+                      `Asegúrese de otorgar permisos de cámara y ubicación en su navegador.`,
+            });
         } finally {
             button.disabled = true;
             button.innerHTML = originalText;
