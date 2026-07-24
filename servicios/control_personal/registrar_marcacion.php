@@ -135,10 +135,10 @@ if ($markType === 'entrada' && !empty($scheduleDay['entry_start'])) {
     }
 }
 
-$duplicate = db()->prepare('SELECT id FROM attendance_marks WHERE worker_id = :worker_id AND mark_date = :mark_date AND mark_type = :mark_type LIMIT 1');
-$duplicate->execute(['worker_id' => $workerId, 'mark_date' => $today, 'mark_type' => $markType]);
+$duplicate = db()->prepare('SELECT id FROM attendance_marks WHERE assignment_id = :assignment_id AND mark_date = :mark_date AND mark_type = :mark_type LIMIT 1');
+$duplicate->execute(['assignment_id' => (int) $assignment['assignment_id'], 'mark_date' => $today, 'mark_type' => $markType]);
 if ($duplicate->fetch()) {
-    json_response(['ok' => false, 'message' => 'Ya existe una marcacion de ' . $markType . ' para hoy.'], 409);
+    json_response(['ok' => false, 'message' => 'Ya existe una marcacion de ' . $markType . ' para esta asignacion hoy.'], 409);
 }
 
 $serverDistance = meters_between(

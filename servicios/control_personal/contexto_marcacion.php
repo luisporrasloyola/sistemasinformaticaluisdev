@@ -48,9 +48,9 @@ $calendarEvent = attendance_calendar_event_for_worker(
 $scheduleDay = attendance_calendar_effective_schedule($weeklyScheduleDay, $calendarEvent);
 
 $stmt = db()->prepare('SELECT mark_type, mark_time, final_status, photo_path FROM attendance_marks
-    WHERE worker_id = :worker_id AND mark_date = :mark_date
+    WHERE assignment_id = :assignment_id AND mark_date = :mark_date
     ORDER BY marked_at ASC');
-$stmt->execute(['worker_id' => $workerId, 'mark_date' => $today]);
+$stmt->execute(['assignment_id' => (int) $assignment['assignment_id'], 'mark_date' => $today]);
 $marks = $stmt->fetchAll();
 
 $entryAvailableFrom = $scheduleDay['entry_start'] ?? null;
