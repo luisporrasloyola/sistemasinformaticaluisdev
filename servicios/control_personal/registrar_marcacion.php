@@ -78,12 +78,11 @@ $stmt = db()->prepare("SELECT aa.id AS assignment_id,
     JOIN attendance_locations l ON l.id = aa.location_id
     JOIN attendance_schedules s ON s.id = aa.schedule_id
     WHERE aa.worker_id = :worker_id AND aa.status = 1
-    ORDER BY aa.id DESC
-    LIMIT 1");
+    ORDER BY aa.id DESC");
 $stmt->execute(['worker_id' => $workerId]);
-$assignment = $stmt->fetch();
+$assignments = $stmt->fetchAll();
 
-if (!$assignment) {
+if (!$assignments) {
     json_response(['ok' => false, 'message' => 'El trabajador no tiene asignacion activa.'], 404);
 }
 
@@ -92,20 +91,54 @@ $nowTime = date('H:i:s');
 $markedAt = date('Y-m-d H:i:s');
 $dayOfWeek = (int) date('N');
 
-$stmt = db()->prepare('SELECT * FROM attendance_schedule_days
-    WHERE schedule_id = :schedule_id AND day_of_week = :day_of_week AND status = 1
-    LIMIT 1');
-$stmt->execute([
-    'schedule_id' => (int) $assignment['schedule_id'],
-    'day_of_week' => $dayOfWeek,
-]);
-$weeklyScheduleDay = $stmt->fetch() ?: null;
-$calendarEvent = attendance_calendar_event_for_worker(
-    $today,
-    $workerId,
-    (int) ($assignment['company_id'] ?? 0)
-);
-$scheduleDay = attendance_calendar_effective_schedule($weeklyScheduleDay, $calendarEvent);
+$selectedAssignment = null;
+$selectedScheduleDay = null;
+$selectedCalendarEvent = null;
+
+foreach ($assignments as $asg) {
+    $stmt = db()->prepare('SELECT * FROM attendance_schedule_days
+        WHERE schedule_id = :schedule_id AND day_of_week = :day_of_week AND status = 1
+        LIMIT 1');
+    $stmt->execute([
+        'schedule_id' => (int) $asg['schedule_id'],
+        'day_of_week' => $dayOfWeek,
+    ]);
+    $weeklyScheduleDay = $stmt->fetch() ?: null;
+    $calendarEvent = attendance_calendar_event_for_worker(
+        $today,
+        $workerId,
+        (int) ($asg['company_id'] ?? 0)
+    );
+    $scheduleDay = attendance_calendar_effective_schedule($weeklyScheduleDay, $calendarEvent);
+
+    if ($scheduleDay) {
+        $selectedAssignment = $asg;
+        $selectedScheduleDay = $scheduleDay;
+        $selectedCalendarEvent = $calendarEvent;
+        break;
+    }
+}
+
+if (!$selectedAssignment) {
+    $selectedAssignment = $assignments[0];
+    $stmt = db()->prepare('SELECT * FROM attendance_schedule_days
+        WHERE schedule_id = :schedule_id AND day_of_week = :day_of_week AND status = 1
+        LIMIT 1');
+    $stmt->execute([
+        'schedule_id' => (int) $selectedAssignment['schedule_id'],
+        'day_of_week' => $dayOfWeek,
+    ]);
+    $weeklyScheduleDay = $stmt->fetch() ?: null;
+    $selectedCalendarEvent = attendance_calendar_event_for_worker(
+        $today,
+        $workerId,
+        (int) ($selectedAssignment['company_id'] ?? 0)
+    );
+    $selectedScheduleDay = attendance_calendar_effective_schedule($weeklyScheduleDay, $selectedCalendarEvent);
+}
+
+$assignment = $selectedAssignment;
+$scheduleDay = $selectedScheduleDay;
 
 if (!$scheduleDay) {
     $message = $calendarEvent

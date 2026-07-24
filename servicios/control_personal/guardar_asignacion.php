@@ -24,7 +24,7 @@ $replacedCount = 0;
 if (!in_array($scopeType, ['all', 'worker', 'selected'], true)) {
     json_response(['ok' => false, 'message' => 'Seleccione a quien se aplicara la asignacion.'], 400);
 }
-if (!in_array($conflictPolicy, ['skip', 'replace'], true)) {
+if (!in_array($conflictPolicy, ['skip', 'replace', 'allow'], true)) {
     json_response(['ok' => false, 'message' => 'Seleccione cómo tratar las asignaciones existentes.'], 400);
 }
 if (($scopeType === 'worker' && $workerId <= 0) || $locationId <= 0 || $scheduleId <= 0) {
@@ -118,8 +118,10 @@ if ($id > 0) {
                 static fn(int $targetId): bool => !isset($activeLookup[$targetId])
             ));
             $skippedCount = count($activeWorkerIds);
-        } else {
+        } elseif ($conflictPolicy === 'replace') {
             $replacedCount = count($activeWorkerIds);
+        } else {
+            // Para 'allow', no filtramos ni desactivamos nada
         }
         $assignedCount = count($workerIds);
 
