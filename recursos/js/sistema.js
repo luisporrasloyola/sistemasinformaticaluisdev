@@ -1356,7 +1356,6 @@ function postFormWithProgress(url, formData, onProgress) {
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open('POST', url);
-        xhr.responseType = 'json';
 
         xhr.upload.addEventListener('progress', (event) => {
             if (!event.lengthComputable || typeof onProgress !== 'function') return;
@@ -1364,12 +1363,23 @@ function postFormWithProgress(url, formData, onProgress) {
         });
 
         xhr.addEventListener('load', () => {
-            const data = xhr.response || {};
+            let data = {};
+            let isJson = false;
+            try {
+                if (xhr.responseText) {
+                    data = JSON.parse(xhr.responseText);
+                    isJson = true;
+                }
+            } catch (e) {
+                // Si no es JSON, capturar el texto de error como mensaje
+                data = { ok: false, message: xhr.responseText || 'No se pudo procesar la solicitud.' };
+            }
+
             if (xhr.status >= 200 && xhr.status < 300) {
-                resolve(data);
+                resolve(isJson ? data : { ok: true, data });
                 return;
             }
-            resolve(data.ok === false ? data : { ok: false, message: 'No se pudo procesar la solicitud.' });
+            resolve(data.ok === false ? data : { ok: false, message: data.message || 'No se pudo procesar la solicitud.' });
         });
 
         xhr.addEventListener('error', () => reject(new Error('No se pudo conectar con el servidor.')));
