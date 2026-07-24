@@ -5200,13 +5200,13 @@ function initControlPersonalMarking() {
             navigator.geolocation.getCurrentPosition(resolve, (error) => {
                 let msg = 'Error en GPS: ';
                 switch(error.code) {
-                    case error.PERMISSION_DENIED:
+                    case 1: // PERMISSION_DENIED
                         msg += 'Permiso de ubicación denegado en el navegador o GPS desactivado.';
                         break;
-                    case error.POSITION_UNAVAILABLE:
+                    case 2: // POSITION_UNAVAILABLE
                         msg += 'Señal de ubicación no disponible en esta zona.';
                         break;
-                    case error.TIMEOUT:
+                    case 3: // TIMEOUT
                         msg += 'Tiempo de espera agotado al obtener ubicación.';
                         break;
                     default:
