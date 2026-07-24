@@ -4890,6 +4890,48 @@ function initControlPersonalMarking() {
         document.querySelector('.page-title')?.after(warningDiv);
     }
 
+    async function runDiagnostics() {
+        const diagContainer = document.createElement('div');
+        diagContainer.className = 'work-panel mt-3 p-3 bg-light border rounded';
+        diagContainer.innerHTML = '<h6 class="mb-2 text-primary fw-bold"><i class="fa-solid fa-square-poll-horizontal me-2"></i>Estado de Permisos en este Celular</h6><ul id="diagList" class="mb-0 small text-muted d-flex flex-column gap-1" style="list-style:none; padding-left:0;"></ul>';
+        document.querySelector('.page-title')?.after(diagContainer);
+        
+        const list = document.getElementById('diagList');
+        if (!list) return;
+
+        const addRow = (label, value, success) => {
+            const li = document.createElement('li');
+            li.innerHTML = `<strong>${label}:</strong> <span class="badge ${success ? 'text-bg-success' : 'text-bg-danger'}">${value}</span>`;
+            list.appendChild(li);
+        };
+
+        addRow('Conexión Segura (HTTPS)', window.isSecureContext ? 'SÍ' : 'NO', window.isSecureContext);
+        addRow('Acceso a Cámara', !!navigator.mediaDevices?.getUserMedia ? 'Soportado' : 'No soportado', !!navigator.mediaDevices?.getUserMedia);
+        addRow('Acceso a GPS', !!navigator.geolocation ? 'Soportado' : 'No soportado', !!navigator.geolocation);
+
+        if (navigator.permissions && navigator.permissions.query) {
+            try {
+                const camPerm = await navigator.permissions.query({ name: 'camera' });
+                addRow('Permiso Cámara (Sitio)', camPerm.state.toUpperCase(), camPerm.state !== 'denied');
+                camPerm.onchange = () => window.location.reload();
+            } catch (e) {
+                addRow('Permiso Cámara (Sitio)', 'No consultable', false);
+            }
+
+            try {
+                const geoPerm = await navigator.permissions.query({ name: 'geolocation' });
+                addRow('Permiso GPS (Sitio)', geoPerm.state.toUpperCase(), geoPerm.state !== 'denied');
+                geoPerm.onchange = () => window.location.reload();
+            } catch (e) {
+                addRow('Permiso GPS (Sitio)', 'No consultable', false);
+            }
+        } else {
+            addRow('Permissions API', 'No soportado en este navegador', false);
+        }
+    }
+    
+    runDiagnostics();
+
     let context = null;
     let map = null;
     let locationMarker = null;
