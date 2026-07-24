@@ -59,13 +59,11 @@ $entrySecondsRemaining = 0;
 if ($scheduleDay && $entryAvailableFrom) {
     $entryAvailableAt = strtotime($today . ' ' . $entryAvailableFrom);
     
-    // Si el rango de entrada cruza la medianoche (ej: empieza 23:52 y termina 00:19)
-    // y la hora actual del servidor es menor o igual al fin de la ventana (madrugada)
-    if (!empty($scheduleDay['entry_end']) && strtotime($entryAvailableFrom) > strtotime($scheduleDay['entry_end'])) {
-        $serverTimeFormatted = date('H:i:s');
-        if ($serverTimeFormatted <= $scheduleDay['entry_end']) {
-            $entryAvailableAt = strtotime($today . ' ' . $entryAvailableFrom . ' -1 day');
-        }
+    // Si el inicio de la ventana es mayor que la hora oficial de entrada (o fin de ventana),
+    // significa que la ventana de marcado se abre el día anterior.
+    $officialTime = $scheduleDay['entry_time'] ?? $scheduleDay['entry_end'] ?? $entryAvailableFrom;
+    if (strtotime($entryAvailableFrom) > strtotime($officialTime)) {
+        $entryAvailableAt = strtotime($today . ' ' . $entryAvailableFrom . ' -1 day');
     }
     
     $serverNow = time();
