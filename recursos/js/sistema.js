@@ -133,32 +133,10 @@ function initAttendanceDashboardLiveUpdates() {
         }
     };
 
-    const checkForUpdates = async () => {
-        if (document.hidden || refreshing) return;
-        try {
-            const response = await fetch(`${BASE_URL}/servicios/control_personal/version_dashboard_asistencia.php`, {
-                cache: 'no-store',
-                headers: { 'X-Requested-With': 'XMLHttpRequest' }
-            });
-            if (!response.ok) return;
-            const data = await response.json();
-            const detectedVersion = Number(data.version || 0);
-            if (data.ok && detectedVersion > lastVersion) {
-                await refreshDashboardSections(detectedVersion);
-            }
-        } catch (error) {
-            console.warn('No se pudo verificar la actualización de asistencias.', error);
-        }
-    };
-
-    window.setInterval(checkForUpdates, 2000);
     window.addEventListener('storage', (event) => {
         if (event.key === 'attendance-marks-updated-at' && event.newValue) {
             refreshDashboardSections(lastVersion);
         }
-    });
-    document.addEventListener('visibilitychange', () => {
-        if (!document.hidden) checkForUpdates();
     });
 }
 
