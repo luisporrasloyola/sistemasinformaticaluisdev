@@ -25,7 +25,7 @@ if (strtotime($fechaFin) < strtotime($fechaInicio)) {
 }
 
 try {
-    $pdf = upload_file($_FILES['pdf'] ?? [], 'empresa_seguridad', ['application/pdf']);
+    $pdf = upload_file($_FILES['pdf'] ?? [], 'empresa_seguridad', document_attachment_mimes());
     if ($id > 0) {
         $currentStmt = db()->prepare('SELECT archivo_path FROM empresa_seguridad_documentos WHERE id = :id');
         $currentStmt->execute(['id' => $id]);

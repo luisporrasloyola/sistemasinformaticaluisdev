@@ -24,7 +24,7 @@ if (strtotime($fechaFin) < strtotime($fechaInicio)) {
 }
 
 try {
-    $pdf = upload_file($_FILES['pdf'] ?? [], 'maquinaria_documentos', ['application/pdf']);
+    $pdf = upload_file($_FILES['pdf'] ?? [], 'maquinaria_documentos', document_attachment_mimes());
 
     if ($id > 0) {
         $currentStmt = db()->prepare('SELECT archivo_path FROM maquinaria_documentos WHERE id = :id');

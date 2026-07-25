@@ -111,8 +111,9 @@ require __DIR__ . '/../../includes/header.php';
                         <textarea class="form-control" name="observaciones" id="machineObservations" rows="3"></textarea>
                     </div>
                     <div class="col-md-12">
-                        <label class="form-label">Adjunto PDF</label>
-                        <input class="form-control" type="file" name="pdf" id="machinePdfInput" accept="application/pdf">
+                        <label class="form-label">Adjunto (PDF o imagen)</label>
+                        <input class="form-control" type="file" name="pdf" id="machinePdfInput" accept="application/pdf,image/jpeg,image/png,image/webp">
+                        <small class="text-muted d-block mt-1">Formatos permitidos: PDF, JPG, PNG y WEBP.</small>
                         <div class="file-current mt-2 d-none" id="machineCurrentPdf"></div>
                         <div class="upload-progress mt-2 d-none" id="machineUploadProgress">
                             <div class="progress progress-thin">

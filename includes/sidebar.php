@@ -1,8 +1,9 @@
 <?php
 $currentPath = str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '');
 $dashboardActive = str_contains($currentPath, '/panel.php') || str_ends_with($currentPath, '/index.php');
-$controlPersonalOpen = str_contains($currentPath, '/modulos/aliados/') || str_contains($currentPath, '/modulos/control_personal/');
-$requisitosOpen = str_contains($currentPath, '/modulos/requisitos/');
+$personalOpen = str_ends_with($currentPath, '/modulos/aliados/personal.php');
+$controlPersonalOpen = (!$personalOpen && str_contains($currentPath, '/modulos/aliados/')) || str_contains($currentPath, '/modulos/control_personal/');
+$requisitosOpen = $personalOpen || str_contains($currentPath, '/modulos/requisitos/');
 $maquinariaOpen = str_contains($currentPath, '/modulos/maquinaria/');
 $empresaOpen = str_contains($currentPath, '/modulos/empresa/');
 $usuarioOpen = str_contains($currentPath, '/modulos/usuario/');
@@ -31,7 +32,6 @@ $isAdmin = is_admin();
             <div class="submenu">
                 <?php if ($isAdmin): ?>
                     <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/dashboard_asistencia.php"><i class="fa-solid fa-chart-line"></i><span>Dashboard de asistencia</span></a>
-                    <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/aliados/personal.php"><i class="fa-solid fa-users"></i><span>Personal</span></a>
                     <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/calendario_laboral.php"><i class="fa-solid fa-calendar-days"></i><span>Calendario laboral</span></a>
                     <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/horarios.php"><i class="fa-solid fa-clock"></i><span>Horarios</span></a>
                     <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/puntos_marcacion.php"><i class="fa-solid fa-location-dot"></i><span>Lugares de marcación</span></a>
@@ -53,6 +53,7 @@ $isAdmin = is_admin();
             </button>
             <div class="collapse <?= $requisitosOpen ? 'show' : '' ?>" id="requisitosMenu">
                 <div class="submenu">
+                    <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/aliados/personal.php"><i class="fa-solid fa-users"></i><span>Personal</span></a>
                     <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/requisitos/pmi_individual.php"><i class="fa-solid fa-file-shield"></i><span>PMI Individual</span></a>
                     <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/requisitos/pmi_masivo.php"><i class="fa-solid fa-file-import"></i><span>Requisito PMI Masivo</span></a>
                 </div>
@@ -100,7 +101,6 @@ $isAdmin = is_admin();
                 <button class="nav-link nav-parent <?= $controlPersonalOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#controlPersonalMenuGestor" aria-expanded="<?= $controlPersonalOpen ? 'true' : 'false' ?>" aria-controls="controlPersonalMenuGestor"><i class="fa-solid fa-people-group"></i><span>Control de personal</span><i class="fa-solid fa-chevron-down nav-caret"></i></button>
                 <div class="collapse <?= $controlPersonalOpen ? 'show' : '' ?>" id="controlPersonalMenuGestor"><div class="submenu">
                     <?php if (current_user_can_module('control_personal.dashboard')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/dashboard_asistencia.php"><i class="fa-solid fa-chart-line"></i><span>Dashboard de asistencia</span></a><?php endif; ?>
-                    <?php if (current_user_can_module('control_personal.personal')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/aliados/personal.php"><i class="fa-solid fa-users"></i><span>Personal</span></a><?php endif; ?>
                     <?php if (current_user_can_module('control_personal.calendario_laboral')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/calendario_laboral.php"><i class="fa-solid fa-calendar-days"></i><span>Calendario laboral</span></a><?php endif; ?>
                     <?php if (current_user_can_module('control_personal.horarios')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/horarios.php"><i class="fa-solid fa-clock"></i><span>Horarios</span></a><?php endif; ?>
                     <?php if (current_user_can_module('control_personal.puntos_marcacion')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/puntos_marcacion.php"><i class="fa-solid fa-location-dot"></i><span>Puntos de marcacion</span></a><?php endif; ?>
@@ -110,9 +110,10 @@ $isAdmin = is_admin();
                     <?php if (current_user_can_module('control_personal.reporte_asistencias')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/reporte_asistencias.php"><i class="fa-solid fa-clipboard-check"></i><span>Reporte de asistencias</span></a><?php endif; ?>
                 </div></div>
             <?php endif; ?>
-            <?php if (current_user_can_module('requisitos')): ?>
+            <?php if (current_user_can_module('requisitos') || current_user_can_module('control_personal.personal')): ?>
                 <button class="nav-link nav-parent <?= $requisitosOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#requisitosMenuGestor" aria-expanded="<?= $requisitosOpen ? 'true' : 'false' ?>" aria-controls="requisitosMenuGestor"><i class="fa-solid fa-folder-open"></i><span>Requisitos</span><i class="fa-solid fa-chevron-down nav-caret"></i></button>
                 <div class="collapse <?= $requisitosOpen ? 'show' : '' ?>" id="requisitosMenuGestor"><div class="submenu">
+                    <?php if (current_user_can_module('control_personal.personal')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/aliados/personal.php"><i class="fa-solid fa-users"></i><span>Personal</span></a><?php endif; ?>
                     <?php if (current_user_can_module('requisitos.pmi_individual')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/requisitos/pmi_individual.php"><i class="fa-solid fa-file-shield"></i><span>PMI Individual</span></a><?php endif; ?>
                     <?php if (current_user_can_module('requisitos.pmi_masivo')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/requisitos/pmi_masivo.php"><i class="fa-solid fa-file-import"></i><span>Requisito PMI Masivo</span></a><?php endif; ?>
                 </div></div>

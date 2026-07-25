@@ -118,8 +118,9 @@ require __DIR__ . '/../../includes/header.php';
                         </div>
                     </div>
                     <div class="col-md-12">
-                        <label class="form-label">Adjunto PDF</label>
-                        <input class="form-control" type="file" name="pdf" id="pdfInput" accept="application/pdf">
+                        <label class="form-label">Adjunto (PDF o imagen)</label>
+                        <input class="form-control" type="file" name="pdf" id="pdfInput" accept="application/pdf,image/jpeg,image/png,image/webp">
+                        <small class="text-muted d-block mt-1">Formatos permitidos: PDF, JPG, PNG y WEBP.</small>
                         <div class="file-current mt-2 d-none" id="currentPdf"></div>
                         <div class="upload-progress mt-2 d-none" id="requirementUploadProgress">
                             <div class="progress progress-thin">

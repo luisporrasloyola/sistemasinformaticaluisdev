@@ -9,7 +9,6 @@ function permission_modules_catalog(): array
             'label' => 'Control de personal',
             'children' => [
                 'control_personal.dashboard' => 'Dashboard de asistencia',
-                'control_personal.personal' => 'Personal',
                 'control_personal.calendario_laboral' => 'Calendario laboral',
                 'control_personal.horarios' => 'Horarios',
                 'control_personal.puntos_marcacion' => 'Lugares de marcación',
@@ -22,6 +21,8 @@ function permission_modules_catalog(): array
         'requisitos' => [
             'label' => 'Requisitos',
             'children' => [
+                // Se conserva la clave técnica para no invalidar permisos ya asignados.
+                'control_personal.personal' => 'Personal',
                 'requisitos.pmi_individual' => 'PMI Individual',
                 'requisitos.pmi_masivo' => 'Requisito PMI Masivo',
             ],

@@ -423,18 +423,19 @@ require __DIR__ . '/includes/header.php';
                     <td>
                         <div class="dashboard-action-group">
                             <?php if ($item['file_path'] !== ''): ?>
+                                <?php $isImageAttachment = in_array(strtolower(pathinfo($item['file_path'], PATHINFO_EXTENSION)), ['jpg', 'jpeg', 'png', 'webp'], true); ?>
                                 <button
-                                    class="btn btn-sm btn-outline-danger dashboard-pdf-preview-btn"
+                                    class="btn btn-sm <?= $isImageAttachment ? 'btn-outline-primary' : 'btn-outline-danger' ?> dashboard-pdf-preview-btn"
                                     type="button"
-                                    title="Previsualizar PDF"
+                                    title="Previsualizar archivo"
                                     data-pdf-url="<?= e(APP_URL . '/' . $item['file_path']) ?>"
                                     data-pdf-title="<?= e($item['file_name']) ?>"
                                 >
-                                    <i class="fa-solid fa-file-pdf"></i>
+                                    <i class="fa-solid <?= $isImageAttachment ? 'fa-file-image' : 'fa-file-pdf' ?>"></i>
                                 </button>
                             <?php else: ?>
-                                <button class="btn btn-sm btn-outline-secondary dashboard-pdf-preview-btn" type="button" title="Sin PDF adjunto" disabled>
-                                    <i class="fa-solid fa-file-pdf"></i>
+                                <button class="btn btn-sm btn-outline-secondary dashboard-pdf-preview-btn" type="button" title="Sin archivo adjunto" disabled>
+                                    <i class="fa-solid fa-paperclip"></i>
                                 </button>
                             <?php endif; ?>
 

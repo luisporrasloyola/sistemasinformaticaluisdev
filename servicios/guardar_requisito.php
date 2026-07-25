@@ -27,7 +27,12 @@ if (strtotime($endDate) < strtotime($startDate)) {
 }
 
 try {
-    $pdf = upload_file($_FILES['pdf'] ?? [], 'requisitos', ['application/pdf']);
+    $pdf = upload_file($_FILES['pdf'] ?? [], 'requisitos', [
+        'application/pdf',
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+    ]);
     $pdo = db();
     $currentUserId = (int) (current_user()['id'] ?? 0) ?: null;
     $cleanObservation = static function (string $value): string {
@@ -99,7 +104,7 @@ try {
         $previousObservation = $cleanObservation((string) ($current['observations'] ?? ''));
         $observationChanged = $canEditObservations && $hasNewObservation;
         if ($pdf['path']) {
-            $changes[] = 'subió un nuevo documento PDF: ' . (string) $pdf['name'];
+            $changes[] = 'subió un nuevo archivo adjunto: ' . (string) $pdf['name'];
         }
 
         $currentObservationStatus = (string) ($current['observation_status'] ?? 'none');
@@ -185,7 +190,7 @@ try {
             'worker_requirement_id' => $newId,
             'user_id' => $currentUserId,
             'action_type' => 'registro_creado',
-            'description' => $pdf['path'] ? 'Registro creado con documento PDF: ' . (string) $pdf['name'] . '.' : 'Registro creado.',
+            'description' => $pdf['path'] ? 'Registro creado con archivo adjunto: ' . (string) $pdf['name'] . '.' : 'Registro creado.',
         ]);
         if ($hasInitialObservation) {
             $log->execute([

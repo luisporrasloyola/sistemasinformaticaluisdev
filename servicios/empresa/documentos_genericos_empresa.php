@@ -111,7 +111,7 @@ function generic_company_save(array $config, string $module): never
     }
 
     try {
-        $pdf = upload_file($_FILES['pdf'] ?? [], $config['folder'], ['application/pdf']);
+        $pdf = upload_file($_FILES['pdf'] ?? [], $config['folder'], document_attachment_mimes());
         if ($id > 0) {
             $currentStmt = db()->prepare("SELECT archivo_path FROM {$config['documents']} WHERE id = :id");
             $currentStmt->execute(['id' => $id]);

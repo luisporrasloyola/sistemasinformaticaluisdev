@@ -95,8 +95,9 @@ require __DIR__ . '/../../includes/header.php';
                         <div class="col-md-4"><label class="form-label">F. Fin</label><input class="form-control js-company-generic-end" type="date" name="fecha_fin" required></div>
                         <div class="col-md-12"><label class="form-label">Observaciones</label><textarea class="form-control js-company-generic-observations" name="observaciones" rows="3"></textarea></div>
                         <div class="col-md-12">
-                            <label class="form-label">Adjunto PDF</label>
-                            <input class="form-control js-company-generic-pdf-input" type="file" name="pdf" accept="application/pdf">
+                            <label class="form-label">Adjunto (PDF o imagen)</label>
+                            <input class="form-control js-company-generic-pdf-input" type="file" name="pdf" accept="application/pdf,image/jpeg,image/png,image/webp">
+                            <small class="text-muted d-block mt-1">Formatos permitidos: PDF, JPG, PNG y WEBP.</small>
                             <div class="file-current mt-2 d-none js-company-generic-current-pdf"></div>
                             <div class="upload-progress mt-2 d-none js-company-generic-progress">
                                 <div class="progress progress-thin"><div class="progress-bar" role="progressbar" style="width: 0%" aria-valuemin="0" aria-valuemax="100"></div></div>

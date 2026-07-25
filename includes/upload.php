@@ -6,7 +6,7 @@ require_once __DIR__ . '/security.php';
 function upload_error_message(int $error): string
 {
     return match ($error) {
-        UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'El archivo supera el limite permitido por el servidor. Reduzca el PDF o aumente upload_max_filesize y post_max_size en cPanel.',
+        UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'El archivo supera el límite permitido por el servidor. Reduzca su tamaño o aumente upload_max_filesize y post_max_size en cPanel.',
         UPLOAD_ERR_PARTIAL => 'El archivo se subio incompleto. Intente nuevamente.',
         UPLOAD_ERR_NO_TMP_DIR => 'El servidor no tiene carpeta temporal configurada para subidas.',
         UPLOAD_ERR_CANT_WRITE => 'El servidor no pudo escribir el archivo temporal. Revise permisos o espacio disponible.',
@@ -60,6 +60,11 @@ function upload_file(array $file, string $folder, array $allowedMime): array
         'path' => 'archivos/' . $folder . '/' . $safeName,
         'name' => preg_replace('/[^A-Za-z0-9._ -]/', '_', (string) $file['name']),
     ];
+}
+
+function document_attachment_mimes(): array
+{
+    return ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
 }
 
 function delete_uploaded_file(?string $relativePath): void

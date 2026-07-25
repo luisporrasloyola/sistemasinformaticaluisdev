@@ -34,6 +34,17 @@ function localDateValue(date = new Date()) {
     return year + '-' + month + '-' + day;
 }
 
+function documentAttachmentHeader(row) {
+    const path = String(row?.archivo_path || '');
+    const fileName = String(row?.archivo_nombre_original || path || 'archivo');
+    const isImage = /\.(?:jpe?g|png|webp)$/i.test(fileName);
+    const preview = isImage
+        ? `<a class="requirement-image-preview" target="_blank" href="${BASE_URL}/${path}"><img src="${BASE_URL}/${path}" alt="Vista previa del adjunto"></a>`
+        : '';
+    const icon = isImage ? 'fa-file-image text-primary' : 'fa-file-pdf text-danger';
+    return `${preview}<i class="fa-solid ${icon} me-2"></i><strong>${escapeHtml(fileName)}</strong>`;
+}
+
 function initAttendanceMatrixDetail() {
     const modalElement = document.getElementById('attendanceMatrixDetailModal');
     if (!modalElement) return;
@@ -829,15 +840,15 @@ async function loadRequirements() {
     const tbody = document.querySelector('#requirementsTable tbody');
     tbody.innerHTML = '';
     data.rows.forEach((row) => {
-        const hasPdf = !!row.file_path;
-        const downloadName = escapeHtml(row.original_file_name || `${row.requirement}.pdf`);
-        const downloadButton = hasPdf
+        const hasAttachment = !!row.file_path;
+        const downloadName = escapeHtml(row.original_file_name || `${row.requirement}`);
+        const downloadButton = hasAttachment
             ? `<a class="btn btn-sm btn-outline-success" href="${BASE_URL}/${row.file_path}" download="${downloadName}" title="Descargar documento"><i class="fa-solid fa-download"></i></a>`
             : '';
         tbody.insertAdjacentHTML('beforeend', `
             <tr>
                 <td class="text-center">
-                    <input class="form-check-input requirement-download-check" type="checkbox" value="${row.id}" ${hasPdf ? '' : 'disabled'} title="${hasPdf ? 'Seleccionar documento' : 'Sin PDF adjunto'}">
+                    <input class="form-check-input requirement-download-check" type="checkbox" value="${row.id}" ${hasAttachment ? '' : 'disabled'} title="${hasAttachment ? 'Seleccionar archivo' : 'Sin archivo adjunto'}">
                 </td>
                 <td>${escapeHtml(row.requirement)}</td>
                 <td>${row.registration_date}</td>
@@ -1018,10 +1029,17 @@ function renderCurrentPdf(row) {
         box.innerHTML = '';
         return;
     }
+    const fileName = row.original_file_name || row.file_path || 'archivo';
+    const isImage = /\.(?:jpe?g|png|webp)$/i.test(fileName);
+    const icon = isImage ? 'fa-file-image text-primary' : 'fa-file-pdf text-danger';
+    const preview = isImage
+        ? `<a class="requirement-image-preview" target="_blank" href="${BASE_URL}/${row.file_path}"><img src="${BASE_URL}/${row.file_path}" alt="Vista previa del adjunto"></a>`
+        : '';
     box.classList.remove('d-none');
     box.innerHTML = `
-        <i class="fa-solid fa-file-pdf text-danger me-2"></i>
-        <strong>${escapeHtml(row.original_file_name || 'archivo.pdf')}</strong>
+        ${preview}
+        <i class="fa-solid ${icon} me-2"></i>
+        <strong>${escapeHtml(fileName)}</strong>
         <div class="d-flex gap-2 mt-2">
             <a class="btn btn-sm btn-outline-primary" target="_blank" href="${BASE_URL}/${row.file_path}"><i class="fa-solid fa-up-right-from-square me-1"></i>Abrir</a>
             <button class="btn btn-sm btn-outline-danger" type="button" onclick="deleteRequirementPdf(${row.id})"><i class="fa-solid fa-trash me-1"></i>Eliminar</button>
@@ -1660,7 +1678,7 @@ async function loadMachineDocuments() {
         tbody.insertAdjacentHTML('beforeend', `
             <tr>
                 <td class="text-center">
-                    <input class="form-check-input machine-document-download-check" type="checkbox" value="${row.id}" ${hasPdf ? '' : 'disabled'} title="${hasPdf ? 'Seleccionar documento' : 'Sin PDF adjunto'}">
+                    <input class="form-check-input machine-document-download-check" type="checkbox" value="${row.id}" ${hasPdf ? '' : 'disabled'} title="${hasPdf ? 'Seleccionar archivo' : 'Sin archivo adjunto'}">
                 </td>
                 <td>${escapeHtml(row.documento)}</td>
                 <td>${row.fecha_registro}</td>
@@ -1750,8 +1768,7 @@ function renderMachineCurrentPdf(row) {
     }
     box.classList.remove('d-none');
     box.innerHTML = `
-        <i class="fa-solid fa-file-pdf text-danger me-2"></i>
-        <strong>${escapeHtml(row.archivo_nombre_original || 'archivo.pdf')}</strong>
+        ${documentAttachmentHeader(row)}
         <div class="d-flex gap-2 mt-2">
             <a class="btn btn-sm btn-outline-primary" target="_blank" href="${BASE_URL}/${row.archivo_path}"><i class="fa-solid fa-up-right-from-square me-1"></i>Abrir</a>
             <button class="btn btn-sm btn-outline-danger" type="button" onclick="deleteMachineDocumentPdf(${row.id})"><i class="fa-solid fa-trash me-1"></i>Eliminar</button>
@@ -2152,7 +2169,7 @@ async function loadCompanyDocuments() {
         tbody.insertAdjacentHTML('beforeend', `
             <tr>
                 <td class="text-center">
-                    <input class="form-check-input company-document-download-check" type="checkbox" value="${row.id}" ${hasPdf ? '' : 'disabled'} title="${hasPdf ? 'Seleccionar documento' : 'Sin PDF adjunto'}">
+                    <input class="form-check-input company-document-download-check" type="checkbox" value="${row.id}" ${hasPdf ? '' : 'disabled'} title="${hasPdf ? 'Seleccionar archivo' : 'Sin archivo adjunto'}">
                 </td>
                 <td>${escapeHtml(row.documento)}</td>
                 <td>${row.fecha_registro}</td>
@@ -2241,8 +2258,7 @@ function renderCompanyCurrentPdf(row) {
     }
     box.classList.remove('d-none');
     box.innerHTML = `
-        <i class="fa-solid fa-file-pdf text-danger me-2"></i>
-        <strong>${escapeHtml(row.archivo_nombre_original || 'archivo.pdf')}</strong>
+        ${documentAttachmentHeader(row)}
         <div class="d-flex gap-2 mt-2">
             <a class="btn btn-sm btn-outline-primary" target="_blank" href="${BASE_URL}/${row.archivo_path}"><i class="fa-solid fa-up-right-from-square me-1"></i>Abrir</a>
             <button class="btn btn-sm btn-outline-danger" type="button" onclick="deleteCompanyDocumentPdf(${row.id})"><i class="fa-solid fa-trash me-1"></i>Eliminar</button>
@@ -2636,7 +2652,7 @@ function renderCompanySecurityPdf(row) {
         return;
     }
     box.classList.remove('d-none');
-    box.innerHTML = `<i class="fa-solid fa-file-pdf text-danger me-2"></i><strong>${escapeHtml(row.archivo_nombre_original || 'archivo.pdf')}</strong><div class="d-flex gap-2 mt-2"><a class="btn btn-sm btn-outline-primary" target="_blank" href="${BASE_URL}/${row.archivo_path}"><i class="fa-solid fa-up-right-from-square me-1"></i>Abrir</a><button class="btn btn-sm btn-outline-danger" type="button" onclick="deleteCompanySecurityPdf(${row.id})"><i class="fa-solid fa-trash me-1"></i>Eliminar</button></div>`;
+    box.innerHTML = `${documentAttachmentHeader(row)}<div class="d-flex gap-2 mt-2"><a class="btn btn-sm btn-outline-primary" target="_blank" href="${BASE_URL}/${row.archivo_path}"><i class="fa-solid fa-up-right-from-square me-1"></i>Abrir</a><button class="btn btn-sm btn-outline-danger" type="button" onclick="deleteCompanySecurityPdf(${row.id})"><i class="fa-solid fa-trash me-1"></i>Eliminar</button></div>`;
 }
 
 function setCompanySecurityReadonly(state) {
@@ -2966,7 +2982,7 @@ function initEmpresaGenericModules() {
                 return;
             }
             box.classList.remove('d-none');
-            box.innerHTML = `<i class="fa-solid fa-file-pdf text-danger me-2"></i><strong>${escapeHtml(row.archivo_nombre_original || 'archivo.pdf')}</strong><div class="d-flex gap-2 mt-2"><a class="btn btn-sm btn-outline-primary" target="_blank" href="${BASE_URL}/${row.archivo_path}"><i class="fa-solid fa-up-right-from-square me-1"></i>Abrir</a><button class="btn btn-sm btn-outline-danger js-delete-current-pdf" type="button"><i class="fa-solid fa-trash me-1"></i>Eliminar</button></div>`;
+            box.innerHTML = `${documentAttachmentHeader(row)}<div class="d-flex gap-2 mt-2"><a class="btn btn-sm btn-outline-primary" target="_blank" href="${BASE_URL}/${row.archivo_path}"><i class="fa-solid fa-up-right-from-square me-1"></i>Abrir</a><button class="btn btn-sm btn-outline-danger js-delete-current-pdf" type="button"><i class="fa-solid fa-trash me-1"></i>Eliminar</button></div>`;
             box.querySelector('.js-delete-current-pdf')?.addEventListener('click', () => deletePdf(row.id));
         }
 
@@ -3677,6 +3693,11 @@ function initUsuariosModule() {
         const selectedModules = new Set(payload?.modules || []);
         moduleChecks.forEach((check) => {
             check.checked = selectedModules.has(check.value);
+        });
+        moduleChecks.forEach((check) => {
+            if (!check.checked || check.value === check.dataset.parent) return;
+            const parent = moduleChecks.find((item) => item.value === check.dataset.parent);
+            if (parent) parent.checked = true;
         });
         viewChecks.forEach((check) => {
             const scope = check.dataset.scope;

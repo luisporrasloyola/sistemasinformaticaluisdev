@@ -4049,6 +4049,23 @@ body {
     margin-top: 2px !important;
 }
 
+.requirement-image-preview {
+    background: #f8fafc;
+    border: 1px solid #dbe3ee;
+    border-radius: 8px;
+    display: block;
+    margin-bottom: 10px;
+    overflow: hidden;
+    width: min(220px, 100%);
+}
+
+.requirement-image-preview img {
+    display: block;
+    height: 110px;
+    object-fit: cover;
+    width: 100%;
+}
+
 .observation-history-box {
     background: #f8fafc !important;
     border-color: #cbd5e1 !important;
