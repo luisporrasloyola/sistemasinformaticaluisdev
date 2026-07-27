@@ -34,12 +34,13 @@ CREATE TABLE attendance_locations (
     latitude DECIMAL(10,8) NOT NULL,
     longitude DECIMAL(11,8) NOT NULL,
     address VARCHAR(255) NULL,
+    reference VARCHAR(255) NULL,
     radius_meters INT UNSIGNED NOT NULL DEFAULT 100,
     status TINYINT(1) NOT NULL DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_attendance_locations_name (name),
-    CONSTRAINT chk_attendance_location_radius CHECK (radius_meters BETWEEN 50 AND 1000)
+    CONSTRAINT chk_attendance_location_radius CHECK (radius_meters BETWEEN 50 AND 3000)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE attendance_assignments (

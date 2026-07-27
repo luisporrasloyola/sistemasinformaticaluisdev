@@ -30,12 +30,14 @@ require __DIR__ . '/../../includes/header.php';
             <h2>Marcación</h2>
             <?php if ($isAdmin): ?>
                 <label class="form-label">Trabajador</label>
-                <select class="form-select mb-3" id="markWorkerId">
-                    <option value="">Seleccione</option>
-                    <?php foreach ($workers as $worker): ?>
-                        <option value="<?= (int) $worker['id'] ?>"><?= e($worker['full_name'] . ' - ' . $worker['document_number'] . (!empty($worker['company']) ? ' - ' . $worker['company'] : '')) ?></option>
-                    <?php endforeach; ?>
-                </select>
+                <div class="mb-3">
+                    <select class="form-select" id="markWorkerId" data-placeholder="Buscar trabajador">
+                        <option value=""></option>
+                        <?php foreach ($workers as $worker): ?>
+                            <option value="<?= (int) $worker['id'] ?>"><?= e($worker['full_name'] . ' - ' . $worker['document_number'] . (!empty($worker['company']) ? ' - ' . $worker['company'] : '')) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
             <?php else: ?>
                 <input type="hidden" id="markWorkerId" value="<?= (int) $currentWorkerId ?>">
             <?php endif; ?>

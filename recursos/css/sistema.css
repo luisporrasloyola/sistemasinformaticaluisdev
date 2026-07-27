@@ -299,6 +299,41 @@ body {
     overflow: hidden;
 }
 
+/* Modal amplio para configurar lugares y revisar el radio sobre el mapa. */
+#locationModal .location-modal-dialog {
+    width: 94vw;
+    max-width: 1500px;
+}
+
+#locationModal .modal-content {
+    max-height: 94vh;
+}
+
+#locationModal #locationMap {
+    height: clamp(430px, 58vh, 650px);
+    min-height: 430px;
+}
+
+@media (max-width: 991.98px) {
+    #locationModal .location-modal-dialog {
+        width: auto;
+        max-width: calc(100vw - 24px);
+        margin: 12px auto;
+    }
+
+    #locationModal #locationMap {
+        height: 420px;
+        min-height: 420px;
+    }
+}
+
+@media (max-width: 575.98px) {
+    #locationModal #locationMap {
+        height: 340px;
+        min-height: 340px;
+    }
+}
+
 .camera-box {
     width: 100%;
     aspect-ratio: 4 / 3;

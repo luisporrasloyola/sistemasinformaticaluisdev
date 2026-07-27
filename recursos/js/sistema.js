@@ -4531,6 +4531,7 @@ function initControlPersonalLocations() {
     const latInput = document.getElementById('locationLatitude');
     const lngInput = document.getElementById('locationLongitude');
     const addressInput = document.getElementById('locationAddress');
+    const referenceInput = document.getElementById('locationReference');
     let map = null;
     let marker = null;
     let circle = null;
@@ -4547,7 +4548,7 @@ function initControlPersonalLocations() {
         if (!circle) circle = L.circle(point, { radius: Number(radius?.value || 100), color: '#1457d9', fillColor: '#1457d9', fillOpacity: 0.12 }).addTo(map);
         circle.setLatLng(point);
         circle.setRadius(Number(radius?.value || 100));
-        map.setView(point, 16);
+        map.fitBounds(circle.getBounds(), { padding: [30, 30], maxZoom: 16 });
     }
 
     async function reverseAddress(lat, lng) {
@@ -4595,6 +4596,7 @@ function initControlPersonalLocations() {
         latInput.value = data.latitude || '';
         lngInput.value = data.longitude || '';
         addressInput.value = data.address || '';
+        if (referenceInput) referenceInput.value = data.reference || '';
         radius.value = data.radius || '100';
         updateRadiusLabel();
         document.getElementById('locationModalTitle').textContent = data.id ? 'Editar lugar de marcación' : 'Nuevo lugar de marcación';
@@ -4891,6 +4893,24 @@ function initControlPersonalMarking() {
     const attendancePhotoModalImage = document.getElementById('attendancePhotoModalImage');
     const attendancePhotoModalTitle = document.getElementById('attendancePhotoModalTitle');
     if (!workerField || !entryBtn || !exitBtn || !camera || !canvas || !mapElement) return;
+
+    if (workerField.tagName === 'SELECT' && window.jQuery && jQuery.fn.select2) {
+        const $workerField = jQuery(workerField);
+        $workerField.select2({
+            theme: 'bootstrap4',
+            width: '100%',
+            placeholder: workerField.dataset.placeholder || 'Buscar trabajador',
+            allowClear: true,
+            minimumResultsForSearch: 0,
+            language: {
+                noResults: () => 'No se encontraron trabajadores',
+                searching: () => 'Buscando...'
+            }
+        });
+        $workerField.on('select2:open', () => {
+            document.querySelector('.select2-container--open .select2-search__field')?.focus();
+        });
+    }
 
     if (window.self !== window.top) {
         const warningDiv = document.createElement('div');
@@ -5376,7 +5396,11 @@ function initControlPersonalMarking() {
         }
     }
 
-    workerField.addEventListener('change', loadMarkContext);
+    if (workerField.tagName === 'SELECT' && window.jQuery && jQuery.fn.select2) {
+        jQuery(workerField).on('change.marking', loadMarkContext);
+    } else {
+        workerField.addEventListener('change', loadMarkContext);
+    }
     entryBtn.addEventListener('click', () => mark('entrada'));
     exitBtn.addEventListener('click', () => mark('salida'));
     setAssignmentAvailability(false, workerField.value ? 'Cargando la asignación activa...' : 'Seleccione un trabajador para consultar su asignación y registrar asistencia.');

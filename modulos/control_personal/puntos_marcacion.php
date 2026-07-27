@@ -24,6 +24,7 @@ require __DIR__ . '/../../includes/header.php';
                 <th>Lugar de marcaci&oacute;n</th>
                 <th>Coordenadas</th>
                 <th>Dirección</th>
+                <th>Referencia</th>
                 <th>Radio</th>
                 <th>Acciones</th>
             </tr>
@@ -34,6 +35,7 @@ require __DIR__ . '/../../includes/header.php';
                     <td><?= e($location['name']) ?></td>
                     <td><?= e($location['latitude'] . ', ' . $location['longitude']) ?></td>
                     <td><?= e($location['address'] ?? '') ?></td>
+                    <td><?= e($location['reference'] ?? '') ?></td>
                     <td><?= (int) $location['radius_meters'] ?> metros</td>
                     <td class="text-nowrap">
                         <button class="btn btn-sm btn-outline-primary js-edit-location" type="button"
@@ -42,6 +44,7 @@ require __DIR__ . '/../../includes/header.php';
                             data-latitude="<?= e((string) $location['latitude']) ?>"
                             data-longitude="<?= e((string) $location['longitude']) ?>"
                             data-address="<?= e($location['address'] ?? '') ?>"
+                            data-reference="<?= e($location['reference'] ?? '') ?>"
                             data-radius="<?= (int) $location['radius_meters'] ?>"
                             title="Editar"><i class="fa-solid fa-pen"></i></button>
                         <button class="btn btn-sm btn-outline-danger js-delete-location" type="button" data-id="<?= (int) $location['id'] ?>" title="Eliminar"><i class="fa-solid fa-trash"></i></button>
@@ -54,7 +57,7 @@ require __DIR__ . '/../../includes/header.php';
 </div>
 
 <div class="modal fade" id="locationModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable modal-dialog-centered location-modal-dialog">
         <form class="modal-content needs-validation" id="locationForm" novalidate>
             <div class="modal-header">
                 <h5 class="modal-title" id="locationModalTitle">Nuevo lugar de marcación</h5>
@@ -76,13 +79,17 @@ require __DIR__ . '/../../includes/header.php';
                         <label class="form-label">Longitud</label>
                         <input class="form-control" type="number" step="0.00000001" name="longitude" id="locationLongitude" required>
                     </div>
-                    <div class="col-md-8">
+                    <div class="col-md-5">
                         <label class="form-label">Dirección</label>
                         <input class="form-control" name="address" id="locationAddress" maxlength="255">
                     </div>
                     <div class="col-md-4">
+                        <label class="form-label">Referencia</label>
+                        <input class="form-control" name="reference" id="locationReference" maxlength="255" placeholder="Ej.: Ingreso por la puerta principal">
+                    </div>
+                    <div class="col-md-3">
                         <label class="form-label">Radio permitido: <span id="locationRadiusLabel">100 metros</span></label>
-                        <input class="form-range" type="range" name="radius_meters" id="locationRadius" min="50" max="1000" step="10" value="100">
+                        <input class="form-range" type="range" name="radius_meters" id="locationRadius" min="50" max="3000" step="10" value="100">
                     </div>
                     <div class="col-md-12">
                         <div class="attendance-map" id="locationMap"></div>
