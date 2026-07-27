@@ -255,6 +255,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
         });
+
+        $('.select2-searchable').each(function () {
+            const $field = $(this);
+            if ($field.hasClass('select2-hidden-accessible')) return;
+            const $modal = $field.closest('.modal');
+            $field.select2({
+                theme: 'bootstrap4',
+                width: '100%',
+                dropdownParent: $modal.length ? $modal : $(document.body),
+                placeholder: $field.data('placeholder') || 'Buscar',
+                minimumResultsForSearch: 0,
+                language: {
+                    noResults: () => $field.data('no-results') || 'No se encontraron resultados',
+                    searching: () => 'Buscando...'
+                }
+            });
+            $field.on('select2:open', () => {
+                document.querySelector('.select2-container--open .select2-search__field')?.focus();
+            });
+        });
     }
 });
 
@@ -4279,9 +4299,26 @@ function initControlPersonalSchedules() {
     const entryRulePreview = document.getElementById('entryRulePreview');
     const exitRulePreview = document.getElementById('exitRulePreview');
 
-    document.getElementById('scheduleSelector')?.addEventListener('change', (event) => {
-        event.target.form?.submit();
-    });
+    const scheduleSelector = document.getElementById('scheduleSelector');
+    if (scheduleSelector && window.jQuery && jQuery.fn.select2) {
+        const $scheduleSelector = jQuery(scheduleSelector);
+        $scheduleSelector.select2({
+            theme: 'bootstrap4',
+            width: '100%',
+            placeholder: scheduleSelector.dataset.placeholder || 'Buscar horario',
+            minimumResultsForSearch: 0,
+            language: {
+                noResults: () => 'No se encontraron horarios',
+                searching: () => 'Buscando...'
+            }
+        });
+        $scheduleSelector.on('select2:open', () => {
+            document.querySelector('.select2-container--open .select2-search__field')?.focus();
+        });
+        $scheduleSelector.on('change.scheduleSelector', () => scheduleSelector.form?.submit());
+    } else {
+        scheduleSelector?.addEventListener('change', () => scheduleSelector.form?.submit());
+    }
 
     const timeWithOffset = (time, offset) => {
         const [hours, minutes] = String(time || '').split(':').map(Number);

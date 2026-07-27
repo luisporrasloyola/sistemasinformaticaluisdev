@@ -50,7 +50,7 @@ require __DIR__ . '/../../includes/header.php';
         </div>
         <div class="col-xl-4">
             <label class="form-label">Trabajador</label>
-            <select class="form-select" name="trabajador_id" required>
+            <select class="form-select select2-searchable" name="trabajador_id" data-placeholder="Buscar trabajador" data-no-results="No se encontraron trabajadores" required>
                 <option value="">Seleccione un trabajador</option>
                 <?php foreach ($catalog as $item): ?>
                     <option value="<?= (int) $item['id'] ?>" <?= $workerId === (int) $item['id'] ? 'selected' : '' ?>><?= e($item['full_name'] . ' - ' . $item['document_number']) ?></option>

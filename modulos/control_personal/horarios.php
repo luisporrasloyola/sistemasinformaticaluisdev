@@ -86,7 +86,7 @@ require __DIR__ . '/../../includes/header.php';
                 <div class="schedule-picker">
                     <label class="form-label" for="scheduleSelector">Horario seleccionado</label>
                     <form method="get">
-                        <select class="form-select" id="scheduleSelector" name="id" <?= !$schedules ? 'disabled' : '' ?>>
+                        <select class="form-select" id="scheduleSelector" name="id" data-placeholder="Buscar horario" <?= !$schedules ? 'disabled' : '' ?>>
                             <?php if (!$schedules): ?><option>No hay horarios registrados</option><?php endif; ?>
                             <?php foreach ($schedules as $schedule): ?>
                                 <option value="<?= (int) $schedule['id'] ?>" <?= (int) $schedule['id'] === $selectedScheduleId ? 'selected' : '' ?>><?= e($schedule['name']) ?></option>
