@@ -172,7 +172,7 @@ for ($cursor = $startDate; $cursor <= $lastDate; $cursor = $cursor->modify('+1 d
             || (!empty($assignment['valid_until']) && $date > (string) $assignment['valid_until'])) continue;
         $assignmentId = (int) $assignment['assignment_id'];
         $worker = (int) $assignment['worker_id'];
-        // Las jornadas extraordinarias ya se agregaron directamente por trabajador.
+        // Las programaciones especiales ya se agregaron directamente por trabajador.
         $programs = [];
         if ($programs) {
             foreach ($programs as $program) {
@@ -190,7 +190,7 @@ for ($cursor = $startDate; $cursor <= $lastDate; $cursor = $cursor->modify('+1 d
             }
             continue;
         }
-        // Una jornada extraordinaria reemplaza el horario habitual del trabajador
+        // Una programación especial reemplaza el horario habitual del trabajador
         // durante esa fecha, incluso cuando posee más de una asignación activa.
         $special = attendance_calendar_resolve_event($eventsByDate, $date, $worker, (int) $assignment['company_id']);
         if ($special) {

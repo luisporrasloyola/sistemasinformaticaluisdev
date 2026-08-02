@@ -47,4 +47,4 @@ $insert = db()->prepare("INSERT INTO attendance_calendar_days
     (calendar_date,end_date,event_type,name,scope_type,company_id,worker_id,status,created_by_user_id)
     VALUES (:date_start,:date_end,'rest','Jornada excluida','worker',NULL,:worker_id,1,:user_id)");
 $insert->execute(['date_start'=>$date,'date_end'=>$date,'worker_id'=>$workerId,'user_id'=>(int)($_SESSION['user']['id']??0)?:null]);
-json_response(['ok'=>true,'message'=>'La jornada se excluyó únicamente para esta fecha.']);
+json_response(['ok'=>true,'message'=>'La fecha se registró como descanso y el trabajador no podrá marcar ese día.']);

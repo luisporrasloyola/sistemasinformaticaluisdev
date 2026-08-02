@@ -14,7 +14,7 @@ try {
     $stmt->execute(['id'=>$id,'user_id'=>$userId]);
     if ($stmt->rowCount() === 0) throw new RuntimeException('La asignación ya estaba desactivada o no existe.');
     $pdo->commit();
-    // La jornada extraordinaria conserva su propia fecha, horario y lugar.
+    // La programación especial conserva su propia fecha, horario y lugar.
     // Desactivar el horario habitual no debe cancelarla ni hacer reaparecer la
     // jornada semanal en la fecha que ya fue programada como excepción.
     $message = 'Asignación desactivada. Las programaciones especiales y el historial se conservaron.';

@@ -114,7 +114,7 @@ $overrideStmt = db()->prepare('SELECT activity, instructions FROM attendance_jou
     WHERE assignment_id=:assignment_id AND journey_date=:journey_date LIMIT 1');
 $overrideStmt->execute(['assignment_id' => (int) $assignment['assignment_id'], 'journey_date' => $today]);
 $journeyOverride = $overrideStmt->fetch() ?: null;
-// Las programaciones extraordinarias almacenan directamente sus propios datos.
+// Las programaciones especiales almacenan directamente sus propios datos.
 // Las personalizaciones paralelas solo corresponden a jornadas habituales.
 if ($journeyOverride && !$selectedProgram) {
     $assignment['activity'] = (string) $journeyOverride['activity'];

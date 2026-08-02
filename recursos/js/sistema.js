@@ -4588,7 +4588,7 @@ function initScheduleJourneysCalendar() {
         if (props.kind !== 'regular' || !props.canExclude) return;
         const answer = await Swal.fire({
             icon: 'warning', title: '¿Excluir esta jornada?',
-            html: '<p class="mb-2">El trabajador no tendrá jornada habitual en esta fecha.</p><small>La plantilla y las demás semanas no serán modificadas.</small>',
+            html: '<p class="mb-2">El trabajador no tendrá jornada laboral en esta fecha.</p><p class="mb-2"><strong>No podrá registrar entrada ni salida y el día se considerará descanso.</strong></p><small>Solo se excluirá esta fecha; la plantilla y las demás jornadas no serán modificadas.</small>',
             showCancelButton: true, confirmButtonText: 'Sí, excluir fecha', cancelButtonText: 'Cancelar', confirmButtonColor: '#dc3545'
         });
         if (!answer.isConfirmed) return;
@@ -4618,7 +4618,7 @@ function initScheduleJourneysCalendar() {
         Swal.fire({ icon: 'success', title: 'Jornada restaurada', timer: 1500, showConfirmButton: false });
     });
 
-    activateView(['#programacion-especial', '#programacion-extraordinaria'].includes(window.location.hash) ? 'extraordinary' : 'calendar');
+    activateView(window.location.hash === '#programacion-especial' ? 'extraordinary' : 'calendar');
 }
 
 function initControlPersonalSchedules() {

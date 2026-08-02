@@ -49,10 +49,10 @@ $journeyStmt->execute([
 ]);
 $journey = $journeyStmt->fetch();
 if (!$journey || (!(bool) $journey['has_program'] && !(bool) $journey['has_regular'])) {
-    json_response(['ok' => false, 'message' => 'La fecha seleccionada no contiene una jornada habitual o extraordinaria válida.'], 409);
+    json_response(['ok' => false, 'message' => 'La fecha seleccionada no contiene un horario habitual ni una programación especial válida.'], 409);
 }
 
-// Una programación extraordinaria ya es exclusiva de una fecha. Por ello se
+// Una programación especial ya es exclusiva de una fecha. Por ello se
 // actualiza su propio registro para que todos los módulos muestren los mismos datos.
 if ((bool) $journey['has_program']) {
     if ($action === 'reset') {
@@ -73,7 +73,7 @@ if ((bool) $journey['has_program']) {
     ]);
 
     // Elimina personalizaciones antiguas para evitar dos fuentes de información
-    // sobre la misma jornada extraordinaria.
+    // sobre la misma programación especial.
     $deleteOverride = db()->prepare('DELETE FROM attendance_journey_overrides WHERE assignment_id=:assignment_id AND journey_date=:journey_date');
     $deleteOverride->execute(['assignment_id' => $assignmentId, 'journey_date' => $journeyDate]);
 

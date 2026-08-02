@@ -208,7 +208,7 @@ require __DIR__ . '/../../includes/header.php';
                 <button class="btn-close btn-close-white" type="button" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
             <div class="modal-body">
-                <div class="assignment-calendar-guide"><i class="fa-solid fa-circle-info"></i><span>Se muestran las jornadas habituales, extraordinarias y los d&iacute;as del calendario laboral correspondientes al trabajador.</span></div>
+                <div class="assignment-calendar-guide"><i class="fa-solid fa-circle-info"></i><span>Se muestran los horarios habituales, las programaciones especiales y los d&iacute;as del calendario laboral correspondientes al trabajador.</span></div>
                 <div id="assignmentCalendar"></div>
             </div>
             <div class="modal-footer">
