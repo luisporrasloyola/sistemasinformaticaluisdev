@@ -76,7 +76,7 @@ require __DIR__ . '/../../includes/header.php';
 
 <div class="schedule-view-tabs" role="tablist" aria-label="Vistas de jornadas">
     <button class="schedule-view-tab active" type="button" data-journey-module-view="calendar" aria-selected="true"><i class="fa-solid fa-calendar-days"></i><span><strong>Calendario de jornadas</strong><small>Horarios, personal y fechas reales</small></span></button>
-    <button class="schedule-view-tab" type="button" data-journey-module-view="extraordinary" aria-selected="false"><i class="fa-solid fa-calendar-plus"></i><span><strong>Programación extraordinaria</strong><small>Excepciones para una fecha específica</small></span></button>
+    <button class="schedule-view-tab" type="button" data-journey-module-view="extraordinary" aria-selected="false"><i class="fa-solid fa-calendar-plus"></i><span><strong>Programación especial</strong><small>Horarios diferentes para fechas específicas</small></span></button>
 </div>
 
 <div class="work-panel" id="journeysCalendarView">
@@ -87,20 +87,20 @@ require __DIR__ . '/../../includes/header.php';
             <div><label class="form-label" for="journeysWorkerFilter">Trabajador</label><select class="form-select select2-searchable" id="journeysWorkerFilter" data-placeholder="Buscar trabajador"><option value="all">Todo el personal</option><?php foreach ($journeyWorkers as $worker): ?><option value="<?= (int) $worker['id'] ?>" <?= $selectedWorkerId === (int) $worker['id'] ? 'selected' : '' ?>><?= e($worker['full_name'] . ' - ' . $worker['document_number']) ?></option><?php endforeach; ?></select></div>
         </div>
     </div>
-    <div class="journeys-calendar-legend" aria-label="Leyenda"><span class="legend-regular">Horario habitual</span><span class="legend-extraordinary">Jornada extraordinaria</span><span class="legend-special">Calendario laboral</span></div>
+    <div class="journeys-calendar-legend" aria-label="Leyenda"><span class="legend-regular">Horario habitual</span><span class="legend-extraordinary">Programación especial</span><span class="legend-special">Calendario laboral</span></div>
     <div class="journeys-calendar-guide"><i class="fa-solid fa-circle-info"></i><span>Seleccione una jornada para revisar sus detalles. Puede excluir una fecha habitual sin modificar la plantilla semanal.</span></div>
     <div id="scheduleJourneysCalendar"></div>
 </div>
 
 <div class="d-none" id="extraordinaryProgrammingView">
 <div class="page-title programming-view-title">
-    <div><h2>Programación extraordinaria</h2><p>Cree jornadas que reemplazan el horario habitual solamente en la fecha seleccionada.</p></div>
-    <button class="btn btn-primary" type="button" id="newProgramBtn"><i class="fa-solid fa-plus me-2"></i>Nueva jornada extraordinaria</button>
+    <div><h2>Programación especial</h2><p>Configure un horario diferente para una fecha específica.</p></div>
+    <button class="btn btn-primary" type="button" id="newProgramBtn"><i class="fa-solid fa-plus me-2"></i>Nueva programación especial</button>
 </div>
 
 <div class="alert alert-primary d-flex align-items-start gap-3 shadow-sm" role="alert">
     <i class="fa-solid fa-circle-info fs-4 mt-1"></i>
-    <div><strong>Utilice este calendario solo para jornadas extraordinarias.</strong><br><span class="small">Los horarios habituales ya se generan desde las plantillas. Lo registrado aquí reemplaza únicamente la jornada de la fecha seleccionada.</span></div>
+    <div><strong>Utilice este calendario para programaciones especiales.</strong><br><span class="small">El horario configurado aquí reemplaza al habitual únicamente en la fecha seleccionada.</span></div>
 </div>
 
 <div class="work-panel">
@@ -114,7 +114,7 @@ require __DIR__ . '/../../includes/header.php';
                 <?php endforeach; ?>
             </select>
         </div>
-        <div class="col-lg-7 text-lg-end"><span class="badge rounded-pill text-bg-warning px-3 py-2"><i class="fa-solid fa-calendar-check me-2"></i><?= count($programs) ?> jornadas extraordinarias</span></div>
+        <div class="col-lg-7 text-lg-end"><span class="badge rounded-pill text-bg-warning px-3 py-2"><i class="fa-solid fa-calendar-check me-2"></i><?= count($programs) ?> programaciones especiales</span></div>
     </div>
     <div id="personnelProgramCalendar"></div>
 </div>
@@ -132,7 +132,7 @@ require __DIR__ . '/../../includes/header.php';
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <form class="modal-content" id="personnelProgramForm">
             <div class="modal-header bg-primary text-white">
-                <div><h5 class="modal-title mb-0">Programar jornada extraordinaria</h5><small>Configure una excepción para una fecha específica.</small></div>
+                <div><h5 class="modal-title mb-0">Nueva programación especial</h5><small>Configure un horario diferente para una fecha específica.</small></div>
                 <button class="btn-close btn-close-white" type="button" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
             <div class="modal-body">
@@ -160,7 +160,7 @@ require __DIR__ . '/../../includes/header.php';
                     <div class="col-12" id="extraordinaryScheduleFields">
                         <div class="schedule-rule-intro">
                             <i class="fa-solid fa-calendar-day"></i>
-                            <div><strong>Configure el horario extraordinario</strong><span>Estas reglas se aplicarán exclusivamente a la fecha seleccionada.</span></div>
+                            <div><strong>Configure el horario especial</strong><span>Estas reglas se aplicarán exclusivamente a la fecha seleccionada.</span></div>
                         </div>
                         <section class="schedule-rule-section schedule-rule-entry">
                             <div class="schedule-rule-section-title"><i class="fa-solid fa-right-to-bracket"></i><div><h6>Regla de entrada</h6><p>Defina la hora oficial y el margen permitido.</p></div></div>

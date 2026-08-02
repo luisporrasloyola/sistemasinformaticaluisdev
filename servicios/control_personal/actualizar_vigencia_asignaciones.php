@@ -69,7 +69,7 @@ try {
         WHERE assignment_id IN ({$placeholders}) AND status = 'programada' AND ({$programOutside})");
     $programStmt->execute($programParams);
     if ((int) $programStmt->fetchColumn() > 0) {
-        throw new RuntimeException('Existen jornadas extraordinarias fuera de la nueva vigencia. Ajuste el periodo o reprograme primero esas jornadas.');
+        throw new RuntimeException('Existen programaciones especiales fuera de la nueva vigencia. Ajuste el periodo o reprograme primero esas fechas.');
     }
 
     $update = $pdo->prepare("UPDATE attendance_assignments SET valid_from = ?, valid_until = ?

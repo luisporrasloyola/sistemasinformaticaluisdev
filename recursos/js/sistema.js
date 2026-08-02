@@ -4511,7 +4511,7 @@ function initScheduleJourneysCalendar() {
             window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#calendario`);
             window.setTimeout(() => calendar?.updateSize(), 80);
         } else {
-            window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#programacion-extraordinaria`);
+            window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#programacion-especial`);
             window.setTimeout(() => window.dispatchEvent(new Event('resize')), 80);
         }
     }
@@ -4544,7 +4544,7 @@ function initScheduleJourneysCalendar() {
                 selectedEvent = info.event;
                 const props = selectedEvent.extendedProps || {};
                 const date = selectedEvent.startStr.slice(0, 10);
-                const kindLabels = { regular: 'Horario habitual', program: 'Jornada extraordinaria', special: 'Calendario laboral' };
+                const kindLabels = { regular: 'Horario habitual', program: 'Programación especial', special: 'Calendario laboral' };
                 setText('journeyDetailDate', dateLabel(date));
                 setText('journeyDetailWorker', props.worker);
                 setText('journeyDetailSchedule', props.schedule || (props.kind === 'special' ? props.name : '-'));
@@ -4561,7 +4561,7 @@ function initScheduleJourneysCalendar() {
                         ? 'Puede excluir únicamente esta fecha. La plantilla semanal y los demás días permanecerán sin cambios.'
                         : 'La fecha pertenece al historial y se mantiene protegida contra modificaciones.')
                     : props.kind === 'program'
-                        ? 'Esta jornada extraordinaria tiene prioridad sobre el horario habitual únicamente en esta fecha.'
+                        ? 'Esta programación especial reemplaza el horario habitual únicamente en esta fecha.'
                         : 'Esta fecha está definida desde Calendario laboral y tiene prioridad sobre la plantilla semanal.');
                 excludeButton?.classList.toggle('d-none', props.kind !== 'regular' || !props.canExclude);
                 restoreButton?.classList.toggle('d-none', !props.canRestore);
@@ -4618,7 +4618,7 @@ function initScheduleJourneysCalendar() {
         Swal.fire({ icon: 'success', title: 'Jornada restaurada', timer: 1500, showConfirmButton: false });
     });
 
-    activateView(window.location.hash === '#programacion-extraordinaria' ? 'extraordinary' : 'calendar');
+    activateView(['#programacion-especial', '#programacion-extraordinaria'].includes(window.location.hash) ? 'extraordinary' : 'calendar');
 }
 
 function initControlPersonalSchedules() {
@@ -6567,7 +6567,7 @@ function initControlPersonalMarking() {
                         info.el.title = `${program.label}: ${program.name}`;
                         return;
                     }
-                    const scheduleType = program.schedule_source === 'extraordinary' ? 'Horario extraordinario' : program.schedule_name;
+                    const scheduleType = program.schedule_source === 'extraordinary' ? 'Horario especial' : program.schedule_name;
                     info.el.title = `${formatTime(program.entry_time)} - ${formatTime(program.exit_time)} | ${program.location_name} | ${scheduleType}${program.activity ? ` | ${program.activity}` : ''}`;
                 },
                 eventClick(info) {
@@ -6615,7 +6615,7 @@ function initControlPersonalMarking() {
                     const indications = indicationText
                         ? `<div class="my-schedule-detail-value">${escapeHtml(indicationText).replace(/\r?\n/g, '<br>')}</div>`
                         : (legacyIndications ? `<ol class="my-schedule-indications-list">${legacyIndications}</ol>` : '');
-                    const scheduleType = program.schedule_source === 'extraordinary' ? 'Horario extraordinario' : `Plantilla: ${escapeHtml(program.schedule_name)}`;
+                    const scheduleType = program.schedule_source === 'extraordinary' ? 'Horario especial' : `Plantilla: ${escapeHtml(program.schedule_name)}`;
                     detail.innerHTML = `<div class="my-schedule-detail-header">
                         <div><div class="my-schedule-detail-date">${escapeHtml(date)}</div><h5 class="my-schedule-detail-title">Detalle de la jornada</h5></div>
                         <span class="my-schedule-detail-state" style="background:${escapeHtml(program.stateColor)}"><i class="fa-solid fa-calendar-check"></i>${escapeHtml(program.state)}</span>

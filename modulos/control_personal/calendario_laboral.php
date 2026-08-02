@@ -186,7 +186,7 @@ require __DIR__ . '/../../includes/header.php';
                         <label class="form-label">Aplicar a</label>
                         <select class="form-select" name="scope_type" id="calendarScopeType" required>
                             <option value="all">Todo el personal</option>
-                            <option value="worker">Un trabajador</option>
+                            <option value="worker" hidden>Edici&oacute;n individual</option>
                             <option value="selected">Seleccionar trabajadores</option>
                         </select>
                     </div>

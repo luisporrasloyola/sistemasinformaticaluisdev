@@ -80,8 +80,8 @@ if ((bool) $journey['has_program']) {
     json_response([
         'ok' => true,
         'message' => $action === 'reset'
-            ? 'La jornada extraordinaria volvió a utilizar los datos de la asignación.'
-            : 'La programación extraordinaria del ' . $date->format('d/m/Y') . ' fue actualizada.',
+            ? 'La programación especial volvió a utilizar los datos de la asignación.'
+            : 'La programación especial del ' . $date->format('d/m/Y') . ' fue actualizada.',
     ]);
 }
 

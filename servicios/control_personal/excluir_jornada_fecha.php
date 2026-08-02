@@ -33,7 +33,7 @@ $used->execute([
 ]);
 $usage = $used->fetch();
 if (!empty($usage['has_marks']) || !empty($usage['has_program']) || !empty($usage['has_trips'])) {
-    json_response(['ok'=>false,'message'=>'No se puede excluir esta fecha porque ya tiene marcaciones, una jornada extraordinaria o desplazamientos registrados.'],409);
+    json_response(['ok'=>false,'message'=>'No se puede excluir esta fecha porque ya tiene marcaciones, una programación especial o desplazamientos registrados.'],409);
 }
 
 $existing = db()->prepare("SELECT id FROM attendance_calendar_days

@@ -52,7 +52,7 @@ if ($scheduleSource === 'extraordinary') {
     if (!preg_match('/^\d{2}:\d{2}$/', $extraEntry) || !preg_match('/^\d{2}:\d{2}$/', $extraExit)
         || $extraAdvance === false || $extraAdvance < 0 || $extraAdvance > 360
         || $extraTolerance === false || $extraTolerance < 0 || $extraTolerance > 180) {
-        json_response(['ok' => false, 'message' => 'Revise las horas, la anticipación y la tolerancia del horario extraordinario.'], 422);
+        json_response(['ok' => false, 'message' => 'Revise las horas, la anticipación y la tolerancia del horario especial.'], 422);
     }
     if ($extraEntry === $extraExit) json_response(['ok' => false, 'message' => 'La salida debe ser diferente de la entrada.'], 422);
     $entryTime = $extraEntry . ':00';
@@ -66,7 +66,7 @@ if ($scheduleSource === 'extraordinary') {
     $stmt->execute(['schedule_id' => $assignment['schedule_id'], 'day_of_week' => $dayOfWeek]);
     $day = $stmt->fetch();
     if (!$day) {
-        json_response(['ok' => false, 'message' => 'La plantilla "' . $assignment['schedule_name'] . '" no tiene horario para ese día. Puede utilizar un horario extraordinario.'], 422);
+        json_response(['ok' => false, 'message' => 'La plantilla "' . $assignment['schedule_name'] . '" no tiene horario para ese día. Puede crear una programación especial.'], 422);
     }
     $entryTime = (string) ($day['entry_time'] ?: $day['entry_start']);
     $entryStart = (string) ($day['entry_start'] ?: $entryTime);
@@ -137,7 +137,7 @@ try {
     }
 
     $pdo->commit();
-    json_response(['ok'=>true,'message'=>$scheduleSource === 'extraordinary' ? 'La jornada extraordinaria fue programada correctamente.' : 'La jornada fue programada correctamente.']);
+    json_response(['ok'=>true,'message'=>$scheduleSource === 'extraordinary' ? 'La programación especial fue guardada correctamente.' : 'La jornada fue programada correctamente.']);
 } catch (Throwable $error) {
     if ($pdo->inTransaction()) $pdo->rollBack();
     if ($error instanceof PDOException && $error->getCode() === '23000') json_response(['ok'=>false,'message'=>'Ya existe una programación para esa asignación y fecha.'],409);

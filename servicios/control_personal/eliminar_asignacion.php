@@ -13,17 +13,11 @@ try {
     $stmt = $pdo->prepare('UPDATE attendance_assignments SET status=0,deactivated_at=NOW(),deactivated_by_user_id=:user_id WHERE id=:id AND status=1');
     $stmt->execute(['id'=>$id,'user_id'=>$userId]);
     if ($stmt->rowCount() === 0) throw new RuntimeException('La asignación ya estaba desactivada o no existe.');
-    $cancelled = 0;
-    try {
-        $future = $pdo->prepare("UPDATE attendance_programs ap SET ap.status='cancelada'
-            WHERE ap.assignment_id=:id AND ap.program_date>=CURDATE() AND ap.status='programada'
-              AND NOT EXISTS (SELECT 1 FROM attendance_marks am WHERE am.program_id=ap.id)");
-        $future->execute(['id'=>$id]);
-        $cancelled = $future->rowCount();
-    } catch (Throwable $ignored) {}
     $pdo->commit();
-    $message = 'Asignación desactivada. El historial y todas las marcaciones se conservaron.';
-    if ($cancelled > 0) $message .= " Se cancelaron {$cancelled} programación(es) futura(s) asociada(s).";
+    // La jornada extraordinaria conserva su propia fecha, horario y lugar.
+    // Desactivar el horario habitual no debe cancelarla ni hacer reaparecer la
+    // jornada semanal en la fecha que ya fue programada como excepción.
+    $message = 'Asignación desactivada. Las programaciones especiales y el historial se conservaron.';
     json_response(['ok'=>true,'message'=>$message]);
 } catch (Throwable $error) {
     if ($pdo->inTransaction()) $pdo->rollBack();
