@@ -5067,17 +5067,43 @@ function initControlPersonalAssignments() {
     const noEnd = document.getElementById('assignmentNoEnd');
     const groupSearch = document.getElementById('assignmentGroupSearch');
     const assignmentGroups = Array.from(document.querySelectorAll('.assignment-group'));
+    const assignmentSearchEmpty = document.getElementById('assignmentSearchEmpty');
 
     groupSearch?.addEventListener('input', () => {
         const query = normalizarTexto(groupSearch.value);
+        let visibleGroups = 0;
+
         assignmentGroups.forEach((group) => {
-            const matches = query === '' || normalizarTexto(group.dataset.search || '').includes(query);
+            const rows = Array.from(group.querySelectorAll('.assignment-member-row'));
+            const matchesGroup = query !== '' && normalizarTexto(group.dataset.groupSearch || '').includes(query);
+            let visibleRows = 0;
+
+            rows.forEach((row) => {
+                const matchesRow = query === '' || matchesGroup || normalizarTexto(row.dataset.search || '').includes(query);
+                row.classList.toggle('d-none', !matchesRow);
+                if (matchesRow) visibleRows++;
+            });
+
+            const matches = query === '' || matchesGroup || visibleRows > 0;
             group.classList.toggle('d-none', !matches);
+            if (matches) visibleGroups++;
+
+            const bulkbar = group.querySelector('.assignment-group-bulkbar');
+            bulkbar?.classList.toggle('d-none', query !== '' && !matchesGroup);
+
+            const count = group.querySelector('.assignment-group-count');
+            if (count) {
+                const shown = query === '' || matchesGroup ? rows.length : visibleRows;
+                count.innerHTML = `<b>${shown}</b> ${shown === 1 ? 'trabajador' : 'trabajadores'}`;
+            }
+
             if (query && matches) {
                 const body = group.querySelector('.collapse');
                 if (body) bootstrap.Collapse.getOrCreateInstance(body, { toggle: false }).show();
             }
         });
+
+        assignmentSearchEmpty?.classList.toggle('d-none', visibleGroups > 0 || query === '');
     });
     document.getElementById('expandAssignmentGroups')?.addEventListener('click', () => {
         assignmentGroups.filter((group) => !group.classList.contains('d-none')).forEach((group) => {

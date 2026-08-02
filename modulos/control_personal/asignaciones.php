@@ -77,7 +77,9 @@ require __DIR__ . '/../../includes/header.php';
         $groupValidFrom = count($groupValidFromValues) === 1 ? $groupValidFromValues[0] : '';
         $groupValidUntil = count($groupValidUntilValues) === 1 ? $groupValidUntilValues[0] : '';
         ?>
-        <section class="assignment-group assignment-group-color-<?= $colorIndex ?>" data-search="<?= e(strtolower(implode(' ', $searchParts))) ?>">
+        <section class="assignment-group assignment-group-color-<?= $colorIndex ?>"
+            data-search="<?= e(strtolower(implode(' ', $searchParts))) ?>"
+            data-group-search="<?= e(strtolower($group['location'] . ' ' . $group['schedule'])) ?>">
             <button class="assignment-group-header <?= $groupIndex === array_key_first($assignmentGroups) ? '' : 'collapsed' ?>" type="button"
                 data-bs-toggle="collapse" data-bs-target="#<?= e($groupId) ?>" aria-expanded="<?= $groupIndex === array_key_first($assignmentGroups) ? 'true' : 'false' ?>">
                 <span class="assignment-group-symbol assignment-group-symbol-schedule"><i class="fa-regular fa-clock"></i></span>
@@ -113,7 +115,14 @@ require __DIR__ . '/../../includes/header.php';
                         <thead><tr><th>Personal</th><th>Puesto</th><th>Actividad</th><th>Vigencia</th><th>Registrado por</th><th>Acciones</th></tr></thead>
                         <tbody>
                         <?php foreach ($group['assignments'] as $assignment): ?>
-                            <tr class="assignment-member-row">
+                            <tr class="assignment-member-row" data-search="<?= e(strtolower(implode(' ', [
+                                $assignment['full_name'],
+                                $assignment['document_number'],
+                                $assignment['positions'] ?? '',
+                                $assignment['activity'] ?? '',
+                                $assignment['instructions'] ?? '',
+                                $assignment['registered_by_name'] ?? '',
+                            ]))) ?>">
                                 <td><strong><?= e($assignment['full_name']) ?></strong><small class="text-muted d-block"><?= e($assignment['document_number']) ?></small></td>
                                 <td><?= e($assignment['positions'] ?: 'Sin puesto registrado') ?></td>
                                 <td><?= e($assignment['activity'] ?: 'Sin actividad especificada') ?><?php if (!empty($assignment['instructions'])): ?><small class="text-muted d-block mt-1"><i class="fa-solid fa-circle-info me-1"></i><?= e($assignment['instructions']) ?></small><?php endif; ?></td>
@@ -157,6 +166,7 @@ require __DIR__ . '/../../includes/header.php';
         </section>
     <?php endforeach; ?>
     <?php if (!$assignmentGroups): ?><div class="text-center text-muted py-5"><i class="fa-solid fa-users-slash fs-3 mb-3 d-block"></i>No existen asignaciones vigentes.</div><?php endif; ?>
+    <?php if ($assignmentGroups): ?><div class="text-center text-muted py-5 d-none" id="assignmentSearchEmpty"><i class="fa-solid fa-magnifying-glass fs-3 mb-3 d-block"></i>No se encontraron asignaciones que coincidan con la b&uacute;squeda.</div><?php endif; ?>
     </div>
 </div>
 
