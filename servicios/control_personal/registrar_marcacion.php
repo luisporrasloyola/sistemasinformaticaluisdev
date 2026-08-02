@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/attendance_calendar.php';
+require_once __DIR__ . '/../../includes/attendance_programming.php';
 require_module_access('control_personal.control_asistencia');
 
 verify_csrf($_POST['csrf_token'] ?? null);
@@ -15,6 +16,7 @@ $address = trim((string) ($_POST['address'] ?? ''));
 $observations = trim((string) ($_POST['observations'] ?? ''));
 $photoData = (string) ($_POST['photo_data'] ?? '');
 $evidenceData = (string) ($_POST['evidence_data'] ?? '');
+$requestedProgramId = (int) ($_POST['program_id'] ?? 0);
 
 if (is_personal_role()) {
     $workerId = (int) current_user_worker_id();
@@ -68,6 +70,7 @@ function meters_between(float $lat1, float $lon1, float $lat2, float $lon2): flo
     return $earthRadius * 2 * atan2(sqrt($a), sqrt(1 - $a));
 }
 
+$today = date('Y-m-d');
 $stmt = db()->prepare("SELECT aa.id AS assignment_id,
         aa.worker_id, aa.location_id, aa.schedule_id,
         w.company_id,
@@ -78,15 +81,15 @@ $stmt = db()->prepare("SELECT aa.id AS assignment_id,
     JOIN attendance_locations l ON l.id = aa.location_id
     JOIN attendance_schedules s ON s.id = aa.schedule_id
     WHERE aa.worker_id = :worker_id AND aa.status = 1
+      AND aa.valid_from <= :today_from AND (aa.valid_until IS NULL OR aa.valid_until >= :today_until)
     ORDER BY aa.id DESC");
-$stmt->execute(['worker_id' => $workerId]);
+$stmt->execute(['worker_id' => $workerId, 'today_from' => $today, 'today_until' => $today]);
 $assignments = $stmt->fetchAll();
 
 if (!$assignments) {
     json_response(['ok' => false, 'message' => 'El trabajador no tiene asignacion activa.'], 404);
 }
 
-$today = date('Y-m-d');
 $nowTime = date('H:i:s');
 $markedAt = date('Y-m-d H:i:s');
 $dayOfWeek = (int) date('N');
@@ -94,8 +97,29 @@ $dayOfWeek = (int) date('N');
 $selectedAssignment = null;
 $selectedScheduleDay = null;
 $selectedCalendarEvent = null;
+$selectedProgram = null;
+$programs = attendance_programs_for_worker_date($workerId, $today);
+$priorityCalendarEvent = attendance_calendar_event_for_worker(
+    $today,
+    $workerId,
+    (int) ($assignments[0]['company_id'] ?? 0)
+);
 
-foreach ($assignments as $asg) {
+if ($programs && !$priorityCalendarEvent) {
+    $selectedProgram = attendance_select_program($programs, $requestedProgramId);
+    if ($selectedProgram) {
+        $selectedAssignment = [
+            'assignment_id'=>(int)$selectedProgram['assignment_id'], 'worker_id'=>$workerId,
+            'location_id'=>(int)$selectedProgram['location_id'], 'schedule_id'=>(int)$selectedProgram['schedule_id'],
+            'company_id'=>(int)$selectedProgram['company_id'], 'location_latitude'=>$selectedProgram['latitude'],
+            'location_longitude'=>$selectedProgram['longitude'], 'radius_meters'=>$selectedProgram['radius_meters'],
+            'schedule_name'=>$selectedProgram['schedule_name'],
+        ];
+        $selectedScheduleDay = attendance_program_schedule_day($selectedProgram);
+    }
+}
+
+foreach ($selectedAssignment ? [] : $assignments as $asg) {
     $stmt = db()->prepare('SELECT * FROM attendance_schedule_days
         WHERE schedule_id = :schedule_id AND day_of_week = :day_of_week AND status = 1
         LIMIT 1');
@@ -168,10 +192,23 @@ if ($markType === 'entrada' && !empty($scheduleDay['entry_start'])) {
     }
 }
 
-$duplicate = db()->prepare('SELECT id FROM attendance_marks WHERE assignment_id = :assignment_id AND mark_date = :mark_date AND mark_type = :mark_type LIMIT 1');
-$duplicate->execute(['assignment_id' => (int) $assignment['assignment_id'], 'mark_date' => $today, 'mark_type' => $markType]);
+$programId = (int) ($selectedProgram['id'] ?? 0);
+$duplicate = db()->prepare('SELECT id FROM attendance_marks WHERE assignment_id = :assignment_id AND mark_date = :mark_date AND mark_type = :mark_type
+    AND ((:program_selected > 0 AND program_id=:program_match) OR (:program_none=0 AND program_id IS NULL)) LIMIT 1');
+$duplicate->execute([
+    'assignment_id' => (int) $assignment['assignment_id'], 'mark_date' => $today, 'mark_type' => $markType,
+    'program_selected'=>$programId, 'program_match'=>$programId, 'program_none'=>$programId,
+]);
 if ($duplicate->fetch()) {
     json_response(['ok' => false, 'message' => 'Ya existe una marcacion de ' . $markType . ' para esta asignacion hoy.'], 409);
+}
+
+if ($markType === 'salida') {
+    $tripCheck = db()->prepare("SELECT id FROM attendance_trips WHERE worker_id=:worker_id AND trip_date=:trip_date AND status='en_ruta' LIMIT 1");
+    $tripCheck->execute(['worker_id'=>$workerId,'trip_date'=>$today]);
+    if ($tripCheck->fetchColumn()) {
+        json_response(['ok'=>false,'title'=>'Desplazamiento en curso','message'=>'Finaliza el desplazamiento laboral antes de registrar tu salida definitiva.'],409);
+    }
 }
 
 $serverDistance = meters_between(
@@ -216,15 +253,16 @@ try {
     $evidencePath = save_base64_image($evidenceData, 'marcaciones_evidencias');
 
     $stmt = db()->prepare('INSERT INTO attendance_marks
-        (assignment_id, worker_id, location_id, schedule_id, mark_type, mark_date, mark_time, marked_at,
+        (assignment_id, program_id, worker_id, location_id, schedule_id, mark_type, mark_date, mark_time, marked_at,
          latitude, longitude, accuracy_meters, address, distance_meters, within_radius,
          schedule_status, location_status, final_status, photo_path, evidence_path, observations)
         VALUES
-        (:assignment_id, :worker_id, :location_id, :schedule_id, :mark_type, :mark_date, :mark_time, :marked_at,
+        (:assignment_id, :program_id, :worker_id, :location_id, :schedule_id, :mark_type, :mark_date, :mark_time, :marked_at,
          :latitude, :longitude, :accuracy_meters, :address, :distance_meters, :within_radius,
          :schedule_status, :location_status, :final_status, :photo_path, :evidence_path, :observations)');
     $stmt->execute([
         'assignment_id' => (int) $assignment['assignment_id'],
+        'program_id' => $programId ?: null,
         'worker_id' => $workerId,
         'location_id' => (int) $assignment['location_id'],
         'schedule_id' => (int) $assignment['schedule_id'],

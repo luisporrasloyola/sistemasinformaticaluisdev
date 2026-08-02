@@ -12,6 +12,7 @@ $longitude = (float) ($_POST['longitude'] ?? 0);
 $address = trim((string) ($_POST['address'] ?? ''));
 $reference = trim((string) ($_POST['reference'] ?? ''));
 $radius = (int) ($_POST['radius_meters'] ?? 100);
+$currentUserId = (int) ($_SESSION['user']['id'] ?? 0) ?: null;
 
 if ($name === '' || $latitude < -90 || $latitude > 90 || $longitude < -180 || $longitude > 180 || $radius < 50 || $radius > 3000) {
     json_response(['ok' => false, 'message' => 'Complete los datos del punto de marcacion.'], 400);
@@ -20,7 +21,8 @@ if ($name === '' || $latitude < -90 || $latitude > 90 || $longitude < -180 || $l
 try {
     if ($id > 0) {
         $stmt = db()->prepare('UPDATE attendance_locations
-            SET name = :name, latitude = :latitude, longitude = :longitude, address = :address, reference = :reference, radius_meters = :radius_meters
+            SET name = :name, latitude = :latitude, longitude = :longitude, address = :address, reference = :reference,
+                radius_meters = :radius_meters, created_by_user_id = :created_by_user_id
             WHERE id = :id');
         $stmt->execute([
             'name' => $name,
@@ -29,12 +31,13 @@ try {
             'address' => $address ?: null,
             'reference' => $reference ?: null,
             'radius_meters' => $radius,
+            'created_by_user_id' => $currentUserId,
             'id' => $id,
         ]);
     } else {
-        $stmt = db()->prepare('INSERT INTO attendance_locations (name, latitude, longitude, address, reference, radius_meters, status)
-            VALUES (:name, :latitude, :longitude, :address, :reference, :radius_meters, 1)
-            ON DUPLICATE KEY UPDATE status = 1, id = LAST_INSERT_ID(id), latitude = VALUES(latitude), longitude = VALUES(longitude), address = VALUES(address), reference = VALUES(reference), radius_meters = VALUES(radius_meters)');
+        $stmt = db()->prepare('INSERT INTO attendance_locations (name, latitude, longitude, address, reference, radius_meters, status, created_by_user_id)
+            VALUES (:name, :latitude, :longitude, :address, :reference, :radius_meters, 1, :created_by_user_id)
+            ON DUPLICATE KEY UPDATE status = 1, id = LAST_INSERT_ID(id), latitude = VALUES(latitude), longitude = VALUES(longitude), address = VALUES(address), reference = VALUES(reference), radius_meters = VALUES(radius_meters), created_by_user_id = VALUES(created_by_user_id)');
         $stmt->execute([
             'name' => $name,
             'latitude' => $latitude,
@@ -42,6 +45,7 @@ try {
             'address' => $address ?: null,
             'reference' => $reference ?: null,
             'radius_meters' => $radius,
+            'created_by_user_id' => $currentUserId,
         ]);
         $id = (int) db()->lastInsertId();
     }

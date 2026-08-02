@@ -49,6 +49,8 @@ CREATE TABLE attendance_assignments (
     location_id INT UNSIGNED NOT NULL,
     schedule_id INT UNSIGNED NOT NULL,
     activity VARCHAR(180) NULL,
+    valid_from DATE NOT NULL,
+    valid_until DATE NULL,
     status TINYINT(1) NOT NULL DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

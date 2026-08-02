@@ -227,6 +227,8 @@ document.addEventListener('DOMContentLoaded', () => {
     initAttendanceMatrixDetail();
     initAttendanceDashboardLiveUpdates();
     initControlPersonalSchedules();
+    initPersonnelProgramming();
+    initScheduleJourneysCalendar();
     initControlPersonalCalendar();
     initControlPersonalLocations();
     initControlPersonalAssignments();
@@ -290,6 +292,159 @@ function initDevelopmentPhaseLinks() {
                 confirmButtonText: 'Entendido'
             });
         });
+    });
+}
+
+function initPersonnelProgramming() {
+    const calendarElement = document.getElementById('personnelProgramCalendar');
+    if (!calendarElement || !window.FullCalendar) return;
+
+    const modalElement = document.getElementById('personnelProgramModal');
+    const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+    const form = document.getElementById('personnelProgramForm');
+    const idField = document.getElementById('personnelProgramId');
+    const assignmentField = document.getElementById('personnelProgramAssignment');
+    const dateField = document.getElementById('personnelProgramDate');
+    const activityField = document.getElementById('personnelProgramActivity');
+    const notesField = document.getElementById('personnelProgramNotes');
+    const extraEntry = document.getElementById('programExtraEntry');
+    const extraAdvance = document.getElementById('programExtraAdvance');
+    const extraTolerance = document.getElementById('programExtraTolerance');
+    const extraExit = document.getElementById('programExtraExit');
+    const entryRulePreview = document.getElementById('programEntryRulePreview');
+    const exitRulePreview = document.getElementById('programExitRulePreview');
+    const cancelButton = document.getElementById('cancelProgramBtn');
+    const workerFilter = document.getElementById('programWorkerFilter');
+    const csrf = form.querySelector('[name="csrf_token"]').value;
+
+    function scheduleAdvanceMinutes(entryTime, entryStart) {
+        const minutes = (value) => { const [h, m] = String(value || '00:00').split(':').map(Number); return h * 60 + m; };
+        return (minutes(entryTime) - minutes(entryStart) + 1440) % 1440;
+    }
+
+    function programTimeWithOffset(time, offset) {
+        const [hours, minutes] = String(time || '').split(':').map(Number);
+        if (![hours, minutes].every(Number.isFinite)) return '';
+        const total = (((hours * 60 + minutes + offset) % 1440) + 1440) % 1440;
+        return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+    }
+
+    function updateProgramRulePreview() {
+        const advance = Math.max(0, Number(extraAdvance?.value || 0));
+        const tolerance = Math.max(0, Number(extraTolerance?.value || 0));
+        if (entryRulePreview) {
+            entryRulePreview.textContent = extraEntry?.value
+                ? `Puede marcar desde ${programTimeWithOffset(extraEntry.value, -advance)}. Se considera puntual hasta ${programTimeWithOffset(extraEntry.value, tolerance)}.`
+                : 'Complete la hora de entrada para calcular la ventana.';
+        }
+        if (exitRulePreview) {
+            exitRulePreview.textContent = extraExit?.value
+                ? `Antes de ${extraExit.value} será salida anticipada. Desde ${extraExit.value}, salida normal.`
+                : 'Complete la hora de salida.';
+        }
+    }
+
+    function resetProgram(date = '') {
+        form.reset();
+        idField.value = '';
+        dateField.value = date || localDateValue();
+        if (extraAdvance) extraAdvance.value = '30';
+        if (extraTolerance) extraTolerance.value = '0';
+        updateProgramRulePreview();
+        cancelButton.classList.add('d-none');
+        if (window.jQuery) jQuery(assignmentField).val('').trigger('change');
+    }
+
+    const calendar = new FullCalendar.Calendar(calendarElement, {
+        locale: 'es',
+        initialView: 'dayGridMonth',
+        firstDay: 1,
+        height: 'auto',
+        selectable: true,
+        dayMaxEvents: true,
+        displayEventTime: false,
+        headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,listMonth' },
+        buttonText: { today: 'Hoy', month: 'Mes', week: 'Semana', list: 'Lista' },
+        events: window.PERSONNEL_PROGRAM_EVENTS || [],
+        dateClick(info) {
+            // Un clic sobre una zona libre crea una programación nueva para la
+            // fecha seleccionada, sin heredar al trabajador del último evento.
+            resetProgram(info.dateStr);
+            modal.show();
+        },
+        eventClick(info) {
+            // Evitar que el clic sobre el nombre/evento llegue también a la celda
+            // y vuelva a abrir el formulario como si fuera una programación nueva.
+            info.jsEvent?.preventDefault();
+            info.jsEvent?.stopPropagation();
+            const event = info.event;
+            const props = event.extendedProps || {};
+            idField.value = event.id;
+            dateField.value = event.startStr.slice(0, 10);
+            activityField.value = props.activity || '';
+            notesField.value = props.notes || props.stops || '';
+            if (extraEntry) extraEntry.value = props.entryTime || '';
+            if (extraExit) extraExit.value = props.exitTime || '';
+            if (extraTolerance) extraTolerance.value = String(props.tolerance || 0);
+            if (extraAdvance) extraAdvance.value = String(scheduleAdvanceMinutes(props.entryTime, props.entryStart));
+            updateProgramRulePreview();
+            if (window.jQuery) {
+                jQuery(assignmentField).val(String(props.assignmentId || '')).trigger('change');
+            } else {
+                assignmentField.value = props.assignmentId || '';
+            }
+            // Toda programación abierta puede solicitar su eliminación. El servidor
+            // decide de forma segura si existen marcaciones o desplazamientos vinculados.
+            cancelButton.classList.remove('d-none');
+            modal.show();
+        },
+        eventDidMount(info) {
+            const p = info.event.extendedProps || {};
+            info.el.title = `${p.worker || ''}\n${p.schedule || ''} · ${p.location || ''}`;
+        },
+    });
+    calendar.render();
+
+    [extraEntry, extraAdvance, extraTolerance, extraExit].forEach((input) => input?.addEventListener('input', updateProgramRulePreview));
+
+    document.getElementById('newProgramBtn')?.addEventListener('click', () => { resetProgram(); modal.show(); });
+    workerFilter?.addEventListener('change', () => {
+        const workerId = String(workerFilter.value || '');
+        calendar.getEvents().forEach(event => event.setProp('display', !workerId || String(event.extendedProps.workerId) === workerId ? 'auto' : 'none'));
+    });
+
+    form.addEventListener('submit', async event => {
+        event.preventDefault();
+        const button = form.querySelector('[type="submit"]');
+        button.disabled = true;
+        try {
+            const response = await fetch(`${BASE_URL}/servicios/control_personal/guardar_programacion.php`, { method: 'POST', body: new FormData(form) });
+            const data = await response.json();
+            if (!data.ok) throw new Error(data.message || 'No se pudo guardar la programación.');
+            await Swal.fire('Programación guardada', data.message, 'success');
+            window.location.reload();
+        } catch (error) {
+            Swal.fire('Atención', error.message || String(error), 'warning');
+        } finally { button.disabled = false; }
+    });
+
+    cancelButton.addEventListener('click', async () => {
+        const answer = await Swal.fire({
+            icon: 'warning',
+            title: '¿Eliminar programación?',
+            html: '<p class="mb-2">Esta programación será retirada del calendario.</p><small class="text-muted">Solo podrá eliminarse si todavía no tiene marcaciones ni desplazamientos laborales registrados.</small>',
+            showCancelButton: true,
+            confirmButtonText: '<i class="fa-solid fa-trash-can me-2"></i>Sí, eliminar',
+            cancelButtonText: 'Volver',
+            confirmButtonColor: '#dc3545'
+        });
+        if (!answer.isConfirmed) return;
+        const body = new FormData(); body.append('csrf_token', csrf); body.append('id', idField.value);
+        const response = await fetch(`${BASE_URL}/servicios/control_personal/eliminar_programacion.php`, { method:'POST', body });
+        const data = await response.json();
+        if (!data.ok) return Swal.fire('Atención', data.message, 'warning');
+        await Swal.fire('Programación eliminada', data.message, 'success');
+        window.location.reload();
     });
 }
 
@@ -4285,6 +4440,154 @@ function initObservationNotifications() {
     setInterval(load, 20000);
 }
 
+function initScheduleJourneysCalendar() {
+    const calendarView = document.getElementById('journeysCalendarView');
+    const extraordinaryView = document.getElementById('extraordinaryProgrammingView');
+    if (!calendarView || !extraordinaryView) return;
+
+    const tabs = Array.from(document.querySelectorAll('[data-journey-module-view]'));
+    const calendarElement = document.getElementById('scheduleJourneysCalendar');
+    const scheduleFilter = document.getElementById('journeysScheduleFilter');
+    const workerFilter = document.getElementById('journeysWorkerFilter');
+    const detailElement = document.getElementById('scheduleJourneyDetailModal');
+    const detailModal = detailElement ? bootstrap.Modal.getOrCreateInstance(detailElement) : null;
+    const excludeButton = document.getElementById('excludeJourneyDateBtn');
+    const restoreButton = document.getElementById('restoreJourneyDateBtn');
+    let calendar = null;
+    let selectedEvent = null;
+    let eventsRequestSequence = 0;
+
+    const setText = (id, value) => {
+        const element = document.getElementById(id);
+        if (element) element.textContent = value || '-';
+    };
+    const dateLabel = (value) => new Date(`${value}T12:00:00`).toLocaleDateString('es-PE', {
+        weekday: 'long', day: '2-digit', month: 'long', year: 'numeric'
+    });
+
+    function activateView(view) {
+        const showCalendar = view === 'calendar';
+        calendarView.classList.toggle('d-none', !showCalendar);
+        extraordinaryView.classList.toggle('d-none', showCalendar);
+        tabs.forEach((tab) => {
+            const active = tab.dataset.journeyModuleView === view;
+            tab.classList.toggle('active', active);
+            tab.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+        if (showCalendar) {
+            window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#calendario`);
+            window.setTimeout(() => calendar?.updateSize(), 80);
+        } else {
+            window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#programacion-extraordinaria`);
+            window.setTimeout(() => window.dispatchEvent(new Event('resize')), 80);
+        }
+    }
+    tabs.forEach((tab) => tab.addEventListener('click', () => activateView(tab.dataset.journeyModuleView || 'calendar')));
+
+    if (calendarElement && window.FullCalendar) {
+        calendar = new FullCalendar.Calendar(calendarElement, {
+            locale: 'es', initialView: 'dayGridMonth', firstDay: 1, height: 'auto', dayMaxEvents: true,
+            headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,listMonth' },
+            buttonText: { today: 'Hoy', month: 'Mes', list: 'Lista' },
+            events(info, success, failure) {
+                const requestSequence = ++eventsRequestSequence;
+                const url = new URL(`${BASE_URL}/servicios/control_personal/listar_calendario_jornadas.php`);
+                if (scheduleFilter?.value && scheduleFilter.value !== 'all') url.searchParams.set('schedule_id', scheduleFilter.value);
+                url.searchParams.set('start', info.startStr.slice(0, 10));
+                url.searchParams.set('end', info.endStr.slice(0, 10));
+                if (workerFilter?.value && workerFilter.value !== 'all') url.searchParams.set('worker_id', workerFilter.value);
+                fetch(url, { cache: 'no-store' }).then((response) => response.json().then((data) => ({ response, data })))
+                    .then(({ response, data }) => {
+                        if (requestSequence !== eventsRequestSequence) return;
+                        if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudieron cargar las jornadas.');
+                        success(data.events || []);
+                    }).catch((error) => {
+                        if (requestSequence !== eventsRequestSequence) return;
+                        failure(error);
+                        Swal.fire('Atención', error.message || 'No se pudieron cargar las jornadas.', 'warning');
+                    });
+            },
+            eventClick(info) {
+                selectedEvent = info.event;
+                const props = selectedEvent.extendedProps || {};
+                const date = selectedEvent.startStr.slice(0, 10);
+                const kindLabels = { regular: 'Horario habitual', program: 'Jornada extraordinaria', special: 'Calendario laboral' };
+                setText('journeyDetailDate', dateLabel(date));
+                setText('journeyDetailWorker', props.worker);
+                setText('journeyDetailSchedule', props.schedule || (props.kind === 'special' ? props.name : '-'));
+                setText('journeyDetailHours', props.entry && props.exit ? `${props.entry} - ${props.exit}` : '-');
+                setText('journeyDetailLocation', props.location);
+                setText('journeyDetailActivity', props.activity || props.name);
+                const status = document.getElementById('journeyDetailStatus');
+                if (status) {
+                    status.className = `journey-detail-status is-${props.kind || 'special'}`;
+                    status.textContent = kindLabels[props.kind] || 'Jornada';
+                }
+                setText('journeyDetailHelp', props.kind === 'regular'
+                    ? (props.canExclude
+                        ? 'Puede excluir únicamente esta fecha. La plantilla semanal y los demás días permanecerán sin cambios.'
+                        : 'La fecha pertenece al historial y se mantiene protegida contra modificaciones.')
+                    : props.kind === 'program'
+                        ? 'Esta jornada extraordinaria tiene prioridad sobre el horario habitual únicamente en esta fecha.'
+                        : 'Esta fecha está definida desde Calendario laboral y tiene prioridad sobre la plantilla semanal.');
+                excludeButton?.classList.toggle('d-none', props.kind !== 'regular' || !props.canExclude);
+                restoreButton?.classList.toggle('d-none', !props.canRestore);
+                detailModal?.show();
+            },
+            eventDidMount(info) {
+                const props = info.event.extendedProps || {};
+                info.el.title = `${props.worker || ''}\n${props.location || props.name || ''}`;
+            }
+        });
+        calendar.render();
+        const applyCalendarFilters = () => calendar?.refetchEvents();
+        scheduleFilter?.addEventListener('change', applyCalendarFilters);
+        workerFilter?.addEventListener('change', applyCalendarFilters);
+        if (window.jQuery) {
+            jQuery(scheduleFilter).on('select2:select select2:clear', applyCalendarFilters);
+            jQuery(workerFilter).on('select2:select select2:clear', applyCalendarFilters);
+        }
+        window.addEventListener('pageshow', () => window.setTimeout(applyCalendarFilters, 120), { once: true });
+    }
+
+    excludeButton?.addEventListener('click', async () => {
+        const props = selectedEvent?.extendedProps || {};
+        if (props.kind !== 'regular' || !props.canExclude) return;
+        const answer = await Swal.fire({
+            icon: 'warning', title: '¿Excluir esta jornada?',
+            html: '<p class="mb-2">El trabajador no tendrá jornada habitual en esta fecha.</p><small>La plantilla y las demás semanas no serán modificadas.</small>',
+            showCancelButton: true, confirmButtonText: 'Sí, excluir fecha', cancelButtonText: 'Cancelar', confirmButtonColor: '#dc3545'
+        });
+        if (!answer.isConfirmed) return;
+        const body = new FormData();
+        body.append('csrf_token', csrf); body.append('assignment_id', String(props.assignmentId || ''));
+        body.append('date', selectedEvent.startStr.slice(0, 10));
+        const response = await fetch(`${BASE_URL}/servicios/control_personal/excluir_jornada_fecha.php`, { method: 'POST', body });
+        const data = await response.json();
+        if (!response.ok || !data.ok) return Swal.fire('Atención', data.message || 'No se pudo excluir la jornada.', 'warning');
+        detailModal?.hide(); calendar?.refetchEvents();
+        Swal.fire({ icon: 'success', title: 'Jornada excluida', text: data.message, timer: 1800, showConfirmButton: false });
+    });
+
+    restoreButton?.addEventListener('click', async () => {
+        const props = selectedEvent?.extendedProps || {};
+        if (!props.canRestore || !props.calendarId) return;
+        const answer = await Swal.fire({
+            icon: 'question', title: '¿Restaurar la jornada habitual?', showCancelButton: true,
+            confirmButtonText: 'Sí, restaurar', cancelButtonText: 'Cancelar'
+        });
+        if (!answer.isConfirmed) return;
+        const body = new FormData(); body.append('csrf_token', csrf); body.append('id', String(props.calendarId));
+        const response = await fetch(`${BASE_URL}/servicios/control_personal/restaurar_jornada_fecha.php`, { method: 'POST', body });
+        const data = await response.json();
+        if (!response.ok || !data.ok) return Swal.fire('Atención', data.message || 'No se pudo restaurar la jornada.', 'warning');
+        detailModal?.hide(); calendar?.refetchEvents();
+        Swal.fire({ icon: 'success', title: 'Jornada restaurada', timer: 1500, showConfirmButton: false });
+    });
+
+    activateView(window.location.hash === '#programacion-extraordinaria' ? 'extraordinary' : 'calendar');
+}
+
 function initControlPersonalSchedules() {
     const form = document.getElementById('scheduleForm');
     if (!form) return;
@@ -4448,10 +4751,13 @@ function initControlPersonalCalendar() {
     const startDateField = document.getElementById('calendarDate');
     const endDateField = document.getElementById('calendarEndDate');
     const nameField = document.getElementById('calendarDayName');
+    const workerChecks = Array.from(document.querySelectorAll('.calendar-worker-check'));
+    const workersField = document.getElementById('calendarWorkersField');
+    const workersError = document.getElementById('calendarWorkersError');
+    const selectAllWorkers = document.getElementById('calendarSelectAllWorkers');
+    const workerSearch = document.getElementById('calendarWorkerSearch');
 
     function syncFields() {
-        const isVacation = typeField.value === 'vacation';
-        const isIndividual = isVacation || typeField.value === 'permission';
         const defaultNames = {
             vacation: 'Vacaciones',
             permission: 'Permiso',
@@ -4459,25 +4765,23 @@ function initControlPersonalCalendar() {
         };
         const automaticNames = Object.values(defaultNames);
 
-        if (isIndividual) {
-            scopeField.value = 'worker';
-        }
         if (!nameField.value.trim() || automaticNames.includes(nameField.value.trim())) {
             nameField.value = defaultNames[typeField.value] || '';
         }
-        if (isVacation) {
-            if (!endDateField.value) endDateField.value = startDateField.value;
-        }
-        document.getElementById('calendarEndDateField')?.classList.toggle('d-none', !isVacation);
-        document.getElementById('calendarDateLabel').textContent = isVacation ? 'Fecha inicial' : 'Fecha';
-        endDateField.disabled = !isVacation;
-        endDateField.required = isVacation;
+        if (!endDateField.value) endDateField.value = startDateField.value;
+        document.getElementById('calendarDateLabel').textContent = 'Fecha inicial';
+        endDateField.disabled = false;
+        endDateField.required = true;
         endDateField.min = startDateField.value || '';
 
         const isWorker = scopeField.value === 'worker';
+        const isSelected = scopeField.value === 'selected';
         document.getElementById('calendarWorkerField')?.classList.toggle('d-none', !isWorker);
+        workersField?.classList.toggle('d-none', !isSelected);
         workerField.disabled = !isWorker;
         workerField.required = isWorker;
+        workerChecks.forEach((check) => { check.disabled = !isSelected; });
+        workersError?.classList.add('d-none');
     }
 
     function setValue(id, value) {
@@ -4495,6 +4799,13 @@ function initControlPersonalCalendar() {
         setValue('calendarDayName', data.name);
         setValue('calendarScopeType', data.scopeType || 'all');
         setValue('calendarWorkerId', data.workerId);
+        if (window.jQuery && jQuery(workerField).hasClass('select2-hidden-accessible')) {
+            jQuery(workerField).val(data.workerId || '').trigger('change');
+        }
+        workerChecks.forEach((check) => { check.checked = false; });
+        if (selectAllWorkers) selectAllWorkers.checked = false;
+        document.querySelectorAll('.calendar-worker-option').forEach((option) => option.classList.remove('d-none'));
+        if (workerSearch) workerSearch.value = '';
         document.getElementById('calendarDayModalTitle').textContent = data.id ? 'Editar dia especial' : 'Nuevo dia especial';
         syncFields();
         modal.show();
@@ -4502,6 +4813,19 @@ function initControlPersonalCalendar() {
 
     typeField.addEventListener('change', syncFields);
     scopeField.addEventListener('change', syncFields);
+    selectAllWorkers?.addEventListener('change', () => {
+        workerChecks.forEach((check) => {
+            if (!check.closest('.calendar-worker-option')?.classList.contains('d-none')) check.checked = selectAllWorkers.checked;
+        });
+        workersError?.classList.add('d-none');
+    });
+    workerChecks.forEach((check) => check.addEventListener('change', () => workersError?.classList.add('d-none')));
+    workerSearch?.addEventListener('input', () => {
+        const query = normalizarTexto(workerSearch.value);
+        document.querySelectorAll('.calendar-worker-option').forEach((option) => {
+            option.classList.toggle('d-none', query !== '' && !normalizarTexto(option.dataset.search || '').includes(query));
+        });
+    });
     startDateField.addEventListener('change', () => {
         if (!endDateField.value || endDateField.value < startDateField.value) {
             endDateField.value = startDateField.value;
@@ -4516,6 +4840,10 @@ function initControlPersonalCalendar() {
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
         syncFields();
+        if (scopeField.value === 'selected' && !workerChecks.some((check) => check.checked)) {
+            workersError?.classList.remove('d-none');
+            return;
+        }
         if (!form.checkValidity()) {
             form.classList.add('was-validated');
             return;
@@ -4701,6 +5029,283 @@ function initControlPersonalAssignments() {
     const workersError = document.getElementById('assignmentWorkersError');
     const conflictField = document.getElementById('assignmentConflictField');
     const conflictPolicy = document.getElementById('assignmentConflictPolicy');
+    const validFrom = document.getElementById('assignmentValidFrom');
+    const validUntil = document.getElementById('assignmentValidUntil');
+    const noEnd = document.getElementById('assignmentNoEnd');
+    const groupSearch = document.getElementById('assignmentGroupSearch');
+    const assignmentGroups = Array.from(document.querySelectorAll('.assignment-group'));
+
+    groupSearch?.addEventListener('input', () => {
+        const query = normalizarTexto(groupSearch.value);
+        assignmentGroups.forEach((group) => {
+            const matches = query === '' || normalizarTexto(group.dataset.search || '').includes(query);
+            group.classList.toggle('d-none', !matches);
+            if (query && matches) {
+                const body = group.querySelector('.collapse');
+                if (body) bootstrap.Collapse.getOrCreateInstance(body, { toggle: false }).show();
+            }
+        });
+    });
+    document.getElementById('expandAssignmentGroups')?.addEventListener('click', () => {
+        assignmentGroups.filter((group) => !group.classList.contains('d-none')).forEach((group) => {
+            const body = group.querySelector('.collapse');
+            if (body) bootstrap.Collapse.getOrCreateInstance(body, { toggle: false }).show();
+        });
+    });
+    document.getElementById('collapseAssignmentGroups')?.addEventListener('click', () => {
+        assignmentGroups.forEach((group) => {
+            const body = group.querySelector('.collapse');
+            if (body) bootstrap.Collapse.getOrCreateInstance(body, { toggle: false }).hide();
+        });
+    });
+
+    const assignmentCalendarElement = document.getElementById('assignmentCalendar');
+    const assignmentCalendarModalElement = document.getElementById('assignmentCalendarModal');
+    const assignmentCalendarModal = assignmentCalendarModalElement
+        ? bootstrap.Modal.getOrCreateInstance(assignmentCalendarModalElement)
+        : null;
+    const assignmentCalendarContext = document.getElementById('assignmentCalendarContext');
+    const journeyDetailModalElement = document.getElementById('journeyDateDetailModal');
+    const journeyDetailModal = journeyDetailModalElement ? bootstrap.Modal.getOrCreateInstance(journeyDetailModalElement) : null;
+    const journeyDetailForm = document.getElementById('journeyDateDetailForm');
+    const resetJourneyDetail = document.getElementById('resetJourneyDateDetail');
+    let assignmentCalendar = null;
+    let assignmentCalendarWorkerId = '';
+
+    function openJourneyDateDetail(event) {
+        const props = event.extendedProps || {};
+        if (!['regular', 'program'].includes(props.kind) || !props.assignmentId || !props.date) return;
+        journeyDetailForm?.reset();
+        journeyDetailForm?.classList.remove('was-validated');
+        document.getElementById('journeyDetailAssignmentId').value = props.assignmentId;
+        document.getElementById('journeyDetailDate').value = props.date;
+        document.getElementById('journeyDetailWorker').value = props.worker || '';
+        document.getElementById('journeyDetailLocation').value = props.location || '';
+        document.getElementById('journeyDetailSchedule').value = `${props.entry || '--:--'} - ${props.exit || '--:--'} · ${props.schedule || ''}`;
+        document.getElementById('journeyDetailDateLabel').value = new Date(`${props.date}T12:00:00`).toLocaleDateString('es-PE', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+        document.getElementById('journeyDetailActivity').value = props.activity || '';
+        document.getElementById('journeyDetailInstructions').value = props.instructions || '';
+        const context = document.getElementById('journeyDateDetailContext');
+        if (context) context.textContent = `Personalización exclusiva del ${document.getElementById('journeyDetailDateLabel').value}`;
+        resetJourneyDetail?.classList.toggle('d-none', !props.customized);
+        journeyDetailModal?.show();
+    }
+
+    function ensureAssignmentCalendar() {
+        if (assignmentCalendar || !assignmentCalendarElement || !window.FullCalendar) return;
+        assignmentCalendar = new FullCalendar.Calendar(assignmentCalendarElement, {
+            locale: 'es',
+            initialView: 'dayGridMonth',
+            firstDay: 1,
+            height: 'auto',
+            dayMaxEvents: 3,
+            headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,listMonth' },
+            buttonText: { today: 'Hoy', month: 'Mes', list: 'Lista' },
+            events(info, success, failure) {
+                const url = new URL(`${BASE_URL}/servicios/control_personal/listar_calendario_jornadas.php`);
+                url.searchParams.set('start', info.startStr.slice(0, 10));
+                url.searchParams.set('end', info.endStr.slice(0, 10));
+                url.searchParams.set('worker_id', assignmentCalendarWorkerId);
+                fetch(url, { cache: 'no-store' })
+                    .then((response) => response.json().then((data) => ({ response, data })))
+                    .then(({ response, data }) => {
+                        if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudieron cargar las jornadas.');
+                        success(data.events || []);
+                    })
+                    .catch(failure);
+            },
+            eventDidMount(info) {
+                info.el.title = info.event.title || 'Jornada programada';
+            },
+            eventClick(info) { openJourneyDateDetail(info.event); }
+        });
+        assignmentCalendar.render();
+    }
+
+    document.querySelectorAll('.js-assignment-calendar').forEach((button) => {
+        button.addEventListener('click', () => {
+            assignmentCalendarWorkerId = button.dataset.workerId || '';
+            if (assignmentCalendarContext) {
+                assignmentCalendarContext.textContent = `${button.dataset.workerName || 'Trabajador'} · Todas sus asignaciones y jornadas`;
+            }
+            assignmentCalendarModal?.show();
+        });
+    });
+    assignmentCalendarModalElement?.addEventListener('shown.bs.modal', () => {
+        ensureAssignmentCalendar();
+        assignmentCalendar?.refetchEvents();
+        window.setTimeout(() => assignmentCalendar?.updateSize(), 80);
+    });
+
+    journeyDetailModalElement?.addEventListener('shown.bs.modal', () => {
+        journeyDetailModalElement.style.zIndex = '1070';
+        const backdrops = document.querySelectorAll('.modal-backdrop');
+        if (backdrops.length) backdrops[backdrops.length - 1].style.zIndex = '1065';
+    });
+    journeyDetailModalElement?.addEventListener('hidden.bs.modal', () => {
+        if (assignmentCalendarModalElement?.classList.contains('show')) document.body.classList.add('modal-open');
+    });
+    journeyDetailForm?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (!journeyDetailForm.checkValidity()) return journeyDetailForm.classList.add('was-validated');
+        try {
+            const response = await fetch(`${BASE_URL}/servicios/control_personal/guardar_detalle_jornada.php`, { method: 'POST', body: new FormData(journeyDetailForm) });
+            const rawResponse = await response.text();
+            let data;
+            try {
+                data = JSON.parse(rawResponse);
+            } catch (error) {
+                throw new Error('El servidor no pudo procesar la solicitud.');
+            }
+            if (!response.ok || !data.ok) throw new Error(data.message || 'Revise los datos ingresados.');
+            journeyDetailModal?.hide();
+            assignmentCalendar?.refetchEvents();
+            await Swal.fire('Jornada actualizada', data.message, 'success');
+        } catch (error) {
+            await Swal.fire('No se pudo guardar', error.message || 'Inténtelo nuevamente.', 'warning');
+        }
+    });
+    resetJourneyDetail?.addEventListener('click', async () => {
+        const confirmation = await Swal.fire({ icon: 'question', title: '¿Restablecer esta jornada?', text: 'Volverá a utilizar la actividad y las indicaciones definidas en la asignación.', showCancelButton: true, confirmButtonText: 'Sí, restablecer', cancelButtonText: 'Cancelar' });
+        if (!confirmation.isConfirmed) return;
+        const body = new FormData(journeyDetailForm);
+        body.set('action', 'reset');
+        const response = await fetch(`${BASE_URL}/servicios/control_personal/guardar_detalle_jornada.php`, { method: 'POST', body });
+        const data = await response.json();
+        if (!response.ok || !data.ok) return Swal.fire('No se pudo restablecer', data.message || 'Inténtelo nuevamente.', 'warning');
+        journeyDetailModal?.hide();
+        assignmentCalendar?.refetchEvents();
+        await Swal.fire('Valores restablecidos', data.message, 'success');
+    });
+
+    const groupValidityForm = document.getElementById('groupValidityForm');
+    const groupValidityModalElement = document.getElementById('groupValidityModal');
+    const groupValidityModal = groupValidityModalElement
+        ? bootstrap.Modal.getOrCreateInstance(groupValidityModalElement)
+        : null;
+    const groupValidityIds = document.getElementById('groupValidityAssignmentIds');
+    const groupValidityContext = document.getElementById('groupValidityContext');
+    const groupValidFrom = document.getElementById('groupValidFrom');
+    const groupValidUntil = document.getElementById('groupValidUntil');
+    const groupNoEnd = document.getElementById('groupNoEnd');
+    let groupValidityCount = 0;
+
+    function syncGroupNoEnd() {
+        if (!groupValidUntil || !groupNoEnd) return;
+        groupValidUntil.disabled = groupNoEnd.checked;
+        groupValidUntil.required = !groupNoEnd.checked;
+        if (groupNoEnd.checked) groupValidUntil.value = '';
+    }
+    groupNoEnd?.addEventListener('change', syncGroupNoEnd);
+    document.querySelectorAll('.js-group-validity').forEach((button) => {
+        button.addEventListener('click', () => {
+            groupValidityForm?.reset();
+            groupValidityForm?.classList.remove('was-validated');
+            groupValidityCount = Number(button.dataset.count || 0);
+            if (groupValidityIds) groupValidityIds.value = button.dataset.assignmentIds || '';
+            if (groupValidityContext) {
+                const mixedLabel = button.dataset.uniform === '1' ? '' : ' · Vigencias actuales diferentes';
+                groupValidityContext.textContent = `${button.dataset.location || 'Lugar'} · ${button.dataset.schedule || 'Horario'} · ${groupValidityCount} trabajador(es)${mixedLabel}`;
+            }
+            if (groupValidFrom) groupValidFrom.value = button.dataset.validFrom || '';
+            if (groupValidUntil) groupValidUntil.value = button.dataset.validUntil || '';
+            if (groupNoEnd) groupNoEnd.checked = button.dataset.uniform === '1' && Boolean(button.dataset.validFrom) && !button.dataset.validUntil;
+            syncGroupNoEnd();
+            groupValidityModal?.show();
+        });
+    });
+    groupValidityForm?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (!groupValidityForm.checkValidity()) {
+            groupValidityForm.classList.add('was-validated');
+            return;
+        }
+        const confirmation = await Swal.fire({
+            icon: 'question',
+            title: '¿Actualizar la vigencia del grupo?',
+            text: `El nuevo periodo se aplicará a ${groupValidityCount} trabajador(es). Sus marcaciones e historial se conservarán.`,
+            showCancelButton: true,
+            confirmButtonText: 'Sí, aplicar',
+            cancelButtonText: 'Cancelar'
+        });
+        if (!confirmation.isConfirmed) return;
+        const response = await fetch(`${BASE_URL}/servicios/control_personal/actualizar_vigencia_asignaciones.php`, {
+            method: 'POST', body: new FormData(groupValidityForm)
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) {
+            Swal.fire('No se pudo actualizar', data.message || 'Revise el periodo seleccionado.', 'warning');
+            return;
+        }
+        await Swal.fire('Vigencia actualizada', data.message || 'El periodo se aplicó correctamente.', 'success');
+        window.location.reload();
+    });
+
+    const localIsoDate = (date) => {
+        const offset = date.getTimezoneOffset();
+        return new Date(date.getTime() - offset * 60000).toISOString().slice(0, 10);
+    };
+    function setValidityDefaults() {
+        const start = new Date();
+        validFrom.value = localIsoDate(start);
+        validUntil.value = `${start.getFullYear()}-12-31`;
+        noEnd.checked = false;
+        validUntil.disabled = false;
+        validUntil.required = true;
+    }
+    function syncNoEnd() {
+        validUntil.disabled = noEnd.checked;
+        validUntil.required = !noEnd.checked;
+        if (noEnd.checked) validUntil.value = '';
+    }
+    noEnd?.addEventListener('change', () => {
+        if (!noEnd.checked && !validUntil.value) {
+            const start = new Date(`${validFrom.value || localIsoDate(new Date())}T12:00:00`);
+            validUntil.value = `${start.getFullYear()}-12-31`;
+        }
+        syncNoEnd();
+    });
+    const validityPresetButtons = Array.from(document.querySelectorAll('.js-validity-preset'));
+    function selectValidityPreset(selectedButton) {
+        validityPresetButtons.forEach((presetButton) => {
+            const isSelected = presetButton === selectedButton;
+            presetButton.classList.toggle('btn-primary', isSelected);
+            presetButton.classList.toggle('btn-outline-primary', !isSelected);
+            presetButton.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+        });
+    }
+    function getValidityPresetEnd(startValue, preset) {
+        if (!startValue) return '';
+        const start = new Date(`${startValue}T12:00:00`);
+        if (Number.isNaN(start.getTime())) return '';
+        let end = new Date(start);
+        if (preset === 'month') end = new Date(start.getFullYear(), start.getMonth() + 1, 0, 12);
+        if (preset === 'year') end = new Date(start.getFullYear(), 11, 31, 12);
+        if (preset === '6months') { end.setMonth(end.getMonth() + 6); end.setDate(end.getDate() - 1); }
+        if (preset === '1year') { end.setFullYear(end.getFullYear() + 1); end.setDate(end.getDate() - 1); }
+        if (preset === '2years') { end.setFullYear(end.getFullYear() + 2); end.setDate(end.getDate() - 1); }
+        return localIsoDate(end);
+    }
+    function syncValidityPresetFromDates() {
+        if (noEnd?.checked || !validFrom?.value || !validUntil?.value) {
+            selectValidityPreset(null);
+            return;
+        }
+        const matchingButton = validityPresetButtons.find((button) => (
+            getValidityPresetEnd(validFrom.value, button.dataset.preset) === validUntil.value
+        ));
+        selectValidityPreset(matchingButton || null);
+    }
+    validityPresetButtons.forEach((button) => button.addEventListener('click', () => {
+        const startValue = validFrom.value || localIsoDate(new Date());
+        noEnd.checked = false;
+        validUntil.value = getValidityPresetEnd(startValue, button.dataset.preset);
+        syncNoEnd();
+        selectValidityPreset(button);
+    }));
+    validFrom?.addEventListener('input', syncValidityPresetFromDates);
+    validUntil?.addEventListener('input', syncValidityPresetFromDates);
+    noEnd?.addEventListener('change', syncValidityPresetFromDates);
 
     function syncAssignmentScope() {
         const isWorker = scopeField.value === 'worker';
@@ -4745,6 +5350,11 @@ function initControlPersonalAssignments() {
 
     document.getElementById('newAssignmentBtn')?.addEventListener('click', () => {
         form.reset();
+        setValidityDefaults();
+        selectValidityPreset(validityPresetButtons.find((button) => button.dataset.preset === 'year') || null);
+        if (window.jQuery && jQuery(workerField).hasClass('select2-hidden-accessible')) {
+            jQuery(workerField).val('').trigger('change');
+        }
         form.classList.remove('was-validated');
         document.getElementById('assignmentId').value = '';
         scopeField.disabled = false;
@@ -4772,9 +5382,18 @@ function initControlPersonalAssignments() {
             scopeField.disabled = true;
             conflictField?.classList.add('d-none');
             workerField.value = button.dataset.workerId || '';
+            if (window.jQuery && jQuery(workerField).hasClass('select2-hidden-accessible')) {
+                jQuery(workerField).val(button.dataset.workerId || '').trigger('change');
+            }
             document.getElementById('assignmentLocationId').value = button.dataset.locationId || '';
             document.getElementById('assignmentScheduleId').value = button.dataset.scheduleId || '';
             document.getElementById('assignmentActivity').value = button.dataset.activity || '';
+            document.getElementById('assignmentInstructions').value = button.dataset.instructions || '';
+            validFrom.value = button.dataset.validFrom || localIsoDate(new Date());
+            validUntil.value = button.dataset.validUntil || '';
+            noEnd.checked = !button.dataset.validUntil;
+            syncNoEnd();
+            syncValidityPresetFromDates();
             syncAssignmentScope();
             document.getElementById('assignmentModalTitle').textContent = 'Editar asignación';
             modal.show();
@@ -4785,6 +5404,10 @@ function initControlPersonalAssignments() {
         event.preventDefault();
         if (!form.checkValidity()) {
             form.classList.add('was-validated');
+            return;
+        }
+        if (!noEnd.checked && validUntil.value < validFrom.value) {
+            Swal.fire('Revise la vigencia', 'La fecha de finalización no puede ser anterior a la fecha de inicio.', 'warning');
             return;
         }
         if (scopeField.value === 'selected' && !workerChecks.some((check) => check.checked)) {
@@ -4879,7 +5502,11 @@ function initControlPersonalAssignments() {
                 if (!data.ok) throw new Error(data.message || 'No se pudo cargar el historial.');
                 const rows = data.history || [];
                 historyList.innerHTML = rows.length ? rows.map((row) => {
-                    const active = Number(row.status) === 1;
+                    const todayKey = localIsoDate(new Date());
+                    const enabled = Number(row.status) === 1;
+                    const upcoming = enabled && row.valid_from > todayKey;
+                    const active = enabled && !upcoming && (!row.valid_until || row.valid_until >= todayKey);
+                    const statusLabel = active ? 'Vigente' : (upcoming ? 'Próxima' : 'Finalizada');
                     return `
                         <article class="assignment-history-item ${active ? 'is-active' : 'is-finished'}">
                             <div class="assignment-history-head">
@@ -4887,10 +5514,11 @@ function initControlPersonalAssignments() {
                                     <strong>${escapeHtml(row.schedule_name || '-')}</strong>
                                     <span><i class="fa-solid fa-location-dot"></i> ${escapeHtml(row.location_name || '-')}</span>
                                 </div>
-                                <span class="assignment-history-status">${active ? 'Activa' : 'Finalizada'}</span>
+                                <span class="assignment-history-status">${statusLabel}</span>
                             </div>
                             <div class="assignment-history-meta">
                                 <span><b>Actividad:</b> ${escapeHtml(row.activity || 'Sin actividad')}</span>
+                                <span><b>Vigencia:</b> ${escapeHtml(row.valid_from || '-')} ${row.valid_until ? `al ${escapeHtml(row.valid_until)}` : 'sin fecha final'}</span>
                                 <span><b>Inicio:</b> ${escapeHtml(formatAssignmentDate(row.created_at))}</span>
                                 <span><b>Registrada por:</b> ${escapeHtml(row.created_by || 'No disponible')}</span>
                                 <span><b>Finalización:</b> ${active ? '—' : escapeHtml(formatAssignmentDate(row.deactivated_at))}</span>
@@ -4922,13 +5550,26 @@ function initControlPersonalMarking() {
     const permissionHelp = document.getElementById('markPermissionHelp');
     const availabilityNotice = document.getElementById('markAvailabilityNotice');
     const availabilityText = document.getElementById('markAvailabilityText');
+    const programField = document.getElementById('markProgramField');
+    const programSelect = document.getElementById('markProgramId');
+    const startTripBtn = document.getElementById('startTripBtn');
+    const addTripStopBtn = document.getElementById('addTripStopBtn');
+    const finishTripBtn = document.getElementById('finishTripBtn');
+    const activeTripPanel = document.getElementById('activeTripPanel');
+    const activeTripText = document.getElementById('activeTripText');
     const recentMarksBody = document.getElementById('recentAttendanceMarks');
+    const recentTripsBody = document.getElementById('recentAttendanceTrips');
     const attendancePhotoModalElement = document.getElementById('attendancePhotoModal');
     const attendancePhotoModal = attendancePhotoModalElement
         ? bootstrap.Modal.getOrCreateInstance(attendancePhotoModalElement)
         : null;
     const attendancePhotoModalImage = document.getElementById('attendancePhotoModalImage');
     const attendancePhotoModalTitle = document.getElementById('attendancePhotoModalTitle');
+    const tripStopMapModalElement = document.getElementById('tripStopMapModal');
+    const tripStopMapModal = tripStopMapModalElement ? bootstrap.Modal.getOrCreateInstance(tripStopMapModalElement) : null;
+    let tripStopEvidenceMap = null;
+    let tripStopEvidenceMarker = null;
+    let pendingTripStopCoordinates = null;
     if (!workerField || !entryBtn || !exitBtn || !camera || !canvas || !mapElement) return;
 
     if (workerField.tagName === 'SELECT' && window.jQuery && jQuery.fn.select2) {
@@ -4999,6 +5640,7 @@ function initControlPersonalMarking() {
     runDiagnostics();
 
     let context = null;
+    let currentActiveTrip = null;
     let map = null;
     let locationMarker = null;
     let currentMarker = null;
@@ -5007,6 +5649,7 @@ function initControlPersonalMarking() {
     let cameraStream = null;
     let photoData = '';
     let recentMarksRequestId = 0;
+    let recentTripsRequestId = 0;
     let availabilityTimer = null;
 
     function value(id, text) {
@@ -5032,6 +5675,13 @@ function initControlPersonalMarking() {
         availabilityNotice?.classList.add('d-none');
         entryBtn.disabled = true;
         exitBtn.disabled = true;
+        if (!available) {
+            programField?.classList.add('d-none');
+            startTripBtn?.classList.add('d-none');
+            addTripStopBtn?.classList.add('d-none');
+            finishTripBtn?.classList.add('d-none');
+            activeTripPanel?.classList.add('d-none');
+        }
         if (observations) {
             observations.disabled = !available;
             if (!available) observations.value = '';
@@ -5047,7 +5697,7 @@ function initControlPersonalMarking() {
         }
         if (!available) {
             value('markEmptyStateText', message || 'No tienes un horario ni un lugar de marcación asignados. Comunícate con el administrador para poder registrar tu asistencia.');
-            ['markWorkerName', 'markLocationName', 'markScheduleName', 'markActivity', 'markEntryOfficial', 'markEntryWindow', 'markExitOfficial', 'markExitWindow', 'markRadius'].forEach((id) => value(id, '-'));
+            ['markWorkerName', 'markLocationName', 'markScheduleName', 'markActivity', 'markWorkDate', 'markEntryOfficial', 'markEntryWindow', 'markExitOfficial', 'markExitWindow', 'markRadius'].forEach((id) => value(id, '-'));
             value('markEntryTolerance', '');
             currentPosition = null;
             photoData = '';
@@ -5136,6 +5786,109 @@ function initControlPersonalMarking() {
         }
     }
 
+    function formatTripDuration(totalSeconds, startedAt = '', endedAt = '') {
+        let minutes;
+        if (startedAt && endedAt) {
+            const minuteTimestamp = value => {
+                const normalized = String(value).replace(' ', 'T');
+                const date = new Date(normalized);
+                if (Number.isNaN(date.getTime())) return null;
+                date.setSeconds(0, 0);
+                return date.getTime();
+            };
+            const start = minuteTimestamp(startedAt);
+            const end = minuteTimestamp(endedAt);
+            minutes = start !== null && end !== null ? Math.max(0, Math.round((end - start) / 60000)) : null;
+        }
+        if (!Number.isFinite(minutes)) minutes = Math.max(0, Math.floor(Number(totalSeconds || 0) / 60));
+        const hours = Math.floor(minutes / 60);
+        const remaining = minutes % 60;
+        return hours > 0 ? `${hours} h ${remaining} min` : `${minutes} min`;
+    }
+
+    function renderRecentTrips(rows, emptyMessage = 'No hay desplazamientos laborales registrados para este trabajador.') {
+        if (!recentTripsBody) return;
+        if (!rows.length) {
+            recentTripsBody.innerHTML = `<tr><td colspan="9" class="text-muted text-center py-4">${escapeHtml(emptyMessage)}</td></tr>`;
+            return;
+        }
+        recentTripsBody.innerHTML = rows.map((trip) => {
+            const route = (trip.stops || []).map((stop, index) => {
+                const hasCoordinates = stop.latitude !== null && stop.latitude !== '' && stop.longitude !== null && stop.longitude !== ''
+                    && Number.isFinite(Number(stop.latitude)) && Number.isFinite(Number(stop.longitude));
+                const visitNumber = hasCoordinates
+                    ? `<button class="badge rounded-pill text-bg-primary border-0 js-trip-stop-evidence" type="button" title="Ver ubicación y hora de la visita" data-destination="${escapeHtml(stop.destination || '-') }" data-activity="${escapeHtml(stop.activity || '-') }" data-date="${escapeHtml(stop.registered_date || trip.date || '-') }" data-time="${escapeHtml(stop.registered_time || '-') }" data-latitude="${Number(stop.latitude)}" data-longitude="${Number(stop.longitude)}">${index + 1}</button>`
+                    : `<span class="badge rounded-pill text-bg-light border text-dark" title="Esta visita no tiene coordenadas registradas">${index + 1}</span>`;
+                return `<div class="d-flex align-items-start gap-2 ${index ? 'mt-1' : ''}">
+                ${visitNumber}
+                <span><strong>${escapeHtml(stop.destination || '-')}</strong>${stop.activity ? `<small class="d-block text-muted">${escapeHtml(stop.activity)}</small>` : ''}</span>
+            </div>`;
+            }).join('') || '<span class="text-muted">—</span>';
+            const inProgress = trip.status === 'en_ruta';
+            return `<tr${inProgress ? ' class="table-warning"' : ''}>
+                <td class="text-nowrap">${escapeHtml(trip.date)}</td>
+                <td><strong>${escapeHtml(trip.started_at ? String(trip.started_at).slice(11, 16) : '-')}</strong></td>
+                <td><strong>${escapeHtml(trip.ended_at ? String(trip.ended_at).slice(11, 16) : '-')}</strong></td>
+                <td class="text-nowrap">${escapeHtml(formatTripDuration(trip.duration_seconds, trip.started_at, trip.ended_at))}</td>
+                <td>${escapeHtml(trip.origin || '-')}</td>
+                <td><strong>${escapeHtml(trip.first_destination || '-')}</strong></td>
+                <td>${route}</td>
+                <td>${escapeHtml(trip.reason || '-')}</td>
+                <td><span class="badge ${inProgress ? 'text-bg-warning' : 'text-bg-success'}"><i class="fa-solid ${inProgress ? 'fa-route' : 'fa-circle-check'} me-1"></i>${inProgress ? 'En curso' : 'Finalizado'}</span></td>
+            </tr>`;
+        }).join('');
+    }
+
+    recentTripsBody?.addEventListener('click', event => {
+        const button = event.target.closest('.js-trip-stop-evidence');
+        if (!button) return;
+        const latitude = Number(button.dataset.latitude);
+        const longitude = Number(button.dataset.longitude);
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+        document.getElementById('tripStopMapDestination').textContent = button.dataset.destination || '-';
+        document.getElementById('tripStopMapActivity').textContent = button.dataset.activity || '-';
+        document.getElementById('tripStopMapDateTime').textContent = `${button.dataset.date || '-'} · ${button.dataset.time || '-'}`;
+        document.getElementById('tripStopMapCoordinates').textContent = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+        pendingTripStopCoordinates = { latitude, longitude, destination: button.dataset.destination || 'Punto visitado' };
+        tripStopMapModal?.show();
+    });
+
+    tripStopMapModalElement?.addEventListener('shown.bs.modal', () => {
+        if (!pendingTripStopCoordinates || !window.L) return;
+        const point = [pendingTripStopCoordinates.latitude, pendingTripStopCoordinates.longitude];
+        if (!tripStopEvidenceMap) {
+            tripStopEvidenceMap = L.map('tripStopEvidenceMap');
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(tripStopEvidenceMap);
+        }
+        if (!tripStopEvidenceMarker) tripStopEvidenceMarker = L.marker(point).addTo(tripStopEvidenceMap);
+        tripStopEvidenceMarker.setLatLng(point).bindPopup(pendingTripStopCoordinates.destination).openPopup();
+        tripStopEvidenceMap.setView(point, 17);
+        setTimeout(() => tripStopEvidenceMap?.invalidateSize(), 100);
+    });
+
+    async function loadRecentTrips(workerId) {
+        if (!recentTripsBody) return;
+        const requestId = ++recentTripsRequestId;
+        if (!workerId) {
+            renderRecentTrips([], 'Seleccione un trabajador para consultar sus desplazamientos.');
+            return;
+        }
+        recentTripsBody.innerHTML = '<tr><td colspan="9" class="text-muted text-center py-4"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando desplazamientos...</td></tr>';
+        try {
+            const response = await fetch(`${BASE_URL}/servicios/control_personal/listar_desplazamientos_recientes.php?worker_id=${encodeURIComponent(workerId)}`);
+            const data = await response.json();
+            if (requestId !== recentTripsRequestId) return;
+            if (!data.ok) {
+                renderRecentTrips([], data.message || 'No se pudieron cargar los desplazamientos.');
+                return;
+            }
+            renderRecentTrips(data.rows || []);
+        } catch (error) {
+            if (requestId !== recentTripsRequestId) return;
+            renderRecentTrips([], 'No se pudieron cargar los desplazamientos.');
+        }
+    }
+
     recentMarksBody?.addEventListener('click', (event) => {
         const button = event.target.closest('.js-view-attendance-photo');
         if (!button || !attendancePhotoModal || !attendancePhotoModalImage) return;
@@ -5200,17 +5953,21 @@ function initControlPersonalMarking() {
 
     async function loadMarkContext() {
         const workerId = workerField.value || '';
+        currentActiveTrip = null;
         if (!workerId) {
             context = null;
             setAssignmentAvailability(false, 'Seleccione un trabajador para consultar su asignación y registrar asistencia.');
             renderStatuses([{ text: 'Seleccione trabajador', className: 'text-bg-secondary' }]);
             loadRecentMarks('');
+            loadRecentTrips('');
             return;
         }
 
         loadRecentMarks(workerId);
+        loadRecentTrips(workerId);
 
-        const response = await fetch(`${BASE_URL}/servicios/control_personal/contexto_marcacion.php?worker_id=${encodeURIComponent(workerId)}`);
+        const selectedProgramId = programSelect?.value || '';
+        const response = await fetch(`${BASE_URL}/servicios/control_personal/contexto_marcacion.php?worker_id=${encodeURIComponent(workerId)}&program_id=${encodeURIComponent(selectedProgramId)}`);
         const data = await response.json();
         if (!data.ok) {
             context = null;
@@ -5220,6 +5977,13 @@ function initControlPersonalMarking() {
         }
 
         context = data;
+        const programs = data.programs || [];
+        if (programSelect) {
+            const currentId = String(data.program?.id || '');
+            programSelect.innerHTML = programs.map(program => `<option value="${program.id}">${escapeHtml(program.time)} · ${escapeHtml(program.location)} · ${escapeHtml(program.schedule)}</option>`).join('');
+            programSelect.value = currentId;
+            programField?.classList.toggle('d-none', programs.length <= 1);
+        }
         setAssignmentAvailability(true);
         const assignment = data.assignment;
         const day = data.schedule_day || {};
@@ -5229,6 +5993,7 @@ function initControlPersonalMarking() {
         value('markLocationName', assignment.location_name);
         value('markScheduleName', assignment.schedule_name);
         value('markActivity', assignment.activity || '-');
+        value('markWorkDate', data.work_date_formatted || '-');
         value('markEntryOfficial', formatTime(day.entry_time || day.entry_start));
         value('markEntryWindow', `${formatTime(day.entry_start)}-${formatTime(day.entry_end)}`);
         value('markEntryTolerance', `(${Number(day.tolerance_minutes || 0)} min tolerancia)`);
@@ -5237,10 +6002,19 @@ function initControlPersonalMarking() {
         value('markRadius', `${assignment.radius_meters} metros`);
         const hasEntryMark = data.marks.some((mark) => mark.mark_type === 'entrada');
         const hasExitMark = data.marks.some((mark) => mark.mark_type === 'salida');
+        const activeTrip = data.active_trip || null;
+        currentActiveTrip = activeTrip;
+        const plannedStopsList = document.getElementById('plannedTripStops');
+        if (plannedStopsList) plannedStopsList.innerHTML = (data.planned_stops || []).map(stop => `<option value="${escapeHtml(stop.destination)}">${escapeHtml(stop.activity || '')}</option>`).join('');
         const entryAvailability = data.entry_availability || {};
         const entryTooEarly = hasSchedule && !hasEntryMark && entryAvailability.available === false;
         entryBtn.disabled = !hasSchedule || hasEntryMark || entryTooEarly;
-        exitBtn.disabled = !hasSchedule || hasExitMark || !hasEntryMark;
+        exitBtn.disabled = !hasSchedule || hasExitMark || !hasEntryMark || !!activeTrip;
+        startTripBtn?.classList.toggle('d-none', !hasEntryMark || hasExitMark || !!activeTrip);
+        addTripStopBtn?.classList.toggle('d-none', !activeTrip);
+        finishTripBtn?.classList.toggle('d-none', !activeTrip);
+        activeTripPanel?.classList.toggle('d-none', !activeTrip);
+        if (activeTripText && activeTrip) activeTripText.textContent = `${activeTrip.first_destination} · iniciado ${formatTime(String(activeTrip.started_at).slice(11))}`;
         if (entryTooEarly) {
             const availableFrom = entryAvailability.available_from || formatTime(day.entry_start);
             const officialEntry = formatTime(day.entry_time || day.entry_start);
@@ -5395,6 +6169,7 @@ function initControlPersonalMarking() {
             form.append('csrf_token', csrf);
             form.append('worker_id', workerField.value || '');
             form.append('mark_type', type);
+            form.append('program_id', String(context?.program?.id || ''));
             form.append('latitude', String(currentPosition.latitude));
             form.append('longitude', String(currentPosition.longitude));
             form.append('accuracy', String(currentPosition.accuracy));
@@ -5438,8 +6213,265 @@ function initControlPersonalMarking() {
     } else {
         workerField.addEventListener('change', loadMarkContext);
     }
+
+    const scheduleModalElement = document.getElementById('myScheduleModal');
+    const scheduleModal = scheduleModalElement ? bootstrap.Modal.getOrCreateInstance(scheduleModalElement) : null;
+    let workerScheduleCalendar = null;
+    document.getElementById('viewMyScheduleBtn')?.addEventListener('click', async () => {
+        const workerId = workerField.value || '';
+        if (!workerId) return Swal.fire('Seleccione un trabajador', 'Primero seleccione el trabajador cuya programación desea consultar.', 'info');
+        const content = document.getElementById('myScheduleContent');
+        const loading = document.getElementById('myScheduleLoading');
+        const legend = document.getElementById('myScheduleLegend');
+        const calendarElement = document.getElementById('myScheduleCalendar');
+        const detail = document.getElementById('myScheduleDetail');
+        if (content) content.scrollTop = 0;
+        loading?.classList.remove('d-none');
+        legend?.classList.add('d-none');
+        calendarElement?.classList.add('d-none');
+        detail?.classList.add('d-none');
+        scheduleModal?.show();
+        scheduleModalElement?.addEventListener('shown.bs.modal', () => {
+            if (content) content.scrollTop = 0;
+        }, { once: true });
+        try {
+            const response = await fetch(`${BASE_URL}/servicios/control_personal/listar_programacion_trabajador.php?worker_id=${encodeURIComponent(workerId)}`);
+            const data = await response.json();
+            if (!data.ok) throw new Error(data.message || 'No se pudo consultar la programación.');
+            const rows = data.programs || [];
+            const calendarRows = data.calendar_events || [];
+            const regularSchedules = data.regular_schedules || [];
+            const journeyOverrides = new Map((data.journey_overrides || []).map((item) => [`${item.assignment_id}-${item.journey_date}`, item]));
+            const localNow = new Date();
+            const today = `${localNow.getFullYear()}-${String(localNow.getMonth() + 1).padStart(2, '0')}-${String(localNow.getDate()).padStart(2, '0')}`;
+            const programmedDates = new Set(rows.map((program) => program.program_date));
+            const specialDates = new Set();
+            calendarRows.forEach((item) => {
+                const cursor = new Date(`${item.start_date}T12:00:00`);
+                const end = new Date(`${item.end_date}T12:00:00`);
+                while (cursor <= end) {
+                    specialDates.add(`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`);
+                    cursor.setDate(cursor.getDate() + 1);
+                }
+            });
+            const events = rows.filter((program) => !specialDates.has(program.program_date)).map((program) => {
+                let state = 'Programado';
+                let color = '#f97316';
+                if (program.has_entry && program.has_exit) { state = 'Completada'; color = '#16a34a'; }
+                else if (program.has_entry) { state = 'En jornada'; color = '#d97706'; }
+                else if (program.program_date < today) { state = 'Sin marcaciones'; color = '#64748b'; }
+                return {
+                    id: String(program.id),
+                    title: `${formatTime(program.entry_time)} - ${formatTime(program.exit_time)} · ${program.location_name}${program.activity ? ` · ${program.activity}` : ''}`,
+                    start: program.program_date,
+                    allDay: true,
+                    backgroundColor: color,
+                    borderColor: color,
+                    textColor: '#ffffff',
+                    display: 'block',
+                    extendedProps: { ...program, eventKind: 'program', state, stateColor: color }
+                };
+            });
+            const specialMeta = {
+                vacation: { color: '#2563eb' }, permission: { color: '#7c3aed' },
+                rest: { color: '#334155' }, holiday: { color: '#0891b2' }, non_working: { color: '#78716c' }
+            };
+            calendarRows.forEach((item) => {
+                const endExclusive = new Date(`${item.end_date}T12:00:00`);
+                endExclusive.setDate(endExclusive.getDate() + 1);
+                const endKey = `${endExclusive.getFullYear()}-${String(endExclusive.getMonth() + 1).padStart(2, '0')}-${String(endExclusive.getDate()).padStart(2, '0')}`;
+                const color = specialMeta[item.type]?.color || '#64748b';
+                events.push({
+                    id: `calendar-${item.id}`,
+                    title: `${item.code} · ${item.label}${item.name ? ` · ${item.name}` : ''}`,
+                    start: item.start_date,
+                    end: endKey,
+                    allDay: true,
+                    backgroundColor: color,
+                    borderColor: color,
+                    extendedProps: { ...item, eventKind: 'calendar', stateColor: color }
+                });
+            });
+            // Mantener el mismo rango histórico y futuro que entrega el servicio.
+            // Si se comienza únicamente en "hoy", una jornada habitual desaparece
+            // del calendario apenas cambia el día, aunque la asignación siga vigente.
+            const regularStart = new Date(`${today}T12:00:00`);
+            regularStart.setMonth(regularStart.getMonth() - 3);
+            const regularEnd = new Date(`${today}T12:00:00`);
+            regularEnd.setMonth(regularEnd.getMonth() + 12);
+            for (const cursor = new Date(regularStart); cursor <= regularEnd; cursor.setDate(cursor.getDate() + 1)) {
+                const dateKey = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`;
+                if (specialDates.has(dateKey) || programmedDates.has(dateKey)) continue;
+                const dayOfWeek = cursor.getDay() === 0 ? 7 : cursor.getDay();
+                regularSchedules.filter((schedule) => Number(schedule.day_of_week) === dayOfWeek).forEach((schedule) => {
+                    if (dateKey < schedule.valid_from || (schedule.valid_until && dateKey > schedule.valid_until)) return;
+                    const override = journeyOverrides.get(`${schedule.assignment_id}-${dateKey}`);
+                    const effectiveSchedule = override ? { ...schedule, activity: override.activity || '', instructions: override.instructions || '' } : schedule;
+                    events.push({
+                        id: `regular-${schedule.assignment_id}-${dateKey}`,
+                        title: `${formatTime(schedule.entry_time)} - ${formatTime(schedule.exit_time)} · ${schedule.location_name}`,
+                        start: dateKey,
+                        allDay: true,
+                        backgroundColor: '#4f46e5',
+                        borderColor: '#3730a3',
+                        textColor: '#ffffff',
+                        display: 'block',
+                        extendedProps: { ...effectiveSchedule, eventKind: 'regular', work_date: dateKey, stateColor: '#4f46e5' }
+                    });
+                });
+            }
+
+            workerScheduleCalendar?.destroy();
+            loading?.classList.add('d-none');
+            legend?.classList.remove('d-none');
+            calendarElement?.classList.remove('d-none');
+            if (!window.FullCalendar) throw new Error('No se pudo cargar el calendario. Actualice la página e inténtelo nuevamente.');
+            workerScheduleCalendar = new FullCalendar.Calendar(calendarElement, {
+                locale: 'es',
+                initialView: window.innerWidth < 768 ? 'listMonth' : 'dayGridMonth',
+                firstDay: 1,
+                height: 'auto',
+                dayMaxEvents: 3,
+                displayEventTime: false,
+                noEventsContent: 'No hay jornadas programadas en este periodo.',
+                headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,listMonth' },
+                buttonText: { today: 'Hoy', month: 'Mes', list: 'Lista' },
+                events,
+                eventDidMount(info) {
+                    const program = info.event.extendedProps;
+                    if (program.eventKind === 'calendar') {
+                        info.el.title = `${program.label}: ${program.name}`;
+                        return;
+                    }
+                    const scheduleType = program.schedule_source === 'extraordinary' ? 'Horario extraordinario' : program.schedule_name;
+                    info.el.title = `${formatTime(program.entry_time)} - ${formatTime(program.exit_time)} | ${program.location_name} | ${scheduleType}${program.activity ? ` | ${program.activity}` : ''}`;
+                },
+                eventClick(info) {
+                    const program = info.event.extendedProps;
+                    if (program.eventKind === 'regular') {
+                        const date = new Date(`${program.work_date}T12:00:00`).toLocaleDateString('es-PE', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
+                        detail.innerHTML = `<div class="my-schedule-detail-header">
+                            <div><div class="my-schedule-detail-date">${escapeHtml(date)}</div><h5 class="my-schedule-detail-title">Detalle de la jornada habitual</h5></div>
+                            <span class="my-schedule-detail-state" style="background:${escapeHtml(program.stateColor)}"><i class="fa-solid fa-calendar-days"></i>Horario habitual</span>
+                        </div>
+                        <div class="my-schedule-detail-body"><div class="my-schedule-detail-grid">
+                            <div class="my-schedule-detail-item"><span class="my-schedule-detail-label">Horario</span><span class="my-schedule-detail-value"><i class="fa-regular fa-clock"></i>${formatTime(program.entry_time)} - ${formatTime(program.exit_time)}</span></div>
+                            <div class="my-schedule-detail-item"><span class="my-schedule-detail-label">Plantilla</span><span class="my-schedule-detail-value"><i class="fa-solid fa-clock-rotate-left"></i>${escapeHtml(program.schedule_name)}</span></div>
+                            <div class="my-schedule-detail-item"><span class="my-schedule-detail-label">Lugar de marcación</span><span class="my-schedule-detail-value"><i class="fa-solid fa-location-dot"></i>${escapeHtml(program.location_name)}</span></div>
+                            ${program.address ? `<div class="my-schedule-detail-item wide"><span class="my-schedule-detail-label">Dirección</span><span class="my-schedule-detail-value"><i class="fa-solid fa-map-location-dot"></i>${escapeHtml(program.address)}</span></div>` : ''}
+                            ${program.reference ? `<div class="my-schedule-detail-item"><span class="my-schedule-detail-label">Referencia</span><span class="my-schedule-detail-value"><i class="fa-solid fa-signs-post"></i>${escapeHtml(program.reference)}</span></div>` : ''}
+                            ${program.activity ? `<div class="my-schedule-detail-item wide"><span class="my-schedule-detail-label">Actividad</span><span class="my-schedule-detail-value"><i class="fa-solid fa-briefcase"></i>${escapeHtml(program.activity)}</span></div>` : ''}
+                        </div>${program.instructions ? `<div class="my-schedule-indications"><div class="my-schedule-indications-title"><i class="fa-solid fa-list-check"></i>Indicaciones</div><div class="my-schedule-detail-value">${escapeHtml(program.instructions)}</div></div>` : ''}</div>`;
+                        detail.classList.remove('d-none');
+                        content?.scrollTo({ top: Math.max(0, detail.offsetTop - 16), behavior: 'smooth' });
+                        return;
+                    }
+                    if (program.eventKind === 'calendar') {
+                        const start = new Date(`${program.start_date}T12:00:00`).toLocaleDateString('es-PE', { day:'2-digit', month:'long', year:'numeric' });
+                        const end = new Date(`${program.end_date}T12:00:00`).toLocaleDateString('es-PE', { day:'2-digit', month:'long', year:'numeric' });
+                        const period = program.start_date === program.end_date ? start : `${start} al ${end}`;
+                        const scope = program.scope === 'all' ? 'Todo el personal' : (program.scope === 'company' ? 'Empresa del trabajador' : 'Trabajador');
+                        detail.innerHTML = `<div class="my-schedule-detail-header">
+                            <div><div class="my-schedule-detail-date">${escapeHtml(period)}</div><h5 class="my-schedule-detail-title">Detalle del calendario laboral</h5></div>
+                            <span class="my-schedule-detail-state" style="background:${escapeHtml(program.stateColor)}"><i class="fa-solid fa-calendar-check"></i>${escapeHtml(program.code)} · ${escapeHtml(program.label)}</span>
+                        </div>
+                        <div class="my-schedule-detail-body"><div class="my-schedule-detail-grid">
+                            <div class="my-schedule-detail-item"><span class="my-schedule-detail-label">Tipo de día</span><span class="my-schedule-detail-value"><i class="fa-solid fa-tag"></i>${escapeHtml(program.label)}</span></div>
+                            <div class="my-schedule-detail-item"><span class="my-schedule-detail-label">Aplica a</span><span class="my-schedule-detail-value"><i class="fa-solid fa-users"></i>${escapeHtml(scope)}</span></div>
+                            <div class="my-schedule-detail-item"><span class="my-schedule-detail-label">Periodo</span><span class="my-schedule-detail-value"><i class="fa-regular fa-calendar"></i>${escapeHtml(period)}</span></div>
+                            <div class="my-schedule-detail-item wide"><span class="my-schedule-detail-label">Motivo</span><span class="my-schedule-detail-value"><i class="fa-solid fa-circle-info"></i>${escapeHtml(program.name || '-')}</span></div>
+                        </div></div>`;
+                        detail.classList.remove('d-none');
+                        content?.scrollTo({ top: Math.max(0, detail.offsetTop - 16), behavior: 'smooth' });
+                        return;
+                    }
+                    const date = new Date(`${program.program_date}T12:00:00`).toLocaleDateString('es-PE', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
+                    const indicationText = String(program.notes || program.instructions || '').trim();
+                    const legacyIndications = (program.stops || []).map((stop, index) => `<li><span class="my-schedule-indications-number">${index + 1}</span><span>${escapeHtml(stop.destination)}${stop.activity ? `<small class="d-block mt-1 text-muted">${escapeHtml(stop.activity)}</small>` : ''}</span></li>`).join('');
+                    const indications = indicationText
+                        ? `<div class="my-schedule-detail-value">${escapeHtml(indicationText).replace(/\r?\n/g, '<br>')}</div>`
+                        : (legacyIndications ? `<ol class="my-schedule-indications-list">${legacyIndications}</ol>` : '');
+                    const scheduleType = program.schedule_source === 'extraordinary' ? 'Horario extraordinario' : `Plantilla: ${escapeHtml(program.schedule_name)}`;
+                    detail.innerHTML = `<div class="my-schedule-detail-header">
+                        <div><div class="my-schedule-detail-date">${escapeHtml(date)}</div><h5 class="my-schedule-detail-title">Detalle de la jornada</h5></div>
+                        <span class="my-schedule-detail-state" style="background:${escapeHtml(program.stateColor)}"><i class="fa-solid fa-calendar-check"></i>${escapeHtml(program.state)}</span>
+                    </div>
+                    <div class="my-schedule-detail-body">
+                        <div class="my-schedule-detail-grid">
+                            <div class="my-schedule-detail-item"><span class="my-schedule-detail-label">Horario</span><span class="my-schedule-detail-value"><i class="fa-regular fa-clock"></i>${formatTime(program.entry_time)} - ${formatTime(program.exit_time)}</span></div>
+                            <div class="my-schedule-detail-item"><span class="my-schedule-detail-label">Tipo de horario</span><span class="my-schedule-detail-value"><i class="fa-solid fa-clock-rotate-left"></i>${scheduleType}</span></div>
+                            <div class="my-schedule-detail-item"><span class="my-schedule-detail-label">Lugar de marcación</span><span class="my-schedule-detail-value"><i class="fa-solid fa-location-dot"></i>${escapeHtml(program.location_name)}</span></div>
+                            ${program.address ? `<div class="my-schedule-detail-item wide"><span class="my-schedule-detail-label">Dirección</span><span class="my-schedule-detail-value"><i class="fa-solid fa-map-location-dot"></i>${escapeHtml(program.address)}</span></div>` : ''}
+                            ${program.reference ? `<div class="my-schedule-detail-item"><span class="my-schedule-detail-label">Referencia</span><span class="my-schedule-detail-value"><i class="fa-solid fa-signs-post"></i>${escapeHtml(program.reference)}</span></div>` : ''}
+                            ${program.activity ? `<div class="my-schedule-detail-item wide"><span class="my-schedule-detail-label">Actividad</span><span class="my-schedule-detail-value"><i class="fa-solid fa-briefcase"></i>${escapeHtml(program.activity)}</span></div>` : ''}
+                        </div>
+                        ${indications ? `<div class="my-schedule-indications"><div class="my-schedule-indications-title"><i class="fa-solid fa-list-check"></i>Indicaciones</div>${indications}</div>` : ''}
+                    </div>`;
+                    detail.classList.remove('d-none');
+                    content?.scrollTo({ top: Math.max(0, detail.offsetTop - 16), behavior: 'smooth' });
+                }
+            });
+            workerScheduleCalendar.render();
+            setTimeout(() => workerScheduleCalendar?.updateSize(), 150);
+        } catch (error) {
+            loading?.classList.add('d-none');
+            legend?.classList.add('d-none');
+            calendarElement?.classList.add('d-none');
+            detail.classList.remove('d-none');
+            detail.innerHTML = `<div class="alert alert-warning mb-0">${escapeHtml(error.message)}</div>`;
+        }
+    });
+
+    const tripModalElement = document.getElementById('tripModal');
+    const tripModal = tripModalElement ? bootstrap.Modal.getOrCreateInstance(tripModalElement) : null;
+    const tripForm = document.getElementById('tripForm');
+    function openTripModal(action) {
+        tripForm.reset(); document.getElementById('tripAction').value = action;
+        const tripOrigin = document.getElementById('tripOrigin');
+        const isStop = action === 'parada';
+        if (tripOrigin) tripOrigin.value = currentActiveTrip?.origin || context?.assignment?.location_name || '-';
+        const mainDestination = document.getElementById('tripMainDestination');
+        if (mainDestination) mainDestination.value = currentActiveTrip?.first_destination || '-';
+        document.getElementById('tripMainDestinationField')?.classList.toggle('d-none', !isStop);
+        document.getElementById('tripModalTitle').textContent = isStop ? 'Registrar visita del recorrido' : 'Iniciar desplazamiento laboral';
+        document.getElementById('tripModalDescription').textContent = isStop ? 'Agregue una visita y la actividad realizada sin finalizar el desplazamiento.' : 'Esta acción no finaliza tu jornada laboral.';
+        document.getElementById('tripDestinationLabel').textContent = isStop ? 'Punto visitado' : 'Destino';
+        const destinationField = document.getElementById('tripDestination');
+        if (destinationField) destinationField.placeholder = isStop ? 'Ej.: Notaría del centro de Lima' : 'Ej.: Municipalidad de El Agustino';
+        document.getElementById('tripReasonField').classList.toggle('d-none', action !== 'iniciar');
+        document.getElementById('tripActivityField').classList.toggle('d-none', !isStop);
+        tripForm.querySelector('[name="reason"]').required = action === 'iniciar';
+        tripForm.querySelector('[name="activity"]').required = isStop;
+        tripModal?.show();
+    }
+    startTripBtn?.addEventListener('click', () => openTripModal('iniciar'));
+    addTripStopBtn?.addEventListener('click', () => openTripModal('parada'));
+
+    async function submitTrip(action, extra = {}) {
+        const position = await requestPosition();
+        const body = new FormData();
+        body.append('csrf_token', csrf); body.append('action', action); body.append('worker_id', workerField.value || '');
+        body.append('assignment_id', String(context?.assignment?.assignment_id || '')); body.append('program_id', String(context?.program?.id || ''));
+        body.append('latitude', String(position.coords.latitude)); body.append('longitude', String(position.coords.longitude));
+        Object.entries(extra).forEach(([key,value]) => body.append(key,String(value || '')));
+        const response = await fetch(`${BASE_URL}/servicios/control_personal/registrar_desplazamiento.php`,{method:'POST',body});
+        const data = await response.json();
+        if (!data.ok) throw new Error(data.message || 'No se pudo registrar el desplazamiento.');
+        return data;
+    }
+    tripForm?.addEventListener('submit', async event => {
+        event.preventDefault(); const button=tripForm.querySelector('[type="submit"]'); button.disabled=true;
+        try { const fields=new FormData(tripForm); const data=await submitTrip(fields.get('action'),{destination:fields.get('destination'),reason:fields.get('reason'),activity:fields.get('activity')}); tripModal?.hide(); await Swal.fire('Registro exitoso',data.message,'success'); await loadMarkContext(); }
+        catch(error){ Swal.fire('Atención',error.message || String(error),'warning'); } finally { button.disabled=false; }
+    });
+    finishTripBtn?.addEventListener('click', async () => {
+        const answer=await Swal.fire({icon:'question',title:'¿Finalizar desplazamiento?',text:'Tu jornada continuará activa. La salida definitiva se registra por separado.',showCancelButton:true,confirmButtonText:'Sí, finalizar',cancelButtonText:'Cancelar'});
+        if(!answer.isConfirmed)return;
+        try{const data=await submitTrip('finalizar');await Swal.fire('Desplazamiento finalizado',data.message,'success');await loadMarkContext();}catch(error){Swal.fire('Atención',error.message || String(error),'warning');}
+    });
     entryBtn.addEventListener('click', () => mark('entrada'));
     exitBtn.addEventListener('click', () => mark('salida'));
+    programSelect?.addEventListener('change', loadMarkContext);
     setAssignmentAvailability(false, workerField.value ? 'Cargando la asignación activa...' : 'Seleccione un trabajador para consultar su asignación y registrar asistencia.');
     if (workerField.value) loadMarkContext();
 }

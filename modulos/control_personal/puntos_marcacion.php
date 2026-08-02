@@ -3,7 +3,11 @@ require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
 require_module_access('control_personal.puntos_marcacion');
 
-$locations = db()->query('SELECT * FROM attendance_locations WHERE status = 1 ORDER BY name')->fetchAll();
+$locations = db()->query("SELECT l.*, u.name AS registered_by_name
+    FROM attendance_locations l
+    LEFT JOIN users u ON u.id = l.created_by_user_id
+    WHERE l.status = 1
+    ORDER BY l.name")->fetchAll();
 
 require __DIR__ . '/../../includes/header.php';
 ?>
@@ -26,6 +30,7 @@ require __DIR__ . '/../../includes/header.php';
                 <th>Dirección</th>
                 <th>Referencia</th>
                 <th>Radio</th>
+                <th>Registrado por</th>
                 <th>Acciones</th>
             </tr>
             </thead>
@@ -37,6 +42,7 @@ require __DIR__ . '/../../includes/header.php';
                     <td><?= e($location['address'] ?? '') ?></td>
                     <td><?= e($location['reference'] ?? '') ?></td>
                     <td><?= (int) $location['radius_meters'] ?> metros</td>
+                    <td><?= e($location['registered_by_name'] ?: 'No registrado') ?></td>
                     <td class="text-nowrap">
                         <button class="btn btn-sm btn-outline-primary js-edit-location" type="button"
                             data-id="<?= (int) $location['id'] ?>"

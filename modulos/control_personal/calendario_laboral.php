@@ -164,7 +164,7 @@ require __DIR__ . '/../../includes/header.php';
                 <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                 <input type="hidden" name="id" id="calendarDayId">
                 <div class="row g-3">
-                    <div class="col-md-5">
+                    <div class="col-md-4">
                         <label class="form-label">Tipo</label>
                         <select class="form-select" name="event_type" id="calendarEventType" required>
                             <option value="vacation">Vacaciones</option>
@@ -174,19 +174,20 @@ require __DIR__ . '/../../includes/header.php';
                             <option value="non_working">No laborable</option>
                         </select>
                     </div>
-                    <div class="col-md-3">
-                        <label class="form-label" id="calendarDateLabel">Fecha</label>
+                    <div class="col-md-4">
+                        <label class="form-label" id="calendarDateLabel">Fecha inicial</label>
                         <input class="form-control" type="date" name="calendar_date" id="calendarDate" required>
                     </div>
-                    <div class="col-md-4 d-none" id="calendarEndDateField">
+                    <div class="col-md-4" id="calendarEndDateField">
                         <label class="form-label">Fecha final</label>
-                        <input class="form-control" type="date" name="end_date" id="calendarEndDate">
+                        <input class="form-control" type="date" name="end_date" id="calendarEndDate" required>
                     </div>
                     <div class="col-md-4" id="calendarScopeField">
                         <label class="form-label">Aplicar a</label>
                         <select class="form-select" name="scope_type" id="calendarScopeType" required>
                             <option value="all">Todo el personal</option>
                             <option value="worker">Un trabajador</option>
+                            <option value="selected">Seleccionar trabajadores</option>
                         </select>
                     </div>
                     <div class="col-12">
@@ -195,12 +196,39 @@ require __DIR__ . '/../../includes/header.php';
                     </div>
                     <div class="col-12 d-none" id="calendarWorkerField">
                         <label class="form-label">Personal</label>
-                        <select class="form-select" name="worker_id" id="calendarWorkerId">
+                        <select class="form-select select2-searchable" name="worker_id" id="calendarWorkerId"
+                            data-placeholder="Buscar por nombre, documento o empresa"
+                            data-no-results="No se encontraron trabajadores">
                             <option value="">Seleccione</option>
                             <?php foreach ($workers as $worker): ?>
                                 <option value="<?= (int) $worker['id'] ?>"><?= e($worker['full_name'] . ' - ' . $worker['document_number'] . (!empty($worker['company']) ? ' - ' . $worker['company'] : '')) ?></option>
                             <?php endforeach; ?>
                         </select>
+                    </div>
+                    <div class="col-12 d-none" id="calendarWorkersField">
+                        <div class="assignment-workers-box">
+                            <div class="assignment-workers-toolbar">
+                                <div>
+                                    <strong>Seleccionar trabajadores</strong>
+                                    <small class="text-muted d-block">El registro se aplicar&aacute; &uacute;nicamente al personal marcado.</small>
+                                </div>
+                                <label class="form-check mb-0">
+                                    <input class="form-check-input" type="checkbox" id="calendarSelectAllWorkers">
+                                    <span class="form-check-label">Seleccionar todos</span>
+                                </label>
+                            </div>
+                            <input class="form-control form-control-sm mb-2" type="search" id="calendarWorkerSearch" placeholder="Buscar por nombre, documento o empresa">
+                            <div class="assignment-workers-grid" id="calendarWorkersGrid">
+                                <?php foreach ($workers as $worker): ?>
+                                    <?php $workerLabel = $worker['full_name'] . ' - ' . $worker['document_number'] . (!empty($worker['company']) ? ' - ' . $worker['company'] : ''); ?>
+                                    <label class="assignment-worker-option calendar-worker-option" data-search="<?= e(strtolower($workerLabel)) ?>">
+                                        <input class="form-check-input calendar-worker-check" type="checkbox" name="worker_ids[]" value="<?= (int) $worker['id'] ?>">
+                                        <span><?= e($workerLabel) ?></span>
+                                    </label>
+                                <?php endforeach; ?>
+                            </div>
+                            <div class="invalid-feedback d-block d-none" id="calendarWorkersError">Seleccione al menos un trabajador.</div>
+                        </div>
                     </div>
                 </div>
             </div>

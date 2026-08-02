@@ -79,8 +79,8 @@ function cp_badge_class(?string $status): string
     };
 }
 
-$activeAssignments = (int) db()->query('SELECT COUNT(*) FROM attendance_assignments WHERE status = 1')->fetchColumn();
-$activeWorkers = (int) db()->query('SELECT COUNT(DISTINCT worker_id) FROM attendance_assignments WHERE status = 1')->fetchColumn();
+$activeAssignments = (int) db()->query('SELECT COUNT(*) FROM attendance_assignments WHERE status = 1 AND valid_from <= CURDATE() AND (valid_until IS NULL OR valid_until >= CURDATE())')->fetchColumn();
+$activeWorkers = (int) db()->query('SELECT COUNT(DISTINCT worker_id) FROM attendance_assignments WHERE status = 1 AND valid_from <= CURDATE() AND (valid_until IS NULL OR valid_until >= CURDATE())')->fetchColumn();
 
 $stmt = db()->prepare("SELECT
         SUM(mark_type = 'entrada') AS entradas,
@@ -164,6 +164,17 @@ $scheduleDayRows = db()->query('SELECT schedule_id, day_of_week
 foreach ($scheduleDayRows as $scheduleDayRow) {
     $scheduleDaysBySchedule[(int) $scheduleDayRow['schedule_id']][(int) $scheduleDayRow['day_of_week']] = true;
 }
+$programmedDaysByWorker = [];
+try {
+    $programStmt = db()->prepare("SELECT worker_id,program_date FROM attendance_programs
+        WHERE status='programada' AND program_date BETWEEN :date_from AND :date_to");
+    $programStmt->execute(['date_from'=>min($monthStart,$today),'date_to'=>max($monthEnd,$today)]);
+    foreach ($programStmt->fetchAll() as $programRow) {
+        $programmedDaysByWorker[(int)$programRow['worker_id']][(string)$programRow['program_date']] = true;
+    }
+} catch (Throwable $error) {
+    $programmedDaysByWorker = [];
+}
 
 $calendarEvents = attendance_calendar_events_between($monthStart, $monthEnd);
 $todayCalendarEvents = $today >= $monthStart && $today <= $monthEnd
@@ -184,7 +195,8 @@ foreach ($todayRows as $todayRow) {
     );
     $todayEventType = (string) ($todayEvent['event_type'] ?? '');
     $hasScheduleToday = !attendance_calendar_is_non_working_event($todayEventType)
-        && isset($scheduleDaysBySchedule[(int) $todayRow['schedule_id']][$todayWeekday]);
+        && (isset($programmedDaysByWorker[(int)$todayRow['worker_id']][$today])
+            || isset($scheduleDaysBySchedule[(int) $todayRow['schedule_id']][$todayWeekday]));
     if ($hasScheduleToday && empty($todayRow['entry_time'])) {
         $absentToday++;
     }
@@ -281,7 +293,8 @@ foreach ($matrixRows as $workerId => $worker) {
             && $assignmentStartDate !== ''
             && $cellDate >= $assignmentStartDate;
         $isWeeklyScheduled = isset($scheduleDaysBySchedule[$scheduleId][$weekdayNumber]);
-        $isScheduledDay = $isAssignedPeriod && !$isNonWorkingDay && $isWeeklyScheduled;
+        $isExplicitlyProgrammed = isset($programmedDaysByWorker[(int)$worker['worker_id']][$cellDate]);
+        $isScheduledDay = !$isNonWorkingDay && ($isExplicitlyProgrammed || ($isAssignedPeriod && $isWeeklyScheduled));
         $isAbsence = !$entry && !$exit && $cellDate < $today && $isScheduledDay;
         $isLate = ($entry['status'] ?? '') === 'tardanza';
         $isEarlyExit = ($exit['status'] ?? '') === 'salida_anticipada';
@@ -403,7 +416,8 @@ require __DIR__ . '/../../includes/header.php';
                         $hasScheduleToday = !empty($row['assignment_id'])
                             && $today >= (string) $row['assignment_start_date']
                             && !attendance_calendar_is_non_working_event($todayEventType)
-                            && isset($scheduleDaysBySchedule[(int) $row['schedule_id']][$todayWeekday]);
+                            && (isset($programmedDaysByWorker[(int)$row['worker_id']][$today])
+                                || isset($scheduleDaysBySchedule[(int) $row['schedule_id']][$todayWeekday]));
                         $status = empty($row['assignment_id']) ? 'sin_asignar' : ($hasScheduleToday ? 'ausente' : 'sin_horario');
                         $label = empty($row['assignment_id'])
                             ? 'Sin asignar'
@@ -524,10 +538,12 @@ require __DIR__ . '/../../includes/header.php';
                             && $assignmentStartDate !== ''
                             && $cellDate >= $assignmentStartDate;
                         $isWeeklyScheduled = isset($scheduleDaysBySchedule[$scheduleId][$weekdayNumber]);
+                        $isExplicitlyProgrammed = isset($programmedDaysByWorker[(int)$worker['worker_id']][$cellDate]);
                         $isRestDay = $isAssignedPeriod
                             && !$calendarEvent
-                            && !$isWeeklyScheduled;
-                        $isScheduledDay = $isAssignedPeriod && !$isNonWorkingDay && $isWeeklyScheduled;
+                            && !$isWeeklyScheduled
+                            && !$isExplicitlyProgrammed;
+                        $isScheduledDay = !$isNonWorkingDay && ($isExplicitlyProgrammed || ($isAssignedPeriod && $isWeeklyScheduled));
                         $isAbsence = !$entry && !$exit && $cellDate < $today && $isScheduledDay;
                         $isLate = ($entry['status'] ?? '') === 'tardanza';
                         $isEarlyExit = ($exit['status'] ?? '') === 'salida_anticipada';

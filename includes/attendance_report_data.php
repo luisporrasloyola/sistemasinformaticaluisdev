@@ -104,8 +104,8 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
     if ($workers) {
         $ids = array_map(static fn(array $worker): int => (int) $worker['id'], $workers);
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
-        $stmt = db()->prepare("SELECT aa.*, DATE(aa.created_at) AS assignment_start_date,
-                DATE(aa.deactivated_at) AS assignment_end_date,
+        $stmt = db()->prepare("SELECT aa.*, aa.valid_from AS assignment_start_date,
+                COALESCE(aa.valid_until, DATE(aa.deactivated_at)) AS assignment_end_date,
                 s.name AS schedule_name, l.name AS location_name, l.address AS location_address
             FROM attendance_assignments aa
             JOIN attendance_schedules s ON s.id = aa.schedule_id
@@ -129,6 +129,19 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
             break_start, break_end, exit_time, exit_start, exit_end, tolerance_minutes
         FROM attendance_schedule_days WHERE status = 1")->fetchAll() as $scheduleDay) {
         $scheduleDaysBySchedule[(int) $scheduleDay['schedule_id']][(int) $scheduleDay['day_of_week']] = $scheduleDay;
+    }
+
+    $programsByWorkerDateAssignment = [];
+    try {
+        $programParams = ['date_from'=>$dateFrom,'date_to'=>$dateTo];
+        $programSql = "SELECT * FROM attendance_programs WHERE status='programada' AND program_date BETWEEN :date_from AND :date_to";
+        if ($workerId > 0) { $programSql .= ' AND worker_id=:worker_id'; $programParams['worker_id']=$workerId; }
+        $stmt = db()->prepare($programSql); $stmt->execute($programParams);
+        foreach ($stmt->fetchAll() as $program) {
+            $programsByWorkerDateAssignment[(int)$program['worker_id']][(string)$program['program_date']][(int)$program['assignment_id']] = $program;
+        }
+    } catch (Throwable $error) {
+        $programsByWorkerDateAssignment = [];
     }
 
     $marksByWorkerAndDateAndAssignment = [];
@@ -165,9 +178,13 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
 
             $dateAssignments = [];
             $markedAssignmentsMap = $marksByWorkerAndDateAndAssignment[$id][$date] ?? [];
+            $dateProgramsMap = $programsByWorkerDateAssignment[$id][$date] ?? [];
+            if ($dateProgramsMap) {
+                foreach (array_keys($dateProgramsMap) as $aid) if (isset($assignmentsById[$aid])) $dateAssignments[] = $assignmentsById[$aid];
+            }
             if ($markedAssignmentsMap) {
                 foreach (array_keys($markedAssignmentsMap) as $aid) {
-                    if (isset($assignmentsById[$aid])) {
+                    if (isset($assignmentsById[$aid]) && !in_array($assignmentsById[$aid], $dateAssignments, true)) {
                         $dateAssignments[] = $assignmentsById[$aid];
                     }
                 }
@@ -194,6 +211,14 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 $entry = $marks['entrada'] ?? null;
                 $exit = $marks['salida'] ?? null;
                 $scheduleDay = $scheduleDaysBySchedule[(int) $assignment['schedule_id']][$weekday] ?? null;
+                $program = $dateProgramsMap[$aid] ?? null;
+                if ($program) {
+                    $scheduleDay = [
+                        'entry_time'=>$program['entry_time'], 'entry_start'=>$program['entry_start'], 'entry_end'=>$program['entry_end'],
+                        'exit_time'=>$program['exit_time'], 'exit_start'=>$program['exit_time'], 'exit_end'=>$program['exit_time'],
+                        'tolerance_minutes'=>$program['tolerance_minutes'], 'break_start'=>null, 'break_end'=>null,
+                    ];
+                }
                 $calendarEvent = attendance_calendar_resolve_event($calendarEvents, $date, $id, (int) $worker['company_id']);
                 $eventType = (string) ($calendarEvent['event_type'] ?? '');
                 $isNonWorking = attendance_calendar_is_non_working_event($eventType);
@@ -333,9 +358,25 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
     $summary['punctuality'] = $summary['attendances'] > 0 ? round((($summary['attendances'] - $summary['late']) / $summary['attendances']) * 100, 1) : 0;
     $summary['compliance'] = $summary['attendances'] > 0 ? round(($summary['completed'] / $summary['attendances']) * 100, 1) : 0;
 
+    $trips = [];
+    if ($workerId > 0) {
+        try {
+            $stmt = db()->prepare("SELECT at.*, l.name AS location_name FROM attendance_trips at
+                JOIN attendance_assignments aa ON aa.id=at.assignment_id
+                JOIN attendance_locations l ON l.id=aa.location_id
+                WHERE at.worker_id=:worker_id AND at.trip_date BETWEEN :date_from AND :date_to ORDER BY at.started_at");
+            $stmt->execute(['worker_id'=>$workerId,'date_from'=>$dateFrom,'date_to'=>$dateTo]);
+            $trips = $stmt->fetchAll();
+            $stopStmt = db()->prepare('SELECT destination,activity,registered_at FROM attendance_trip_stops WHERE trip_id=:trip_id ORDER BY stop_order');
+            foreach ($trips as &$trip) { $stopStmt->execute(['trip_id'=>$trip['id']]); $trip['stops']=$stopStmt->fetchAll(); }
+            unset($trip);
+        } catch (Throwable $error) { $trips=[]; }
+    }
+
     return [
         'workers' => $workers, 'rows' => $rows, 'individual_rows' => $individualRows,
         'worker' => $selectedWorker, 'assignment' => $selectedAssignment, 'summary' => $summary,
         'note' => $workerId > 0 ? attendance_report_note($workerId, $dateFrom, $dateTo) : null,
+        'trips' => $trips,
     ];
 }

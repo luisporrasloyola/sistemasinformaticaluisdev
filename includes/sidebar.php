@@ -33,9 +33,10 @@ $isAdmin = is_admin();
                 <?php if ($isAdmin): ?>
                     <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/dashboard_asistencia.php"><i class="fa-solid fa-chart-line"></i><span>Dashboard de asistencia</span></a>
                     <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/calendario_laboral.php"><i class="fa-solid fa-calendar-days"></i><span>Calendario laboral</span></a>
-                    <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/horarios.php"><i class="fa-solid fa-clock"></i><span>Horarios</span></a>
+                    <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/horarios.php"><i class="fa-solid fa-clock"></i><span>Plantillas de horarios</span></a>
                     <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/puntos_marcacion.php"><i class="fa-solid fa-location-dot"></i><span>Lugares de marcación</span></a>
                     <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/asignaciones.php"><i class="fa-solid fa-user-check"></i><span>Asignaciones</span></a>
+                    <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/programacion_personal.php"><i class="fa-solid fa-calendar-plus"></i><span>Calendario y programación de jornadas</span></a>
                 <?php endif; ?>
                 <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/control_asistencia.php"><i class="fa-solid fa-camera"></i><span>Control de asistencia</span></a>
                 <?php if ($isAdmin): ?>
@@ -102,9 +103,10 @@ $isAdmin = is_admin();
                 <div class="collapse <?= $controlPersonalOpen ? 'show' : '' ?>" id="controlPersonalMenuGestor"><div class="submenu">
                     <?php if (current_user_can_module('control_personal.dashboard')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/dashboard_asistencia.php"><i class="fa-solid fa-chart-line"></i><span>Dashboard de asistencia</span></a><?php endif; ?>
                     <?php if (current_user_can_module('control_personal.calendario_laboral')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/calendario_laboral.php"><i class="fa-solid fa-calendar-days"></i><span>Calendario laboral</span></a><?php endif; ?>
-                    <?php if (current_user_can_module('control_personal.horarios')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/horarios.php"><i class="fa-solid fa-clock"></i><span>Horarios</span></a><?php endif; ?>
-                    <?php if (current_user_can_module('control_personal.puntos_marcacion')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/puntos_marcacion.php"><i class="fa-solid fa-location-dot"></i><span>Puntos de marcacion</span></a><?php endif; ?>
+                    <?php if (current_user_can_module('control_personal.horarios')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/horarios.php"><i class="fa-solid fa-clock"></i><span>Plantillas de horarios</span></a><?php endif; ?>
+                    <?php if (current_user_can_module('control_personal.puntos_marcacion')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/puntos_marcacion.php"><i class="fa-solid fa-location-dot"></i><span>Lugares de marcación</span></a><?php endif; ?>
                     <?php if (current_user_can_module('control_personal.asignaciones')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/asignaciones.php"><i class="fa-solid fa-user-check"></i><span>Asignaciones</span></a><?php endif; ?>
+                    <?php if (current_user_can_module('control_personal.programacion')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/programacion_personal.php"><i class="fa-solid fa-calendar-plus"></i><span>Calendario y programación de jornadas</span></a><?php endif; ?>
                     <?php if (current_user_can_module('control_personal.control_asistencia')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/control_asistencia.php"><i class="fa-solid fa-camera"></i><span>Control de asistencia</span></a><?php endif; ?>
                     <?php if (current_user_can_module('control_personal.reportes')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/reportes.php"><i class="fa-solid fa-file-export"></i><span>Reporte de marcaciones</span></a><?php endif; ?>
                     <?php if (current_user_can_module('control_personal.reporte_asistencias')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/reporte_asistencias.php"><i class="fa-solid fa-clipboard-check"></i><span>Reporte de asistencias</span></a><?php endif; ?>

@@ -15,6 +15,9 @@ $selectedWorkerIds = array_values(array_unique(array_filter(
 $locationId = (int) ($_POST['location_id'] ?? 0);
 $scheduleId = (int) ($_POST['schedule_id'] ?? 0);
 $activity = trim((string) ($_POST['activity'] ?? ''));
+$instructions = trim((string) ($_POST['instructions'] ?? ''));
+$validFrom = trim((string) ($_POST['valid_from'] ?? ''));
+$validUntil = !empty($_POST['no_end']) ? null : trim((string) ($_POST['valid_until'] ?? ''));
 $conflictPolicy = trim((string) ($_POST['conflict_policy'] ?? 'skip'));
 $currentUserId = (int) (current_user()['id'] ?? 0) ?: null;
 $assignedCount = 1;
@@ -32,6 +35,15 @@ if (($scopeType === 'worker' && $workerId <= 0) || $locationId <= 0 || $schedule
 }
 if ($scopeType === 'selected' && !$selectedWorkerIds) {
     json_response(['ok' => false, 'message' => 'Seleccione al menos un trabajador.'], 400);
+}
+$validFromDate = DateTimeImmutable::createFromFormat('!Y-m-d', $validFrom);
+$validUntilDate = $validUntil ? DateTimeImmutable::createFromFormat('!Y-m-d', $validUntil) : null;
+if (!$validFromDate || $validFromDate->format('Y-m-d') !== $validFrom
+    || ($validUntil !== null && (!$validUntilDate || $validUntilDate->format('Y-m-d') !== $validUntil))) {
+    json_response(['ok' => false, 'message' => 'Defina un periodo de vigencia valido para la asignacion.'], 422);
+}
+if ($validUntilDate && $validUntilDate < $validFromDate) {
+    json_response(['ok' => false, 'message' => 'La fecha de finalizacion no puede ser anterior a la fecha de inicio.'], 422);
 }
 
 $checks = [
@@ -74,15 +86,18 @@ if ($id > 0) {
         }
         $pdo->prepare('UPDATE attendance_assignments
             SET status = 0, deactivated_at = NOW(), deactivated_by_user_id = :user_id
-            WHERE worker_id = :worker_id AND status = 1')
-            ->execute(['worker_id' => $currentWorkerId, 'user_id' => $currentUserId]);
+            WHERE id = :id AND status = 1')
+            ->execute(['id' => $id, 'user_id' => $currentUserId]);
         $pdo->prepare('INSERT INTO attendance_assignments
-            (worker_id, location_id, schedule_id, activity, status, created_by_user_id)
-            VALUES (:worker_id, :location_id, :schedule_id, :activity, 1, :user_id)')->execute([
+            (worker_id, location_id, schedule_id, activity, instructions, valid_from, valid_until, status, created_by_user_id)
+            VALUES (:worker_id, :location_id, :schedule_id, :activity, :instructions, :valid_from, :valid_until, 1, :user_id)')->execute([
                 'worker_id' => $currentWorkerId,
                 'location_id' => $locationId,
                 'schedule_id' => $scheduleId,
                 'activity' => $activity ?: null,
+                'instructions' => $instructions ?: null,
+                'valid_from' => $validFrom,
+                'valid_until' => $validUntil,
                 'user_id' => $currentUserId,
             ]);
         $replacedCount = 1;
@@ -107,8 +122,9 @@ if ($id > 0) {
         $workerIds = array_values(array_unique(array_map('intval', $workerIds)));
         $placeholders = implode(',', array_fill(0, count($workerIds), '?'));
         $activeStmt = $pdo->prepare("SELECT DISTINCT worker_id FROM attendance_assignments
-            WHERE status = 1 AND worker_id IN ({$placeholders})");
-        $activeStmt->execute($workerIds);
+            WHERE status = 1 AND worker_id IN ({$placeholders})
+              AND valid_from <= ? AND (valid_until IS NULL OR valid_until >= ?)");
+        $activeStmt->execute(array_merge($workerIds, [$validUntil ?: '9999-12-31', $validFrom]));
         $activeWorkerIds = array_map('intval', $activeStmt->fetchAll(PDO::FETCH_COLUMN));
         $activeLookup = array_fill_keys($activeWorkerIds, true);
 
@@ -127,20 +143,25 @@ if ($id > 0) {
 
         $disable = $pdo->prepare('UPDATE attendance_assignments
             SET status = 0, deactivated_at = NOW(), deactivated_by_user_id = :user_id
-            WHERE worker_id = :worker_id AND status = 1');
+            WHERE worker_id = :worker_id AND status = 1
+              AND valid_from <= :range_end AND (valid_until IS NULL OR valid_until >= :range_start)');
         $insert = $pdo->prepare('INSERT INTO attendance_assignments
-            (worker_id, location_id, schedule_id, activity, status, created_by_user_id)
-            VALUES (:worker_id, :location_id, :schedule_id, :activity, 1, :user_id)');
+            (worker_id, location_id, schedule_id, activity, instructions, valid_from, valid_until, status, created_by_user_id)
+            VALUES (:worker_id, :location_id, :schedule_id, :activity, :instructions, :valid_from, :valid_until, 1, :user_id)');
 
         foreach ($workerIds as $targetWorkerId) {
             if ($conflictPolicy === 'replace') {
-                $disable->execute(['worker_id' => (int) $targetWorkerId, 'user_id' => $currentUserId]);
+                $disable->execute(['worker_id' => (int) $targetWorkerId, 'user_id' => $currentUserId,
+                    'range_end' => $validUntil ?: '9999-12-31', 'range_start' => $validFrom]);
             }
             $insert->execute([
                 'worker_id' => (int) $targetWorkerId,
                 'location_id' => $locationId,
                 'schedule_id' => $scheduleId,
                 'activity' => $activity ?: null,
+                'instructions' => $instructions ?: null,
+                'valid_from' => $validFrom,
+                'valid_until' => $validUntil,
                 'user_id' => $currentUserId,
             ]);
         }

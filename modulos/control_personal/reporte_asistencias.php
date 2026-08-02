@@ -21,6 +21,7 @@ $assignment = $report['assignment'] ?? null;
 $summary = $report['summary'] ?? [];
 $rows = $report['individual_rows'] ?? [];
 $note = $report['note'] ?? null;
+$trips = $report['trips'] ?? [];
 $query = http_build_query(['desde' => $dateFrom, 'hasta' => $dateTo, 'trabajador_id' => $workerId]);
 
 require __DIR__ . '/../../includes/header.php';
@@ -124,6 +125,23 @@ require __DIR__ . '/../../includes/header.php';
             </tbody>
         </table>
     </div>
+
+    <?php if ($trips): ?>
+    <div class="individual-report-section-title mt-4"><h3>Desplazamientos laborales</h3><p>Salidas temporales realizadas sin finalizar la jornada.</p></div>
+    <div class="table-responsive">
+        <table class="table align-middle individual-report-table">
+            <thead><tr><th>Fecha</th><th>Inicio</th><th>Fin</th><th>Origen</th><th>Primer destino</th><th>Motivo</th><th>Puntos visitados</th><th>Estado</th></tr></thead>
+            <tbody><?php foreach ($trips as $trip): ?><tr>
+                <td><?= e(date('d/m/Y', strtotime($trip['trip_date']))) ?></td>
+                <td><?= e(date('H:i', strtotime($trip['started_at']))) ?></td>
+                <td><?= $trip['ended_at'] ? e(date('H:i', strtotime($trip['ended_at']))) : '-' ?></td>
+                <td><?= e($trip['location_name']) ?></td><td><?= e($trip['first_destination']) ?></td><td><?= e($trip['reason']) ?></td>
+                <td><?php if ($trip['stops']): ?><ol class="mb-0 ps-3"><?php foreach ($trip['stops'] as $stop): ?><li><?= e($stop['destination'] . (!empty($stop['activity']) ? ' · ' . $stop['activity'] : '')) ?></li><?php endforeach; ?></ol><?php else: ?>-<?php endif; ?></td>
+                <td><span class="badge <?= $trip['status']==='finalizado' ? 'text-bg-success' : 'text-bg-warning' ?>"><?= $trip['status']==='finalizado' ? 'Finalizado' : 'En curso' ?></span></td>
+            </tr><?php endforeach; ?></tbody>
+        </table>
+    </div>
+    <?php endif; ?>
 
     <div class="individual-report-bottom">
         <form id="attendanceReportNoteForm" class="report-note-card report-note-card-full">

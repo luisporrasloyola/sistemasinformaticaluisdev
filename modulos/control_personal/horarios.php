@@ -73,13 +73,13 @@ require __DIR__ . '/../../includes/header.php';
 ?>
 <div class="page-title">
     <div>
-        <h1>Horarios</h1>
-        <p>Catálogo y configuración semanal de horarios.</p>
+        <h1>Plantillas de horarios</h1>
+        <p>Define reglas semanales reutilizables para programar al personal por fechas.</p>
     </div>
     <button class="btn btn-primary" type="button" id="newScheduleBtn"><i class="fa-solid fa-plus me-2"></i>Nuevo horario</button>
 </div>
 
-<div class="row g-3">
+<div class="row g-3" id="weeklyScheduleView">
     <div class="col-12">
         <div class="work-panel schedule-selector-panel">
             <div class="schedule-management-toolbar">

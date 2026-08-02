@@ -18,7 +18,7 @@ if (!$worker) {
     json_response(['ok' => false, 'message' => 'El trabajador no existe.'], 404);
 }
 
-$stmt = db()->prepare("SELECT aa.id, aa.activity, aa.status, aa.created_at, aa.deactivated_at,
+$stmt = db()->prepare("SELECT aa.id, aa.activity, aa.status, aa.created_at, aa.deactivated_at, aa.valid_from, aa.valid_until,
         l.name AS location_name, s.name AS schedule_name,
         creator.name AS created_by, deactivator.name AS deactivated_by
     FROM attendance_assignments aa

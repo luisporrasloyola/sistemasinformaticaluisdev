@@ -10,9 +10,10 @@ function permission_modules_catalog(): array
             'children' => [
                 'control_personal.dashboard' => 'Dashboard de asistencia',
                 'control_personal.calendario_laboral' => 'Calendario laboral',
-                'control_personal.horarios' => 'Horarios',
+                'control_personal.horarios' => 'Plantillas de horarios',
                 'control_personal.puntos_marcacion' => 'Lugares de marcación',
                 'control_personal.asignaciones' => 'Asignaciones',
+                'control_personal.programacion' => 'Calendario y programación de jornadas',
                 'control_personal.control_asistencia' => 'Control de asistencia',
                 'control_personal.reportes' => 'Reporte de marcaciones',
                 'control_personal.reporte_asistencias' => 'Reporte de asistencias',

@@ -23,6 +23,7 @@ $assignment = $report['assignment'];
 $summary = $report['summary'];
 $rows = $report['individual_rows'];
 $note = $report['note'];
+$trips = $report['trips'] ?? [];
 
 $summaryRows = [];
 $summaryRows[] = xlsx_row(1, [xlsx_cell(1, 1, 'REPORTE INDIVIDUAL DE ASISTENCIA', 2)], 28);
@@ -57,8 +58,26 @@ foreach ($rows as $row) {
     $excelRow++;
 }
 if (!$rows) $summaryRows[] = xlsx_row(21, [xlsx_cell(1, 21, 'No hay jornadas en el periodo seleccionado.', 9)]);
+$extraMerge = '';
+if ($trips) {
+    $sectionRow = $excelRow + 1;
+    $summaryRows[] = xlsx_row($sectionRow, [xlsx_cell(1,$sectionRow,'DESPLAZAMIENTOS LABORALES',1)],24);
+    $extraMerge = '<mergeCell ref="A'.$sectionRow.':K'.$sectionRow.'"/>';
+    $excelRow = $sectionRow + 1;
+    $tripHeaders=['Fecha','Inicio','Fin','Origen','Primer destino','Motivo','Puntos visitados','Estado'];
+    $cells=[]; foreach($tripHeaders as $index=>$header)$cells[]=xlsx_cell($index+1,$excelRow,$header,1);
+    $summaryRows[]=xlsx_row($excelRow,$cells,25); $excelRow++;
+    foreach($trips as $trip){
+        $visited=array_map(static fn(array $stop):string=>(string)$stop['destination'].(!empty($stop['activity'])?' - '.$stop['activity']:''),$trip['stops']??[]);
+        $values=[date('d/m/Y',strtotime($trip['trip_date'])),date('H:i',strtotime($trip['started_at'])),$trip['ended_at']?date('H:i',strtotime($trip['ended_at'])):'-',
+            $trip['location_name'],$trip['first_destination'],$trip['reason'],$visited?implode(' | ',$visited):'-',$trip['status']==='finalizado'?'Finalizado':'En curso'];
+        $cells=[];foreach($values as $index=>$value)$cells[]=xlsx_cell($index+1,$excelRow,$value,9);
+        $summaryRows[]=xlsx_row($excelRow,$cells,mb_strlen(implode(' ',$values))>100?42:28);$excelRow++;
+    }
+}
 $lastRow = max(21, $excelRow - 1);
-$sheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:K' . $lastRow . '"/><sheetViews><sheetView workbookViewId="0" showGridLines="0" zoomScale="90"/></sheetViews><cols><col min="1" max="1" width="21" customWidth="1"/><col min="2" max="2" width="16" customWidth="1"/><col min="3" max="3" width="24" customWidth="1"/><col min="4" max="4" width="18" customWidth="1"/><col min="5" max="5" width="25" customWidth="1"/><col min="6" max="6" width="16" customWidth="1"/><col min="7" max="8" width="15" customWidth="1"/><col min="9" max="9" width="36" customWidth="1"/><col min="10" max="10" width="25" customWidth="1"/><col min="11" max="11" width="42" customWidth="1"/></cols><sheetData>' . implode('', $summaryRows) . '</sheetData><mergeCells count="7"><mergeCell ref="A1:F1"/><mergeCell ref="A4:F4"/><mergeCell ref="A8:F8"/><mergeCell ref="A12:F12"/><mergeCell ref="A16:F16"/><mergeCell ref="A17:F17"/><mergeCell ref="A19:K19"/></mergeCells></worksheet>';
+$mergeCount = $trips ? 8 : 7;
+$sheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:K' . $lastRow . '"/><sheetViews><sheetView workbookViewId="0" showGridLines="0" zoomScale="90"/></sheetViews><cols><col min="1" max="1" width="21" customWidth="1"/><col min="2" max="2" width="16" customWidth="1"/><col min="3" max="3" width="24" customWidth="1"/><col min="4" max="4" width="18" customWidth="1"/><col min="5" max="5" width="25" customWidth="1"/><col min="6" max="6" width="16" customWidth="1"/><col min="7" max="8" width="24" customWidth="1"/><col min="9" max="9" width="36" customWidth="1"/><col min="10" max="10" width="25" customWidth="1"/><col min="11" max="11" width="42" customWidth="1"/></cols><sheetData>' . implode('', $summaryRows) . '</sheetData><mergeCells count="'.$mergeCount.'"><mergeCell ref="A1:F1"/><mergeCell ref="A4:F4"/><mergeCell ref="A8:F8"/><mergeCell ref="A12:F12"/><mergeCell ref="A16:F16"/><mergeCell ref="A17:F17"/><mergeCell ref="A19:K19"/>'.$extraMerge.'</mergeCells></worksheet>';
 
 $content = xlsx_package($sheet);
 $safeName = trim((string) preg_replace('/[^a-z0-9_-]+/i', '_', (string) $worker['full_name']), '_');

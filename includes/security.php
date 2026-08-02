@@ -227,6 +227,7 @@ function default_user_landing_path(): string
         'control_personal.horarios' => 'modulos/control_personal/horarios.php',
         'control_personal.puntos_marcacion' => 'modulos/control_personal/puntos_marcacion.php',
         'control_personal.asignaciones' => 'modulos/control_personal/asignaciones.php',
+        'control_personal.programacion' => 'modulos/control_personal/programacion_personal.php',
         'control_personal.control_asistencia' => 'modulos/control_personal/control_asistencia.php',
         'control_personal.reportes' => 'modulos/control_personal/reportes.php',
         'control_personal.reporte_asistencias' => 'modulos/control_personal/reporte_asistencias.php',
