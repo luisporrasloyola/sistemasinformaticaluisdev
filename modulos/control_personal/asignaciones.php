@@ -259,9 +259,9 @@ require __DIR__ . '/../../includes/header.php';
                                 <select class="form-select" name="conflict_policy" id="assignmentConflictPolicy">
                                     <option value="skip">Conservarla y omitir al trabajador (recomendado)</option>
                                     <option value="replace">Finalizar la anterior y crear una nueva asignación</option>
-                                    <option value="allow">Permitir múltiples asignaciones activas (para días diferentes)</option>
+                                    <option value="allow">Crear otra asignación sin superponer horarios</option>
                                 </select>
-                                <small class="text-muted d-block mt-2">Las asignaciones anteriores se conservarán como historial para reportes y marcaciones.</small>
+                                <small class="text-muted d-block mt-2">Solo se permitirán varias asignaciones cuando sus vigencias, días y horas no se crucen.</small>
                             </div>
                         </div>
                     </div>

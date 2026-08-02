@@ -13,14 +13,17 @@ $journeyWorkers = db()->query("SELECT DISTINCT w.id, w.full_name, w.document_num
     FROM attendance_assignments aa JOIN workers w ON w.id = aa.worker_id
     WHERE aa.status = 1 AND (aa.valid_until IS NULL OR aa.valid_until >= CURDATE()) ORDER BY w.full_name")->fetchAll();
 $schedules = db()->query("SELECT id, name FROM attendance_schedules WHERE status = 1 ORDER BY name")->fetchAll();
-$assignments = db()->query("SELECT aa.id, aa.worker_id, aa.activity, aa.valid_from, aa.valid_until, w.full_name, w.document_number,
+$locations = db()->query("SELECT id, name FROM attendance_locations WHERE status = 1 ORDER BY name")->fetchAll();
+$assignments = db()->query("SELECT aa.id, aa.worker_id, aa.location_id, aa.schedule_id, aa.activity, aa.valid_from, aa.valid_until, w.full_name, w.document_number,
         l.name AS location_name, s.name AS schedule_name
     FROM attendance_assignments aa
     JOIN workers w ON w.id = aa.worker_id
     JOIN attendance_locations l ON l.id = aa.location_id
     JOIN attendance_schedules s ON s.id = aa.schedule_id
     WHERE aa.status = 1 AND (aa.valid_until IS NULL OR aa.valid_until >= CURDATE()) ORDER BY w.full_name, s.name, l.name")->fetchAll();
-$programs = db()->query("SELECT ap.id, ap.assignment_id, ap.worker_id, ap.program_date, ap.entry_time,
+$programs = db()->query("SELECT ap.id, ap.assignment_id, ap.worker_id,
+        COALESCE(ap.location_id, aa.location_id) AS location_id,
+        COALESCE(ap.schedule_id, aa.schedule_id) AS schedule_id, ap.program_date, ap.entry_time,
         ap.entry_start, ap.exit_time, ap.tolerance_minutes, ap.schedule_source, ap.activity, ap.notes, ap.status, w.full_name, w.document_number,
         l.name AS location_name, s.name AS schedule_name,
         (SELECT GROUP_CONCAT(CONCAT(aps.destination, IF(aps.activity IS NULL OR aps.activity='', '', CONCAT(' - ',aps.activity))) ORDER BY aps.stop_order SEPARATOR '\n')
@@ -28,22 +31,21 @@ $programs = db()->query("SELECT ap.id, ap.assignment_id, ap.worker_id, ap.progra
     FROM attendance_programs ap
     JOIN workers w ON w.id = ap.worker_id
     JOIN attendance_assignments aa ON aa.id = ap.assignment_id
-    JOIN attendance_locations l ON l.id = aa.location_id
-    JOIN attendance_schedules s ON s.id = aa.schedule_id
+    JOIN attendance_locations l ON l.id = COALESCE(ap.location_id, aa.location_id)
+    JOIN attendance_schedules s ON s.id = COALESCE(ap.schedule_id, aa.schedule_id)
     WHERE ap.program_date BETWEEN DATE_SUB(CURDATE(), INTERVAL 6 MONTH) AND DATE_ADD(CURDATE(), INTERVAL 12 MONTH)
     ORDER BY ap.program_date, ap.entry_time")->fetchAll();
 
 $events = array_map(static function (array $row): array {
     $cancelled = $row['status'] === 'cancelada';
-    $endDate = (string) $row['program_date'];
-    if ((string) $row['exit_time'] <= (string) $row['entry_time']) {
-        $endDate = date('Y-m-d', strtotime($endDate . ' +1 day'));
-    }
     return [
         'id' => (string) $row['id'],
         'title' => $row['full_name'] . ' · ' . substr((string) $row['entry_time'], 0, 5) . ' - ' . substr((string) $row['exit_time'], 0, 5),
-        'start' => $row['program_date'] . 'T' . $row['entry_time'],
-        'end' => $endDate . 'T' . $row['exit_time'],
+        // La jornada pertenece visualmente a la fecha programada, aunque su
+        // hora de salida sea del día siguiente. Las horas reales permanecen
+        // en extendedProps para la marcación, edición y los reportes.
+        'start' => $row['program_date'],
+        'allDay' => true,
         'backgroundColor' => $cancelled ? '#64748b' : '#f97316',
         'borderColor' => $cancelled ? '#475569' : '#c2410c',
         'textColor' => '#ffffff',
@@ -51,6 +53,7 @@ $events = array_map(static function (array $row): array {
         'classNames' => [$cancelled ? 'personnel-program-cancelled' : 'personnel-program-scheduled'],
         'extendedProps' => [
             'assignmentId' => (int) $row['assignment_id'], 'workerId' => (int) $row['worker_id'],
+            'locationId' => (int) $row['location_id'], 'scheduleId' => (int) $row['schedule_id'],
             'worker' => $row['full_name'], 'document' => $row['document_number'],
             'location' => $row['location_name'], 'schedule' => $row['schedule_name'],
             'scheduleSource' => $row['schedule_source'], 'entryStart' => substr((string) $row['entry_start'], 0, 5),
@@ -138,17 +141,22 @@ require __DIR__ . '/../../includes/header.php';
                 <input type="hidden" name="schedule_source" value="extraordinary">
                 <div class="row g-3">
                     <div class="col-md-8">
-                        <label class="form-label">Asignación activa</label>
+                        <label class="form-label">Personal</label>
                         <select class="form-select select2-searchable" name="assignment_id" id="personnelProgramAssignment" required>
-                            <option value="">Seleccione trabajador, horario y lugar</option>
+                            <option value="">Seleccione un trabajador</option>
                             <?php foreach ($assignments as $assignment): ?>
-                                <option value="<?= (int) $assignment['id'] ?>" data-worker-id="<?= (int) $assignment['worker_id'] ?>">
-                                    <?= e($assignment['full_name'] . ' - ' . $assignment['document_number'] . ' | ' . $assignment['schedule_name'] . ' | ' . $assignment['location_name']) ?>
+                                <option value="<?= (int) $assignment['id'] ?>"
+                                    data-worker-id="<?= (int) $assignment['worker_id'] ?>"
+                                    data-location-id="<?= (int) $assignment['location_id'] ?>"
+                                    data-schedule-id="<?= (int) $assignment['schedule_id'] ?>">
+                                    <?= e($assignment['full_name'] . ' - ' . $assignment['document_number'] . ' · ' . $assignment['location_name']) ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
                     </div>
                     <div class="col-md-4"><label class="form-label">Fecha</label><input class="form-control" type="date" name="program_date" id="personnelProgramDate" required></div>
+                    <div class="col-md-6"><label class="form-label">Lugar de marcación</label><select class="form-select select2-searchable" name="location_id" id="personnelProgramLocation" required><option value="">Seleccione un lugar</option><?php foreach ($locations as $location): ?><option value="<?= (int) $location['id'] ?>"><?= e($location['name']) ?></option><?php endforeach; ?></select><div class="form-text">Se aplicará solamente en esta fecha.</div></div>
+                    <div class="col-md-6"><label class="form-label">Plantilla de horario</label><select class="form-select select2-searchable" name="schedule_id" id="personnelProgramSchedule" required><option value="">Seleccione una plantilla</option><?php foreach ($schedules as $schedule): ?><option value="<?= (int) $schedule['id'] ?>"><?= e($schedule['name']) ?></option><?php endforeach; ?></select><div class="form-text">Identifica el horario excepcional de esta jornada.</div></div>
                     <div class="col-12" id="extraordinaryScheduleFields">
                         <div class="schedule-rule-intro">
                             <i class="fa-solid fa-calendar-day"></i>
@@ -189,6 +197,10 @@ require __DIR__ . '/../../includes/header.php';
 
 <style>
 #personnelProgramCalendar{min-height:650px}.fc .fc-toolbar-title{font-size:1.25rem}.fc .fc-button-primary{background:#2563eb;border-color:#2563eb}.fc-event{cursor:pointer;border-radius:6px;padding:2px 4px}.fc-day-today{background:#eff6ff!important}
+#personnelProgramCalendar .fc-daygrid-event-harness{min-width:0;overflow:hidden}
+#personnelProgramCalendar .fc-daygrid-event{display:block;box-sizing:border-box;width:calc(100% - 4px);max-width:calc(100% - 4px);min-width:0;margin-left:2px;margin-right:2px;overflow:hidden}
+#personnelProgramCalendar .fc-daygrid-event .fc-event-main{display:block;min-width:0;overflow:hidden}
+#personnelProgramCalendar .fc-daygrid-event .fc-event-title{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #personnelProgramCalendar .personnel-program-scheduled{background:#f97316!important;border-color:#c2410c!important;color:#fff!important;box-shadow:0 2px 5px rgba(194,65,12,.22)}
 #personnelProgramCalendar .personnel-program-scheduled .fc-event-main,#personnelProgramCalendar .personnel-program-scheduled .fc-event-time,#personnelProgramCalendar .personnel-program-scheduled .fc-event-title{color:#fff!important}
 </style>

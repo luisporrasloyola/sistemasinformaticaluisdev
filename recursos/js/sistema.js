@@ -304,6 +304,8 @@ function initPersonnelProgramming() {
     const form = document.getElementById('personnelProgramForm');
     const idField = document.getElementById('personnelProgramId');
     const assignmentField = document.getElementById('personnelProgramAssignment');
+    const locationField = document.getElementById('personnelProgramLocation');
+    const scheduleField = document.getElementById('personnelProgramSchedule');
     const dateField = document.getElementById('personnelProgramDate');
     const activityField = document.getElementById('personnelProgramActivity');
     const notesField = document.getElementById('personnelProgramNotes');
@@ -352,7 +354,11 @@ function initPersonnelProgramming() {
         if (extraTolerance) extraTolerance.value = '0';
         updateProgramRulePreview();
         cancelButton.classList.add('d-none');
-        if (window.jQuery) jQuery(assignmentField).val('').trigger('change');
+        if (window.jQuery) {
+            jQuery(assignmentField).val('').trigger('change');
+            jQuery(locationField).val('').trigger('change');
+            jQuery(scheduleField).val('').trigger('change');
+        }
     }
 
     const calendar = new FullCalendar.Calendar(calendarElement, {
@@ -390,8 +396,12 @@ function initPersonnelProgramming() {
             updateProgramRulePreview();
             if (window.jQuery) {
                 jQuery(assignmentField).val(String(props.assignmentId || '')).trigger('change');
+                jQuery(locationField).val(String(props.locationId || '')).trigger('change');
+                jQuery(scheduleField).val(String(props.scheduleId || '')).trigger('change');
             } else {
                 assignmentField.value = props.assignmentId || '';
+                locationField.value = props.locationId || '';
+                scheduleField.value = props.scheduleId || '';
             }
             // Toda programación abierta puede solicitar su eliminación. El servidor
             // decide de forma segura si existen marcaciones o desplazamientos vinculados.
@@ -406,6 +416,29 @@ function initPersonnelProgramming() {
     calendar.render();
 
     [extraEntry, extraAdvance, extraTolerance, extraExit].forEach((input) => input?.addEventListener('input', updateProgramRulePreview));
+
+    function useAssignmentDefaults() {
+        const option = assignmentField?.selectedOptions?.[0];
+        if (!option || !option.value) return;
+        const locationId = option.dataset.locationId || '';
+        const scheduleId = option.dataset.scheduleId || '';
+        if (window.jQuery) {
+            jQuery(locationField).val(locationId).trigger('change');
+            jQuery(scheduleField).val(scheduleId).trigger('change');
+        } else {
+            locationField.value = locationId;
+            scheduleField.value = scheduleId;
+        }
+    }
+
+    // Select2 administra su propio ciclo de eventos. Vincular mediante jQuery
+    // garantiza que los valores habituales se carguen tanto al buscar como al
+    // seleccionar al trabajador con teclado o mouse.
+    if (window.jQuery) {
+        jQuery(assignmentField).off('change.personnelProgramDefaults').on('change.personnelProgramDefaults', useAssignmentDefaults);
+    } else {
+        assignmentField?.addEventListener('change', useAssignmentDefaults);
+    }
 
     document.getElementById('newProgramBtn')?.addEventListener('click', () => { resetProgram(); modal.show(); });
     workerFilter?.addEventListener('change', () => {
@@ -5419,16 +5452,19 @@ function initControlPersonalAssignments() {
         if (isMultipleAssignment) {
             const selectedCount = workerChecks.filter((check) => check.checked).length;
             const willReplace = conflictPolicy?.value === 'replace';
+            const willAllowCompatible = conflictPolicy?.value === 'allow';
             const confirmed = await Swal.fire({
-                title: willReplace ? 'Confirmar cambio de asignaciones' : 'Confirmar asignación segura',
+                title: willReplace ? 'Confirmar cambio de asignaciones' : (willAllowCompatible ? 'Validar nueva asignación' : 'Confirmar asignación segura'),
                 text: willReplace
                     ? 'Las asignaciones activas involucradas se finalizarán y se crearán nuevas. El historial anterior permanecerá disponible.'
-                    : (scopeField.value === 'all'
+                    : (willAllowCompatible
+                        ? 'Se creará otra asignación solo si su vigencia, días y horas no se superponen con las actuales.'
+                        : (scopeField.value === 'all'
                         ? 'Solo se asignará al personal que actualmente no tenga una asignación activa.'
-                        : `Solo se asignará a los seleccionados sin asignación activa (${selectedCount} seleccionado(s)).`),
+                        : `Solo se asignará a los seleccionados sin asignación activa (${selectedCount} seleccionado(s)).`)),
                 icon: willReplace ? 'warning' : 'question',
                 showCancelButton: true,
-                confirmButtonText: willReplace ? 'Sí, finalizar y crear' : 'Sí, asignar',
+                confirmButtonText: willReplace ? 'Sí, finalizar y crear' : (willAllowCompatible ? 'Validar y guardar' : 'Sí, asignar'),
                 cancelButtonText: 'Cancelar'
             });
             if (!confirmed.isConfirmed) return;

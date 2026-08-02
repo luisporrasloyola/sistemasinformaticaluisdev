@@ -24,6 +24,77 @@ $assignedCount = 1;
 $skippedCount = 0;
 $replacedCount = 0;
 
+/** Convierte los días de una plantilla en intervalos de una semana modelo. */
+function assignment_schedule_intervals(PDO $pdo, int $scheduleId): array
+{
+    static $cache = [];
+    if (isset($cache[$scheduleId])) return $cache[$scheduleId];
+    $stmt = $pdo->prepare('SELECT day_of_week, entry_time, entry_start, exit_time, exit_start
+        FROM attendance_schedule_days WHERE schedule_id=:schedule_id AND status=1');
+    $stmt->execute(['schedule_id' => $scheduleId]);
+    $intervals = [];
+    foreach ($stmt->fetchAll() as $day) {
+        $startText = (string) ($day['entry_time'] ?: $day['entry_start']);
+        $endText = (string) ($day['exit_time'] ?: $day['exit_start']);
+        if ($startText === '' || $endText === '') continue;
+        [$sh, $sm, $ss] = array_pad(array_map('intval', explode(':', $startText)), 3, 0);
+        [$eh, $em, $es] = array_pad(array_map('intval', explode(':', $endText)), 3, 0);
+        $start = (((int) $day['day_of_week']) - 1) * 86400 + $sh * 3600 + $sm * 60 + $ss;
+        $end = (((int) $day['day_of_week']) - 1) * 86400 + $eh * 3600 + $em * 60 + $es;
+        if ($end <= $start) $end += 86400;
+        $intervals[] = [$start, $end, (int) $day['day_of_week'], substr($startText, 0, 5), substr($endText, 0, 5)];
+    }
+    return $cache[$scheduleId] = $intervals;
+}
+
+function assignment_schedules_overlap(PDO $pdo, int $firstScheduleId, int $secondScheduleId): ?array
+{
+    $week = 7 * 86400;
+    foreach (assignment_schedule_intervals($pdo, $firstScheduleId) as $first) {
+        foreach (assignment_schedule_intervals($pdo, $secondScheduleId) as $second) {
+            foreach ([-$week, 0, $week] as $shift) {
+                if ($first[0] < $second[1] + $shift && $first[1] > $second[0] + $shift) {
+                    return ['day' => $first[2], 'start' => $first[3], 'end' => $first[4]];
+                }
+            }
+        }
+    }
+    return null;
+}
+
+function assignment_conflict(PDO $pdo, int $workerId, int $scheduleId, string $validFrom, ?string $validUntil, int $excludeId = 0): ?array
+{
+    $stmt = $pdo->prepare("SELECT aa.id, aa.schedule_id, aa.valid_from, aa.valid_until,
+            s.name AS schedule_name, l.name AS location_name, w.full_name AS worker_name
+        FROM attendance_assignments aa
+        JOIN workers w ON w.id=aa.worker_id
+        JOIN attendance_schedules s ON s.id=aa.schedule_id
+        JOIN attendance_locations l ON l.id=aa.location_id
+        WHERE aa.worker_id=:worker_id AND aa.status=1 AND aa.id<>:exclude_id
+          AND aa.valid_from<=:range_end AND (aa.valid_until IS NULL OR aa.valid_until>=:range_start)");
+    $stmt->execute([
+        'worker_id' => $workerId, 'exclude_id' => $excludeId,
+        'range_end' => $validUntil ?: '9999-12-31', 'range_start' => $validFrom,
+    ]);
+    foreach ($stmt->fetchAll() as $existing) {
+        $overlap = assignment_schedules_overlap($pdo, $scheduleId, (int) $existing['schedule_id']);
+        if ($overlap) return $existing + ['overlap' => $overlap];
+    }
+    return null;
+}
+
+function assignment_conflict_message(array $conflict): string
+{
+    $days = [1=>'lunes', 2=>'martes', 3=>'miércoles', 4=>'jueves', 5=>'viernes', 6=>'sábado', 7=>'domingo'];
+    $day = $days[(int) $conflict['overlap']['day']] ?? 'uno de los días';
+    $worker = trim((string) ($conflict['worker_name'] ?? ''));
+    return 'No se puede guardar porque ' . ($worker !== '' ? $worker : 'el trabajador')
+        . ' ya tiene una asignación que se superpone. '
+        . 'Conflicto con "' . $conflict['schedule_name'] . '" en ' . $conflict['location_name']
+        . ' (' . $day . ', ' . $conflict['overlap']['start'] . ' - ' . $conflict['overlap']['end'] . '). '
+        . 'Cambie el horario o finalice la asignación anterior.';
+}
+
 if (!in_array($scopeType, ['all', 'worker', 'selected'], true)) {
     json_response(['ok' => false, 'message' => 'Seleccione a quien se aplicara la asignacion.'], 400);
 }
@@ -84,6 +155,8 @@ if ($id > 0) {
         if ($currentWorkerId <= 0) {
             throw new RuntimeException('La asignación ya no está activa.');
         }
+        $conflict = assignment_conflict($pdo, $currentWorkerId, $scheduleId, $validFrom, $validUntil, $id);
+        if ($conflict) throw new DomainException(assignment_conflict_message($conflict));
         $pdo->prepare('UPDATE attendance_assignments
             SET status = 0, deactivated_at = NOW(), deactivated_by_user_id = :user_id
             WHERE id = :id AND status = 1')
@@ -104,7 +177,11 @@ if ($id > 0) {
         $pdo->commit();
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
-        json_response(['ok' => false, 'message' => $e instanceof RuntimeException ? $e->getMessage() : 'No se pudo actualizar la asignación.'], 500);
+        $controlled = $e instanceof RuntimeException || $e instanceof DomainException;
+        json_response(
+            ['ok' => false, 'message' => $controlled ? $e->getMessage() : 'No se pudo actualizar la asignación.'],
+            $e instanceof DomainException ? 409 : 500
+        );
     }
 } else {
     $pdo = db();
@@ -150,6 +227,10 @@ if ($id > 0) {
             VALUES (:worker_id, :location_id, :schedule_id, :activity, :instructions, :valid_from, :valid_until, 1, :user_id)');
 
         foreach ($workerIds as $targetWorkerId) {
+            if ($conflictPolicy === 'allow') {
+                $conflict = assignment_conflict($pdo, (int) $targetWorkerId, $scheduleId, $validFrom, $validUntil);
+                if ($conflict) throw new DomainException(assignment_conflict_message($conflict));
+            }
             if ($conflictPolicy === 'replace') {
                 $disable->execute(['worker_id' => (int) $targetWorkerId, 'user_id' => $currentUserId,
                     'range_end' => $validUntil ?: '9999-12-31', 'range_start' => $validFrom]);
@@ -170,8 +251,10 @@ if ($id > 0) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();
         }
-        $message = $e instanceof RuntimeException ? $e->getMessage() : 'No se pudo guardar la asignacion.';
-        json_response(['ok' => false, 'message' => $message], 500);
+        $message = ($e instanceof RuntimeException || $e instanceof DomainException)
+            ? $e->getMessage()
+            : 'No se pudo guardar la asignacion.';
+        json_response(['ok' => false, 'message' => $message], $e instanceof DomainException ? 409 : 500);
     }
 }
 

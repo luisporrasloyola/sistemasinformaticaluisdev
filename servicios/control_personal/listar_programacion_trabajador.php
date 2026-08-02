@@ -19,8 +19,8 @@ $stmt = db()->prepare("SELECT ap.id, ap.assignment_id, ap.program_date, ap.entry
         EXISTS(SELECT 1 FROM attendance_marks ams WHERE ams.program_id = ap.id AND ams.mark_type = 'salida') AS has_exit
     FROM attendance_programs ap
     JOIN attendance_assignments aa ON aa.id=ap.assignment_id
-    JOIN attendance_locations l ON l.id=aa.location_id
-    JOIN attendance_schedules s ON s.id=aa.schedule_id
+    JOIN attendance_locations l ON l.id=COALESCE(ap.location_id, aa.location_id)
+    JOIN attendance_schedules s ON s.id=COALESCE(ap.schedule_id, aa.schedule_id)
     WHERE ap.worker_id=:worker_id AND ap.status='programada'
       AND ap.program_date BETWEEN DATE_SUB(CURDATE(), INTERVAL 3 MONTH) AND DATE_ADD(CURDATE(), INTERVAL 12 MONTH)
     ORDER BY ap.program_date, ap.entry_time");

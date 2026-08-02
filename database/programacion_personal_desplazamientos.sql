@@ -2,6 +2,8 @@ CREATE TABLE IF NOT EXISTS attendance_programs (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     assignment_id INT UNSIGNED NOT NULL,
     worker_id INT UNSIGNED NOT NULL,
+    location_id INT UNSIGNED NULL,
+    schedule_id INT UNSIGNED NULL,
     program_date DATE NOT NULL,
     entry_time TIME NOT NULL,
     entry_start TIME NOT NULL,
@@ -16,8 +18,12 @@ CREATE TABLE IF NOT EXISTS attendance_programs (
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_attendance_program_assignment_date (assignment_id, program_date),
     KEY idx_attendance_program_worker_date (worker_id, program_date),
+    KEY idx_attendance_program_location (location_id),
+    KEY idx_attendance_program_schedule (schedule_id),
     CONSTRAINT fk_attendance_program_assignment FOREIGN KEY (assignment_id) REFERENCES attendance_assignments(id),
     CONSTRAINT fk_attendance_program_worker FOREIGN KEY (worker_id) REFERENCES workers(id) ON DELETE CASCADE,
+    CONSTRAINT fk_attendance_program_location FOREIGN KEY (location_id) REFERENCES attendance_locations(id),
+    CONSTRAINT fk_attendance_program_schedule FOREIGN KEY (schedule_id) REFERENCES attendance_schedules(id),
     CONSTRAINT fk_attendance_program_created_by FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

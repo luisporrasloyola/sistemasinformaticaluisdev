@@ -70,7 +70,7 @@ if ($workerId > 0) {
     $programParams['program_worker_id'] = $workerId;
 }
 if ($scheduleId > 0) {
-    $programFilters[] = 'aa.schedule_id = :program_schedule_id';
+    $programFilters[] = 'COALESCE(ap.schedule_id, aa.schedule_id) = :program_schedule_id';
     $programParams['program_schedule_id'] = $scheduleId;
 }
 $programWhere = $programFilters ? ' AND ' . implode(' AND ', $programFilters) : '';
@@ -82,8 +82,8 @@ $programStmt = db()->prepare("SELECT ap.id, ap.assignment_id, ap.worker_id, ap.p
         s.name AS schedule_name, aa.activity AS assignment_activity, aa.instructions AS assignment_instructions
     FROM attendance_programs ap
     JOIN attendance_assignments aa ON aa.id = ap.assignment_id
-    JOIN attendance_locations l ON l.id = aa.location_id
-    JOIN attendance_schedules s ON s.id = aa.schedule_id
+    JOIN attendance_locations l ON l.id = COALESCE(ap.location_id, aa.location_id)
+    JOIN attendance_schedules s ON s.id = COALESCE(ap.schedule_id, aa.schedule_id)
     JOIN workers w ON w.id = ap.worker_id
     WHERE ap.status = 'programada'
       AND ap.program_date BETWEEN :program_start AND :program_end {$programWhere}

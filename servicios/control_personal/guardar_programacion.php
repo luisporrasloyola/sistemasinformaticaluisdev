@@ -8,6 +8,8 @@ verify_csrf($_POST['csrf_token'] ?? null);
 
 $id = (int) ($_POST['id'] ?? 0);
 $assignmentId = (int) ($_POST['assignment_id'] ?? 0);
+$locationId = (int) ($_POST['location_id'] ?? 0);
+$scheduleId = (int) ($_POST['schedule_id'] ?? 0);
 $programDate = trim((string) ($_POST['program_date'] ?? ''));
 $activity = trim((string) ($_POST['activity'] ?? ''));
 $notes = trim((string) ($_POST['notes'] ?? ($_POST['stops'] ?? '')));
@@ -17,7 +19,7 @@ $extraExit = trim((string) ($_POST['extra_exit_time'] ?? ''));
 $extraAdvance = filter_var($_POST['extra_entry_advance'] ?? 0, FILTER_VALIDATE_INT);
 $extraTolerance = filter_var($_POST['extra_tolerance'] ?? 0, FILTER_VALIDATE_INT);
 
-if ($assignmentId <= 0 || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $programDate)) {
+if ($assignmentId <= 0 || $locationId <= 0 || $scheduleId <= 0 || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $programDate)) {
     json_response(['ok' => false, 'message' => 'Seleccione una asignación activa y una fecha válida.'], 422);
 }
 if (!in_array($scheduleSource, ['template', 'extraordinary'], true)) {
@@ -35,6 +37,16 @@ $stmt = db()->prepare("SELECT aa.*, w.full_name, l.name AS location_name, s.name
 $stmt->execute(['id' => $assignmentId, 'program_date_from' => $programDate, 'program_date_until' => $programDate]);
 $assignment = $stmt->fetch();
 if (!$assignment) json_response(['ok' => false, 'message' => 'La asignación seleccionada ya no está activa.'], 409);
+
+$locationStmt = db()->prepare('SELECT id, name FROM attendance_locations WHERE id=:id AND status=1 LIMIT 1');
+$locationStmt->execute(['id' => $locationId]);
+$selectedLocation = $locationStmt->fetch();
+$scheduleStmt = db()->prepare('SELECT id, name FROM attendance_schedules WHERE id=:id AND status=1 LIMIT 1');
+$scheduleStmt->execute(['id' => $scheduleId]);
+$selectedSchedule = $scheduleStmt->fetch();
+if (!$selectedLocation || !$selectedSchedule) {
+    json_response(['ok' => false, 'message' => 'Seleccione un lugar de marcación y una plantilla de horario vigentes.'], 422);
+}
 
 if ($scheduleSource === 'extraordinary') {
     if (!preg_match('/^\d{2}:\d{2}$/', $extraEntry) || !preg_match('/^\d{2}:\d{2}$/', $extraExit)
@@ -98,13 +110,15 @@ if ($programInUse) {
 }
 $pdo->beginTransaction();
 try {
-    $values = ['assignment_id'=>$assignmentId, 'worker_id'=>$assignment['worker_id'], 'program_date'=>$programDate,
+    $values = ['assignment_id'=>$assignmentId, 'worker_id'=>$assignment['worker_id'],
+        'location_id'=>$locationId, 'schedule_id'=>$scheduleId, 'program_date'=>$programDate,
         'entry_time'=>$entryTime, 'entry_start'=>$entryStart, 'entry_end'=>$entryEnd, 'exit_time'=>$exitTime,
         'tolerance'=>$tolerance, 'schedule_source'=>$scheduleSource,
         'activity'=>$activity !== '' ? mb_substr($activity, 0, 180) : ($assignment['activity'] ?: null),
         'notes'=>$notes !== '' ? mb_substr($notes, 0, 500) : null];
     if ($id > 0) {
         $stmt = $pdo->prepare("UPDATE attendance_programs SET assignment_id=:assignment_id, worker_id=:worker_id,
+            location_id=:location_id, schedule_id=:schedule_id,
             program_date=:program_date, entry_time=:entry_time, entry_start=:entry_start, entry_end=:entry_end,
             exit_time=:exit_time, tolerance_minutes=:tolerance, schedule_source=:schedule_source,
             activity=:activity, notes=:notes, status='programada' WHERE id=:id");
@@ -116,8 +130,8 @@ try {
         $pdo->prepare('DELETE FROM attendance_program_stops WHERE program_id=:id')->execute(['id'=>$programId]);
     } else {
         $stmt = $pdo->prepare("INSERT INTO attendance_programs
-            (assignment_id,worker_id,program_date,entry_time,entry_start,entry_end,exit_time,tolerance_minutes,schedule_source,activity,notes,status,created_by_user_id)
-            VALUES (:assignment_id,:worker_id,:program_date,:entry_time,:entry_start,:entry_end,:exit_time,:tolerance,:schedule_source,:activity,:notes,'programada',:user_id)");
+            (assignment_id,worker_id,location_id,schedule_id,program_date,entry_time,entry_start,entry_end,exit_time,tolerance_minutes,schedule_source,activity,notes,status,created_by_user_id)
+            VALUES (:assignment_id,:worker_id,:location_id,:schedule_id,:program_date,:entry_time,:entry_start,:entry_end,:exit_time,:tolerance,:schedule_source,:activity,:notes,'programada',:user_id)");
         $stmt->execute($values + ['user_id'=>(int)(current_user()['id'] ?? 0) ?: null]);
         $programId = (int) $pdo->lastInsertId();
     }
