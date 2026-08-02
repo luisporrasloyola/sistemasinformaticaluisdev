@@ -1738,6 +1738,82 @@ body {
 
 .dashboard-title {
     align-items: stretch;
+    flex-direction: column;
+    flex-wrap: wrap;
+    gap: 14px;
+}
+
+.attendance-dashboard-filters {
+    display: grid;
+    grid-template-columns: minmax(180px, 1.15fr) minmax(220px, 1.4fr) minmax(145px, .8fr) minmax(145px, .8fr) auto;
+    align-items: end;
+    gap: 14px;
+    width: 100%;
+    padding: 16px 18px;
+    border: 1px solid #dbe5f1;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #ffffff 0%, #f8fbff 100%);
+    box-shadow: 0 6px 18px rgba(15, 23, 42, .05);
+}
+
+.attendance-dashboard-filters .form-label {
+    display: block;
+    margin-bottom: 6px;
+    color: #334155 !important;
+    font-size: .78rem !important;
+    letter-spacing: .01em;
+}
+
+.attendance-dashboard-filters .select2-container {
+    width: 100% !important;
+    min-width: 0;
+}
+
+.attendance-dashboard-filters .form-control,
+.attendance-dashboard-filters .form-select,
+.attendance-dashboard-filters .select2-selection--single {
+    min-height: 42px;
+    border-color: #cbd8e8;
+    background-color: #fff;
+}
+
+.attendance-dashboard-filters .form-control:focus,
+.attendance-dashboard-filters .form-select:focus,
+.attendance-dashboard-filters .select2-container--focus .select2-selection--single,
+.attendance-dashboard-filters .select2-container--open .select2-selection--single {
+    border-color: #6ea8fe !important;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, .12) !important;
+}
+
+.attendance-filter-submit {
+    min-height: 42px;
+    padding-inline: 22px;
+    white-space: nowrap;
+    box-shadow: 0 5px 12px rgba(37, 99, 235, .2);
+}
+
+@media (max-width: 1180px) {
+    .attendance-dashboard-filters {
+        grid-template-columns: repeat(2, minmax(190px, 1fr));
+    }
+
+    .attendance-filter-submit {
+        grid-column: 1 / -1;
+        width: 100%;
+    }
+}
+
+@media (max-width: 620px) {
+    .attendance-dashboard-filters {
+        grid-template-columns: 1fr;
+        gap: 11px;
+        padding: 14px;
+    }
+
+    .attendance-filter-submit {
+        grid-column: auto;
+        width: 100%;
+    }
 }
 
 .dashboard-total {

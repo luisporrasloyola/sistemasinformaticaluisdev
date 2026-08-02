@@ -11,6 +11,26 @@ $defaultRangeStart = date('Y-m-01');
 $defaultRangeEnd = date('Y-m-t');
 $rangeStart = (string) ($_GET['desde'] ?? $defaultRangeStart);
 $rangeEnd = (string) ($_GET['hasta'] ?? $defaultRangeEnd);
+$selectedCompanyId = max(0, (int) ($_GET['empresa_id'] ?? 0));
+$selectedWorkerId = max(0, (int) ($_GET['trabajador_id'] ?? 0));
+
+$dashboardCompanies = db()->query('SELECT id, name FROM companies ORDER BY name')->fetchAll();
+$dashboardWorkers = db()->query("SELECT w.id, w.company_id, w.full_name, w.document_number, c.name AS company
+    FROM workers w
+    LEFT JOIN companies c ON c.id = w.company_id
+    ORDER BY w.full_name")->fetchAll();
+
+if ($selectedWorkerId > 0) {
+    $selectedWorker = array_values(array_filter(
+        $dashboardWorkers,
+        static fn (array $worker): bool => (int) $worker['id'] === $selectedWorkerId
+    ))[0] ?? null;
+
+    if ($selectedWorker === null
+        || ($selectedCompanyId > 0 && (int) $selectedWorker['company_id'] !== $selectedCompanyId)) {
+        $selectedWorkerId = 0;
+    }
+}
 
 $isValidDate = static function (string $value): bool {
     $date = DateTimeImmutable::createFromFormat('!Y-m-d', $value);
@@ -225,10 +245,16 @@ $stmt = db()->prepare("SELECT
     LEFT JOIN attendance_marks am ON am.worker_id = w.id
         AND am.mark_date BETWEEN :month_start AND :month_end
     LEFT JOIN attendance_locations l ON l.id = am.location_id
+    WHERE (:filter_company = 0 OR w.company_id = :company_id)
+      AND (:filter_worker = 0 OR w.id = :worker_id)
     ORDER BY w.full_name, am.mark_date, am.mark_type");
 $stmt->execute([
     'month_start' => $monthStart,
     'month_end' => $monthEnd,
+    'filter_company' => $selectedCompanyId,
+    'company_id' => $selectedCompanyId,
+    'filter_worker' => $selectedWorkerId,
+    'worker_id' => $selectedWorkerId,
 ]);
 $matrixRows = [];
 foreach ($stmt->fetchAll() as $row) {
@@ -337,18 +363,90 @@ require __DIR__ . '/../../includes/header.php';
         <h1>Dashboard de asistencia</h1>
         <p>Resumen operativo de asistencias, faltas, tardanzas y cobertura diaria.</p>
     </div>
-    <form class="d-flex flex-wrap gap-2 align-items-end" method="get">
-        <div>
-            <label class="form-label small fw-bold text-muted">Desde</label>
-            <input class="form-control" type="date" name="desde" value="<?= e($rangeStart) ?>" required>
+    <form class="attendance-dashboard-filters" method="get">
+        <div class="attendance-filter-company">
+            <label class="form-label small fw-bold text-muted" for="attendanceCompanyFilter">Por empresa</label>
+            <select class="form-select select2-searchable" id="attendanceCompanyFilter" name="empresa_id"
+                data-placeholder="Todas las empresas" data-no-results="No se encontraron empresas">
+                <option value="0">Todas las empresas</option>
+                <?php foreach ($dashboardCompanies as $company): ?>
+                    <option value="<?= (int) $company['id'] ?>" <?= $selectedCompanyId === (int) $company['id'] ? 'selected' : '' ?>>
+                        <?= e($company['name']) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="attendance-filter-worker">
+            <label class="form-label small fw-bold text-muted" for="attendanceWorkerFilter">Por trabajador</label>
+            <select class="form-select select2-searchable" id="attendanceWorkerFilter" name="trabajador_id"
+                data-placeholder="Todo el personal" data-no-results="No se encontraron trabajadores">
+                <option value="0">Todo el personal</option>
+                <?php foreach ($dashboardWorkers as $worker): ?>
+                    <option value="<?= (int) $worker['id'] ?>" data-company-id="<?= (int) $worker['company_id'] ?>"
+                        <?= $selectedWorkerId === (int) $worker['id'] ? 'selected' : '' ?>>
+                        <?= e($worker['full_name'] . ' - ' . $worker['document_number']) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
         </div>
         <div>
-            <label class="form-label small fw-bold text-muted">Hasta</label>
-            <input class="form-control" type="date" name="hasta" value="<?= e($rangeEnd) ?>" required>
+            <label class="form-label small fw-bold text-muted" for="attendanceDateFrom">Desde</label>
+            <input class="form-control" id="attendanceDateFrom" type="date" name="desde" value="<?= e($rangeStart) ?>" required>
         </div>
-        <button class="btn btn-primary" type="submit"><i class="fa-solid fa-filter me-2"></i>Filtrar</button>
+        <div>
+            <label class="form-label small fw-bold text-muted" for="attendanceDateTo">Hasta</label>
+            <input class="form-control" id="attendanceDateTo" type="date" name="hasta" value="<?= e($rangeEnd) ?>" required>
+        </div>
+        <button class="btn btn-primary attendance-filter-submit" type="submit"><i class="fa-solid fa-filter me-2"></i>Filtrar</button>
     </form>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const companyField = document.getElementById('attendanceCompanyFilter');
+    const workerField = document.getElementById('attendanceWorkerFilter');
+    if (!companyField || !workerField) return;
+
+    const workers = Array.from(workerField.options).slice(1).map((option) => ({
+        value: option.value,
+        label: option.textContent.trim(),
+        companyId: option.dataset.companyId || '0'
+    }));
+
+    const refreshWorkers = (keepSelection = false) => {
+        const companyId = companyField.value;
+        const previousValue = keepSelection ? workerField.value : '0';
+        const visibleWorkers = companyId === '0'
+            ? workers
+            : workers.filter((worker) => worker.companyId === companyId);
+
+        workerField.replaceChildren(new Option('Todo el personal', '0'));
+        visibleWorkers.forEach((worker) => {
+            workerField.add(new Option(
+                worker.label,
+                worker.value,
+                false,
+                worker.value === previousValue
+            ));
+        });
+
+        if (!visibleWorkers.some((worker) => worker.value === previousValue)) {
+            workerField.value = '0';
+        }
+
+        if (window.jQuery && window.jQuery.fn.select2) {
+            window.jQuery(workerField).trigger('change.select2');
+        }
+    };
+
+    refreshWorkers(true);
+    if (window.jQuery) {
+        window.jQuery(companyField).on('change.attendanceDashboard', () => refreshWorkers(false));
+    } else {
+        companyField.addEventListener('change', () => refreshWorkers(false));
+    }
+});
+</script>
 
 <div class="attendance-kpi-grid attendance-kpi-grid-five mb-3" id="attendanceLiveKpis" data-live-version="<?= $attendanceLiveVersion ?>">
     <div class="attendance-kpi-card kpi-green">
