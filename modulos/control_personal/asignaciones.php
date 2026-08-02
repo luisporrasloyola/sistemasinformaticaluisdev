@@ -36,6 +36,11 @@ $workers = db()->query("SELECT w.id, w.full_name, w.document_number, c.name AS c
     ORDER BY w.full_name")->fetchAll();
 $locations = db()->query('SELECT id, name FROM attendance_locations WHERE status = 1 ORDER BY name')->fetchAll();
 $schedules = db()->query('SELECT id, name FROM attendance_schedules WHERE status = 1 ORDER BY name')->fetchAll();
+$activeAssignmentPeriods = array_map(static fn(array $assignment): array => [
+    'worker_id' => (int) $assignment['worker_id'],
+    'valid_from' => (string) $assignment['valid_from'],
+    'valid_until' => $assignment['valid_until'] ?: null,
+], db()->query('SELECT worker_id, valid_from, valid_until FROM attendance_assignments WHERE status = 1')->fetchAll());
 
 require __DIR__ . '/../../includes/header.php';
 ?>
@@ -261,17 +266,29 @@ require __DIR__ . '/../../includes/header.php';
                             <option value="selected">Seleccionar trabajadores</option>
                         </select>
                     </div>
-                    <div class="col-md-12" id="assignmentConflictField">
+                    <div class="col-md-12 d-none" id="assignmentAvailabilitySummary" aria-live="polite">
+                        <div class="assignment-availability-card">
+                            <span class="assignment-availability-icon"><i class="fa-solid fa-users"></i></span>
+                            <div><strong id="assignmentAvailabilityTitle"></strong><small id="assignmentAvailabilityDetail"></small></div>
+                            <button class="btn btn-sm assignment-availability-view" type="button" id="assignmentAvailableWorkersBtn"><i class="fa-solid fa-list-check"></i><span>Ver disponibles</span></button>
+                        </div>
+                    </div>
+                    <div class="col-md-12 d-none" id="assignmentConflictField">
                         <div class="assignment-safety-card">
                             <div class="assignment-safety-icon"><i class="fa-solid fa-shield-halved"></i></div>
                             <div class="flex-grow-1">
-                                <label class="form-label" for="assignmentConflictPolicy">Si el trabajador ya tiene una asignación activa</label>
-                                <select class="form-select" name="conflict_policy" id="assignmentConflictPolicy">
-                                    <option value="skip">Conservarla y omitir al trabajador (recomendado)</option>
-                                    <option value="replace">Finalizar la anterior y crear una nueva asignación</option>
-                                    <option value="allow">Crear otra asignación sin superponer horarios</option>
-                                </select>
-                                <small class="text-muted d-block mt-2">Solo se permitirán varias asignaciones cuando sus vigencias, días y horas no se crucen.</small>
+                                <span class="assignment-conflict-heading" id="assignmentConflictHeading">Asignaciones encontradas</span>
+                                <input type="hidden" name="conflict_policy" id="assignmentConflictPolicy" value="skip">
+                                <div class="assignment-conflict-choices">
+                                    <label class="assignment-conflict-choice">
+                                        <input type="radio" name="assignment_conflict_choice" value="skip" checked>
+                                        <span><strong>Asignar solo a disponibles</strong><small id="assignmentSkipDetail">No modifica asignaciones actuales.</small></span>
+                                    </label>
+                                    <label class="assignment-conflict-choice is-replace">
+                                        <input type="radio" name="assignment_conflict_choice" value="replace">
+                                        <span><strong>Reemplazar asignaciones</strong><small id="assignmentReplaceDetail">Cierra las actuales y aplica la nueva.</small></span>
+                                    </label>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -302,7 +319,8 @@ require __DIR__ . '/../../includes/header.php';
                             <div class="assignment-workers-grid" id="assignmentWorkersGrid">
                                 <?php foreach ($workers as $worker): ?>
                                     <?php $workerLabel = $worker['full_name'] . ' - ' . $worker['document_number'] . (!empty($worker['company']) ? ' - ' . $worker['company'] : ''); ?>
-                                    <label class="assignment-worker-option" data-search="<?= e(strtolower($workerLabel)) ?>">
+                                    <label class="assignment-worker-option" data-search="<?= e(strtolower($workerLabel)) ?>"
+                                        data-name="<?= e($worker['full_name']) ?>" data-document="<?= e($worker['document_number']) ?>" data-company="<?= e($worker['company'] ?? '') ?>">
                                         <input class="form-check-input assignment-worker-check" type="checkbox" name="worker_ids[]" value="<?= (int) $worker['id'] ?>">
                                         <span><?= e($workerLabel) ?></span>
                                     </label>
@@ -348,7 +366,7 @@ require __DIR__ . '/../../includes/header.php';
                                         <small class="text-muted d-block">Las jornadas y marcaciones solo estar&aacute;n disponibles dentro de este periodo.</small>
                                     </div>
                                     <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" id="assignmentNoEnd" name="no_end" value="1">
+                                        <input class="form-check-input" type="checkbox" id="assignmentNoEnd" name="no_end" value="1" checked>
                                         <label class="form-check-label" for="assignmentNoEnd">Sin fecha final</label>
                                     </div>
                                 </div>
@@ -359,12 +377,12 @@ require __DIR__ . '/../../includes/header.php';
                                     </div>
                                     <div class="col-md-6">
                                         <label class="form-label" for="assignmentValidUntil">Fecha de finalizaci&oacute;n</label>
-                                        <input class="form-control" type="date" name="valid_until" id="assignmentValidUntil" required>
+                                        <input class="form-control" type="date" name="valid_until" id="assignmentValidUntil" disabled>
                                     </div>
                                 </div>
                                 <div class="d-flex flex-wrap gap-2 mt-3">
                                     <button class="btn btn-sm btn-outline-primary js-validity-preset" type="button" data-preset="month">Fin de mes</button>
-                                    <button class="btn btn-sm btn-primary js-validity-preset" type="button" data-preset="year">Fin de a&ntilde;o</button>
+                                    <button class="btn btn-sm btn-outline-primary js-validity-preset" type="button" data-preset="year">Fin de a&ntilde;o</button>
                                     <button class="btn btn-sm btn-outline-primary js-validity-preset" type="button" data-preset="6months">6 meses</button>
                                     <button class="btn btn-sm btn-outline-primary js-validity-preset" type="button" data-preset="1year">1 a&ntilde;o</button>
                                     <button class="btn btn-sm btn-outline-primary js-validity-preset" type="button" data-preset="2years">2 a&ntilde;os</button>
@@ -381,6 +399,10 @@ require __DIR__ . '/../../includes/header.php';
         </form>
     </div>
 </div>
+
+<script>
+window.assignmentActivePeriods = <?= json_encode($activeAssignmentPeriods, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+</script>
 
 <div class="modal fade" id="assignmentHistoryModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">

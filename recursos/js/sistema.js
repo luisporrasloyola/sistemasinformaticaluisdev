@@ -5060,14 +5060,124 @@ function initControlPersonalAssignments() {
     const selectAllWorkers = document.getElementById('assignmentSelectAllWorkers');
     const workerSearch = document.getElementById('assignmentWorkerSearch');
     const workersError = document.getElementById('assignmentWorkersError');
+    const availabilitySummary = document.getElementById('assignmentAvailabilitySummary');
+    const availabilityTitle = document.getElementById('assignmentAvailabilityTitle');
+    const availabilityDetail = document.getElementById('assignmentAvailabilityDetail');
+    const availableWorkersBtn = document.getElementById('assignmentAvailableWorkersBtn');
     const conflictField = document.getElementById('assignmentConflictField');
+    const conflictHeading = document.getElementById('assignmentConflictHeading');
     const conflictPolicy = document.getElementById('assignmentConflictPolicy');
+    const conflictChoices = Array.from(document.querySelectorAll('input[name="assignment_conflict_choice"]'));
+    const skipDetail = document.getElementById('assignmentSkipDetail');
+    const replaceDetail = document.getElementById('assignmentReplaceDetail');
+    const activeAssignmentPeriods = Array.isArray(window.assignmentActivePeriods) ? window.assignmentActivePeriods : [];
+    const workerDirectory = new Map(workerChecks.map((check) => {
+        const option = check.closest('.assignment-worker-option');
+        return [Number(check.value), {
+            id: Number(check.value),
+            name: option?.dataset.name || 'Trabajador',
+            document: option?.dataset.document || 'Sin documento',
+            company: option?.dataset.company || 'Sin empresa registrada'
+        }];
+    }));
+    let availableWorkers = [];
     const validFrom = document.getElementById('assignmentValidFrom');
     const validUntil = document.getElementById('assignmentValidUntil');
     const noEnd = document.getElementById('assignmentNoEnd');
     const groupSearch = document.getElementById('assignmentGroupSearch');
     const assignmentGroups = Array.from(document.querySelectorAll('.assignment-group'));
     const assignmentSearchEmpty = document.getElementById('assignmentSearchEmpty');
+
+    function syncConflictChoice(value = 'skip') {
+        if (conflictPolicy) conflictPolicy.value = value;
+        conflictChoices.forEach((choice) => { choice.checked = choice.value === value; });
+    }
+
+    conflictChoices.forEach((choice) => choice.addEventListener('change', () => {
+        if (choice.checked) syncConflictChoice(choice.value);
+    }));
+    syncConflictChoice();
+
+    function refreshConflictVisibility() {
+        if (!conflictField || document.getElementById('assignmentId')?.value) return;
+        const scope = scopeField?.value || 'all';
+        const allWorkerIds = workerChecks.map((check) => Number(check.value)).filter(Boolean);
+        const selectedIds = scope === 'worker'
+            ? [Number(workerField?.value || 0)].filter(Boolean)
+            : (scope === 'selected'
+                ? workerChecks.filter((check) => check.checked).map((check) => Number(check.value))
+                : allWorkerIds);
+        const awaitingSelection = scope !== 'all' && selectedIds.length === 0;
+        const targetIds = [...new Set(awaitingSelection ? allWorkerIds : selectedIds)];
+        if (targetIds.length === 0) {
+            availableWorkers = [];
+            availabilitySummary?.classList.add('d-none');
+            conflictField.classList.add('d-none');
+            syncConflictChoice('skip');
+            return;
+        }
+        const rangeStart = validFrom?.value || localDateValue();
+        const rangeEnd = noEnd?.checked ? '9999-12-31' : (validUntil?.value || rangeStart);
+        const conflictingWorkers = new Set();
+
+        activeAssignmentPeriods.forEach((assignment) => {
+            const workerId = Number(assignment.worker_id || 0);
+            if (!targetIds.includes(workerId)) return;
+            const currentEnd = assignment.valid_until || '9999-12-31';
+            if (assignment.valid_from <= rangeEnd && currentEnd >= rangeStart) conflictingWorkers.add(workerId);
+        });
+
+        const hasConflicts = conflictingWorkers.size > 0;
+        const availableCount = Math.max(0, targetIds.length - conflictingWorkers.size);
+        availableWorkers = targetIds.filter((workerId) => !conflictingWorkers.has(workerId)).map((workerId) => workerDirectory.get(workerId)).filter(Boolean);
+        availabilitySummary?.classList.remove('d-none');
+        const availabilityCard = availabilitySummary?.querySelector('.assignment-availability-card');
+        availabilityCard?.classList.toggle('has-conflicts', hasConflicts && availableCount > 0);
+        availabilityCard?.classList.toggle('none-available', availableCount === 0);
+        availableWorkersBtn?.classList.toggle('d-none', availableCount === 0);
+        if (availabilityTitle) {
+            availabilityTitle.textContent = awaitingSelection && availableCount > 0
+                ? `${availableCount} ${availableCount === 1 ? 'trabajador disponible' : 'trabajadores disponibles'} para seleccionar`
+                : availableCount === 0
+                ? 'No hay personal disponible para esta vigencia'
+                : `${availableCount} ${availableCount === 1 ? 'trabajador disponible' : 'trabajadores disponibles'} para asignar`;
+        }
+        if (availabilityDetail) {
+            const targetLabel = targetIds.length === 1 ? 'trabajador' : 'trabajadores';
+            availabilityDetail.textContent = awaitingSelection
+                ? 'Consulta la lista y luego selecciona el personal que deseas asignar.'
+                : hasConflicts
+                ? `De ${targetIds.length} ${targetLabel}, ${conflictingWorkers.size} ya ${conflictingWorkers.size === 1 ? 'tiene' : 'tienen'} una asignación.`
+                : `${targetIds.length === 1 ? 'El' : 'Los'} ${targetIds.length} ${targetLabel} ${targetIds.length === 1 ? 'puede' : 'pueden'} recibir esta asignación.`;
+        }
+        conflictField.classList.toggle('d-none', awaitingSelection || !hasConflicts);
+        if (awaitingSelection || !hasConflicts) syncConflictChoice('skip');
+        if (conflictHeading && hasConflicts && !awaitingSelection) {
+            const count = conflictingWorkers.size;
+            conflictHeading.textContent = count === 1
+                ? '1 trabajador ya tiene asignación'
+                : `${count} trabajadores ya tienen asignación`;
+        }
+        if (skipDetail) skipDetail.textContent = `${availableCount} ${availableCount === 1 ? 'recibirá' : 'recibirán'} la nueva; ${conflictingWorkers.size} ${conflictingWorkers.size === 1 ? 'conservará' : 'conservarán'} la actual.`;
+        if (replaceDetail) replaceDetail.textContent = `${targetIds.length === 1 ? 'El' : 'Los'} ${targetIds.length} ${targetIds.length === 1 ? 'trabajador recibirá' : 'trabajadores recibirán'} la nueva asignación.`;
+    }
+
+    availableWorkersBtn?.addEventListener('click', () => {
+        if (!availableWorkers.length) return;
+        const rows = availableWorkers.map((worker) => `
+            <div class="assignment-available-worker">
+                <span><i class="fa-solid fa-user-check"></i></span>
+                <div><strong>${escapeHtml(worker.name)}</strong><small>${escapeHtml(worker.document)} · ${escapeHtml(worker.company)}</small></div>
+            </div>
+        `).join('');
+        Swal.fire({
+            title: `${availableWorkers.length} ${availableWorkers.length === 1 ? 'trabajador disponible' : 'trabajadores disponibles'}`,
+            html: `<div class="assignment-available-workers-list">${rows}</div>`,
+            icon: 'success',
+            width: 560,
+            confirmButtonText: 'Cerrar'
+        });
+    });
 
     groupSearch?.addEventListener('input', () => {
         const query = normalizarTexto(groupSearch.value);
@@ -5307,10 +5417,10 @@ function initControlPersonalAssignments() {
     function setValidityDefaults() {
         const start = new Date();
         validFrom.value = localIsoDate(start);
-        validUntil.value = `${start.getFullYear()}-12-31`;
-        noEnd.checked = false;
-        validUntil.disabled = false;
-        validUntil.required = true;
+        validUntil.value = '';
+        noEnd.checked = true;
+        validUntil.disabled = true;
+        validUntil.required = false;
     }
     function syncNoEnd() {
         validUntil.disabled = noEnd.checked;
@@ -5361,10 +5471,11 @@ function initControlPersonalAssignments() {
         validUntil.value = getValidityPresetEnd(startValue, button.dataset.preset);
         syncNoEnd();
         selectValidityPreset(button);
+        refreshConflictVisibility();
     }));
-    validFrom?.addEventListener('input', syncValidityPresetFromDates);
-    validUntil?.addEventListener('input', syncValidityPresetFromDates);
-    noEnd?.addEventListener('change', syncValidityPresetFromDates);
+    validFrom?.addEventListener('input', () => { syncValidityPresetFromDates(); refreshConflictVisibility(); });
+    validUntil?.addEventListener('input', () => { syncValidityPresetFromDates(); refreshConflictVisibility(); });
+    noEnd?.addEventListener('change', () => { syncValidityPresetFromDates(); refreshConflictVisibility(); });
 
     function syncAssignmentScope() {
         const isWorker = scopeField.value === 'worker';
@@ -5377,6 +5488,7 @@ function initControlPersonalAssignments() {
             check.disabled = !isSelected;
         });
         workersError?.classList.add('d-none');
+        refreshConflictVisibility();
     }
 
     function updateAssignmentSelectAll() {
@@ -5393,11 +5505,14 @@ function initControlPersonalAssignments() {
             }
         });
         workersError?.classList.add('d-none');
+        refreshConflictVisibility();
     });
     workerChecks.forEach((check) => check.addEventListener('change', () => {
         updateAssignmentSelectAll();
         workersError?.classList.add('d-none');
+        refreshConflictVisibility();
     }));
+    workerField?.addEventListener('change', refreshConflictVisibility);
     workerSearch?.addEventListener('input', () => {
         const query = normalizarTexto(workerSearch.value);
         document.querySelectorAll('.assignment-worker-option').forEach((option) => {
@@ -5410,7 +5525,7 @@ function initControlPersonalAssignments() {
     document.getElementById('newAssignmentBtn')?.addEventListener('click', () => {
         form.reset();
         setValidityDefaults();
-        selectValidityPreset(validityPresetButtons.find((button) => button.dataset.preset === 'year') || null);
+        selectValidityPreset(null);
         if (window.jQuery && jQuery(workerField).hasClass('select2-hidden-accessible')) {
             jQuery(workerField).val('').trigger('change');
         }
@@ -5418,8 +5533,8 @@ function initControlPersonalAssignments() {
         document.getElementById('assignmentId').value = '';
         scopeField.disabled = false;
         scopeField.value = 'all';
-        if (conflictPolicy) conflictPolicy.value = 'skip';
-        conflictField?.classList.remove('d-none');
+        syncConflictChoice('skip');
+        conflictField?.classList.add('d-none');
         workerChecks.forEach((check) => { check.checked = false; });
         if (selectAllWorkers) {
             selectAllWorkers.checked = false;
@@ -5428,6 +5543,7 @@ function initControlPersonalAssignments() {
         if (workerSearch) workerSearch.value = '';
         document.querySelectorAll('.assignment-worker-option').forEach((option) => option.classList.remove('d-none'));
         syncAssignmentScope();
+        refreshConflictVisibility();
         document.getElementById('assignmentModalTitle').textContent = 'Nueva asignación';
         modal.show();
     });
@@ -5478,19 +5594,16 @@ function initControlPersonalAssignments() {
         if (isMultipleAssignment) {
             const selectedCount = workerChecks.filter((check) => check.checked).length;
             const willReplace = conflictPolicy?.value === 'replace';
-            const willAllowCompatible = conflictPolicy?.value === 'allow';
             const confirmed = await Swal.fire({
-                title: willReplace ? 'Confirmar cambio de asignaciones' : (willAllowCompatible ? 'Validar nueva asignación' : 'Confirmar asignación segura'),
+                title: willReplace ? 'Confirmar cambio de asignaciones' : 'Confirmar asignación segura',
                 text: willReplace
                     ? 'Las asignaciones activas involucradas se finalizarán y se crearán nuevas. El historial anterior permanecerá disponible.'
-                    : (willAllowCompatible
-                        ? 'Se creará otra asignación solo si su vigencia, días y horas no se superponen con las actuales.'
-                        : (scopeField.value === 'all'
-                        ? 'Solo se asignará al personal que actualmente no tenga una asignación activa.'
-                        : `Solo se asignará a los seleccionados sin asignación activa (${selectedCount} seleccionado(s)).`)),
+                    : (scopeField.value === 'all'
+                        ? 'La nueva asignación se aplicará al personal disponible. Quienes ya tengan otra asignación dentro de las fechas elegidas serán omitidos sin modificar sus datos actuales.'
+                        : `Se revisarán ${selectedCount} trabajador(es). La nueva asignación se aplicará solo a quienes estén disponibles en esas fechas; los demás conservarán su asignación actual.`),
                 icon: willReplace ? 'warning' : 'question',
                 showCancelButton: true,
-                confirmButtonText: willReplace ? 'Sí, finalizar y crear' : (willAllowCompatible ? 'Validar y guardar' : 'Sí, asignar'),
+                confirmButtonText: willReplace ? 'Sí, finalizar y crear' : 'Sí, asignar',
                 cancelButtonText: 'Cancelar'
             });
             if (!confirmed.isConfirmed) return;
@@ -5501,9 +5614,58 @@ function initControlPersonalAssignments() {
             Swal.fire('Atención', data.message || 'No se pudo guardar la asignación.', 'warning');
             return;
         }
+
+        if ((data.skipped_count || 0) > 0 && Array.isArray(data.skipped_conflicts) && data.skipped_conflicts.length > 0) {
+            const requested = data.requested_assignment || {};
+            const formatDateOnly = (value) => {
+                if (!value) return 'Sin fecha final';
+                const parts = String(value).slice(0, 10).split('-');
+                return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : String(value);
+            };
+            const requestedPeriod = `${formatDateOnly(requested.valid_from)} - ${formatDateOnly(requested.valid_until)}`;
+            const comparisons = data.skipped_conflicts.map((conflict) => `
+                <article class="assignment-conflict-comparison">
+                    <header>
+                        <i class="fa-solid fa-user-clock"></i>
+                        <div><strong>${escapeHtml(conflict.full_name || 'Trabajador')}</strong><small>Documento: ${escapeHtml(conflict.document_number || 'No registrado')}</small></div>
+                    </header>
+                    <div class="assignment-conflict-columns">
+                        <section class="is-current">
+                            <span class="assignment-conflict-label">Asignación que ya tiene</span>
+                            <b>${escapeHtml(conflict.schedule_name || 'Sin horario')}</b>
+                            <small><i class="fa-solid fa-location-dot"></i>${escapeHtml(conflict.location_name || 'Sin lugar')}</small>
+                            <small><i class="fa-regular fa-calendar"></i>${formatDateOnly(conflict.valid_from)} - ${formatDateOnly(conflict.valid_until)}</small>
+                            <small><i class="fa-solid fa-briefcase"></i>${escapeHtml(conflict.activity || 'Sin actividad especificada')}</small>
+                        </section>
+                        <span class="assignment-conflict-versus"><i class="fa-solid fa-arrow-right"></i></span>
+                        <section class="is-requested">
+                            <span class="assignment-conflict-label">Nueva asignación solicitada</span>
+                            <b>${escapeHtml(requested.schedule_name || 'Sin horario')}</b>
+                            <small><i class="fa-solid fa-location-dot"></i>${escapeHtml(requested.location_name || 'Sin lugar')}</small>
+                            <small><i class="fa-regular fa-calendar"></i>${requestedPeriod}</small>
+                            <small><i class="fa-solid fa-briefcase"></i>${escapeHtml(requested.activity || 'Sin actividad especificada')}</small>
+                        </section>
+                    </div>
+                    <p><i class="fa-solid fa-circle-info"></i>No se aplicó la nueva porque ambas asignaciones coinciden dentro del periodo seleccionado.</p>
+                </article>
+            `).join('');
+            const assignedCount = Number(data.assigned_count || 0);
+            await Swal.fire({
+                title: assignedCount > 0 ? 'Asignación aplicada parcialmente' : 'No se creó la nueva asignación',
+                html: `<div class="assignment-conflict-summary">${assignedCount > 0
+                    ? `<p><strong>${assignedCount}</strong> trabajador(es) recibieron la nueva asignación. Los siguientes no fueron modificados:</p>`
+                    : '<p>El trabajador ya tiene una asignación dentro de las mismas fechas. Compare los datos:</p>'}${comparisons}</div>`,
+                icon: 'info',
+                width: 780,
+                confirmButtonText: 'Entendido'
+            });
+            window.location.reload();
+            return;
+        }
+
         const details = [`${data.assigned_count || 0} asignación(es) creada(s).`];
         if ((data.skipped_count || 0) > 0) {
-            details.push(`${data.skipped_count} trabajador(es) omitido(s) porque ya tenían asignación.`);
+            details.push(`${data.skipped_count} trabajador(es) no recibieron la nueva asignación porque ya tenían otra dentro de las fechas seleccionadas; sus datos actuales no fueron modificados.`);
         }
         if ((data.replaced_count || 0) > 0) {
             details.push(`${data.replaced_count} asignación(es) anterior(es) conservada(s) en el historial.`);

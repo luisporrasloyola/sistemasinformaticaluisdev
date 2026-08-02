@@ -23,6 +23,8 @@ $currentUserId = (int) (current_user()['id'] ?? 0) ?: null;
 $assignedCount = 1;
 $skippedCount = 0;
 $replacedCount = 0;
+$skippedConflicts = [];
+$requestedAssignment = [];
 
 /** Convierte los días de una plantilla en intervalos de una semana modelo. */
 function assignment_schedule_intervals(PDO $pdo, int $scheduleId): array
@@ -100,7 +102,7 @@ function assignment_conflict_message(array $conflict): string
 if (!in_array($scopeType, ['all', 'worker', 'selected'], true)) {
     json_response(['ok' => false, 'message' => 'Seleccione a quien se aplicara la asignacion.'], 400);
 }
-if (!in_array($conflictPolicy, ['skip', 'replace', 'allow'], true)) {
+if (!in_array($conflictPolicy, ['skip', 'replace'], true)) {
     json_response(['ok' => false, 'message' => 'Seleccione cómo tratar las asignaciones existentes.'], 400);
 }
 if (($scopeType === 'worker' && $workerId <= 0) || $locationId <= 0 || $scheduleId <= 0) {
@@ -135,6 +137,17 @@ foreach ($checks as $check) {
         json_response(['ok' => false, 'message' => $check['message']], 400);
     }
 }
+
+$requestedStmt = db()->prepare('SELECT l.name AS location_name, s.name AS schedule_name
+    FROM attendance_locations l
+    CROSS JOIN attendance_schedules s
+    WHERE l.id = :location_id AND s.id = :schedule_id
+    LIMIT 1');
+$requestedStmt->execute(['location_id' => $locationId, 'schedule_id' => $scheduleId]);
+$requestedAssignment = $requestedStmt->fetch() ?: [];
+$requestedAssignment['activity'] = $activity ?: 'Sin actividad especificada';
+$requestedAssignment['valid_from'] = $validFrom;
+$requestedAssignment['valid_until'] = $validUntil;
 
 if ($scopeType === 'selected') {
     $placeholders = implode(',', array_fill(0, count($selectedWorkerIds), '?'));
@@ -208,6 +221,22 @@ if ($id > 0) {
         $activeLookup = array_fill_keys($activeWorkerIds, true);
 
         if ($conflictPolicy === 'skip') {
+            if ($activeWorkerIds) {
+                $conflictPlaceholders = implode(',', array_fill(0, count($activeWorkerIds), '?'));
+                $conflictStmt = $pdo->prepare("SELECT
+                        w.id AS worker_id, w.full_name, w.document_number,
+                        l.name AS location_name, s.name AS schedule_name,
+                        aa.activity, aa.valid_from, aa.valid_until
+                    FROM attendance_assignments aa
+                    JOIN workers w ON w.id = aa.worker_id
+                    JOIN attendance_locations l ON l.id = aa.location_id
+                    JOIN attendance_schedules s ON s.id = aa.schedule_id
+                    WHERE aa.status = 1 AND aa.worker_id IN ({$conflictPlaceholders})
+                      AND aa.valid_from <= ? AND (aa.valid_until IS NULL OR aa.valid_until >= ?)
+                    ORDER BY w.full_name, aa.valid_from");
+                $conflictStmt->execute(array_merge($activeWorkerIds, [$validUntil ?: '9999-12-31', $validFrom]));
+                $skippedConflicts = $conflictStmt->fetchAll();
+            }
             $workerIds = array_values(array_filter(
                 $workerIds,
                 static fn(int $targetId): bool => !isset($activeLookup[$targetId])
@@ -215,8 +244,6 @@ if ($id > 0) {
             $skippedCount = count($activeWorkerIds);
         } elseif ($conflictPolicy === 'replace') {
             $replacedCount = count($activeWorkerIds);
-        } else {
-            // Para 'allow', no filtramos ni desactivamos nada
         }
         $assignedCount = count($workerIds);
 
@@ -229,10 +256,6 @@ if ($id > 0) {
             VALUES (:worker_id, :location_id, :schedule_id, :activity, :instructions, :valid_from, :valid_until, 1, :user_id)');
 
         foreach ($workerIds as $targetWorkerId) {
-            if ($conflictPolicy === 'allow') {
-                $conflict = assignment_conflict($pdo, (int) $targetWorkerId, $scheduleId, $validFrom, $validUntil);
-                if ($conflict) throw new DomainException(assignment_conflict_message($conflict));
-            }
             if ($conflictPolicy === 'replace') {
                 $disable->execute(['worker_id' => (int) $targetWorkerId, 'user_id' => $currentUserId,
                     'range_end' => $validUntil ?: '9999-12-31', 'range_start' => $validFrom]);
@@ -266,4 +289,6 @@ json_response([
     'assigned_count' => $assignedCount,
     'skipped_count' => $skippedCount,
     'replaced_count' => $replacedCount,
+    'skipped_conflicts' => $skippedConflicts,
+    'requested_assignment' => $requestedAssignment,
 ]);
