@@ -54,7 +54,9 @@ function assignment_schedules_overlap(PDO $pdo, int $firstScheduleId, int $secon
         foreach (assignment_schedule_intervals($pdo, $secondScheduleId) as $second) {
             foreach ([-$week, 0, $week] as $shift) {
                 if ($first[0] < $second[1] + $shift && $first[1] > $second[0] + $shift) {
-                    return ['day' => $first[2], 'start' => $first[3], 'end' => $first[4]];
+                    // El mensaje debe mostrar el rango de la asignación que ya existe,
+                    // no el de la plantilla que se está intentando agregar.
+                    return ['day' => $second[2], 'start' => $second[3], 'end' => $second[4]];
                 }
             }
         }
