@@ -189,7 +189,7 @@ require __DIR__ . '/../../includes/header.php';
         <div class="modal-body" id="myScheduleContent">
             <div class="text-center text-muted py-5" id="myScheduleLoading"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando programación...</div>
             <div class="d-none flex-wrap gap-2 mb-3" id="myScheduleLegend">
-                <span class="badge" style="background:#4f46e5">Horario habitual</span>
+                <span class="badge" style="background:#16a34a">Horario habitual</span>
                 <span class="badge" style="background:#f97316">Programado</span>
                 <span class="badge" style="background:#2563eb">VAC Vacaciones</span>
                 <span class="badge" style="background:#7c3aed">PER Permiso</span>

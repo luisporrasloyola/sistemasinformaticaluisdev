@@ -6539,12 +6539,12 @@ input[type="checkbox"]:active {
 .programming-view-title{margin-top:0}.programming-view-title h2{margin:0;font-size:22px}.programming-view-title p{margin:4px 0 0}
 .journeys-calendar-legend{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;padding:12px;border:1px solid #d8e2ee;border-radius:10px;background:#f7f9fc}
 .journeys-calendar-legend span{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;color:#fff;font-size:12px;font-weight:800}
-.legend-regular{background:#4f46e5}.legend-extraordinary{background:#f97316}.legend-special{background:#0891b2}
+.legend-regular{background:#16a34a}.legend-extraordinary{background:#f97316}.legend-special{background:#0891b2}
 .journeys-calendar-guide{display:flex;align-items:flex-start;gap:9px;margin:-7px 0 16px;padding:10px 12px;border:1px solid #bfd3f3;border-radius:9px;background:#eef5ff;color:#365e96;font-size:13px}.journeys-calendar-guide i{margin-top:2px;color:#2468e8}
 #scheduleJourneysCalendar{min-height:590px}.fc .fc-toolbar-title{font-size:20px;text-transform:capitalize}.fc .fc-button{font-weight:700}.fc .fc-daygrid-event{padding:3px 5px;border-radius:5px;cursor:pointer}.fc .fc-day-today{background:#eef5ff!important}
 .empty-calendar-state{min-height:420px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;color:#68768a}
 .empty-calendar-state i{font-size:42px;color:#7ba4df}.empty-calendar-state strong{color:#243750;font-size:18px}.empty-calendar-state span{max-width:480px}
-.journey-detail-status{display:inline-flex;margin-bottom:15px;padding:6px 10px;border-radius:999px;color:#fff;font-size:12px;font-weight:800}.journey-detail-status.is-regular{background:#4f46e5}.journey-detail-status.is-program{background:#f97316}.journey-detail-status.is-special{background:#0891b2}
+.journey-detail-status{display:inline-flex;margin-bottom:15px;padding:6px 10px;border-radius:999px;color:#fff;font-size:12px;font-weight:800}.journey-detail-status.is-regular{background:#16a34a}.journey-detail-status.is-program{background:#f97316}.journey-detail-status.is-special{background:#0891b2}
 .journey-detail-list{display:grid;grid-template-columns:145px minmax(0,1fr);margin:0 0 16px}.journey-detail-list dt,.journey-detail-list dd{margin:0;padding:9px 0;border-bottom:1px solid #e2e8f0}.journey-detail-list dt{color:#66758c}.journey-detail-list dd{font-weight:700;color:#1f2f46}
 @media(max-width:767px){.schedule-view-tabs{grid-template-columns:1fr}.journeys-calendar-head{align-items:stretch;flex-direction:column}.journeys-calendar-filter,.journeys-calendar-filters{width:100%}.journeys-calendar-filters{grid-template-columns:1fr}#scheduleJourneysCalendar{min-height:480px}.fc .fc-toolbar{align-items:stretch;flex-direction:column;gap:9px}.journey-detail-list{grid-template-columns:1fr}.journey-detail-list dt{padding-bottom:2px;border-bottom:0}.journey-detail-list dd{padding-top:2px}}
 

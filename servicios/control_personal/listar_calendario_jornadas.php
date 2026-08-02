@@ -97,16 +97,53 @@ foreach ($programStmt->fetchAll() as $program) {
 }
 
 $eventsByDate = attendance_calendar_events_between($start, $lastDate->format('Y-m-d'));
+$selectedWorkerCompanyId = 0;
+if ($workerId > 0) {
+    $companyStmt = db()->prepare('SELECT company_id FROM workers WHERE id = :id LIMIT 1');
+    $companyStmt->execute(['id' => $workerId]);
+    $selectedWorkerCompanyId = (int) $companyStmt->fetchColumn();
+}
 $specialColors = [
     'vacation' => ['#2563eb', '#1d4ed8'], 'permission' => ['#7c3aed', '#6d28d9'],
     'rest' => ['#334155', '#1e293b'], 'holiday' => ['#0891b2', '#0e7490'],
     'non_working' => ['#78716c', '#57534e'],
 ];
 $events = [];
-$specialAdded = [];
 for ($cursor = $startDate; $cursor <= $lastDate; $cursor = $cursor->modify('+1 day')) {
     $date = $cursor->format('Y-m-d');
     $dayOfWeek = (int) $cursor->format('N');
+
+    // El Calendario laboral es una fuente independiente de las asignaciones.
+    // Debe visualizarse incluso cuando todavía no existe una jornada habitual
+    // activa para esa fecha (por ejemplo, un feriado anterior a la vigencia).
+    foreach ($eventsByDate[$date] ?? [] as $special) {
+        $scope = (string) ($special['scope_type'] ?? 'all');
+        $visibleForWorker = $workerId <= 0
+            || $scope === 'all'
+            || ($scope === 'company' && (int) $special['company_id'] === $selectedWorkerCompanyId)
+            || ($scope === 'worker' && (int) $special['worker_id'] === $workerId);
+        if (!$visibleForWorker) continue;
+
+        $colors = $specialColors[(string) $special['event_type']] ?? ['#64748b', '#475569'];
+        $scopeLabel = match ($scope) {
+            'worker' => (string) ($special['worker_name'] ?: 'Trabajador'),
+            'company' => (string) ($special['company_name'] ?: 'Empresa'),
+            default => 'Todo el personal',
+        };
+        $events[] = [
+            'id' => 'special-' . (int) $special['id'] . '-' . $date,
+            'title' => attendance_calendar_event_abbreviation((string) $special['event_type']) . ' · ' . $special['name'] . ' · ' . $scopeLabel,
+            'start' => $date, 'allDay' => true, 'backgroundColor' => $colors[0], 'borderColor' => $colors[1], 'textColor' => '#fff',
+            'extendedProps' => [
+                'kind' => 'special', 'calendarId' => (int) $special['id'], 'worker' => $scopeLabel,
+                'workerId' => $scope === 'worker' ? (int) $special['worker_id'] : 0,
+                'eventType' => $special['event_type'], 'name' => $special['name'], 'scope' => $scope,
+                'canRestore' => $scope === 'worker'
+                    && (string) $special['name'] === 'Jornada excluida' && $date >= date('Y-m-d'),
+            ],
+        ];
+    }
+
     foreach ($programsByDate[$date] ?? [] as $program) {
         $programSpecial = attendance_calendar_resolve_event(
             $eventsByDate,
@@ -157,22 +194,6 @@ for ($cursor = $startDate; $cursor <= $lastDate; $cursor = $cursor->modify('+1 d
         // durante esa fecha, incluso cuando posee más de una asignación activa.
         $special = attendance_calendar_resolve_event($eventsByDate, $date, $worker, (int) $assignment['company_id']);
         if ($special) {
-            $specialKey = $worker . '-' . $date;
-            if (!isset($specialAdded[$specialKey])) {
-                $colors = $specialColors[(string) $special['event_type']] ?? ['#64748b', '#475569'];
-                $events[] = [
-                    'id' => 'special-' . (int) $special['id'] . '-' . $date . '-' . $worker,
-                    'title' => attendance_calendar_event_abbreviation((string) $special['event_type']) . ' · ' . $assignment['full_name'] . ' · ' . $special['name'],
-                    'start' => $date, 'allDay' => true, 'backgroundColor' => $colors[0], 'borderColor' => $colors[1], 'textColor' => '#fff',
-                    'extendedProps' => [
-                        'kind' => 'special', 'calendarId' => (int) $special['id'], 'worker' => $assignment['full_name'],
-                        'workerId' => $worker, 'eventType' => $special['event_type'], 'name' => $special['name'],
-                        'canRestore' => (string) $special['scope_type'] === 'worker'
-                            && (string) $special['name'] === 'Jornada excluida' && $date >= date('Y-m-d'),
-                    ],
-                ];
-                $specialAdded[$specialKey] = true;
-            }
             continue;
         }
 
@@ -185,7 +206,7 @@ for ($cursor = $startDate; $cursor <= $lastDate; $cursor = $cursor->modify('+1 d
         $events[] = [
             'id' => 'regular-' . $assignmentId . '-' . $date,
             'title' => substr((string) $day['entry_time'], 0, 5) . ' - ' . substr((string) $day['exit_time'], 0, 5) . ' · ' . $assignment['full_name'],
-            'start' => $date, 'allDay' => true, 'backgroundColor' => '#4f46e5', 'borderColor' => '#4338ca', 'textColor' => '#fff',
+            'start' => $date, 'allDay' => true, 'backgroundColor' => '#16a34a', 'borderColor' => '#15803d', 'textColor' => '#fff',
             'extendedProps' => [
                 'kind' => 'regular', 'assignmentId' => $assignmentId, 'worker' => $assignment['full_name'], 'workerId' => $worker,
                 'location' => $assignment['location_name'], 'schedule' => $assignment['schedule_name'],

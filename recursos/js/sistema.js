@@ -6536,11 +6536,11 @@ function initControlPersonalMarking() {
                         title: `${formatTime(schedule.entry_time)} - ${formatTime(schedule.exit_time)} · ${schedule.location_name}`,
                         start: dateKey,
                         allDay: true,
-                        backgroundColor: '#4f46e5',
-                        borderColor: '#3730a3',
+                        backgroundColor: '#16a34a',
+                        borderColor: '#15803d',
                         textColor: '#ffffff',
                         display: 'block',
-                        extendedProps: { ...effectiveSchedule, eventKind: 'regular', work_date: dateKey, stateColor: '#4f46e5' }
+                        extendedProps: { ...effectiveSchedule, eventKind: 'regular', work_date: dateKey, stateColor: '#16a34a' }
                     });
                 });
             }
