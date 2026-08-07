@@ -5159,6 +5159,9 @@ function initControlPersonalCalendar() {
     const form = document.getElementById('calendarDayForm');
     if (!form) return;
 
+    const calendarListWorkerFilter = document.getElementById('calendarListWorkerFilter');
+    const calendarWorkerRows = Array.from(document.querySelectorAll('.calendar-day-row'));
+    const calendarWorkerNoResults = document.getElementById('calendarWorkerNoResults');
     const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('calendarDayModal'));
     const typeField = document.getElementById('calendarEventType');
     const scopeField = document.getElementById('calendarScopeType');
@@ -5171,6 +5174,18 @@ function initControlPersonalCalendar() {
     const workersError = document.getElementById('calendarWorkersError');
     const selectAllWorkers = document.getElementById('calendarSelectAllWorkers');
     const workerSearch = document.getElementById('calendarWorkerSearch');
+
+    calendarListWorkerFilter?.addEventListener('input', () => {
+        const query = normalizarTexto(calendarListWorkerFilter.value);
+        let visibleRows = 0;
+        calendarWorkerRows.forEach((row) => {
+            const workerName = normalizarTexto(row.dataset.workerName || '');
+            const visible = query === '' || workerName.includes(query);
+            row.classList.toggle('d-none', !visible);
+            if (visible) visibleRows++;
+        });
+        calendarWorkerNoResults?.classList.toggle('d-none', visibleRows > 0);
+    });
 
     function syncFields() {
         const defaultNames = {

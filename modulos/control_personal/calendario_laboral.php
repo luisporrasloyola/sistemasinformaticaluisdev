@@ -11,7 +11,7 @@ if (!preg_match('/^\d{4}-\d{2}$/', $selectedMonth)) {
 $monthStart = $selectedMonth . '-01';
 $monthEnd = date('Y-m-t', strtotime($monthStart));
 
-$stmt = db()->prepare("SELECT acd.*, c.name AS company_name, w.full_name AS worker_name,
+$sql = "SELECT acd.*, c.name AS company_name, w.full_name AS worker_name,
         u.name AS created_by_name
     FROM attendance_calendar_days acd
     LEFT JOIN companies c ON c.id = acd.company_id
@@ -21,8 +21,11 @@ $stmt = db()->prepare("SELECT acd.*, c.name AS company_name, w.full_name AS work
       AND acd.event_type IN ('holiday', 'non_working', 'vacation', 'permission', 'rest')
       AND acd.calendar_date <= :month_end
       AND COALESCE(acd.end_date, acd.calendar_date) >= :month_start
-    ORDER BY acd.calendar_date, acd.id");
-$stmt->execute(['month_start' => $monthStart, 'month_end' => $monthEnd]);
+";
+$params = ['month_start' => $monthStart, 'month_end' => $monthEnd];
+$sql .= ' ORDER BY acd.calendar_date, acd.id';
+$stmt = db()->prepare($sql);
+$stmt->execute($params);
 $calendarDays = $stmt->fetchAll();
 
 $workers = db()->query("SELECT w.id, w.full_name, w.document_number, c.name AS company
@@ -39,7 +42,7 @@ function calendar_scope_label(array $event): string
 {
     return match ((string) $event['scope_type']) {
         'company' => 'Empresa: ' . (string) ($event['company_name'] ?? '-'),
-        'worker' => 'Personal: ' . (string) ($event['worker_name'] ?? '-'),
+        'worker' => (string) ($event['worker_name'] ?? '-'),
         default => 'Todo el personal',
     };
 }
@@ -88,12 +91,21 @@ require __DIR__ . '/../../includes/header.php';
 </div>
 
 <div class="work-panel">
-    <div class="attendance-matrix-legend mb-3">
-        <span class="legend-vacation"><strong>VAC</strong>Vacaciones</span>
-        <span class="legend-permission"><strong>PER</strong>Permiso</span>
-        <span class="legend-rest"><strong>D</strong>Descanso</span>
-        <span class="legend-holiday"><strong>FER</strong>Feriado</span>
-        <span class="legend-non-working"><strong>NL</strong>No laborable</span>
+    <div class="d-flex align-items-end justify-content-between gap-3 flex-wrap mb-3">
+        <div class="attendance-matrix-legend mb-0">
+            <span class="legend-vacation"><strong>VAC</strong>Vacaciones</span>
+            <span class="legend-permission"><strong>PER</strong>Permiso</span>
+            <span class="legend-rest"><strong>D</strong>Descanso</span>
+            <span class="legend-holiday"><strong>FER</strong>Feriado</span>
+            <span class="legend-non-working"><strong>NL</strong>No laborable</span>
+        </div>
+        <div class="calendar-worker-filter">
+            <div>
+                <label class="form-label small fw-bold text-muted mb-1" for="calendarListWorkerFilter">Buscar personal</label>
+                <input class="form-control" type="search" id="calendarListWorkerFilter"
+                    placeholder="Escriba el nombre del trabajador" autocomplete="off">
+            </div>
+        </div>
     </div>
     <div class="table-responsive">
         <table class="table table-hover align-middle" id="calendarDaysTable">
@@ -118,7 +130,7 @@ require __DIR__ . '/../../includes/header.php';
                 $periodDays = (new DateTimeImmutable((string) $event['calendar_date']))
                     ->diff(new DateTimeImmutable($eventEndDate))->days + 1;
                 ?>
-                <tr>
+                <tr class="calendar-day-row" data-worker-name="<?= e((string) ($event['worker_name'] ?? '')) ?>">
                     <td><strong><?= e(date('d/m/Y', strtotime((string) $event['calendar_date']))) ?></strong><?= $isRange ? ' - ' . e(date('d/m/Y', strtotime($eventEndDate))) : '' ?></td>
                     <td><?= $isRange ? (int) $periodDays . ' d&iacute;as' : e($dayNames[$dayNumber]) ?></td>
                     <td>
@@ -128,7 +140,7 @@ require __DIR__ . '/../../includes/header.php';
                         </span>
                     </td>
                     <td><?= e($event['name']) ?></td>
-                    <td><?= e(calendar_scope_label($event)) ?></td>
+                    <td><?= (string) $event['scope_type'] === 'worker' ? '<strong>' . e(calendar_scope_label($event)) . '</strong>' : e(calendar_scope_label($event)) ?></td>
                     <td><?= e($event['created_by_name'] ?? '-') ?></td>
                     <td class="text-nowrap">
                         <button class="btn btn-sm btn-outline-primary js-edit-calendar-day" type="button"
@@ -147,6 +159,9 @@ require __DIR__ . '/../../includes/header.php';
             <?php endforeach; ?>
             <?php if (!$calendarDays): ?>
                 <tr><td colspan="7" class="text-muted text-center py-4">No hay d&iacute;as especiales registrados en este mes.</td></tr>
+            <?php endif; ?>
+            <?php if ($calendarDays): ?>
+                <tr class="d-none" id="calendarWorkerNoResults"><td colspan="7" class="text-muted text-center py-4">No hay registros para el personal buscado en este mes.</td></tr>
             <?php endif; ?>
             </tbody>
         </table>

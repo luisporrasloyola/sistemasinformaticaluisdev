@@ -504,6 +504,9 @@ body {
     color: #1d4ed8;
 }
 
+.calendar-worker-filter,.calendar-worker-filter > div{width:min(330px,72vw)}
+@media(max-width:575.98px){.calendar-worker-filter,.calendar-worker-filter > div{width:100%}}
+
 @media (min-width: 768px) {
     .attendance-recent-table {
         width: 100%;
