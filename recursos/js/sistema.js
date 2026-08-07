@@ -384,7 +384,28 @@ function initPersonnelProgramming() {
             <div class="col-md-3"><label class="form-label small mb-1 program-stop-arrival-label">Llegada estimada</label><input class="form-control form-control-sm" type="time" name="stop_estimated_times[]" value="${escapeHtml(stop.estimatedTime || '')}" title="Hora estimada de llegada al lugar"></div>
             <div class="col-md-1 d-grid"><button class="btn btn-sm btn-outline-danger js-remove-program-stop" type="button" title="Quitar lugar"><i class="fa-solid fa-trash-can"></i></button></div>
         </div>`;
-        row.querySelector('.js-remove-program-stop')?.addEventListener('click', () => {
+        const removeButton = row.querySelector('.js-remove-program-stop');
+        // Toda parada cargada al abrir una programación existente ya forma
+        // parte del recorrido, incluso si una respuesta antigua no incluyera su id.
+        const persistedStop = Number(stop.id || 0) > 0 || (Boolean(idField.value) && Object.keys(stop).length > 0);
+        removeButton?.addEventListener('click', async () => {
+            const hasMarks = cancelButton.dataset.hasProgramMarks === '1';
+            const hasTrips = cancelButton.dataset.hasProgramTrips === '1';
+            const hasCompletions = cancelButton.dataset.hasWorkCompletions === '1';
+            if (persistedStop && (hasMarks || hasTrips || hasCompletions)) {
+                const reasons = [
+                    hasMarks ? 'el trabajador ya marcó su asistencia' : '',
+                    hasTrips ? 'el recorrido ya tiene un desplazamiento iniciado' : '',
+                    hasCompletions ? 'ya se finalizó un trabajo del recorrido' : ''
+                ].filter(Boolean);
+                await Swal.fire({
+                    icon: 'info',
+                    title: 'Este lugar no se puede quitar',
+                    html: `<p class="mb-2">${escapeHtml(reasons.join(', '))}.</p><small class="text-muted">Puede actualizar la actividad o la llegada estimada, pero el lugar debe conservarse como parte del historial.</small>`,
+                    confirmButtonText: 'Entendido'
+                });
+                return;
+            }
             const locationSelect = row.querySelector('.js-program-stop-location');
             if (window.jQuery && locationSelect && jQuery(locationSelect).hasClass('select2-hidden-accessible')) {
                 jQuery(locationSelect).select2('destroy');
@@ -506,6 +527,9 @@ function initPersonnelProgramming() {
         cancelButton.dataset.hasProgramMarks = props.hasProgramMarks ? '1' : '0';
         cancelButton.dataset.hasProgramTrips = props.hasProgramTrips ? '1' : '0';
         cancelButton.dataset.hasWorkCompletions = props.hasWorkCompletions ? '1' : '0';
+        cancelButton.dataset.programMarksCount = String(Number(props.programMarksCount || 0));
+        cancelButton.dataset.programTripsCount = String(Number(props.programTripsCount || 0));
+        cancelButton.dataset.workCompletionsCount = String(Number(props.workCompletionsCount || 0));
         setProgramStops(props.stops || []);
         if (extraEntry) extraEntry.value = props.entryTime || '';
         if (extraExit) extraExit.value = props.exitTime || '';
@@ -705,11 +729,18 @@ function initPersonnelProgramming() {
         const hasTrips = cancelButton.dataset.hasProgramTrips === '1';
         const hasCompletions = cancelButton.dataset.hasWorkCompletions === '1';
         if (hasMarks || hasTrips || hasCompletions) {
-            const records = [hasMarks ? 'marcaciones' : '', hasTrips ? 'desplazamientos' : '', hasCompletions ? 'trabajos finalizados' : ''].filter(Boolean);
+            const marksCount = Number(cancelButton.dataset.programMarksCount || 0);
+            const tripsCount = Number(cancelButton.dataset.programTripsCount || 0);
+            const completionsCount = Number(cancelButton.dataset.workCompletionsCount || 0);
+            const records = [
+                hasMarks ? `<li><strong>${marksCount}</strong> ${marksCount === 1 ? 'marcación registrada' : 'marcaciones registradas'}</li>` : '',
+                hasTrips ? `<li><strong>${tripsCount}</strong> ${tripsCount === 1 ? 'desplazamiento iniciado' : 'desplazamientos iniciados'}</li>` : '',
+                hasCompletions ? `<li><strong>${completionsCount}</strong> ${completionsCount === 1 ? 'trabajo finalizado' : 'trabajos finalizados'}</li>` : ''
+            ].filter(Boolean);
             await Swal.fire({
                 icon: 'info',
-                title: 'Este recorrido ya está en uso',
-                html: `<p class="mb-2">No puede eliminarse porque tiene ${escapeHtml(records.join(', '))} registrados específicamente en este recorrido.</p><small class="text-muted">El historial debe conservarse para los reportes de asistencia.</small>`,
+                title: editorMode === 'route' ? 'No se puede eliminar el recorrido' : 'No se puede eliminar la programación',
+                html: `<p class="mb-2">Este registro ya fue utilizado por el trabajador:</p><ul class="text-start mb-2">${records.join('')}</ul><small class="text-muted">Debe conservarse para no alterar su asistencia ni el historial laboral.</small>`,
                 confirmButtonText: 'Entendido'
             });
             return;
@@ -727,7 +758,7 @@ function initPersonnelProgramming() {
         const body = new FormData(); body.append('csrf_token', csrf); body.append('id', idField.value);
         const response = await fetch(`${BASE_URL}/servicios/control_personal/eliminar_programacion.php`, { method:'POST', body });
         const data = await response.json();
-        if (!data.ok) return Swal.fire('Atención', data.message, 'warning');
+        if (!data.ok) return Swal.fire(data.title || 'Atención', data.message, 'warning');
         await Swal.fire('Programación eliminada', data.message, 'success');
         window.location.reload();
     });

@@ -79,6 +79,12 @@ $programStmt = db()->prepare("SELECT ap.id, ap.assignment_id, ap.worker_id, ap.p
             (SELECT GROUP_CONCAT(aps.destination ORDER BY aps.stop_order SEPARATOR '\\n')
              FROM attendance_program_stops aps WHERE aps.program_id=ap.id)) AS notes,
         (SELECT COUNT(*) FROM attendance_program_stops aps WHERE aps.program_id=ap.id) AS route_stop_count,
+        (SELECT COUNT(*) FROM attendance_marks am
+         WHERE am.program_id=ap.id OR (am.program_id IS NULL AND am.assignment_id=ap.assignment_id AND am.worker_id=ap.worker_id AND am.mark_date=ap.program_date)) AS program_marks_count,
+        (SELECT COUNT(*) FROM attendance_trips atp
+         WHERE atp.program_id=ap.id OR (atp.program_id IS NULL AND atp.assignment_id=ap.assignment_id AND atp.worker_id=ap.worker_id AND atp.trip_date=ap.program_date)) AS program_trips_count,
+        (SELECT COUNT(*) FROM attendance_work_completions awc
+         WHERE awc.program_id=ap.id OR (awc.program_id IS NULL AND awc.assignment_id=ap.assignment_id AND awc.worker_id=ap.worker_id AND awc.work_date=ap.program_date)) AS work_completions_count,
         l.name AS location_name, w.full_name, w.company_id,
         s.name AS schedule_name, aa.activity AS assignment_activity, aa.instructions AS assignment_instructions,
         (SELECT aa2.activity FROM attendance_assignments aa2
@@ -100,7 +106,7 @@ $programStopsById = [];
 if ($programRows) {
     $programIds = array_values(array_unique(array_map(static fn(array $row): int => (int) $row['id'], $programRows)));
     $placeholders = implode(',', array_fill(0, count($programIds), '?'));
-    $stopsStmt = db()->prepare("SELECT aps.program_id, aps.stop_order,
+    $stopsStmt = db()->prepare("SELECT aps.id, aps.program_id, aps.location_id, aps.stop_order,
             COALESCE(NULLIF(al.name,''), aps.destination) AS destination,
             aps.activity, aps.estimated_time
         FROM attendance_program_stops aps
@@ -109,6 +115,8 @@ if ($programRows) {
     $stopsStmt->execute($programIds);
     foreach ($stopsStmt->fetchAll() as $stop) {
         $programStopsById[(int) $stop['program_id']][] = [
+            'id' => (int) $stop['id'],
+            'locationId' => (int) ($stop['location_id'] ?? 0),
             'order' => (int) $stop['stop_order'],
             'destination' => (string) $stop['destination'],
             'activity' => (string) ($stop['activity'] ?? ''),
@@ -205,6 +213,12 @@ for ($cursor = $startDate; $cursor <= $lastDate; $cursor = $cursor->modify('+1 d
                     : ($program['notes'] ?: ($program['assignment_instructions'] ?: '')),
                 'customized' => $isRoute && isset($overrides[(int) $program['assignment_id']][$date]),
                 'routePlaceCount' => $routePlaceCount,
+                'hasProgramMarks' => (int) ($program['program_marks_count'] ?? 0) > 0,
+                'hasProgramTrips' => (int) ($program['program_trips_count'] ?? 0) > 0,
+                'hasWorkCompletions' => (int) ($program['work_completions_count'] ?? 0) > 0,
+                'programMarksCount' => (int) ($program['program_marks_count'] ?? 0),
+                'programTripsCount' => (int) ($program['program_trips_count'] ?? 0),
+                'workCompletionsCount' => (int) ($program['work_completions_count'] ?? 0),
                 'stops' => $programStopsById[(int) $program['id']] ?? [],
             ],
         ];

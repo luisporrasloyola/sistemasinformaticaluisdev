@@ -23,9 +23,12 @@ $programs = db()->query("SELECT ap.id, ap.assignment_id, ap.worker_id,
         COALESCE(ap.schedule_id, aa.schedule_id) AS schedule_id, ap.program_date, ap.entry_time,
         ap.entry_start, ap.exit_time, ap.tolerance_minutes, ap.schedule_source, ap.activity, ap.notes, ap.status, w.full_name, w.document_number,
         l.name AS location_name, s.name AS schedule_name,
-        EXISTS(SELECT 1 FROM attendance_marks am WHERE am.program_id=ap.id) AS has_program_marks,
-        EXISTS(SELECT 1 FROM attendance_trips atp WHERE atp.program_id=ap.id) AS has_program_trips,
-        EXISTS(SELECT 1 FROM attendance_work_completions awc WHERE awc.program_id=ap.id) AS has_work_completions,
+        (SELECT COUNT(*) FROM attendance_marks am
+         WHERE am.program_id=ap.id OR (am.program_id IS NULL AND am.assignment_id=ap.assignment_id AND am.worker_id=ap.worker_id AND am.mark_date=ap.program_date)) AS program_marks_count,
+        (SELECT COUNT(*) FROM attendance_trips atp
+         WHERE atp.program_id=ap.id OR (atp.program_id IS NULL AND atp.assignment_id=ap.assignment_id AND atp.worker_id=ap.worker_id AND atp.trip_date=ap.program_date)) AS program_trips_count,
+        (SELECT COUNT(*) FROM attendance_work_completions awc
+         WHERE awc.program_id=ap.id OR (awc.program_id IS NULL AND awc.assignment_id=ap.assignment_id AND awc.worker_id=ap.worker_id AND awc.work_date=ap.program_date)) AS work_completions_count,
         (SELECT GROUP_CONCAT(CONCAT(aps.destination, IF(aps.activity IS NULL OR aps.activity='', '', CONCAT(' - ',aps.activity))) ORDER BY aps.stop_order SEPARATOR '\n')
          FROM attendance_program_stops aps WHERE aps.program_id=ap.id) AS stops_text
     FROM attendance_programs ap
@@ -37,9 +40,10 @@ $programs = db()->query("SELECT ap.id, ap.assignment_id, ap.worker_id,
     ORDER BY ap.program_date, ap.entry_time")->fetchAll();
 
 $programStops = [];
-foreach (db()->query("SELECT aps.program_id, aps.location_id, aps.destination, aps.activity, aps.estimated_time
+foreach (db()->query("SELECT aps.id, aps.program_id, aps.location_id, aps.destination, aps.activity, aps.estimated_time
     FROM attendance_program_stops aps ORDER BY aps.program_id, aps.stop_order")->fetchAll() as $stop) {
     $programStops[(int) $stop['program_id']][] = [
+        'id' => (int) $stop['id'],
         'locationId' => (int) ($stop['location_id'] ?? 0),
         'destination' => (string) $stop['destination'],
         'activity' => (string) ($stop['activity'] ?? ''),
@@ -71,9 +75,12 @@ $events = array_map(static function (array $row) use ($programStops): array {
             'entryTime' => substr((string) $row['entry_time'], 0, 5), 'exitTime' => substr((string) $row['exit_time'], 0, 5),
             'tolerance' => (int) $row['tolerance_minutes'],
             'activity' => $row['activity'] ?? '', 'notes' => $row['notes'] ?? '', 'status' => $row['status'],
-            'hasProgramMarks' => (bool) $row['has_program_marks'],
-            'hasProgramTrips' => (bool) $row['has_program_trips'],
-            'hasWorkCompletions' => (bool) $row['has_work_completions'],
+            'hasProgramMarks' => (int) $row['program_marks_count'] > 0,
+            'hasProgramTrips' => (int) $row['program_trips_count'] > 0,
+            'hasWorkCompletions' => (int) $row['work_completions_count'] > 0,
+            'programMarksCount' => (int) $row['program_marks_count'],
+            'programTripsCount' => (int) $row['program_trips_count'],
+            'workCompletionsCount' => (int) $row['work_completions_count'],
             'stops' => $programStops[(int) $row['id']] ?? [],
         ],
     ];
