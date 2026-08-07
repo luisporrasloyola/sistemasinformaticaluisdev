@@ -689,18 +689,20 @@ document.addEventListener('DOMContentLoaded', () => {
                                 default => 'matrix-empty',
                             },
                         };
-                        if (!$isAssignedPeriod && $attendanceCode === '') {
+                        if (!$isAssignedPeriod && $attendanceCode === '' && !$calendarEvent) {
                             $cellClass = 'matrix-empty';
                         }
-                        $calendarLabel = !$isAssignedPeriod
-                            ? 'Sin asignación activa para esta fecha'
-                            : ($calendarEvent
-                                ? attendance_calendar_event_label($calendarEventType)
+                        $calendarLabel = $calendarEvent
+                            ? attendance_calendar_event_label($calendarEventType)
+                            : (!$isAssignedPeriod
+                                ? 'Sin asignación activa para esta fecha'
                                 : ($isRestDay ? 'Sin horario configurado' : 'Sin marcaciones'));
                         $detailLabel = $attendanceLabel ?: $calendarLabel;
-                        $detailIncidents = !$isAssignedPeriod
-                            ? 'No aplica'
-                            : ($incidents ? implode(' / ', $incidents) : 'Sin incidencias');
+                        $detailIncidents = $calendarEvent
+                            ? (string) ($calendarEvent['name'] ?? 'Sin incidencias')
+                            : (!$isAssignedPeriod
+                                ? 'No aplica'
+                                : ($incidents ? implode(' / ', $incidents) : 'Sin incidencias'));
                         ?>
                         <td class="<?= e($cellClass) ?> js-attendance-matrix-cell"
                             role="button"
@@ -717,10 +719,10 @@ document.addEventListener('DOMContentLoaded', () => {
                             aria-label="Ver detalle de <?= e($worker['name']) ?> del <?= e(date('d/m/Y', strtotime($cellDate))) ?>">
                             <?php if ($attendanceCode !== ''): ?>
                                 <span title="<?= e(strip_tags($attendanceLabel)) ?>"><?= e($attendanceCode) ?></span>
-                            <?php elseif (!$isAssignedPeriod): ?>
-                                <span title="Sin asignación activa para esta fecha">-</span>
                             <?php elseif ($isNonWorkingDay): ?>
                                 <span title="<?= e($calendarEvent['name'] ?? '') ?>"><?= e(attendance_calendar_event_abbreviation($calendarEventType)) ?></span>
+                            <?php elseif (!$isAssignedPeriod): ?>
+                                <span title="Sin asignación activa para esta fecha">-</span>
                             <?php elseif ($isRestDay): ?>
                                 <span title="Sin horario configurado">-</span>
                             <?php endif; ?>
