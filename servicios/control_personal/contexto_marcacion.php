@@ -14,6 +14,29 @@ if ($workerId <= 0) {
     json_response(['ok' => false, 'message' => is_personal_role() ? 'Su usuario no tiene trabajador vinculado.' : 'Seleccione un trabajador.'], 400);
 }
 
+$openJourneyStmt = db()->prepare("SELECT aa.id AS assignment_id, aa.activity, aa.instructions,
+        w.id AS worker_id, w.company_id, w.full_name, w.document_number,
+        l.id AS location_id, l.name AS location_name, l.latitude, l.longitude, l.address, l.reference, l.radius_meters,
+        s.id AS schedule_id, s.name AS schedule_name, entrada.program_id AS open_program_id
+    FROM attendance_marks entrada
+    JOIN attendance_assignments aa ON aa.id = entrada.assignment_id
+    JOIN workers w ON w.id = entrada.worker_id
+    JOIN attendance_locations l ON l.id = aa.location_id
+    JOIN attendance_schedules s ON s.id = aa.schedule_id
+    WHERE entrada.worker_id = :worker_id AND entrada.mark_date = :mark_date
+      AND entrada.mark_type = 'entrada'
+      AND NOT EXISTS (
+          SELECT 1 FROM attendance_marks salida
+          WHERE salida.worker_id = entrada.worker_id
+            AND salida.assignment_id = entrada.assignment_id
+            AND salida.mark_date = entrada.mark_date
+            AND salida.mark_type = 'salida'
+            AND (salida.program_id = entrada.program_id OR (salida.program_id IS NULL AND entrada.program_id IS NULL))
+      )
+    ORDER BY entrada.marked_at ASC, entrada.id ASC LIMIT 1");
+$openJourneyStmt->execute(['worker_id' => $workerId, 'mark_date' => $today]);
+$openJourneyAssignment = $openJourneyStmt->fetch() ?: null;
+
 $stmt = db()->prepare("SELECT aa.id AS assignment_id, aa.activity, aa.instructions,
         w.id AS worker_id, w.company_id, w.full_name, w.document_number,
         l.id AS location_id, l.name AS location_name, l.latitude, l.longitude, l.address, l.reference, l.radius_meters,
@@ -28,6 +51,13 @@ $stmt = db()->prepare("SELECT aa.id AS assignment_id, aa.activity, aa.instructio
 $stmt->execute(['worker_id' => $workerId, 'today_from' => $today, 'today_until' => $today]);
 $assignments = $stmt->fetchAll();
 
+// Una entrada abierta pertenece a la jornada del trabajador, aunque después el
+// administrador edite o reemplace su asignación. Se conserva hasta registrar la salida.
+if ($openJourneyAssignment) {
+    $assignments = [$openJourneyAssignment];
+    $requestedProgramId = (int) ($openJourneyAssignment['open_program_id'] ?? 0);
+}
+
 if (!$assignments) {
     json_response(['ok' => false, 'message' => 'El trabajador no tiene una asignacion activa.'], 404);
 }
@@ -38,7 +68,11 @@ $selectedAssignment = null;
 $selectedScheduleDay = null;
 $selectedCalendarEvent = null;
 $selectedProgram = null;
-$programs = attendance_programs_for_worker_date($workerId, $today);
+$programs = attendance_programs_for_worker_date(
+    $workerId,
+    $today,
+    (int) ($openJourneyAssignment['open_program_id'] ?? 0)
+);
 $priorityCalendarEvent = attendance_calendar_event_for_worker(
     $today,
     $workerId,

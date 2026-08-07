@@ -18,7 +18,7 @@ function attendance_program_schedule_day(array $program): array
     ];
 }
 
-function attendance_programs_for_worker_date(int $workerId, string $date): array
+function attendance_programs_for_worker_date(int $workerId, string $date, int $openProgramId = 0): array
 {
     $stmt = db()->prepare("SELECT ap.*, COALESCE(ap.location_id, aa.location_id) AS location_id,
             COALESCE(ap.schedule_id, aa.schedule_id) AS schedule_id, aa.activity AS assignment_activity,
@@ -36,9 +36,15 @@ function attendance_programs_for_worker_date(int $workerId, string $date): array
         JOIN attendance_locations l ON l.id = COALESCE(ap.location_id, aa.location_id)
         JOIN attendance_schedules s ON s.id = COALESCE(ap.schedule_id, aa.schedule_id)
         JOIN workers w ON w.id = ap.worker_id
-        WHERE ap.worker_id = :worker_id AND ap.program_date = :program_date AND ap.status = 'programada'
+        WHERE ap.worker_id = :worker_id AND ap.program_date = :program_date
+          AND (ap.status = 'programada' OR (:open_program_id > 0 AND ap.id = :open_program_match))
         ORDER BY ap.entry_time, ap.id");
-    $stmt->execute(['worker_id' => $workerId, 'program_date' => $date]);
+    $stmt->execute([
+        'worker_id' => $workerId,
+        'program_date' => $date,
+        'open_program_id' => $openProgramId,
+        'open_program_match' => $openProgramId,
+    ]);
     return $stmt->fetchAll();
 }
 

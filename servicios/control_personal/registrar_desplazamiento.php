@@ -30,11 +30,18 @@ $asg = db()->prepare("SELECT aa.id,aa.location_id,l.name AS location_name,l.lati
       AND ((aa.status=1 AND valid_from <= :today_from AND (valid_until IS NULL OR valid_until >= :today_until))
         OR EXISTS(SELECT 1 FROM attendance_programs ap
             WHERE ap.id=:program_id AND ap.assignment_id=aa.id AND ap.worker_id=aa.worker_id
-              AND ap.program_date=:program_date AND ap.status='programada'))
+              AND ap.program_date=:program_date AND ap.status='programada')
+        OR EXISTS(SELECT 1 FROM attendance_marks entrada
+            WHERE entrada.assignment_id=aa.id AND entrada.worker_id=aa.worker_id
+              AND entrada.mark_date=:open_date AND entrada.mark_type='entrada'
+              AND NOT EXISTS(SELECT 1 FROM attendance_marks salida
+                  WHERE salida.assignment_id=entrada.assignment_id AND salida.worker_id=entrada.worker_id
+                    AND salida.mark_date=entrada.mark_date AND salida.mark_type='salida'
+                    AND (salida.program_id=entrada.program_id OR (salida.program_id IS NULL AND entrada.program_id IS NULL)))))
     LIMIT 1");
 $asg->execute([
     'id'=>$assignmentId,'worker_id'=>$workerId,'today_from'=>$today,'today_until'=>$today,
-    'program_id'=>$programId,'program_date'=>$today,
+    'program_id'=>$programId,'program_date'=>$today,'open_date'=>$today,
 ]);
 $assignment = $asg->fetch();
 if (!$assignment) json_response(['ok'=>false,'message'=>'No se pudo validar el recorrido asignado al trabajador. Actualice la página e inténtelo nuevamente.'],409);
