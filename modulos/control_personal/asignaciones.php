@@ -229,6 +229,7 @@ require __DIR__ . '/../../includes/header.php';
                 <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                 <input type="hidden" name="assignment_id" id="journeyDetailAssignmentId">
                 <input type="hidden" name="journey_date" id="journeyDetailDate">
+                <div class="journey-unified-summary d-none" id="journeyUnifiedSummary"></div>
                 <div class="alert alert-primary py-2"><i class="fa-solid fa-circle-info me-2"></i>Los cambios se aplicar&aacute;n solamente a esta fecha. La asignaci&oacute;n general y las dem&aacute;s jornadas no cambiar&aacute;n.</div>
                 <div class="row g-3">
                     <div class="col-md-6"><label class="form-label">Personal</label><input class="form-control" id="journeyDetailWorker" readonly></div>
@@ -337,6 +338,7 @@ require __DIR__ . '/../../includes/header.php';
                                 <option value="<?= (int) $location['id'] ?>"><?= e($location['name']) ?></option>
                             <?php endforeach; ?>
                         </select>
+                        <div class="form-text">Será el lugar de entrada. Durante la jornada podrá trasladarse y habilitar otro lugar para la salida.</div>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Horario</label>

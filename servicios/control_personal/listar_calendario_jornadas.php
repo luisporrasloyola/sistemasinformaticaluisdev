@@ -78,8 +78,14 @@ $programStmt = db()->prepare("SELECT ap.id, ap.assignment_id, ap.worker_id, ap.p
         ap.activity, COALESCE(NULLIF(ap.notes, ''),
             (SELECT GROUP_CONCAT(aps.destination ORDER BY aps.stop_order SEPARATOR '\\n')
              FROM attendance_program_stops aps WHERE aps.program_id=ap.id)) AS notes,
+        (SELECT COUNT(*) FROM attendance_program_stops aps WHERE aps.program_id=ap.id) AS route_stop_count,
         l.name AS location_name, w.full_name, w.company_id,
-        s.name AS schedule_name, aa.activity AS assignment_activity, aa.instructions AS assignment_instructions
+        s.name AS schedule_name, aa.activity AS assignment_activity, aa.instructions AS assignment_instructions,
+        (SELECT aa2.activity FROM attendance_assignments aa2
+            WHERE aa2.worker_id=ap.worker_id AND aa2.status=1
+              AND aa2.location_id=COALESCE(ap.location_id, aa.location_id)
+              AND aa2.valid_from<=ap.program_date AND (aa2.valid_until IS NULL OR aa2.valid_until>=ap.program_date)
+            ORDER BY aa2.id DESC LIMIT 1) AS current_assignment_activity
     FROM attendance_programs ap
     JOIN attendance_assignments aa ON aa.id = ap.assignment_id
     JOIN attendance_locations l ON l.id = COALESCE(ap.location_id, aa.location_id)
@@ -89,9 +95,30 @@ $programStmt = db()->prepare("SELECT ap.id, ap.assignment_id, ap.worker_id, ap.p
       AND ap.program_date BETWEEN :program_start AND :program_end {$programWhere}
     ORDER BY ap.program_date, ap.entry_time, ap.id");
 $programStmt->execute($programParams);
+$programRows = $programStmt->fetchAll();
+$programStopsById = [];
+if ($programRows) {
+    $programIds = array_values(array_unique(array_map(static fn(array $row): int => (int) $row['id'], $programRows)));
+    $placeholders = implode(',', array_fill(0, count($programIds), '?'));
+    $stopsStmt = db()->prepare("SELECT aps.program_id, aps.stop_order,
+            COALESCE(NULLIF(al.name,''), aps.destination) AS destination,
+            aps.activity, aps.estimated_time
+        FROM attendance_program_stops aps
+        LEFT JOIN attendance_locations al ON al.id=aps.location_id
+        WHERE aps.program_id IN ({$placeholders}) ORDER BY aps.program_id, aps.stop_order");
+    $stopsStmt->execute($programIds);
+    foreach ($stopsStmt->fetchAll() as $stop) {
+        $programStopsById[(int) $stop['program_id']][] = [
+            'order' => (int) $stop['stop_order'],
+            'destination' => (string) $stop['destination'],
+            'activity' => (string) ($stop['activity'] ?? ''),
+            'estimatedTime' => $stop['estimated_time'] ? substr((string) $stop['estimated_time'], 0, 5) : '',
+        ];
+    }
+}
 $programsByDate = [];
 $programmedWorkerDates = [];
-foreach ($programStmt->fetchAll() as $program) {
+foreach ($programRows as $program) {
     $programsByDate[(string) $program['program_date']][] = $program;
     $programmedWorkerDates[(int) $program['worker_id']][(string) $program['program_date']] = true;
 }
@@ -152,18 +179,33 @@ for ($cursor = $startDate; $cursor <= $lastDate; $cursor = $cursor->modify('+1 d
             (int) $program['company_id']
         );
         if ($programSpecial) continue;
+        $routeStopCount = (int) ($program['route_stop_count'] ?? 0);
+        $isRoute = $routeStopCount > 0;
+        $routePlaceCount = $routeStopCount + 1;
         $events[] = [
             'id' => 'program-' . (int) $program['id'],
             'title' => substr((string) $program['entry_time'], 0, 5) . ' - ' . substr((string) $program['exit_time'], 0, 5) . ' · ' . $program['full_name'],
-            'start' => $date, 'allDay' => true, 'backgroundColor' => '#f97316', 'borderColor' => '#c2410c', 'textColor' => '#fff',
+            'start' => $date, 'allDay' => true,
+            'backgroundColor' => $isRoute ? '#0f766e' : '#f97316',
+            'borderColor' => $isRoute ? '#115e59' : '#c2410c', 'textColor' => '#fff',
             'extendedProps' => [
-                'kind' => 'program', 'assignmentId' => (int) $program['assignment_id'], 'programId' => (int) $program['id'], 'date' => $date,
+                'kind' => $isRoute ? 'route' : 'program', 'assignmentId' => (int) $program['assignment_id'], 'programId' => (int) $program['id'], 'date' => $date,
                 'worker' => $program['full_name'], 'workerId' => (int) $program['worker_id'],
                 'location' => $program['location_name'], 'schedule' => $program['schedule_name'],
                 'entry' => substr((string) $program['entry_time'], 0, 5), 'exit' => substr((string) $program['exit_time'], 0, 5),
-                'activity' => $program['activity'] ?: ($program['assignment_activity'] ?: ''),
-                'instructions' => $program['notes'] ?: ($program['assignment_instructions'] ?: ''),
-                'customized' => false,
+                'activity' => $isRoute
+                    ? (isset($overrides[(int) $program['assignment_id']][$date])
+                        ? (string) $overrides[(int) $program['assignment_id']][$date]['activity']
+                        : ($program['current_assignment_activity'] ?: ($program['assignment_activity'] ?: ($program['activity'] ?: ''))))
+                    : ($program['activity'] ?: ($program['assignment_activity'] ?: '')),
+                'instructions' => $isRoute
+                    ? (isset($overrides[(int) $program['assignment_id']][$date])
+                        ? (string) $overrides[(int) $program['assignment_id']][$date]['instructions']
+                        : ($program['notes'] ?: ($program['assignment_instructions'] ?: '')))
+                    : ($program['notes'] ?: ($program['assignment_instructions'] ?: '')),
+                'customized' => $isRoute && isset($overrides[(int) $program['assignment_id']][$date]),
+                'routePlaceCount' => $routePlaceCount,
+                'stops' => $programStopsById[(int) $program['id']] ?? [],
             ],
         ];
     }

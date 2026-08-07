@@ -31,6 +31,20 @@ $user = current_user();
                 <button class="sidebar-toggle-btn" id="sidebarToggle" type="button" aria-label="Alternar menú"><i class="fa-solid fa-bars"></i></button>
                 <div class="topbar-spacer"></div>
 
+                <?php if (!is_personal_role()): ?>
+                <div class="topbar-notif-container" id="routeNotifContainer">
+                    <button class="topbar-notif-btn route-notif-btn" id="routeNotifBtn" type="button" aria-label="Alertas de recorridos" title="Alertas de recorridos">
+                        <i class="fa-solid fa-route"></i>
+                        <span class="topbar-notif-badge" id="routeNotifBadge" style="display:none">0</span>
+                    </button>
+                    <div class="topbar-notif-dropdown" id="routeNotifDropdown">
+                        <div class="notif-dropdown-header"><span><i class="fa-solid fa-route me-2 text-primary"></i>Alertas de recorridos</span></div>
+                        <div class="notif-search-container"><i class="fa-solid fa-magnifying-glass search-icon"></i><input type="text" id="routeNotifSearchInput" placeholder="Buscar trabajador o lugar..."></div>
+                        <div class="notif-dropdown-list" id="routeNotifList"><div class="notif-loading text-center p-3 text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</div></div>
+                    </div>
+                </div>
+                <?php endif; ?>
+
                 <div class="topbar-notif-container" id="obsNotifContainer">
                     <button class="topbar-notif-btn" id="obsNotifBtn" type="button" aria-label="Observaciones">
                         <i class="fa-solid fa-comment-dots"></i>

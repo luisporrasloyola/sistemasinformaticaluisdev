@@ -47,6 +47,8 @@ CREATE TABLE IF NOT EXISTS attendance_trips (
     reason VARCHAR(255) NOT NULL,
     first_destination VARCHAR(180) NOT NULL,
     status ENUM('en_ruta','finalizado') NOT NULL DEFAULT 'en_ruta',
+    completion_type ENUM('arrival_confirmed','temporary_return_confirmed','returned_without_arrival') NOT NULL DEFAULT 'arrival_confirmed',
+    exception_reason VARCHAR(500) NULL,
     started_at DATETIME NOT NULL,
     ended_at DATETIME NULL,
     start_latitude DECIMAL(10,8) NOT NULL,

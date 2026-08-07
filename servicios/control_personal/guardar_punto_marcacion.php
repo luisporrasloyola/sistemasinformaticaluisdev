@@ -7,8 +7,8 @@ verify_csrf($_POST['csrf_token'] ?? null);
 
 $id = (int) ($_POST['id'] ?? 0);
 $name = trim((string) ($_POST['name'] ?? ''));
-$latitude = (float) ($_POST['latitude'] ?? 0);
-$longitude = (float) ($_POST['longitude'] ?? 0);
+$latitude = round((float) ($_POST['latitude'] ?? 0), 8);
+$longitude = round((float) ($_POST['longitude'] ?? 0), 8);
 $address = trim((string) ($_POST['address'] ?? ''));
 $reference = trim((string) ($_POST['reference'] ?? ''));
 $radius = (int) ($_POST['radius_meters'] ?? 100);

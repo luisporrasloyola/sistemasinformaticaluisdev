@@ -11,14 +11,32 @@ $workerStmt->execute(['id' => $workerId]);
 $worker = $workerStmt->fetch();
 if (!$worker) json_response(['ok'=>false,'message'=>'El trabajador seleccionado no existe.'],404);
 $stmt = db()->prepare("SELECT ap.id, ap.assignment_id, ap.program_date, ap.entry_time, ap.exit_time, ap.schedule_source,
-        ap.activity, COALESCE(NULLIF(ap.notes, ''),
-            (SELECT GROUP_CONCAT(aps.destination ORDER BY aps.stop_order SEPARATOR '\\n')
-             FROM attendance_program_stops aps WHERE aps.program_id=ap.id)) AS notes,
-        l.name AS location_name, l.address, l.reference, s.name AS schedule_name,
+        COALESCE(ap.location_id, aa.location_id) AS location_id,
+        CASE WHEN EXISTS(SELECT 1 FROM attendance_program_stops aps WHERE aps.program_id=ap.id)
+            THEN COALESCE(
+                (SELECT ajo.activity FROM attendance_journey_overrides ajo
+                    WHERE ajo.assignment_id=ap.assignment_id AND ajo.journey_date=ap.program_date LIMIT 1),
+                NULLIF((SELECT aa2.activity FROM attendance_assignments aa2
+                    WHERE aa2.worker_id=ap.worker_id AND aa2.status=1
+                      AND aa2.location_id=COALESCE(ap.location_id, aa.location_id)
+                      AND aa2.valid_from<=ap.program_date AND (aa2.valid_until IS NULL OR aa2.valid_until>=ap.program_date)
+                    ORDER BY aa2.id DESC LIMIT 1), ''),
+                NULLIF(aa.activity, ''), ap.activity)
+            ELSE ap.activity END AS activity,
+        CASE WHEN EXISTS(SELECT 1 FROM attendance_program_stops aps WHERE aps.program_id=ap.id)
+            THEN CASE
+                WHEN ajo.id IS NOT NULL AND ajo.updated_at >= ap.updated_at THEN ajo.instructions
+                ELSE COALESCE(ap.notes, aa.instructions)
+            END
+            ELSE ap.notes END AS notes,
+        l.name AS location_name, l.address, l.reference, l.latitude AS location_latitude,
+        l.longitude AS location_longitude, l.radius_meters AS location_radius, s.name AS schedule_name,
         EXISTS(SELECT 1 FROM attendance_marks ame WHERE ame.program_id = ap.id AND ame.mark_type = 'entrada') AS has_entry,
         EXISTS(SELECT 1 FROM attendance_marks ams WHERE ams.program_id = ap.id AND ams.mark_type = 'salida') AS has_exit
     FROM attendance_programs ap
     JOIN attendance_assignments aa ON aa.id=ap.assignment_id
+    LEFT JOIN attendance_journey_overrides ajo
+      ON ajo.assignment_id=ap.assignment_id AND ajo.journey_date=ap.program_date
     JOIN attendance_locations l ON l.id=COALESCE(ap.location_id, aa.location_id)
     JOIN attendance_schedules s ON s.id=COALESCE(ap.schedule_id, aa.schedule_id)
     WHERE ap.worker_id=:worker_id AND ap.status='programada'
@@ -26,10 +44,99 @@ $stmt = db()->prepare("SELECT ap.id, ap.assignment_id, ap.program_date, ap.entry
     ORDER BY ap.program_date, ap.entry_time");
 $stmt->execute(['worker_id'=>$workerId]);
 $programs = $stmt->fetchAll();
-$stopsStmt = db()->prepare('SELECT destination, activity FROM attendance_program_stops WHERE program_id=:program_id ORDER BY stop_order');
+$stopsStmt = db()->prepare("SELECT aps.stop_order, aps.location_id,
+        COALESCE(NULLIF(al.name, ''), aps.destination) AS destination,
+        al.address, al.reference, aps.activity, aps.estimated_time
+    FROM attendance_program_stops aps
+    LEFT JOIN attendance_locations al ON al.id = aps.location_id
+    WHERE aps.program_id=:program_id
+    ORDER BY aps.stop_order");
+$completionsByProgram = [];
+$arrivalsByProgram = [];
+if ($programs) {
+    $programIds = array_values(array_unique(array_map(static fn(array $program): int => (int) $program['id'], $programs)));
+    $placeholders = implode(',', array_fill(0, count($programIds), '?'));
+    $completionStmt = db()->prepare("SELECT program_id, location_id, activity, observations, completed_at
+        FROM attendance_work_completions
+        WHERE program_id IN ({$placeholders})
+        ORDER BY completed_at DESC, id DESC");
+    $completionStmt->execute($programIds);
+    foreach ($completionStmt->fetchAll() as $completion) {
+        $programId = (int) $completion['program_id'];
+        $locationId = (int) $completion['location_id'];
+        // Si se finalizó más de una actividad en el mismo lugar, se muestra la última.
+        if (isset($completionsByProgram[$programId][$locationId])) continue;
+        $completionsByProgram[$programId][$locationId] = [
+            'location_id' => $locationId,
+            'activity' => (string) $completion['activity'],
+            'observations' => (string) ($completion['observations'] ?? ''),
+            'completed_at' => (string) $completion['completed_at'],
+            'completed_time' => substr((string) $completion['completed_at'], 11, 5),
+        ];
+    }
+
+    $entryArrivalStmt = db()->prepare("SELECT am.program_id, am.location_id, am.marked_at,
+            am.latitude, am.longitude, am.distance_meters,
+            l.latitude AS location_latitude, l.longitude AS location_longitude,
+            l.radius_meters, l.address
+        FROM attendance_marks am
+        JOIN attendance_locations l ON l.id=am.location_id
+        WHERE am.program_id IN ({$placeholders}) AND am.mark_type='entrada'
+        ORDER BY am.marked_at ASC, am.id ASC");
+    $entryArrivalStmt->execute($programIds);
+    foreach ($entryArrivalStmt->fetchAll() as $arrival) {
+        $programId = (int) $arrival['program_id'];
+        $locationId = (int) $arrival['location_id'];
+        if (isset($arrivalsByProgram[$programId][$locationId])) continue;
+        $arrivalsByProgram[$programId][$locationId] = [
+            'location_id' => $locationId,
+            'arrived_at' => (string) $arrival['marked_at'],
+            'arrived_time' => substr((string) $arrival['marked_at'], 11, 5),
+            'latitude' => (float) $arrival['latitude'],
+            'longitude' => (float) $arrival['longitude'],
+            'location_latitude' => (float) $arrival['location_latitude'],
+            'location_longitude' => (float) $arrival['location_longitude'],
+            'radius_meters' => (float) $arrival['radius_meters'],
+            'distance_meters' => (float) $arrival['distance_meters'],
+            'address' => (string) ($arrival['address'] ?? ''),
+        ];
+    }
+
+    $arrivalStmt = db()->prepare("SELECT t.program_id,
+            COALESCE(t.last_location_id, t.first_destination_location_id) AS location_id,
+            t.ended_at, t.end_latitude AS latitude, t.end_longitude AS longitude,
+            l.latitude AS location_latitude, l.longitude AS location_longitude,
+            l.radius_meters, l.address
+        FROM attendance_trips t
+        LEFT JOIN attendance_locations l ON l.id=COALESCE(t.last_location_id, t.first_destination_location_id)
+        WHERE t.program_id IN ({$placeholders}) AND t.status='finalizado'
+          AND t.ended_at IS NOT NULL
+          AND COALESCE(last_location_id, first_destination_location_id) IS NOT NULL
+        ORDER BY t.ended_at ASC, t.id ASC");
+    $arrivalStmt->execute($programIds);
+    foreach ($arrivalStmt->fetchAll() as $arrival) {
+        $programId = (int) $arrival['program_id'];
+        $locationId = (int) $arrival['location_id'];
+        // La primera confirmación representa la llegada real al lugar.
+        if (isset($arrivalsByProgram[$programId][$locationId])) continue;
+        $arrivalsByProgram[$programId][$locationId] = [
+            'location_id' => $locationId,
+            'arrived_at' => (string) $arrival['ended_at'],
+            'arrived_time' => substr((string) $arrival['ended_at'], 11, 5),
+            'latitude' => $arrival['latitude'] !== null ? (float) $arrival['latitude'] : null,
+            'longitude' => $arrival['longitude'] !== null ? (float) $arrival['longitude'] : null,
+            'location_latitude' => $arrival['location_latitude'] !== null ? (float) $arrival['location_latitude'] : null,
+            'location_longitude' => $arrival['location_longitude'] !== null ? (float) $arrival['location_longitude'] : null,
+            'radius_meters' => $arrival['radius_meters'] !== null ? (float) $arrival['radius_meters'] : null,
+            'address' => (string) ($arrival['address'] ?? ''),
+        ];
+    }
+}
 foreach ($programs as &$program) {
     $stopsStmt->execute(['program_id'=>$program['id']]);
     $program['stops'] = $stopsStmt->fetchAll();
+    $program['work_completions'] = array_values($completionsByProgram[(int) $program['id']] ?? []);
+    $program['route_arrivals'] = array_values($arrivalsByProgram[(int) $program['id']] ?? []);
     $program['has_entry'] = (bool) $program['has_entry'];
     $program['has_exit'] = (bool) $program['has_exit'];
 }

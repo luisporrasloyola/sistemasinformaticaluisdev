@@ -80,10 +80,12 @@ require __DIR__ . '/../../includes/header.php';
                     <div class="col-md-3">
                         <label class="form-label">Latitud</label>
                         <input class="form-control" type="number" step="0.00000001" name="latitude" id="locationLatitude" required>
+                        <div class="form-text">Puede copiarla directamente desde Google Maps.</div>
                     </div>
                     <div class="col-md-3">
                         <label class="form-label">Longitud</label>
                         <input class="form-control" type="number" step="0.00000001" name="longitude" id="locationLongitude" required>
+                        <div class="form-text">Se ajustará automáticamente a 8 decimales.</div>
                     </div>
                     <div class="col-md-5">
                         <label class="form-label">Dirección</label>

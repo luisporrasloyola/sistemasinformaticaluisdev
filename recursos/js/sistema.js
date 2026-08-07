@@ -234,6 +234,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initControlPersonalAssignments();
     initControlPersonalMarking();
     initNotifications();
+    initRouteNotifications();
     initObservationNotifications();
 
     if (window.jQuery && $.fn.DataTable) {
@@ -268,6 +269,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 dropdownParent: $modal.length ? $modal : $(document.body),
                 placeholder: $field.data('placeholder') || 'Buscar',
                 minimumResultsForSearch: 0,
+                templateSelection: (option) => {
+                    if ($field.attr('id') !== 'personnelProgramAssignment' || !option.element) return option.text;
+                    return $(option.element).data('selection-label') || option.text;
+                },
                 language: {
                     noResults: () => $field.data('no-results') || 'No se encontraron resultados',
                     searching: () => 'Buscando...'
@@ -304,20 +309,113 @@ function initPersonnelProgramming() {
     const form = document.getElementById('personnelProgramForm');
     const idField = document.getElementById('personnelProgramId');
     const assignmentField = document.getElementById('personnelProgramAssignment');
+    const singleAssignmentField = document.getElementById('personnelProgramSingleAssignment');
+    const singleWorkerField = document.getElementById('personnelProgramSingleWorkerField');
+    const routeWorkersField = document.getElementById('personnelProgramRouteWorkersField');
     const locationField = document.getElementById('personnelProgramLocation');
     const scheduleField = document.getElementById('personnelProgramSchedule');
+    const locationFieldContainer = document.getElementById('personnelProgramLocationField');
+    const scheduleFieldContainer = document.getElementById('personnelProgramScheduleField');
     const dateField = document.getElementById('personnelProgramDate');
     const activityField = document.getElementById('personnelProgramActivity');
+    const activityFieldContainer = document.getElementById('personnelProgramActivityField');
     const notesField = document.getElementById('personnelProgramNotes');
     const extraEntry = document.getElementById('programExtraEntry');
     const extraAdvance = document.getElementById('programExtraAdvance');
     const extraTolerance = document.getElementById('programExtraTolerance');
     const extraExit = document.getElementById('programExtraExit');
+    const scheduleSourceField = document.getElementById('personnelProgramScheduleSource');
+    const specialScheduleFields = document.getElementById('extraordinaryScheduleFields');
     const entryRulePreview = document.getElementById('programEntryRulePreview');
     const exitRulePreview = document.getElementById('programExitRulePreview');
     const cancelButton = document.getElementById('cancelProgramBtn');
     const workerFilter = document.getElementById('programWorkerFilter');
+    const stopsContainer = document.getElementById('programStopsContainer');
+    const stopsEmpty = document.getElementById('programStopsEmpty');
+    const addStopButton = document.getElementById('addProgramStopBtn');
+    const routeField = document.getElementById('personnelProgramRouteField');
+    const scheduleModeField = document.getElementById('personnelProgramScheduleModeField');
+    const workersLabel = document.getElementById('personnelProgramWorkersLabel');
+    const workersHelp = document.getElementById('personnelProgramWorkersHelp');
+    const workersCount = document.getElementById('personnelProgramWorkersCount');
+    const notesHelp = document.getElementById('personnelProgramNotesHelp');
+    const priorityNotice = document.getElementById('personnelProgramPriorityNotice');
+    const modalTitle = modalElement.querySelector('.modal-title');
+    const modalSubtitle = modalElement.querySelector('.modal-title + small');
     const csrf = form.querySelector('[name="csrf_token"]').value;
+    let editorMode = 'special';
+
+    function configureProgramEditor(mode) {
+        editorMode = mode === 'route' ? 'route' : 'special';
+        const route = editorMode === 'route';
+        singleWorkerField?.classList.toggle('d-none', route);
+        routeWorkersField?.classList.toggle('d-none', !route);
+        if (singleAssignmentField) singleAssignmentField.required = !route;
+        if (assignmentField) assignmentField.required = route;
+        routeField?.classList.toggle('d-none', !route);
+        locationFieldContainer?.classList.toggle('d-none', route);
+        scheduleFieldContainer?.classList.toggle('d-none', route);
+        if (locationField) locationField.required = !route;
+        if (scheduleField) scheduleField.required = !route;
+        activityFieldContainer?.classList.toggle('d-none', route);
+        scheduleModeField?.classList.add('d-none');
+        if (scheduleSourceField) scheduleSourceField.value = route ? 'template' : 'extraordinary';
+        if (modalTitle) modalTitle.textContent = route ? 'Nuevo recorrido de trabajo' : 'Nueva programación especial';
+        if (modalSubtitle) modalSubtitle.textContent = route ? 'Organice los lugares y actividades de una misma jornada.' : 'Configure un horario diferente para una fecha específica.';
+        if (workersLabel) workersLabel.innerHTML = route ? '<i class="fa-solid fa-users me-1"></i>Trabajadores' : 'Trabajador';
+        if (workersHelp) workersHelp.textContent = route
+            ? 'Busque por nombre, documento o lugar.'
+            : 'Seleccione un trabajador para esta programación especial.';
+        notesHelp?.classList.toggle('d-none', route);
+        priorityNotice?.classList.toggle('d-none', route);
+        updateProgramScheduleMode();
+    }
+
+    function addProgramStop(stop = {}) {
+        if (!stopsContainer) return;
+        const row = document.createElement('div');
+        row.className = 'program-stop-row border rounded-3 bg-white p-2';
+        const locationOptions = (window.PERSONNEL_PROGRAM_LOCATIONS || []).map(location =>
+            `<option value="${Number(location.id)}" ${Number(stop.locationId || 0) === Number(location.id) ? 'selected' : ''}>${escapeHtml(location.name)}</option>`
+        ).join('');
+        row.innerHTML = `<div class="row g-2 align-items-end">
+            <div class="col-md-4"><label class="form-label small mb-1">Siguiente lugar</label><select class="form-select form-select-sm js-program-stop-location" name="stop_location_ids[]" required><option value="">Buscar lugar</option>${locationOptions}</select></div>
+            <div class="col-md-4"><label class="form-label small mb-1">Actividad</label><input class="form-control form-control-sm" name="stop_activities[]" maxlength="255" value="${escapeHtml(stop.activity || '')}" placeholder="Ej.: Lavado del camión grúa" required></div>
+            <div class="col-md-3"><label class="form-label small mb-1 program-stop-arrival-label">Llegada estimada</label><input class="form-control form-control-sm" type="time" name="stop_estimated_times[]" value="${escapeHtml(stop.estimatedTime || '')}" title="Hora estimada de llegada al lugar"></div>
+            <div class="col-md-1 d-grid"><button class="btn btn-sm btn-outline-danger js-remove-program-stop" type="button" title="Quitar lugar"><i class="fa-solid fa-trash-can"></i></button></div>
+        </div>`;
+        row.querySelector('.js-remove-program-stop')?.addEventListener('click', () => {
+            const locationSelect = row.querySelector('.js-program-stop-location');
+            if (window.jQuery && locationSelect && jQuery(locationSelect).hasClass('select2-hidden-accessible')) {
+                jQuery(locationSelect).select2('destroy');
+            }
+            row.remove();
+            stopsEmpty?.classList.toggle('d-none', !!stopsContainer.children.length);
+        });
+        stopsContainer.appendChild(row);
+        const locationSelect = row.querySelector('.js-program-stop-location');
+        if (window.jQuery && jQuery.fn.select2 && locationSelect) {
+            jQuery(locationSelect).select2({
+                theme: 'bootstrap4',
+                width: '100%',
+                dropdownParent: jQuery(modalElement),
+                placeholder: 'Buscar lugar',
+                minimumResultsForSearch: 0,
+                language: {
+                    noResults: () => 'No se encontraron lugares',
+                    searching: () => 'Buscando...'
+                }
+            });
+        }
+        stopsEmpty?.classList.add('d-none');
+    }
+
+    function setProgramStops(stops = []) {
+        if (!stopsContainer) return;
+        stopsContainer.innerHTML = '';
+        (Array.isArray(stops) ? stops : []).forEach(addProgramStop);
+        stopsEmpty?.classList.toggle('d-none', !!stopsContainer.children.length);
+    }
 
     function scheduleAdvanceMinutes(entryTime, entryStart) {
         const minutes = (value) => { const [h, m] = String(value || '00:00').split(':').map(Number); return h * 60 + m; };
@@ -346,19 +444,110 @@ function initPersonnelProgramming() {
         }
     }
 
-    function resetProgram(date = '') {
+    function updateProgramScheduleMode() {
+        const special = scheduleSourceField?.value === 'extraordinary';
+        specialScheduleFields?.classList.toggle('d-none', !special);
+        [extraEntry, extraAdvance, extraTolerance, extraExit].forEach(input => { if (input) input.required = special; });
+    }
+
+    function resetProgram(date = '', mode = 'special') {
         form.reset();
+        assignmentField?.querySelectorAll('option[data-program-temporary="1"]').forEach(option => option.remove());
         idField.value = '';
         dateField.value = date || localDateValue();
         if (extraAdvance) extraAdvance.value = '30';
         if (extraTolerance) extraTolerance.value = '0';
+        configureProgramEditor(mode);
+        updateProgramScheduleMode();
         updateProgramRulePreview();
+        setProgramStops([]);
         cancelButton.classList.add('d-none');
         if (window.jQuery) {
-            jQuery(assignmentField).val('').trigger('change');
+            jQuery(assignmentField).val([]).trigger('change');
+            jQuery(singleAssignmentField).val('').trigger('change');
             jQuery(locationField).val('').trigger('change');
             jQuery(scheduleField).val('').trigger('change');
         }
+    }
+
+    function ensureEditedProgramWorkerOption(props) {
+        if (!assignmentField || !props.assignmentId) return;
+        const assignmentId = String(props.assignmentId);
+        assignmentField.querySelectorAll('option[data-program-temporary="1"]').forEach(option => {
+            if (option.value !== assignmentId) option.remove();
+        });
+        if (Array.from(assignmentField.options).some(option => option.value === assignmentId)) return;
+
+        // El recorrido puede seguir asociado a una asignación histórica que ya
+        // no forma parte del listado de asignaciones activas. La representamos
+        // únicamente durante la edición para conservar su vínculo original.
+        const option = new Option(
+            `${props.worker || 'Trabajador'} · ${props.location || 'Lugar no disponible'}`,
+            assignmentId,
+            false,
+            false
+        );
+        option.dataset.workerId = String(props.workerId || '');
+        option.dataset.selectionLabel = `${props.worker || 'Trabajador'} · ${props.location || 'Lugar no disponible'}`;
+        option.dataset.locationId = String(props.locationId || '');
+        option.dataset.scheduleId = String(props.scheduleId || '');
+        option.dataset.programTemporary = '1';
+        assignmentField.appendChild(option);
+    }
+
+    function openProgramEvent(event) {
+        const props = event.extendedProps || {};
+        configureProgramEditor((props.stops || []).length ? 'route' : 'special');
+        if (modalTitle) modalTitle.textContent = editorMode === 'route' ? 'Editar recorrido de trabajo' : 'Editar programación especial';
+        idField.value = event.id;
+        dateField.value = event.startStr.slice(0, 10);
+        activityField.value = props.activity || '';
+        notesField.value = props.notes || '';
+        cancelButton.dataset.hasProgramMarks = props.hasProgramMarks ? '1' : '0';
+        cancelButton.dataset.hasProgramTrips = props.hasProgramTrips ? '1' : '0';
+        cancelButton.dataset.hasWorkCompletions = props.hasWorkCompletions ? '1' : '0';
+        setProgramStops(props.stops || []);
+        if (extraEntry) extraEntry.value = props.entryTime || '';
+        if (extraExit) extraExit.value = props.exitTime || '';
+        if (extraTolerance) extraTolerance.value = String(props.tolerance || 0);
+        if (extraAdvance) extraAdvance.value = String(scheduleAdvanceMinutes(props.entryTime, props.entryStart));
+        if (scheduleSourceField) scheduleSourceField.value = props.scheduleSource || 'template';
+        updateProgramScheduleMode();
+        updateProgramRulePreview();
+        ensureEditedProgramWorkerOption(props);
+        if (window.jQuery) {
+            if (editorMode === 'route') {
+                // El selector individual está oculto en recorridos. No debe
+                // dispararse porque una asignación histórica podría no existir
+                // allí y terminaría limpiando la selección múltiple.
+                jQuery(singleAssignmentField).val('').trigger('change.select2');
+                const assignmentId = String(props.assignmentId || '');
+                Array.from(assignmentField.options).forEach(option => {
+                    option.selected = option.value === assignmentId;
+                });
+                // Actualiza únicamente la interfaz de Select2. Los efectos del
+                // cambio se ejecutan explícitamente para evitar que otro campo
+                // oculto vuelva a borrar al trabajador seleccionado.
+                jQuery(assignmentField).trigger('change.select2');
+                useAssignmentDefaults();
+                updateSelectedWorkersCount();
+            } else {
+                jQuery(singleAssignmentField).val(String(props.assignmentId || '')).trigger('change');
+            }
+            jQuery(locationField).val(String(props.locationId || '')).trigger('change');
+            jQuery(scheduleField).val(String(props.scheduleId || '')).trigger('change');
+        } else {
+            if (editorMode === 'route') {
+                Array.from(assignmentField.options).forEach(option => { option.selected = option.value === String(props.assignmentId || ''); });
+                updateSelectedWorkersCount();
+            } else if (singleAssignmentField) {
+                singleAssignmentField.value = String(props.assignmentId || '');
+            }
+            locationField.value = props.locationId || '';
+            scheduleField.value = props.scheduleId || '';
+        }
+        cancelButton.classList.remove('d-none');
+        modal.show();
     }
 
     const calendar = new FullCalendar.Calendar(calendarElement, {
@@ -375,7 +564,7 @@ function initPersonnelProgramming() {
         dateClick(info) {
             // Un clic sobre una zona libre crea una programación nueva para la
             // fecha seleccionada, sin heredar al trabajador del último evento.
-            resetProgram(info.dateStr);
+            resetProgram(info.dateStr, 'special');
             modal.show();
         },
         eventClick(info) {
@@ -383,30 +572,7 @@ function initPersonnelProgramming() {
             // y vuelva a abrir el formulario como si fuera una programación nueva.
             info.jsEvent?.preventDefault();
             info.jsEvent?.stopPropagation();
-            const event = info.event;
-            const props = event.extendedProps || {};
-            idField.value = event.id;
-            dateField.value = event.startStr.slice(0, 10);
-            activityField.value = props.activity || '';
-            notesField.value = props.notes || props.stops || '';
-            if (extraEntry) extraEntry.value = props.entryTime || '';
-            if (extraExit) extraExit.value = props.exitTime || '';
-            if (extraTolerance) extraTolerance.value = String(props.tolerance || 0);
-            if (extraAdvance) extraAdvance.value = String(scheduleAdvanceMinutes(props.entryTime, props.entryStart));
-            updateProgramRulePreview();
-            if (window.jQuery) {
-                jQuery(assignmentField).val(String(props.assignmentId || '')).trigger('change');
-                jQuery(locationField).val(String(props.locationId || '')).trigger('change');
-                jQuery(scheduleField).val(String(props.scheduleId || '')).trigger('change');
-            } else {
-                assignmentField.value = props.assignmentId || '';
-                locationField.value = props.locationId || '';
-                scheduleField.value = props.scheduleId || '';
-            }
-            // Toda programación abierta puede solicitar su eliminación. El servidor
-            // decide de forma segura si existen marcaciones o desplazamientos vinculados.
-            cancelButton.classList.remove('d-none');
-            modal.show();
+            openProgramEvent(info.event);
         },
         eventDidMount(info) {
             const p = info.event.extendedProps || {};
@@ -415,7 +581,25 @@ function initPersonnelProgramming() {
     });
     calendar.render();
 
+    const routesCalendarElement = document.getElementById('personnelRoutesCalendar');
+    let routesCalendar = null;
+    if (routesCalendarElement) {
+        routesCalendar = new FullCalendar.Calendar(routesCalendarElement, {
+            locale: 'es', initialView: 'dayGridMonth', firstDay: 1, height: 'auto', selectable: true,
+            dayMaxEvents: true, displayEventTime: false,
+            headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,listMonth' },
+            buttonText: { today: 'Hoy', month: 'Mes', week: 'Semana', list: 'Lista' },
+            events: window.PERSONNEL_ROUTE_EVENTS || [],
+            dateClick(info) { resetProgram(info.dateStr, 'route'); modal.show(); },
+            eventClick(info) { info.jsEvent?.preventDefault(); info.jsEvent?.stopPropagation(); openProgramEvent(info.event); },
+            eventDidMount(info) { const p=info.event.extendedProps||{}; info.el.title=`${p.worker||''}\n${p.location||''} · ${(p.stops||[]).length} lugares adicionales`; }
+        });
+        routesCalendar.render();
+    }
+
     [extraEntry, extraAdvance, extraTolerance, extraExit].forEach((input) => input?.addEventListener('input', updateProgramRulePreview));
+    scheduleSourceField?.addEventListener('change', updateProgramScheduleMode);
+    addStopButton?.addEventListener('click', () => addProgramStop());
 
     function useAssignmentDefaults() {
         const option = assignmentField?.selectedOptions?.[0];
@@ -431,30 +615,85 @@ function initPersonnelProgramming() {
         }
     }
 
+    function updateSelectedWorkersCount() {
+        if (!workersCount) return;
+        const count = Array.from(assignmentField?.selectedOptions || []).length;
+        workersCount.textContent = count ? `${count} ${count === 1 ? 'seleccionado' : 'seleccionados'}` : 'Ninguno seleccionado';
+    }
+
     // Select2 administra su propio ciclo de eventos. Vincular mediante jQuery
     // garantiza que los valores habituales se carguen tanto al buscar como al
     // seleccionar al trabajador con teclado o mouse.
     if (window.jQuery) {
-        jQuery(assignmentField).off('change.personnelProgramDefaults').on('change.personnelProgramDefaults', useAssignmentDefaults);
+        jQuery(assignmentField).off('change.personnelProgramDefaults').on('change.personnelProgramDefaults', () => { useAssignmentDefaults(); updateSelectedWorkersCount(); });
+        jQuery(singleAssignmentField).off('change.personnelProgramSingle').on('change.personnelProgramSingle', () => {
+            const value = singleAssignmentField.value || '';
+            jQuery(assignmentField).val(value ? [value] : []).trigger('change');
+        });
     } else {
-        assignmentField?.addEventListener('change', useAssignmentDefaults);
+        assignmentField?.addEventListener('change', () => { useAssignmentDefaults(); updateSelectedWorkersCount(); });
+        singleAssignmentField?.addEventListener('change', () => {
+            Array.from(assignmentField.options).forEach(option => { option.selected = option.value === singleAssignmentField.value; });
+            useAssignmentDefaults();
+        });
     }
 
-    document.getElementById('newProgramBtn')?.addEventListener('click', () => { resetProgram(); modal.show(); });
-    workerFilter?.addEventListener('change', () => {
+    document.getElementById('newProgramBtn')?.addEventListener('click', () => { resetProgram('', 'special'); modal.show(); });
+    document.getElementById('newRouteProgramBtn')?.addEventListener('click', () => { resetProgram('', 'route'); modal.show(); });
+    const applyProgramWorkerFilter = () => {
         const workerId = String(workerFilter.value || '');
-        calendar.getEvents().forEach(event => event.setProp('display', !workerId || String(event.extendedProps.workerId) === workerId ? 'auto' : 'none'));
-    });
+        let visibleCount = 0;
+        calendar.getEvents().forEach(event => {
+            const visible = !workerId || workerId === 'all' || String(event.extendedProps.workerId) === workerId;
+            event.setProp('display', visible ? 'block' : 'none');
+            if (visible) visibleCount += 1;
+        });
+        const count = document.querySelector('#specialProgramsCount span');
+        if (count) count.textContent = `${visibleCount} ${visibleCount === 1 ? 'programación especial' : 'programaciones especiales'}`;
+    };
+    const routeWorkerFilter = document.getElementById('routeWorkerFilter');
+    const applyRouteWorkerFilter = () => {
+        const workerId=String(routeWorkerFilter?.value||'');
+        let visibleCount = 0;
+        routesCalendar?.getEvents().forEach(item => {
+            const visible = !workerId || workerId === 'all' || String(item.extendedProps.workerId) === workerId;
+            item.setProp('display', visible ? 'block' : 'none');
+            if (visible) visibleCount += 1;
+        });
+        const count = document.querySelector('#routeProgramsCount span');
+        if (count) count.textContent = `${visibleCount} ${visibleCount === 1 ? 'recorrido' : 'recorridos'}`;
+    };
+    if (window.jQuery) {
+        jQuery(workerFilter).off('change.programWorkerFilter').on('change.programWorkerFilter', applyProgramWorkerFilter);
+        jQuery(routeWorkerFilter).off('change.routeWorkerFilter').on('change.routeWorkerFilter', applyRouteWorkerFilter);
+    } else {
+        workerFilter?.addEventListener('change', applyProgramWorkerFilter);
+        routeWorkerFilter?.addEventListener('change', applyRouteWorkerFilter);
+    }
+    applyProgramWorkerFilter();
+    applyRouteWorkerFilter();
 
     form.addEventListener('submit', async event => {
         event.preventDefault();
         const button = form.querySelector('[type="submit"]');
         button.disabled = true;
         try {
-            const response = await fetch(`${BASE_URL}/servicios/control_personal/guardar_programacion.php`, { method: 'POST', body: new FormData(form) });
-            const data = await response.json();
-            if (!data.ok) throw new Error(data.message || 'No se pudo guardar la programación.');
-            await Swal.fire('Programación guardada', data.message, 'success');
+            const assignmentIds = Array.from(assignmentField.selectedOptions).map(option => option.value).filter(Boolean);
+            if (!assignmentIds.length) throw new Error('Seleccione al menos un trabajador.');
+            if (editorMode === 'special' && assignmentIds.length > 1) throw new Error('La programación especial se aplica a un trabajador. Para varios trabajadores utilice Recorridos de trabajo.');
+            if (editorMode === 'route' && !stopsContainer?.children.length) throw new Error('Agregue al menos un lugar al recorrido.');
+            let lastMessage = '';
+            const targets = idField.value ? [assignmentIds[0]] : assignmentIds;
+            for (const assignmentId of targets) {
+                const body = new FormData(form);
+                body.set('assignment_id', assignmentId);
+                const response = await fetch(`${BASE_URL}/servicios/control_personal/guardar_programacion.php`, { method: 'POST', body });
+                const data = await response.json();
+                if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo guardar la programación.');
+                lastMessage = data.message || '';
+            }
+            const message = targets.length > 1 ? `Se crearon ${targets.length} programaciones con el mismo recorrido.` : lastMessage;
+            await Swal.fire('Programación guardada', message, 'success');
             window.location.reload();
         } catch (error) {
             Swal.fire('Atención', error.message || String(error), 'warning');
@@ -462,10 +701,23 @@ function initPersonnelProgramming() {
     });
 
     cancelButton.addEventListener('click', async () => {
+        const hasMarks = cancelButton.dataset.hasProgramMarks === '1';
+        const hasTrips = cancelButton.dataset.hasProgramTrips === '1';
+        const hasCompletions = cancelButton.dataset.hasWorkCompletions === '1';
+        if (hasMarks || hasTrips || hasCompletions) {
+            const records = [hasMarks ? 'marcaciones' : '', hasTrips ? 'desplazamientos' : '', hasCompletions ? 'trabajos finalizados' : ''].filter(Boolean);
+            await Swal.fire({
+                icon: 'info',
+                title: 'Este recorrido ya está en uso',
+                html: `<p class="mb-2">No puede eliminarse porque tiene ${escapeHtml(records.join(', '))} registrados específicamente en este recorrido.</p><small class="text-muted">El historial debe conservarse para los reportes de asistencia.</small>`,
+                confirmButtonText: 'Entendido'
+            });
+            return;
+        }
         const answer = await Swal.fire({
             icon: 'warning',
-            title: '¿Eliminar programación?',
-            html: '<p class="mb-2">Esta programación será retirada del calendario.</p><small class="text-muted">Solo podrá eliminarse si todavía no tiene marcaciones ni desplazamientos laborales registrados.</small>',
+            title: editorMode === 'route' ? '¿Eliminar recorrido de trabajo?' : '¿Eliminar programación especial?',
+            html: `<p class="mb-2">${editorMode === 'route' ? 'Este recorrido' : 'Esta programación'} todavía no tiene registros propios y será retirado del calendario.</p><small class="text-muted">Las marcaciones realizadas en el horario habitual no se modificarán.</small>`,
             showCancelButton: true,
             confirmButtonText: '<i class="fa-solid fa-trash-can me-2"></i>Sí, eliminar',
             cancelButtonText: 'Volver',
@@ -4278,7 +4530,9 @@ function initNotifications() {
             ? notificationsData.filter(notif => {
                 const name = (notif.full_name || '').toLowerCase();
                 const missing = (notif.missing_fields || '').toLowerCase();
-                return name.includes(queryLower) || missing.includes(queryLower);
+                const title = (notif.title || '').toLowerCase();
+                const body = (notif.body || '').toLowerCase();
+                return name.includes(queryLower) || missing.includes(queryLower) || title.includes(queryLower) || body.includes(queryLower);
               })
             : notificationsData;
 
@@ -4294,16 +4548,19 @@ function initNotifications() {
 
         list.innerHTML = filtered.map(notif => {
             // Unified smaller bell icon
-            const iconHTML = '<i class="fa-solid fa-bell"></i>';
+            const isWorkCompletion = notif.type === 'work_location_completed';
+            const iconHTML = isWorkCompletion ? '<i class="fa-solid fa-circle-check"></i>' : '<i class="fa-solid fa-bell"></i>';
 
             // Clean, structured styling
             const nameHTML = escapeHTML(notif.full_name || '');
             const missingHTML = escapeHTML(notif.missing_fields || '');
             
-            const bodyHTML = `<strong>Nombre del personal:</strong> <span class="notif-worker-name">${nameHTML}</span> <span class="notif-missing-fields">(Falta: ${missingHTML})</span>`;
+            const bodyHTML = isWorkCompletion
+                ? `<strong>${escapeHTML(notif.title || 'Trabajo finalizado')}</strong><br><span>${escapeHTML(notif.body || '')}</span>`
+                : `<strong>Nombre del personal:</strong> <span class="notif-worker-name">${nameHTML}</span> <span class="notif-missing-fields">(Falta: ${missingHTML})</span>`;
 
             return `
-                <div class="notif-item unread" data-id="${notif.id}">
+                <div class="notif-item unread" data-id="${notif.id}" data-notification-id="${Number(notif.notification_id || 0)}" data-worker-id="${Number(notif.worker_id || 0)}" data-type="${escapeHTML(notif.type || '')}">
                     <div class="notif-icon-container">
                         ${iconHTML}
                     </div>
@@ -4315,8 +4572,23 @@ function initNotifications() {
                     </div>
                 </div>
             `;
-        }).join('');
+    }).join('');
     }
+
+    list.addEventListener('click', async (event) => {
+        const item = event.target.closest('.notif-item[data-type="work_location_completed"]');
+        if (!item) return;
+        const body = new FormData();
+        body.append('csrf_token', csrf);
+        body.append('notification_id', item.dataset.notificationId || '');
+        try {
+            await fetch(`${BASE_URL}/servicios/mark_notifications_read.php`, { method:'POST', body });
+        } catch (error) {
+            // La navegación al control de asistencia sigue disponible aunque falle la actualización visual.
+        }
+        const workerId = item.dataset.workerId || '';
+        window.location.href = `${BASE_URL}/modulos/control_personal/control_asistencia.php${workerId ? `?worker_id=${encodeURIComponent(workerId)}` : ''}`;
+    });
 
     // Helper to escape HTML to prevent XSS
     function escapeHTML(str) {
@@ -4345,6 +4617,8 @@ function initNotifications() {
     // Toggle dropdown visibility (does not mark read, preserves count)
     bellBtn.addEventListener('click', (e) => {
         e.stopPropagation();
+        document.getElementById('routeNotifContainer')?.classList.remove('active');
+        document.getElementById('obsNotifContainer')?.classList.remove('active');
         container.classList.toggle('active');
         if (container.classList.contains('active') && searchInput) {
             // Auto focus search input when opened
@@ -4362,6 +4636,106 @@ function initNotifications() {
     // Load initially and start polling
     loadNotifications();
     setInterval(loadNotifications, 20000); // Poll every 20 seconds
+}
+
+function initRouteNotifications() {
+    const container=document.getElementById('routeNotifContainer');
+    const button=document.getElementById('routeNotifBtn');
+    const badge=document.getElementById('routeNotifBadge');
+    const list=document.getElementById('routeNotifList');
+    const search=document.getElementById('routeNotifSearchInput');
+    if(!container||!button||!badge||!list)return;
+    let rows=[];
+    let query='';
+
+    const overtimeText=(minutes)=>{
+        const value=Math.max(0,Number(minutes||0));
+        const hours=Math.floor(value/60);
+        const rest=value%60;
+        return hours ? `${hours} h ${rest} min` : `${rest} min`;
+    };
+    const formatDateTime=(value)=>{
+        if(!value)return '-';
+        const parts=String(value).split(/[- :]/);
+        return parts.length>=5 ? `${parts[2]}/${parts[1]}/${parts[0]} · ${parts[3]}:${parts[4]}` : value;
+    };
+    const setBadge=(count)=>{
+        badge.textContent=count>99?'99+':String(count||0);
+        badge.style.display=count>0?'flex':'none';
+    };
+    const render=()=>{
+        const needle=query.trim().toLowerCase();
+        const filtered=needle?rows.filter(row=>`${row.full_name||''} ${row.location||''} ${row.activity||''} ${row.title||''} ${row.body||''}`.toLowerCase().includes(needle)):rows;
+        if(!filtered.length){
+            list.innerHTML=`<div class="notif-empty"><i class="fa-solid fa-route"></i><span>${needle?'No se encontraron recorridos':'No hay alertas de recorridos pendientes'}</span></div>`;
+            return;
+        }
+        list.innerHTML=filtered.map(row=>{
+            if(row.type==='temporary_trip_exception'){
+                return `<div class="notif-item unread route-notif-item" data-notification-id="${Number(row.notification_id||0)}" data-worker-id="${Number(row.worker_id||0)}" data-needs-assignment="0">
+                    <div class="notif-icon-container route-notif-icon text-warning"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                    <div class="notif-content">
+                        <div class="notif-title">${escapeHtml(row.title||'Regreso con incidencia')}</div>
+                        <div class="notif-body">${escapeHtml(row.body||'')}</div>
+                        <div class="notif-time"><span>${escapeHtml(formatDateTime(row.completed_at))}</span></div>
+                    </div>
+                </div>`;
+            }
+            const hasSchedule=row.entry_time&&row.exit_time;
+            const schedule=hasSchedule?`Jornada: ${escapeHtml(row.entry_time)} a ${escapeHtml(row.exit_time)}`:'Horario no disponible';
+            const completedParts=String(row.completed_at||'').split(/[- :]/);
+            const completedHour=completedParts.length>=5?`${completedParts[3]}:${completedParts[4]}`:'hora no disponible';
+            const overtime=row.is_overtime
+                ? `<div class="route-notif-overtime"><i class="fa-solid fa-clock"></i> Horas extras: ${escapeHtml(overtimeText(row.overtime_minutes))}</div>`
+                : '';
+            return `<div class="notif-item unread route-notif-item" data-notification-id="${Number(row.notification_id||0)}" data-worker-id="${Number(row.worker_id||0)}" data-needs-assignment="${row.needs_assignment?'1':'0'}">
+                <div class="notif-icon-container route-notif-icon"><i class="fa-solid fa-location-dot"></i></div>
+                <div class="notif-content">
+                    <div class="notif-title">Trabajo finalizado</div>
+                    <div class="notif-body route-notif-message"><strong class="route-notif-worker">${escapeHtml(row.full_name||'El trabajador')}</strong> terminó su trabajo en <strong class="route-notif-place">${escapeHtml(row.location||'el lugar registrado')}</strong> a las <strong class="route-notif-hour">${escapeHtml(completedHour)}</strong>.</div>
+                    <div class="route-notif-activity"><span>Actividad:</span> ${escapeHtml(row.activity||'Sin actividad especificada')}</div>
+                    <div class="route-notif-schedule"><i class="fa-regular fa-clock"></i> ${schedule}</div>
+                    ${row.needs_assignment?'<div class="route-notif-assignment"><i class="fa-solid fa-location-arrow"></i> Asignar siguiente destino</div>':''}
+                    ${overtime}
+                    <div class="notif-time"><span>${escapeHtml(formatDateTime(row.completed_at))}</span></div>
+                </div>
+            </div>`;
+        }).join('');
+    };
+    const load=async()=>{
+        try{
+            const response=await fetch(`${BASE_URL}/servicios/get_route_notifications.php?t=${Date.now()}`);
+            const data=await response.json();
+            if(!data.ok)return;
+            rows=data.notifications||[];
+            setBadge(data.unread_count||0);
+            render();
+        }catch(error){console.error('Error fetching route notifications:',error);}
+    };
+    search?.addEventListener('input',event=>{query=event.target.value||'';render();});
+    search?.addEventListener('click',event=>event.stopPropagation());
+    button.addEventListener('click',event=>{
+        event.stopPropagation();
+        document.getElementById('notifContainer')?.classList.remove('active');
+        document.getElementById('obsNotifContainer')?.classList.remove('active');
+        container.classList.toggle('active');
+        if(container.classList.contains('active'))setTimeout(()=>search?.focus(),50);
+    });
+    list.addEventListener('click',async event=>{
+        const item=event.target.closest('.route-notif-item');
+        if(!item)return;
+        const body=new FormData();
+        body.append('csrf_token',csrf);
+        body.append('notification_id',item.dataset.notificationId||'');
+        try{await fetch(`${BASE_URL}/servicios/mark_notifications_read.php`,{method:'POST',body});}catch(error){}
+        const workerId=encodeURIComponent(item.dataset.workerId||'');
+        window.location.href=item.dataset.needsAssignment==='1'
+            ? `${BASE_URL}/modulos/control_personal/programacion_personal.php?worker_id=${workerId}#recorridos-trabajo`
+            : `${BASE_URL}/modulos/control_personal/control_asistencia.php?worker_id=${workerId}`;
+    });
+    document.addEventListener('click',event=>{if(!container.contains(event.target))container.classList.remove('active');});
+    load();
+    setInterval(load,20000);
 }
 
 function initObservationNotifications() {
@@ -4457,6 +4831,7 @@ function initObservationNotifications() {
     button.addEventListener('click', (event) => {
         event.stopPropagation();
         document.getElementById('notifContainer')?.classList.remove('active');
+        document.getElementById('routeNotifContainer')?.classList.remove('active');
         container.classList.toggle('active');
         if (container.classList.contains('active')) {
             setTimeout(() => searchInput?.focus(), 50);
@@ -4476,7 +4851,8 @@ function initObservationNotifications() {
 function initScheduleJourneysCalendar() {
     const calendarView = document.getElementById('journeysCalendarView');
     const extraordinaryView = document.getElementById('extraordinaryProgrammingView');
-    if (!calendarView || !extraordinaryView) return;
+    const routesView = document.getElementById('routesProgrammingView');
+    if (!calendarView || !extraordinaryView || !routesView) return;
 
     const tabs = Array.from(document.querySelectorAll('[data-journey-module-view]'));
     const calendarElement = document.getElementById('scheduleJourneysCalendar');
@@ -4501,7 +4877,8 @@ function initScheduleJourneysCalendar() {
     function activateView(view) {
         const showCalendar = view === 'calendar';
         calendarView.classList.toggle('d-none', !showCalendar);
-        extraordinaryView.classList.toggle('d-none', showCalendar);
+        extraordinaryView.classList.toggle('d-none', view !== 'extraordinary');
+        routesView.classList.toggle('d-none', view !== 'routes');
         tabs.forEach((tab) => {
             const active = tab.dataset.journeyModuleView === view;
             tab.classList.toggle('active', active);
@@ -4510,8 +4887,11 @@ function initScheduleJourneysCalendar() {
         if (showCalendar) {
             window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#calendario`);
             window.setTimeout(() => calendar?.updateSize(), 80);
-        } else {
+        } else if (view === 'extraordinary') {
             window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#programacion-especial`);
+            window.setTimeout(() => window.dispatchEvent(new Event('resize')), 80);
+        } else {
+            window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#recorridos-trabajo`);
             window.setTimeout(() => window.dispatchEvent(new Event('resize')), 80);
         }
     }
@@ -4554,12 +4934,14 @@ function initScheduleJourneysCalendar() {
                 const status = document.getElementById('journeyDetailStatus');
                 if (status) {
                     status.className = `journey-detail-status is-${props.kind || 'special'}`;
-                    status.textContent = kindLabels[props.kind] || 'Jornada';
+                    status.textContent = props.kind === 'route' ? 'Recorrido de trabajo' : (kindLabels[props.kind] || 'Jornada');
                 }
                 setText('journeyDetailHelp', props.kind === 'regular'
                     ? (props.canExclude
                         ? 'Puede excluir únicamente esta fecha. La plantilla semanal y los demás días permanecerán sin cambios.'
                         : 'La fecha pertenece al historial y se mantiene protegida contra modificaciones.')
+                    : props.kind === 'route'
+                        ? `Este recorrido mantiene la jornada laboral y comprende ${props.routePlaceCount || 1} lugares en el orden asignado.`
                     : props.kind === 'program'
                         ? 'Esta programación especial reemplaza el horario habitual únicamente en esta fecha.'
                         : 'Esta fecha está definida desde Calendario laboral y tiene prioridad sobre la plantilla semanal.');
@@ -4618,7 +5000,7 @@ function initScheduleJourneysCalendar() {
         Swal.fire({ icon: 'success', title: 'Jornada restaurada', timer: 1500, showConfirmButton: false });
     });
 
-    activateView(window.location.hash === '#programacion-especial' ? 'extraordinary' : 'calendar');
+    activateView(window.location.hash === '#programacion-especial' ? 'extraordinary' : (window.location.hash === '#recorridos-trabajo' ? 'routes' : 'calendar'));
 }
 
 function initControlPersonalSchedules() {
@@ -4949,6 +5331,14 @@ function initControlPersonalLocations() {
         map.fitBounds(circle.getBounds(), { padding: [30, 30], maxZoom: 16 });
     }
 
+    function normalizeCoordinate(input) {
+        if (!input || String(input.value).trim() === '') return null;
+        const value = Number(String(input.value).trim().replace(',', '.'));
+        if (!Number.isFinite(value)) return null;
+        input.value = value.toFixed(8);
+        return value;
+    }
+
     async function reverseAddress(lat, lng) {
         if (!addressInput || addressInput.value.trim() !== '') return;
         try {
@@ -5012,14 +5402,17 @@ function initControlPersonalLocations() {
         setMapPoint(Number(latInput.value), Number(lngInput.value));
     });
     [latInput, lngInput].forEach((input) => input?.addEventListener('change', () => {
-        const lat = Number(latInput.value);
-        const lng = Number(lngInput.value);
+        const lat = normalizeCoordinate(latInput);
+        const lng = normalizeCoordinate(lngInput);
+        if (lat === null || lng === null) return;
         setMapPoint(lat, lng);
         reverseAddress(lat, lng);
     }));
 
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
+        normalizeCoordinate(latInput);
+        normalizeCoordinate(lngInput);
         if (!form.checkValidity()) {
             form.classList.add('was-validated');
             return;
@@ -5243,7 +5636,7 @@ function initControlPersonalAssignments() {
 
     function openJourneyDateDetail(event) {
         const props = event.extendedProps || {};
-        if (!['regular', 'program'].includes(props.kind) || !props.assignmentId || !props.date) return;
+        if (!['regular', 'program', 'route'].includes(props.kind) || !props.assignmentId || !props.date) return;
         journeyDetailForm?.reset();
         journeyDetailForm?.classList.remove('was-validated');
         document.getElementById('journeyDetailAssignmentId').value = props.assignmentId;
@@ -5254,6 +5647,34 @@ function initControlPersonalAssignments() {
         document.getElementById('journeyDetailDateLabel').value = new Date(`${props.date}T12:00:00`).toLocaleDateString('es-PE', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
         document.getElementById('journeyDetailActivity').value = props.activity || '';
         document.getElementById('journeyDetailInstructions').value = props.instructions || '';
+        const unifiedSummary = document.getElementById('journeyUnifiedSummary');
+        const routeStops = Array.isArray(props.stops) ? props.stops : [];
+        if (unifiedSummary) {
+            const places = [{ destination: props.location || '-', activity: props.activity || '', initial: true }, ...routeStops];
+            unifiedSummary.innerHTML = `<div class="journey-unified-schedule">
+                <span><i class="fa-regular fa-clock"></i>Jornada laboral</span>
+                <strong>${escapeHtml(props.entry || '--:--')} - ${escapeHtml(props.exit || '--:--')}</strong>
+                <small>${escapeHtml(props.schedule || '')}</small>
+            </div><div class="journey-unified-route">
+                <div class="journey-unified-route-title"><i class="fa-solid fa-route"></i>${routeStops.length ? 'Lugares programados' : 'Lugar de la jornada'}</div>
+                <div class="journey-unified-places">${places.map((place, index) => {
+                    const activity = String(place.activity || '').trim();
+                    const estimated = String(place.estimatedTime || '').trim();
+                    const content = `<span class="journey-unified-place-number">${index + 1}</span><span><strong>${escapeHtml(place.destination || '-')}</strong>${activity ? `<small>${escapeHtml(activity)}</small>` : ''}${estimated ? `<small><i class="fa-regular fa-clock"></i> Llegada estimada: ${escapeHtml(estimated)}</small>` : ''}</span><i class="fa-solid fa-pen journey-unified-edit-icon"></i>`;
+                    return place.initial
+                        ? `<button class="journey-unified-place" type="button" data-edit-initial-place>${content}</button>`
+                        : `<a class="journey-unified-place" href="${BASE_URL}/modulos/control_personal/programacion_personal.php?worker_id=${encodeURIComponent(props.workerId || '')}#recorridos-trabajo" title="Editar recorrido">${content}</a>`;
+                }).join('')}</div>
+            </div>`;
+            unifiedSummary.classList.remove('d-none');
+            unifiedSummary.querySelector('[data-edit-initial-place]')?.addEventListener('click', () => {
+                const activityField = document.getElementById('journeyDetailActivity');
+                activityField?.focus();
+                activityField?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                activityField?.classList.add('is-editing-highlight');
+                window.setTimeout(() => activityField?.classList.remove('is-editing-highlight'), 1200);
+            });
+        }
         const context = document.getElementById('journeyDateDetailContext');
         if (context) context.textContent = `Personalización exclusiva del ${document.getElementById('journeyDetailDateLabel').value}`;
         resetJourneyDetail?.classList.toggle('d-none', !props.customized);
@@ -5776,9 +6197,13 @@ function initControlPersonalMarking() {
     const availabilityText = document.getElementById('markAvailabilityText');
     const programField = document.getElementById('markProgramField');
     const programSelect = document.getElementById('markProgramId');
+    const currentWorkActionPanel = document.getElementById('currentWorkActionPanel');
+    const mobilityActionPanel = document.getElementById('mobilityActionPanel');
+    const finishLocationWorkBtn = document.getElementById('finishLocationWorkBtn');
     const startTripBtn = document.getElementById('startTripBtn');
     const addTripStopBtn = document.getElementById('addTripStopBtn');
     const finishTripBtn = document.getElementById('finishTripBtn');
+    const returnWithoutArrivalBtn = document.getElementById('returnWithoutArrivalBtn');
     const activeTripPanel = document.getElementById('activeTripPanel');
     const activeTripText = document.getElementById('activeTripText');
     const recentMarksBody = document.getElementById('recentAttendanceMarks');
@@ -5793,6 +6218,7 @@ function initControlPersonalMarking() {
     const tripStopMapModal = tripStopMapModalElement ? bootstrap.Modal.getOrCreateInstance(tripStopMapModalElement) : null;
     let tripStopEvidenceMap = null;
     let tripStopEvidenceMarker = null;
+    let tripStopEvidenceCircle = null;
     let pendingTripStopCoordinates = null;
     if (!workerField || !entryBtn || !exitBtn || !camera || !canvas || !mapElement) return;
 
@@ -5901,9 +6327,12 @@ function initControlPersonalMarking() {
         exitBtn.disabled = true;
         if (!available) {
             programField?.classList.add('d-none');
+            currentWorkActionPanel?.classList.add('d-none');
+            mobilityActionPanel?.classList.add('d-none');
             startTripBtn?.classList.add('d-none');
             addTripStopBtn?.classList.add('d-none');
             finishTripBtn?.classList.add('d-none');
+            returnWithoutArrivalBtn?.classList.add('d-none');
             activeTripPanel?.classList.add('d-none');
         }
         if (observations) {
@@ -6033,21 +6462,10 @@ function initControlPersonalMarking() {
     function renderRecentTrips(rows, emptyMessage = 'No hay desplazamientos laborales registrados para este trabajador.') {
         if (!recentTripsBody) return;
         if (!rows.length) {
-            recentTripsBody.innerHTML = `<tr><td colspan="9" class="text-muted text-center py-4">${escapeHtml(emptyMessage)}</td></tr>`;
+            recentTripsBody.innerHTML = `<tr><td colspan="8" class="text-muted text-center py-4">${escapeHtml(emptyMessage)}</td></tr>`;
             return;
         }
         recentTripsBody.innerHTML = rows.map((trip) => {
-            const route = (trip.stops || []).map((stop, index) => {
-                const hasCoordinates = stop.latitude !== null && stop.latitude !== '' && stop.longitude !== null && stop.longitude !== ''
-                    && Number.isFinite(Number(stop.latitude)) && Number.isFinite(Number(stop.longitude));
-                const visitNumber = hasCoordinates
-                    ? `<button class="badge rounded-pill text-bg-primary border-0 js-trip-stop-evidence" type="button" title="Ver ubicación y hora de la visita" data-destination="${escapeHtml(stop.destination || '-') }" data-activity="${escapeHtml(stop.activity || '-') }" data-date="${escapeHtml(stop.registered_date || trip.date || '-') }" data-time="${escapeHtml(stop.registered_time || '-') }" data-latitude="${Number(stop.latitude)}" data-longitude="${Number(stop.longitude)}">${index + 1}</button>`
-                    : `<span class="badge rounded-pill text-bg-light border text-dark" title="Esta visita no tiene coordenadas registradas">${index + 1}</span>`;
-                return `<div class="d-flex align-items-start gap-2 ${index ? 'mt-1' : ''}">
-                ${visitNumber}
-                <span><strong>${escapeHtml(stop.destination || '-')}</strong>${stop.activity ? `<small class="d-block text-muted">${escapeHtml(stop.activity)}</small>` : ''}</span>
-            </div>`;
-            }).join('') || '<span class="text-muted">—</span>';
             const inProgress = trip.status === 'en_ruta';
             return `<tr${inProgress ? ' class="table-warning"' : ''}>
                 <td class="text-nowrap">${escapeHtml(trip.date)}</td>
@@ -6056,9 +6474,8 @@ function initControlPersonalMarking() {
                 <td class="text-nowrap">${escapeHtml(formatTripDuration(trip.duration_seconds, trip.started_at, trip.ended_at))}</td>
                 <td>${escapeHtml(trip.origin || '-')}</td>
                 <td><strong>${escapeHtml(trip.first_destination || '-')}</strong></td>
-                <td>${route}</td>
                 <td>${escapeHtml(trip.reason || '-')}</td>
-                <td><span class="badge ${inProgress ? 'text-bg-warning' : 'text-bg-success'}"><i class="fa-solid ${inProgress ? 'fa-route' : 'fa-circle-check'} me-1"></i>${inProgress ? 'En curso' : 'Finalizado'}</span></td>
+                <td><span class="badge ${inProgress || trip.completion_type === 'returned_without_arrival' ? 'text-bg-warning' : 'text-bg-success'}"><i class="fa-solid ${inProgress ? 'fa-route' : (trip.completion_type === 'returned_without_arrival' ? 'fa-triangle-exclamation' : 'fa-circle-check')} me-1"></i>${inProgress ? 'En curso' : (trip.completion_type === 'returned_without_arrival' ? 'Regreso con incidencia' : 'Finalizado')}</span></td>
             </tr>`;
         }).join('');
     }
@@ -6070,10 +6487,22 @@ function initControlPersonalMarking() {
         const longitude = Number(button.dataset.longitude);
         if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
         document.getElementById('tripStopMapDestination').textContent = button.dataset.destination || '-';
+        document.getElementById('tripStopMapTitle').textContent = button.dataset.activity === 'Regreso al lugar de trabajo' ? 'Evidencia de regreso' : (button.dataset.kind === 'arrival' ? 'Evidencia de llegada' : 'Evidencia de la visita');
         document.getElementById('tripStopMapActivity').textContent = button.dataset.activity || '-';
         document.getElementById('tripStopMapDateTime').textContent = `${button.dataset.date || '-'} · ${button.dataset.time || '-'}`;
         document.getElementById('tripStopMapCoordinates').textContent = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
-        pendingTripStopCoordinates = { latitude, longitude, destination: button.dataset.destination || 'Punto visitado' };
+        const distance = button.dataset.distance;
+        const radius = Number(button.dataset.radius || 0);
+        document.getElementById('tripStopMapDistance').textContent = distance !== '' ? `${Number(distance).toFixed(1)} m del punto · radio ${radius} m` : '-';
+        document.getElementById('tripStopMapCompletion').textContent = button.dataset.completionDate ? `${button.dataset.completionDate} · ${button.dataset.completionTime || '-'}` : 'Pendiente';
+        document.getElementById('tripStopMapAddress').textContent = button.dataset.address || '-';
+        document.getElementById('tripStopMapObservation').textContent = button.dataset.observations || 'Sin observaciones';
+        const isArrival = button.dataset.kind === 'arrival';
+        document.getElementById('tripStopMapDistanceBox')?.classList.toggle('d-none', !isArrival);
+        document.getElementById('tripStopMapCompletionBox')?.classList.toggle('d-none', !isArrival);
+        document.getElementById('tripStopMapAddressBox')?.classList.toggle('d-none', !isArrival);
+        document.getElementById('tripStopMapObservationBox')?.classList.toggle('d-none', !isArrival);
+        pendingTripStopCoordinates = { latitude, longitude, destination: button.dataset.destination || 'Punto visitado', locationLatitude:button.dataset.locationLatitude !== '' ? Number(button.dataset.locationLatitude) : NaN, locationLongitude:button.dataset.locationLongitude !== '' ? Number(button.dataset.locationLongitude) : NaN, radius };
         tripStopMapModal?.show();
     });
 
@@ -6084,10 +6513,21 @@ function initControlPersonalMarking() {
             tripStopEvidenceMap = L.map('tripStopEvidenceMap');
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(tripStopEvidenceMap);
         }
-        if (!tripStopEvidenceMarker) tripStopEvidenceMarker = L.marker(point).addTo(tripStopEvidenceMap);
+        tripStopEvidenceMap.invalidateSize();
+        if (!tripStopEvidenceMarker) tripStopEvidenceMarker = L.marker(point);
+        if (!tripStopEvidenceMap.hasLayer(tripStopEvidenceMarker)) tripStopEvidenceMarker.addTo(tripStopEvidenceMap);
         tripStopEvidenceMarker.setLatLng(point).bindPopup(pendingTripStopCoordinates.destination).openPopup();
-        tripStopEvidenceMap.setView(point, 17);
-        setTimeout(() => tripStopEvidenceMap?.invalidateSize(), 100);
+        const officialPoint = [pendingTripStopCoordinates.locationLatitude, pendingTripStopCoordinates.locationLongitude];
+        if (Number.isFinite(officialPoint[0]) && Number.isFinite(officialPoint[1]) && pendingTripStopCoordinates.radius > 0) {
+            if (!tripStopEvidenceCircle) tripStopEvidenceCircle = L.circle(officialPoint, { color:'#2563eb',fillColor:'#3b82f6',fillOpacity:.1 });
+            if (!tripStopEvidenceMap.hasLayer(tripStopEvidenceCircle)) tripStopEvidenceCircle.addTo(tripStopEvidenceMap);
+            tripStopEvidenceCircle.setLatLng(officialPoint).setRadius(pendingTripStopCoordinates.radius);
+            tripStopEvidenceMap.fitBounds(L.latLngBounds([point,officialPoint]), { padding:[30,30],maxZoom:17 });
+        } else {
+            if (tripStopEvidenceCircle) { tripStopEvidenceCircle.remove(); tripStopEvidenceCircle = null; }
+            tripStopEvidenceMap.setView(point, 17);
+        }
+        setTimeout(() => tripStopEvidenceMap?.invalidateSize({pan:false}), 100);
     });
 
     async function loadRecentTrips(workerId) {
@@ -6149,20 +6589,23 @@ function initControlPersonalMarking() {
         initMarkMap();
         if (!map || !context?.assignment) return;
 
-        const assignment = context.assignment;
+        const assignment = context.exit_location || context.assignment;
+        const temporaryLocation = context.exit_location?.is_temporary_location == 1;
         const locationLat = Number(assignment.latitude);
         const locationLng = Number(assignment.longitude);
         const radius = Number(assignment.radius_meters || 100);
         const locationPoint = [locationLat, locationLng];
 
         if (!locationMarker) locationMarker = L.marker(locationPoint).addTo(map);
-        locationMarker.setLatLng(locationPoint).bindPopup('Punto asignado');
+        locationMarker.setLatLng(locationPoint).bindPopup(temporaryLocation ? `Destino temporal: ${assignment.name || ''}` : (context.exit_location ? 'Lugar de salida' : 'Lugar de entrada'));
 
-        if (!radiusCircle) {
-            radiusCircle = L.circle(locationPoint, { radius, color: '#1457d9', fillColor: '#1457d9', fillOpacity: 0.12 }).addTo(map);
+        if (temporaryLocation) {
+            if (radiusCircle) { radiusCircle.remove(); radiusCircle = null; }
+        } else {
+            if (!radiusCircle) radiusCircle = L.circle(locationPoint, { radius, color: '#1457d9', fillColor: '#1457d9', fillOpacity: 0.12 }).addTo(map);
+            radiusCircle.setLatLng(locationPoint);
+            radiusCircle.setRadius(radius);
         }
-        radiusCircle.setLatLng(locationPoint);
-        radiusCircle.setRadius(radius);
 
         if (currentPosition) {
             const currentPoint = [currentPosition.latitude, currentPosition.longitude];
@@ -6213,8 +6656,21 @@ function initControlPersonalMarking() {
         const day = data.schedule_day || {};
         const calendarEvent = data.calendar_event || null;
         const hasSchedule = !!day.id;
+        const finalPlannedStop = data.final_planned_stop || null;
+        const nextPlannedStop = data.next_planned_stop || null;
+        const hasPendingRoute = !!nextPlannedStop;
+        const routeCompleted = !!finalPlannedStop && !hasPendingRoute && data.waiting_next_destination === true;
+        const currentLocationId = Number(data.exit_location?.id || assignment.location_id || 0);
+        const baseLocationId = Number(assignment.location_id || 0);
+        const isAwayFromBase = !finalPlannedStop && (data.exit_location?.is_temporary_location == 1 || (currentLocationId > 0 && baseLocationId > 0 && currentLocationId !== baseLocationId));
+        const currentPlannedStop = (data.planned_stops || []).find(stop => Number(stop.location_id || 0) === currentLocationId);
         value('markWorkerName', `${assignment.full_name} - ${assignment.document_number}`);
         value('markLocationName', assignment.location_name);
+        const exitLocationLabel = document.getElementById('markExitLocationLabel');
+        if (exitLocationLabel) exitLocationLabel.textContent = finalPlannedStop ? 'Lugar final del recorrido' : (isAwayFromBase ? 'Ubicación actual' : 'Lugar de salida');
+        value('markExitLocationName', finalPlannedStop
+            ? `${finalPlannedStop.destination}${routeCompleted ? ' · habilitado' : ' · pendiente'}`
+            : `${data.exit_location?.name || assignment.location_name}${isAwayFromBase ? ' · regreso pendiente' : ''}`);
         value('markScheduleName', assignment.schedule_name);
         value('markActivity', assignment.activity || '-');
         value('markWorkDate', data.work_date_formatted || '-');
@@ -6227,16 +6683,41 @@ function initControlPersonalMarking() {
         const hasEntryMark = data.marks.some((mark) => mark.mark_type === 'entrada');
         const hasExitMark = data.marks.some((mark) => mark.mark_type === 'salida');
         const activeTrip = data.active_trip || null;
+        const waitingNextDestination = data.waiting_next_destination === true;
         currentActiveTrip = activeTrip;
-        const plannedStopsList = document.getElementById('plannedTripStops');
-        if (plannedStopsList) plannedStopsList.innerHTML = (data.planned_stops || []).map(stop => `<option value="${escapeHtml(stop.destination)}">${escapeHtml(stop.activity || '')}</option>`).join('');
+        const destinationField = document.getElementById('tripDestination');
+        if (destinationField && !currentActiveTrip) {
+            if (data.next_planned_stop?.location_id) destinationField.value = String(data.next_planned_stop.location_id);
+        }
         const entryAvailability = data.entry_availability || {};
         const entryTooEarly = hasSchedule && !hasEntryMark && entryAvailability.available === false;
+        const canFinishCurrentWork = hasEntryMark && !hasExitMark && !activeTrip && !waitingNextDestination;
+        currentWorkActionPanel?.classList.toggle('d-none', !canFinishCurrentWork);
+        mobilityActionPanel?.classList.toggle('d-none', !hasEntryMark || hasExitMark);
+        value('currentWorkLocation', data.exit_location?.name || assignment.location_name || '-');
+        value('currentWorkActivity', currentPlannedStop?.activity || assignment.activity || 'Actividad del lugar');
         entryBtn.disabled = !hasSchedule || hasEntryMark || entryTooEarly;
-        exitBtn.disabled = !hasSchedule || hasExitMark || !hasEntryMark || !!activeTrip;
-        startTripBtn?.classList.toggle('d-none', !hasEntryMark || hasExitMark || !!activeTrip);
-        addTripStopBtn?.classList.toggle('d-none', !activeTrip);
-        finishTripBtn?.classList.toggle('d-none', !activeTrip);
+        exitBtn.disabled = !hasSchedule || hasExitMark || !hasEntryMark || !!activeTrip || isAwayFromBase || (!!finalPlannedStop && !routeCompleted);
+        finishLocationWorkBtn?.classList.toggle('d-none', !canFinishCurrentWork);
+        const canStartRouteTrip = !!finalPlannedStop && waitingNextDestination && !routeCompleted && !activeTrip;
+        const canStartTemporaryTrip = !finalPlannedStop && hasEntryMark && !hasExitMark && !activeTrip && !waitingNextDestination;
+        startTripBtn?.classList.toggle('d-none', !(canStartRouteTrip || canStartTemporaryTrip));
+        if (startTripBtn) startTripBtn.innerHTML = nextPlannedStop?.destination
+            ? `<i class="fa-solid fa-route me-2"></i>Ir a ${escapeHtml(nextPlannedStop.destination)}`
+            : (isAwayFromBase
+                ? `<i class="fa-solid fa-arrow-rotate-left me-2"></i>Registrar regreso a ${escapeHtml(assignment.location_name)}`
+                : '<i class="fa-solid fa-person-walking-arrow-right me-2"></i>Salida temporal');
+        const isFreeTemporaryTrip = !!activeTrip && !finalPlannedStop && !activeTrip.first_destination_location_id;
+        const isReturningToBase = !!activeTrip && !finalPlannedStop && isAwayFromBase
+            && Number(activeTrip.first_destination_location_id || 0) === baseLocationId;
+        // En un recorrido programado el destino ya está definido. No se ofrecen
+        // acciones adicionales que puedan confundirse con la llegada real.
+        addTripStopBtn?.classList.toggle('d-none', !activeTrip || isFreeTemporaryTrip || !!finalPlannedStop);
+        finishTripBtn?.classList.toggle('d-none', !activeTrip || isFreeTemporaryTrip);
+        returnWithoutArrivalBtn?.classList.toggle('d-none', !isFreeTemporaryTrip);
+        if (finishTripBtn && activeTrip) finishTripBtn.innerHTML = isReturningToBase
+            ? `<i class="fa-solid fa-house-circle-check me-2"></i>Confirmar regreso a ${escapeHtml(assignment.location_name)}`
+            : `<i class="fa-solid fa-location-dot me-2"></i>Confirmar llegada a ${escapeHtml(activeTrip.first_destination || 'destino')}`;
         activeTripPanel?.classList.toggle('d-none', !activeTrip);
         if (activeTripText && activeTrip) activeTripText.textContent = `${activeTrip.first_destination} · iniciado ${formatTime(String(activeTrip.started_at).slice(11))}`;
         if (entryTooEarly) {
@@ -6251,7 +6732,22 @@ function initControlPersonalMarking() {
             { text: hasSchedule ? (calendarEvent?.name || 'Horario disponible') : (calendarEvent?.name || 'Sin horario para hoy'), className: hasSchedule ? 'text-bg-success' : 'text-bg-warning' },
             { text: hasEntryMark ? 'Entrada registrada' : (entryTooEarly ? `Entrada desde ${entryAvailability.available_from}` : 'Entrada no registrada'), className: hasEntryMark ? 'text-bg-primary' : (entryTooEarly ? 'text-bg-warning' : 'text-bg-secondary') },
             { text: hasExitMark ? 'Salida registrada' : 'Salida no registrada', className: hasExitMark ? 'text-bg-primary' : 'text-bg-secondary' },
+            ...(activeTrip ? [{ text: 'Desplazamiento en curso', className: 'text-bg-warning' }] : []),
+            ...(isAwayFromBase ? [{ text: 'Fuera del lugar habitual', className: 'text-bg-info' }] : []),
+            ...(waitingNextDestination ? [{
+                text: routeCompleted ? 'Recorrido completado' : (nextPlannedStop?.destination ? `Siguiente destino: ${nextPlannedStop.destination}` : 'Esperando asignación de destino'),
+                className: routeCompleted ? 'text-bg-success' : (nextPlannedStop?.destination ? 'text-bg-info' : 'text-bg-warning')
+            }] : []),
         ]);
+        if (permissionHelp && finalPlannedStop) {
+            permissionHelp.textContent = routeCompleted
+                ? `Recorrido completado. La salida está habilitada en ${finalPlannedStop.destination}.`
+                : `La salida se habilitará en ${finalPlannedStop.destination} después de completar todos los lugares y finalizar el último trabajo.`;
+        } else if (permissionHelp && isAwayFromBase) {
+            permissionHelp.textContent = `Estás fuera de ${assignment.location_name}. Registra tu regreso y confirma la llegada antes de marcar la salida laboral.`;
+        } else if (permissionHelp && waitingNextDestination) {
+            permissionHelp.textContent = 'Trabajo finalizado. Tu jornada continúa activa; espera que el administrador asigne el siguiente destino.';
+        }
         updateMap();
     }
 
@@ -6439,6 +6935,12 @@ function initControlPersonalMarking() {
     }
 
     const scheduleModalElement = document.getElementById('myScheduleModal');
+    const scheduleArrivalMapModalElement = document.getElementById('scheduleArrivalMapModal');
+    const scheduleArrivalMapModal = scheduleArrivalMapModalElement ? bootstrap.Modal.getOrCreateInstance(scheduleArrivalMapModalElement) : null;
+    let scheduleArrivalMap = null;
+    let scheduleArrivalMarker = null;
+    let scheduleArrivalCircle = null;
+    let pendingScheduleArrival = null;
     const scheduleModal = scheduleModalElement ? bootstrap.Modal.getOrCreateInstance(scheduleModalElement) : null;
     let workerScheduleCalendar = null;
     document.getElementById('viewMyScheduleBtn')?.addEventListener('click', async () => {
@@ -6479,21 +6981,25 @@ function initControlPersonalMarking() {
                 }
             });
             const events = rows.filter((program) => !specialDates.has(program.program_date)).map((program) => {
+                const hasRoute = Array.isArray(program.stops) && program.stops.length > 0;
+                const routePlaceCount = hasRoute ? program.stops.length + 1 : 0;
                 let state = 'Programado';
                 let color = '#f97316';
                 if (program.has_entry && program.has_exit) { state = 'Completada'; color = '#16a34a'; }
                 else if (program.has_entry) { state = 'En jornada'; color = '#d97706'; }
                 else if (program.program_date < today) { state = 'Sin marcaciones'; color = '#64748b'; }
+                const stateColor = color;
+                if (hasRoute) color = '#0f766e';
                 return {
                     id: String(program.id),
-                    title: `${formatTime(program.entry_time)} - ${formatTime(program.exit_time)} · ${program.location_name}${program.activity ? ` · ${program.activity}` : ''}`,
+                    title: `${formatTime(program.entry_time)} - ${formatTime(program.exit_time)} · ${hasRoute ? `Recorrido · ${routePlaceCount} ${routePlaceCount === 1 ? 'lugar' : 'lugares'}` : program.location_name}${!hasRoute && program.activity ? ` · ${program.activity}` : ''}`,
                     start: program.program_date,
                     allDay: true,
                     backgroundColor: color,
                     borderColor: color,
                     textColor: '#ffffff',
                     display: 'block',
-                    extendedProps: { ...program, eventKind: 'program', state, stateColor: color }
+                    extendedProps: { ...program, eventKind: 'program', state, stateColor, routeColor: hasRoute ? '#0f766e' : '', routePlaceCount }
                 };
             });
             const specialMeta = {
@@ -6568,7 +7074,10 @@ function initControlPersonalMarking() {
                         return;
                     }
                     const scheduleType = program.schedule_source === 'extraordinary' ? 'Horario especial' : program.schedule_name;
-                    info.el.title = `${formatTime(program.entry_time)} - ${formatTime(program.exit_time)} | ${program.location_name} | ${scheduleType}${program.activity ? ` | ${program.activity}` : ''}`;
+                    const routeStops = Array.isArray(program.stops) ? program.stops : [];
+                    info.el.title = routeStops.length
+                        ? `${formatTime(program.entry_time)} - ${formatTime(program.exit_time)} | Recorrido de trabajo | ${routeStops.length + 1} lugares`
+                        : `${formatTime(program.entry_time)} - ${formatTime(program.exit_time)} | ${program.location_name} | ${scheduleType}${program.activity ? ` | ${program.activity}` : ''}`;
                 },
                 eventClick(info) {
                     const program = info.event.extendedProps;
@@ -6611,25 +7120,41 @@ function initControlPersonalMarking() {
                     }
                     const date = new Date(`${program.program_date}T12:00:00`).toLocaleDateString('es-PE', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
                     const indicationText = String(program.notes || program.instructions || '').trim();
-                    const legacyIndications = (program.stops || []).map((stop, index) => `<li><span class="my-schedule-indications-number">${index + 1}</span><span>${escapeHtml(stop.destination)}${stop.activity ? `<small class="d-block mt-1 text-muted">${escapeHtml(stop.activity)}</small>` : ''}</span></li>`).join('');
-                    const indications = indicationText
-                        ? `<div class="my-schedule-detail-value">${escapeHtml(indicationText).replace(/\r?\n/g, '<br>')}</div>`
-                        : (legacyIndications ? `<ol class="my-schedule-indications-list">${legacyIndications}</ol>` : '');
+                    const routeStops = Array.isArray(program.stops) ? program.stops : [];
+                    const hasRoute = routeStops.length > 0;
+                    const workCompletions = Array.isArray(program.work_completions) ? program.work_completions : [];
+                    const routeArrivals = Array.isArray(program.route_arrivals) ? program.route_arrivals : [];
+                    const routeItems = hasRoute ? [{ location_id: program.location_id, destination: program.location_name, activity: program.activity || '', address: program.address || '', estimated_time: '', isOrigin: true }, ...routeStops] : [];
+                    const route = routeItems.map((stop, index) => {
+                        const activity = String(stop.activity || '').trim();
+                        const address = String(stop.address || '').trim();
+                        const estimatedTime = String(stop.estimated_time || '').trim();
+                        const completion = workCompletions.find(item => Number(item.location_id) === Number(stop.location_id));
+                        const arrival = routeArrivals.find(item => Number(item.location_id) === Number(stop.location_id));
+                        const arrivalText = arrival
+                            ? `<button type="button" class="my-schedule-route-arrived js-schedule-arrival-map" title="Ver ubicación de llegada" data-place="${escapeHtml(stop.destination || '-')}" data-time="${escapeHtml(arrival.arrived_time || '--:--')}" data-date="${escapeHtml(program.program_date || '')}" data-latitude="${arrival.latitude ?? ''}" data-longitude="${arrival.longitude ?? ''}" data-location-latitude="${arrival.location_latitude ?? ''}" data-location-longitude="${arrival.location_longitude ?? ''}" data-radius="${arrival.radius_meters ?? ''}"><i class="fa-solid fa-location-dot"></i>Llegó ${escapeHtml(arrival.arrived_time || '--:--')}</button>`
+                            : '';
+                        const completionText = completion
+                            ? `<span class="my-schedule-route-completed"><i class="fa-solid fa-circle-check"></i>Finalizado ${escapeHtml(completion.completed_time || '--:--')} · ${escapeHtml(completion.activity || 'Actividad registrada')}</span>`
+                            : '';
+                        return `<li class="my-schedule-route-stop"><span class="my-schedule-route-number">${index + 1}</span><div><div class="my-schedule-route-place">${escapeHtml(stop.destination || '-')}${arrivalText}${completionText}</div><div class="my-schedule-route-meta">${stop.isOrigin ? '<span><i class="fa-solid fa-location-dot"></i>Lugar inicial</span>' : ''}${estimatedTime ? `<span><i class="fa-regular fa-clock"></i>Llegada estimada: ${formatTime(estimatedTime)}</span>` : ''}${activity ? `<span><i class="fa-solid fa-briefcase"></i>${escapeHtml(activity)}</span>` : ''}${address ? `<span><i class="fa-solid fa-map-location-dot"></i>${escapeHtml(address)}</span>` : ''}</div></div></li>`;
+                    }).join('');
                     const scheduleType = program.schedule_source === 'extraordinary' ? 'Horario especial' : `Plantilla: ${escapeHtml(program.schedule_name)}`;
                     detail.innerHTML = `<div class="my-schedule-detail-header">
-                        <div><div class="my-schedule-detail-date">${escapeHtml(date)}</div><h5 class="my-schedule-detail-title">Detalle de la jornada</h5></div>
-                        <span class="my-schedule-detail-state" style="background:${escapeHtml(program.stateColor)}"><i class="fa-solid fa-calendar-check"></i>${escapeHtml(program.state)}</span>
+                        <div><div class="my-schedule-detail-date">${escapeHtml(date)}</div><h5 class="my-schedule-detail-title">${hasRoute ? 'Recorrido de trabajo' : 'Detalle de la jornada'}</h5></div>
+                        <span class="my-schedule-detail-state" style="background:${escapeHtml(hasRoute ? (program.routeColor || '#0f766e') : program.stateColor)}"><i class="fa-solid ${hasRoute ? 'fa-route' : 'fa-calendar-check'}"></i>${hasRoute ? `Recorrido de trabajo (${routeItems.length} ${routeItems.length === 1 ? 'lugar' : 'lugares'})` : escapeHtml(program.state)}</span>
                     </div>
                     <div class="my-schedule-detail-body">
                         <div class="my-schedule-detail-grid">
                             <div class="my-schedule-detail-item"><span class="my-schedule-detail-label">Horario</span><span class="my-schedule-detail-value"><i class="fa-regular fa-clock"></i>${formatTime(program.entry_time)} - ${formatTime(program.exit_time)}</span></div>
                             <div class="my-schedule-detail-item"><span class="my-schedule-detail-label">Tipo de horario</span><span class="my-schedule-detail-value"><i class="fa-solid fa-clock-rotate-left"></i>${scheduleType}</span></div>
-                            <div class="my-schedule-detail-item"><span class="my-schedule-detail-label">Lugar de marcación</span><span class="my-schedule-detail-value"><i class="fa-solid fa-location-dot"></i>${escapeHtml(program.location_name)}</span></div>
+                            <div class="my-schedule-detail-item"><span class="my-schedule-detail-label">${hasRoute ? 'Lugar inicial' : 'Lugar de marcación'}</span><span class="my-schedule-detail-value"><i class="fa-solid fa-location-dot"></i>${escapeHtml(program.location_name)}</span></div>
                             ${program.address ? `<div class="my-schedule-detail-item wide"><span class="my-schedule-detail-label">Dirección</span><span class="my-schedule-detail-value"><i class="fa-solid fa-map-location-dot"></i>${escapeHtml(program.address)}</span></div>` : ''}
                             ${program.reference ? `<div class="my-schedule-detail-item"><span class="my-schedule-detail-label">Referencia</span><span class="my-schedule-detail-value"><i class="fa-solid fa-signs-post"></i>${escapeHtml(program.reference)}</span></div>` : ''}
                             ${program.activity ? `<div class="my-schedule-detail-item wide"><span class="my-schedule-detail-label">Actividad</span><span class="my-schedule-detail-value"><i class="fa-solid fa-briefcase"></i>${escapeHtml(program.activity)}</span></div>` : ''}
                         </div>
-                        ${indications ? `<div class="my-schedule-indications"><div class="my-schedule-indications-title"><i class="fa-solid fa-list-check"></i>Indicaciones</div>${indications}</div>` : ''}
+                        ${hasRoute ? `<div class="my-schedule-route"><div class="my-schedule-route-title"><i class="fa-solid fa-route"></i>Lugares a recorrer</div><ol class="my-schedule-route-list">${route}</ol></div>` : ''}
+                        ${indicationText ? `<div class="my-schedule-indications"><div class="my-schedule-indications-title"><i class="fa-solid fa-list-check"></i>Indicaciones</div><div class="my-schedule-detail-value">${escapeHtml(indicationText).replace(/\r?\n/g, '<br>')}</div></div>` : ''}
                     </div>`;
                     detail.classList.remove('d-none');
                     content?.scrollTo({ top: Math.max(0, detail.offsetTop - 16), behavior: 'smooth' });
@@ -6646,6 +7171,95 @@ function initControlPersonalMarking() {
         }
     });
 
+    document.getElementById('myScheduleDetail')?.addEventListener('click', event => {
+        const button = event.target.closest('.js-schedule-arrival-map');
+        if (!button) return;
+        const latitude = Number(button.dataset.latitude);
+        const longitude = Number(button.dataset.longitude);
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+            Swal.fire('Ubicación no disponible', 'Esta llegada no tiene coordenadas GPS registradas.', 'info');
+            return;
+        }
+        const dateText = button.dataset.date
+            ? new Date(`${button.dataset.date}T12:00:00`).toLocaleDateString('es-PE', { day:'2-digit', month:'long', year:'numeric' })
+            : '';
+        document.getElementById('scheduleArrivalMapTitle').textContent = button.dataset.place || 'Llegada registrada';
+        document.getElementById('scheduleArrivalMapMessage').textContent = `Llegó a las ${button.dataset.time || '--:--'}${dateText ? ` · ${dateText}` : ''}. Ubicación validada mediante GPS.`;
+        pendingScheduleArrival = {
+            latitude,
+            longitude,
+            place: button.dataset.place || 'Lugar de llegada',
+            locationLatitude: button.dataset.locationLatitude !== '' ? Number(button.dataset.locationLatitude) : NaN,
+            locationLongitude: button.dataset.locationLongitude !== '' ? Number(button.dataset.locationLongitude) : NaN,
+            radius: Number(button.dataset.radius || 0),
+        };
+        scheduleArrivalMapModal?.show();
+    });
+
+    scheduleArrivalMapModalElement?.addEventListener('shown.bs.modal', () => {
+        if (!pendingScheduleArrival || !window.L) return;
+        const point = [pendingScheduleArrival.latitude, pendingScheduleArrival.longitude];
+        if (!scheduleArrivalMap) {
+            scheduleArrivalMap = L.map('scheduleArrivalEvidenceMap');
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19, attribution:'&copy; OpenStreetMap' }).addTo(scheduleArrivalMap);
+        }
+        scheduleArrivalMap.invalidateSize();
+        if (!scheduleArrivalMarker) scheduleArrivalMarker = L.marker(point);
+        if (!scheduleArrivalMap.hasLayer(scheduleArrivalMarker)) scheduleArrivalMarker.addTo(scheduleArrivalMap);
+        scheduleArrivalMarker.setLatLng(point).bindPopup(pendingScheduleArrival.place).openPopup();
+        const officialPoint = [pendingScheduleArrival.locationLatitude, pendingScheduleArrival.locationLongitude];
+        if (Number.isFinite(officialPoint[0]) && Number.isFinite(officialPoint[1]) && pendingScheduleArrival.radius > 0) {
+            if (!scheduleArrivalCircle) scheduleArrivalCircle = L.circle(officialPoint, { color:'#2563eb', fillColor:'#3b82f6', fillOpacity:.1 });
+            if (!scheduleArrivalMap.hasLayer(scheduleArrivalCircle)) scheduleArrivalCircle.addTo(scheduleArrivalMap);
+            scheduleArrivalCircle.setLatLng(officialPoint).setRadius(pendingScheduleArrival.radius);
+            scheduleArrivalMap.fitBounds(L.latLngBounds([point, officialPoint]), { padding:[28,28], maxZoom:18 });
+        } else {
+            if (scheduleArrivalCircle) { scheduleArrivalCircle.remove(); scheduleArrivalCircle = null; }
+            scheduleArrivalMap.setView(point, 17);
+        }
+        setTimeout(() => scheduleArrivalMap?.invalidateSize({ pan:false }), 100);
+    });
+
+    const finishWorkModalElement = document.getElementById('finishLocationWorkModal');
+    const finishWorkModal = finishWorkModalElement ? bootstrap.Modal.getOrCreateInstance(finishWorkModalElement) : null;
+    const finishWorkForm = document.getElementById('finishLocationWorkForm');
+    finishLocationWorkBtn?.addEventListener('click', () => {
+        finishWorkForm?.reset();
+        const currentLocation = document.getElementById('currentWorkLocation')?.textContent || context?.exit_location?.name || context?.assignment?.location_name || '-';
+        const displayedActivity = document.getElementById('currentWorkActivity')?.textContent || '';
+        const currentActivity = displayedActivity === 'Actividad del lugar' ? '' : displayedActivity;
+        const locationField = document.getElementById('finishWorkLocation');
+        const activityField = document.getElementById('finishWorkActivity');
+        if (locationField) locationField.value = currentLocation;
+        if (activityField) activityField.value = currentActivity;
+        finishWorkModal?.show();
+    });
+    finishWorkForm?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const button = finishWorkForm.querySelector('[type="submit"]');
+        button.disabled = true;
+        try {
+            const position = await requestPosition();
+            const fields = new FormData(finishWorkForm);
+            fields.append('csrf_token', csrf);
+            fields.append('worker_id', workerField.value || '');
+            fields.append('assignment_id', String(context?.assignment?.assignment_id || ''));
+            fields.append('program_id', String(context?.program?.id || ''));
+            fields.append('latitude', String(position.coords.latitude));
+            fields.append('longitude', String(position.coords.longitude));
+            const response = await fetch(`${BASE_URL}/servicios/control_personal/finalizar_trabajo_lugar.php`, { method: 'POST', body: fields });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo finalizar el trabajo.');
+            finishWorkModal?.hide();
+            await Swal.fire({ icon:'success', title:'Trabajo finalizado', text:data.message, confirmButtonText:'Entendido' });
+            await loadMarkContext();
+        } catch (error) {
+            Swal.fire('Atención', error.message || String(error), 'warning');
+        } finally {
+            button.disabled = false;
+        }
+    });
+
     const tripModalElement = document.getElementById('tripModal');
     const tripModal = tripModalElement ? bootstrap.Modal.getOrCreateInstance(tripModalElement) : null;
     const tripForm = document.getElementById('tripForm');
@@ -6653,19 +7267,37 @@ function initControlPersonalMarking() {
         tripForm.reset(); document.getElementById('tripAction').value = action;
         const tripOrigin = document.getElementById('tripOrigin');
         const isStop = action === 'parada';
-        if (tripOrigin) tripOrigin.value = currentActiveTrip?.origin || context?.assignment?.location_name || '-';
+        const hasPlannedRoute = !!context?.final_planned_stop;
+        const currentLocationId = Number(context?.exit_location?.id || context?.assignment?.location_id || 0);
+        const baseLocationId = Number(context?.assignment?.location_id || 0);
+        const isTemporaryReturn = action === 'iniciar' && !hasPlannedRoute && baseLocationId > 0
+            && (context?.exit_location?.is_temporary_location == 1 || (currentLocationId > 0 && currentLocationId !== baseLocationId));
+        const isFreeTemporaryOutbound = action === 'iniciar' && !hasPlannedRoute && !isTemporaryReturn;
+        if (tripOrigin) tripOrigin.value = currentActiveTrip?.origin || context?.exit_location?.name || context?.assignment?.location_name || '-';
         const mainDestination = document.getElementById('tripMainDestination');
         if (mainDestination) mainDestination.value = currentActiveTrip?.first_destination || '-';
         document.getElementById('tripMainDestinationField')?.classList.toggle('d-none', !isStop);
-        document.getElementById('tripModalTitle').textContent = isStop ? 'Registrar visita del recorrido' : 'Iniciar desplazamiento laboral';
-        document.getElementById('tripModalDescription').textContent = isStop ? 'Agregue una visita y la actividad realizada sin finalizar el desplazamiento.' : 'Esta acción no finaliza tu jornada laboral.';
+        document.getElementById('tripModalTitle').textContent = isStop ? 'Registrar visita del recorrido' : (isTemporaryReturn ? `Regreso a ${context?.assignment?.location_name || 'lugar habitual'}` : (hasPlannedRoute ? 'Iniciar desplazamiento del recorrido' : 'Salida temporal'));
+        document.getElementById('tripModalDescription').textContent = isStop ? 'Agregue una visita y la actividad realizada sin finalizar el desplazamiento.' : (isTemporaryReturn ? 'Registra el retorno al lugar habitual. Tu jornada laboral continuará activa.' : 'Esta acción no finaliza tu jornada laboral.');
         document.getElementById('tripDestinationLabel').textContent = isStop ? 'Punto visitado' : 'Destino';
         const destinationField = document.getElementById('tripDestination');
-        if (destinationField) destinationField.placeholder = isStop ? 'Ej.: Notaría del centro de Lima' : 'Ej.: Municipalidad de El Agustino';
+        const destinationTextField = document.getElementById('tripDestinationText');
+        document.getElementById('tripRegisteredDestinationField')?.classList.toggle('d-none', isFreeTemporaryOutbound);
+        document.getElementById('tripFreeDestinationField')?.classList.toggle('d-none', !isFreeTemporaryOutbound);
+        if (destinationField) {
+            const planned = context?.next_planned_stop || (isTemporaryReturn ? { location_id:baseLocationId } : null);
+            destinationField.value = planned ? String(planned.location_id) : '';
+            destinationField.disabled = !!planned && action === 'iniciar';
+            destinationField.classList.toggle('bg-light', destinationField.disabled);
+            destinationField.required = !isFreeTemporaryOutbound;
+        }
+        if (destinationTextField) destinationTextField.required = isFreeTemporaryOutbound;
         document.getElementById('tripReasonField').classList.toggle('d-none', action !== 'iniciar');
         document.getElementById('tripActivityField').classList.toggle('d-none', !isStop);
         tripForm.querySelector('[name="reason"]').required = action === 'iniciar';
         tripForm.querySelector('[name="activity"]').required = isStop;
+        if (isTemporaryReturn) tripForm.querySelector('[name="reason"]').value = `Regreso a ${context?.assignment?.location_name || 'lugar habitual'}`;
+        tripForm.dataset.forcedDestinationId = isTemporaryReturn ? String(baseLocationId) : '';
         tripModal?.show();
     }
     startTripBtn?.addEventListener('click', () => openTripModal('iniciar'));
@@ -6677,6 +7309,7 @@ function initControlPersonalMarking() {
         body.append('csrf_token', csrf); body.append('action', action); body.append('worker_id', workerField.value || '');
         body.append('assignment_id', String(context?.assignment?.assignment_id || '')); body.append('program_id', String(context?.program?.id || ''));
         body.append('latitude', String(position.coords.latitude)); body.append('longitude', String(position.coords.longitude));
+        body.append('accuracy', String(position.coords.accuracy || 0));
         Object.entries(extra).forEach(([key,value]) => body.append(key,String(value || '')));
         const response = await fetch(`${BASE_URL}/servicios/control_personal/registrar_desplazamiento.php`,{method:'POST',body});
         const data = await response.json();
@@ -6685,13 +7318,53 @@ function initControlPersonalMarking() {
     }
     tripForm?.addEventListener('submit', async event => {
         event.preventDefault(); const button=tripForm.querySelector('[type="submit"]'); button.disabled=true;
-        try { const fields=new FormData(tripForm); const data=await submitTrip(fields.get('action'),{destination:fields.get('destination'),reason:fields.get('reason'),activity:fields.get('activity')}); tripModal?.hide(); await Swal.fire('Registro exitoso',data.message,'success'); await loadMarkContext(); }
+        try { const fields=new FormData(tripForm); const data=await submitTrip(fields.get('action'),{destination_location_id:context?.next_planned_stop?.location_id || tripForm.dataset.forcedDestinationId || fields.get('destination_location_id'),destination:fields.get('destination'),reason:fields.get('reason'),activity:fields.get('activity')}); tripModal?.hide(); await Swal.fire('Registro exitoso',data.message,'success'); await loadMarkContext(); }
         catch(error){ Swal.fire('Atención',error.message || String(error),'warning'); } finally { button.disabled=false; }
     });
     finishTripBtn?.addEventListener('click', async () => {
-        const answer=await Swal.fire({icon:'question',title:'¿Finalizar desplazamiento?',text:'Tu jornada continuará activa. La salida definitiva se registra por separado.',showCancelButton:true,confirmButtonText:'Sí, finalizar',cancelButtonText:'Cancelar'});
+        const destination = currentActiveTrip?.first_destination || 'el destino seleccionado';
+        const baseLocationId = Number(context?.assignment?.location_id || 0);
+        const isPlannedRoute = !!context?.final_planned_stop;
+        const isReturningToBase = Number(currentActiveTrip?.first_destination_location_id || 0) === baseLocationId
+            && (context?.exit_location?.is_temporary_location == 1 || Number(context?.exit_location?.id || 0) !== baseLocationId);
+        const answer=await Swal.fire({
+            icon:'question',
+            title:isReturningToBase ? `¿Confirmar regreso a ${destination}?` : `¿Confirmar llegada a ${destination}?`,
+            text:isReturningToBase
+                ? `Se validará tu ubicación en ${destination}. Al confirmar, registrarás tu regreso al lugar de trabajo y tu jornada continuará activa.`
+                : (isPlannedRoute
+                    ? `Se validará mediante GPS que ya te encuentras en ${destination}. Tu jornada continuará activa para realizar el trabajo asignado en este lugar.`
+                    : `Se registrará tu llegada a ${destination} con tu ubicación actual. Tu jornada continuará activa; después deberás registrar el regreso a tu lugar de trabajo.`),
+            showCancelButton:true,
+            confirmButtonText:isReturningToBase ? 'Sí, confirmar regreso' : 'Sí, confirmar llegada',
+            cancelButtonText:'Cancelar'
+        });
         if(!answer.isConfirmed)return;
-        try{const data=await submitTrip('finalizar');await Swal.fire('Desplazamiento finalizado',data.message,'success');await loadMarkContext();}catch(error){Swal.fire('Atención',error.message || String(error),'warning');}
+        try{const data=await submitTrip('finalizar');await Swal.fire('Llegada confirmada',data.message,'success');await loadMarkContext();}catch(error){Swal.fire('Atención',error.message || String(error),'warning');}
+    });
+    returnWithoutArrivalBtn?.addEventListener('click', async () => {
+        const baseName = context?.assignment?.location_name || 'tu lugar de trabajo';
+        const destination = currentActiveTrip?.first_destination || 'el destino temporal';
+        const answer = await Swal.fire({
+            icon:'question',
+            title:`¿Confirmar regreso a ${baseName}?`,
+            html:`<p class="mb-2">Se cerrará tu salida temporal a <strong>${escapeHtml(destination)}</strong>.</p><p class="small text-muted mb-0">Validaremos mediante GPS que ya regresaste a ${escapeHtml(baseName)}. Tu jornada laboral continuará activa.</p>`,
+            showCancelButton:true,
+            confirmButtonText:'Sí, confirmar regreso',
+            cancelButtonText:'Cancelar',
+            confirmButtonColor:'#16a34a'
+        });
+        if (!answer.isConfirmed) return;
+        returnWithoutArrivalBtn.disabled = true;
+        try {
+            const data = await submitTrip('regresar_lugar_trabajo');
+            await Swal.fire('Regreso registrado',data.message,'success');
+            await loadMarkContext();
+        } catch (error) {
+            Swal.fire('No se pudo registrar el regreso',error.message || String(error),'warning');
+        } finally {
+            returnWithoutArrivalBtn.disabled = false;
+        }
     });
     entryBtn.addEventListener('click', () => mark('entrada'));
     exitBtn.addEventListener('click', () => mark('salida'));

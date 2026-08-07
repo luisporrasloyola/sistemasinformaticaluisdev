@@ -63,7 +63,9 @@ try {
             $bodyText = "Nombre del personal: " . $worker['full_name'] . " (Falta: " . implode(', ', $missingFields) . ")";
             
             $notifications[] = [
-                'id' => (int)$worker['id'],
+                'id' => 'worker-' . (int)$worker['id'],
+                'type' => 'worker_incomplete',
+                'title' => 'Datos de personal pendientes',
                 'full_name' => $worker['full_name'],
                 'missing_fields' => implode(', ', $missingFields),
                 'body' => $bodyText,

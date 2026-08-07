@@ -146,13 +146,15 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
 
     $marksByWorkerAndDateAndAssignment = [];
     $markParams = ['date_from' => $dateFrom, 'date_to' => $dateTo];
-    $markSql = 'SELECT assignment_id, worker_id, mark_date, mark_type, mark_time, schedule_status, final_status, observations
-        FROM attendance_marks WHERE mark_date BETWEEN :date_from AND :date_to';
+    $markSql = 'SELECT am.assignment_id, am.worker_id, am.mark_date, am.mark_type, am.mark_time,
+        am.schedule_status, am.final_status, am.observations, l.name AS mark_location
+        FROM attendance_marks am JOIN attendance_locations l ON l.id=am.location_id
+        WHERE am.mark_date BETWEEN :date_from AND :date_to';
     if ($workerId > 0) {
-        $markSql .= ' AND worker_id = :worker_id';
+        $markSql .= ' AND am.worker_id = :worker_id';
         $markParams['worker_id'] = $workerId;
     }
-    $markSql .= ' ORDER BY mark_date, mark_time';
+    $markSql .= ' ORDER BY am.mark_date, am.mark_time';
     $stmt = db()->prepare($markSql);
     $stmt->execute($markParams);
     foreach ($stmt->fetchAll() as $mark) {
@@ -258,6 +260,9 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
             $workedMinutes = 0;
             $scheduledMinutes = 0;
             $lateMinutes = 0;
+            $entryDelayMinutes = 0;
+            $entryToleranceMinutes = 0;
+            $toleranceObservation = '';
             $overtimeMinutes = 0;
             $scheduleLabel = '-';
             if ($scheduleDay) {
@@ -273,7 +278,12 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                     }
                 }
                 if ($entry && $officialEntry !== '') {
-                    $lateMinutes = max(0, attendance_report_signed_minutes($officialEntry, (string) $entry['mark_time']));
+                    $entryDelayMinutes = max(0, attendance_report_signed_minutes($officialEntry, (string) $entry['mark_time']));
+                    $entryToleranceMinutes = max(0,(int)($scheduleDay['tolerance_minutes'] ?? 0));
+                    $lateMinutes = $entryDelayMinutes > $entryToleranceMinutes ? $entryDelayMinutes : 0;
+                    if ($entryDelayMinutes > 0 && $lateMinutes === 0) {
+                        $toleranceObservation = 'Puntual: llegó dentro de los '.$entryToleranceMinutes.' min de tolerancia (utilizó '.$entryDelayMinutes.' min)';
+                    }
                 }
             }
             if ($entry && $exit) {
@@ -301,11 +311,15 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
             $observations = array_values(array_filter([
                 trim((string) ($entry['observations'] ?? '')),
                 trim((string) ($exit['observations'] ?? '')),
+                $toleranceObservation,
                 $lateMinutes > 0 ? $lateMinutes . ' min de tardanza' : '',
                 $journeyKey === 'exit_incomplete' ? 'Salida no registrada' : '',
             ]));
             $state = attendance_report_state($stateKey);
             $journey = attendance_report_journey_state($journeyKey);
+            $entryLocation = (string) ($entry['mark_location'] ?? $assignment['location_name'] ?? '-');
+            $exitLocation = (string) ($exit['mark_location'] ?? $entryLocation);
+            $journeyLocations = $entryLocation === $exitLocation ? $entryLocation : $entryLocation . ' → ' . $exitLocation;
             $rows[] = [
                 'worker_id' => $id, 'date' => $date, 'weekday' => $weekdayLabels[$weekday],
                 'assignment_id' => (int) $assignment['id'],
@@ -314,7 +328,9 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 'entry' => attendance_report_time($entry['mark_time'] ?? null),
                 'exit' => attendance_report_time($exit['mark_time'] ?? null),
                 'schedule' => $scheduleLabel,
-                'location' => (string) ($assignment['location_name'] ?? '-'),
+                'tolerance_minutes' => $hasSchedule ? max(0,(int)($scheduleDay['tolerance_minutes'] ?? 0)) : null,
+                'location' => $journeyLocations,
+                'entry_location' => $entryLocation, 'exit_location' => $exitLocation,
                 'state_key' => $stateKey, 'state_code' => $state['code'], 'state_label' => $state['label'], 'state_class' => $state['class'],
                 'journey_key' => $journeyKey, 'journey_label' => $journey['label'], 'journey_class' => $journey['class'],
                 'worked_minutes' => $workedMinutes, 'scheduled_minutes' => $scheduledMinutes,
@@ -361,14 +377,51 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
     $trips = [];
     if ($workerId > 0) {
         try {
-            $stmt = db()->prepare("SELECT at.*, l.name AS location_name FROM attendance_trips at
+            $stmt = db()->prepare("SELECT at.*, COALESCE(
+                (SELECT origin_completion_location.name
+                 FROM attendance_work_completions origin_completion
+                 JOIN attendance_locations origin_completion_location ON origin_completion_location.id=origin_completion.location_id
+                 WHERE origin_completion.worker_id=at.worker_id
+                   AND origin_completion.work_date=at.trip_date
+                   AND origin_completion.completed_at<=at.started_at
+                   AND origin_completion.completed_at>=COALESCE(
+                        (SELECT MAX(previous_trip.ended_at)
+                         FROM attendance_trips previous_trip
+                         WHERE previous_trip.worker_id=at.worker_id
+                           AND previous_trip.trip_date=at.trip_date
+                           AND previous_trip.status='finalizado'
+                           AND previous_trip.ended_at<=at.started_at),
+                        '1000-01-01 00:00:00')
+                 ORDER BY origin_completion.completed_at DESC,origin_completion.id DESC LIMIT 1),
+                (SELECT origin_trip_location.name
+                 FROM attendance_trips origin_trip
+                 JOIN attendance_locations origin_trip_location ON origin_trip_location.id=origin_trip.last_location_id
+                 WHERE origin_trip.worker_id=at.worker_id
+                   AND origin_trip.trip_date=at.trip_date
+                   AND origin_trip.status='finalizado'
+                   AND origin_trip.ended_at<=at.started_at
+                 ORDER BY origin_trip.ended_at DESC,origin_trip.id DESC LIMIT 1),
+                l.name
+            ) AS location_name,
+                COALESCE(ap.entry_time,sd.entry_time,sd.entry_start) AS schedule_entry_time,
+                COALESCE(ap.exit_time,sd.exit_time,sd.exit_start) AS schedule_exit_time
+                FROM attendance_trips at
                 JOIN attendance_assignments aa ON aa.id=at.assignment_id
                 JOIN attendance_locations l ON l.id=aa.location_id
+                LEFT JOIN attendance_programs ap ON ap.id=at.program_id
+                LEFT JOIN attendance_schedule_days sd ON sd.schedule_id=COALESCE(ap.schedule_id,aa.schedule_id)
+                    AND sd.day_of_week=WEEKDAY(at.trip_date)+1 AND sd.status=1
                 WHERE at.worker_id=:worker_id AND at.trip_date BETWEEN :date_from AND :date_to ORDER BY at.started_at");
             $stmt->execute(['worker_id'=>$workerId,'date_from'=>$dateFrom,'date_to'=>$dateTo]);
             $trips = $stmt->fetchAll();
-            $stopStmt = db()->prepare('SELECT destination,activity,registered_at FROM attendance_trip_stops WHERE trip_id=:trip_id ORDER BY stop_order');
-            foreach ($trips as &$trip) { $stopStmt->execute(['trip_id'=>$trip['id']]); $trip['stops']=$stopStmt->fetchAll(); }
+            foreach ($trips as &$trip) {
+                $trip['schedule_label'] = $trip['schedule_entry_time'] && $trip['schedule_exit_time']
+                    ? substr((string)$trip['schedule_entry_time'],0,5).' - '.substr((string)$trip['schedule_exit_time'],0,5)
+                    : '-';
+                $tripEnd = $trip['ended_at'] ? strtotime((string)$trip['ended_at']) : time();
+                $tripStart = strtotime((string)$trip['started_at']);
+                $trip['duration_label'] = attendance_report_minutes_label(max(0,(int)floor(($tripEnd-$tripStart)/60)));
+            }
             unset($trip);
         } catch (Throwable $error) { $trips=[]; }
     }

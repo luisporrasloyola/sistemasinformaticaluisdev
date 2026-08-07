@@ -50,7 +50,9 @@ if ($programs && !$priorityCalendarEvent) {
     if ($selectedProgram) {
         $selectedAssignment = [
             'assignment_id' => (int) $selectedProgram['assignment_id'],
-            'activity' => $selectedProgram['activity'] ?: ($selectedProgram['assignment_activity'] ?? ''),
+            'activity' => !empty($selectedProgram['has_route'])
+                ? (($selectedProgram['current_assignment_activity'] ?? '') ?: (($selectedProgram['assignment_activity'] ?? '') ?: ($selectedProgram['activity'] ?? '')))
+                : (($selectedProgram['activity'] ?? '') ?: ($selectedProgram['assignment_activity'] ?? '')),
             'instructions' => $selectedProgram['notes'] ?: ($selectedProgram['assignment_instructions'] ?? ''),
             'worker_id' => (int) $selectedProgram['worker_id'], 'company_id' => (int) $selectedProgram['company_id'],
             'full_name' => $selectedProgram['full_name'], 'document_number' => $selectedProgram['document_number'],
@@ -115,8 +117,8 @@ $overrideStmt = db()->prepare('SELECT activity, instructions FROM attendance_jou
 $overrideStmt->execute(['assignment_id' => (int) $assignment['assignment_id'], 'journey_date' => $today]);
 $journeyOverride = $overrideStmt->fetch() ?: null;
 // Las programaciones especiales almacenan directamente sus propios datos.
-// Las personalizaciones paralelas solo corresponden a jornadas habituales.
-if ($journeyOverride && !$selectedProgram) {
+// Los recorridos, en cambio, admiten una personalización independiente por fecha.
+if ($journeyOverride && (!$selectedProgram || !empty($selectedProgram['has_route']))) {
     $assignment['activity'] = (string) $journeyOverride['activity'];
     $assignment['instructions'] = (string) $journeyOverride['instructions'];
 }
@@ -135,15 +137,51 @@ $stmt->execute([
 ]);
 $marks = $stmt->fetchAll();
 
-$tripStmt = db()->prepare("SELECT id, reason, first_destination, started_at FROM attendance_trips
+$tripStmt = db()->prepare("SELECT id, reason, first_destination, first_destination_location_id, started_at FROM attendance_trips
     WHERE worker_id=:worker_id AND trip_date=:trip_date AND status='en_ruta' ORDER BY id DESC LIMIT 1");
 $tripStmt->execute(['worker_id'=>$workerId,'trip_date'=>$today]);
 $activeTrip = $tripStmt->fetch() ?: null;
+$completionStmt = db()->prepare('SELECT awc.id,awc.location_id,awc.activity,awc.observations,awc.completed_at,l.name AS location_name
+    FROM attendance_work_completions awc JOIN attendance_locations l ON l.id=awc.location_id
+    WHERE awc.worker_id=:worker_id AND awc.work_date=:trip_date ORDER BY awc.completed_at DESC,awc.id DESC LIMIT 1');
+$completionStmt->execute(['worker_id'=>$workerId,'trip_date'=>$today]);
+$lastWorkCompletion = $completionStmt->fetch() ?: null;
+$lastTripStmt = db()->prepare("SELECT started_at FROM attendance_trips WHERE worker_id=:worker_id AND trip_date=:trip_date AND status='finalizado' ORDER BY ended_at DESC,id DESC LIMIT 1");
+$lastTripStmt->execute(['worker_id'=>$workerId,'trip_date'=>$today]);
+$lastFinishedTripStartedAt = $lastTripStmt->fetchColumn();
+$waitingNextDestination = $lastWorkCompletion
+    && (!$lastFinishedTripStartedAt || strtotime((string)$lastWorkCompletion['completed_at']) >= strtotime((string)$lastFinishedTripStartedAt));
+$exitLocationStmt = db()->prepare("SELECT l.id,COALESCE(l.name,t.first_destination) AS name,
+        COALESCE(l.latitude,t.end_latitude) AS latitude,COALESCE(l.longitude,t.end_longitude) AS longitude,
+        l.address,l.reference,l.radius_meters,(t.last_location_id IS NULL) AS is_temporary_location
+    FROM attendance_trips t LEFT JOIN attendance_locations l ON l.id=t.last_location_id
+    WHERE t.worker_id=:worker_id AND t.trip_date=:trip_date AND t.status='finalizado'
+    ORDER BY t.ended_at DESC,t.id DESC LIMIT 1");
+$exitLocationStmt->execute(['worker_id'=>$workerId,'trip_date'=>$today]);
+$exitLocation = $exitLocationStmt->fetch() ?: null;
 $plannedStops = [];
+$nextPlannedStop = null;
+$finalPlannedStop = null;
 if ($selectedProgram) {
-    $stopStmt = db()->prepare('SELECT destination,activity FROM attendance_program_stops WHERE program_id=:program_id ORDER BY stop_order');
+    $stopStmt = db()->prepare('SELECT location_id,destination,activity,estimated_time FROM attendance_program_stops WHERE program_id=:program_id ORDER BY stop_order');
     $stopStmt->execute(['program_id'=>$selectedProgram['id']]);
     $plannedStops = $stopStmt->fetchAll();
+    if ($plannedStops) $finalPlannedStop = $plannedStops[array_key_last($plannedStops)];
+    $visitedStmt = db()->prepare("SELECT location_id FROM (
+            SELECT first_destination_location_id AS location_id FROM attendance_trips
+            WHERE program_id=:program_first AND status='finalizado' AND first_destination_location_id IS NOT NULL
+            UNION ALL
+            SELECT ats.location_id FROM attendance_trip_stops ats JOIN attendance_trips atr ON atr.id=ats.trip_id
+            WHERE atr.program_id=:program_stops AND atr.status='finalizado' AND ats.location_id IS NOT NULL
+        ) visited");
+    $visitedStmt->execute(['program_first'=>$selectedProgram['id'],'program_stops'=>$selectedProgram['id']]);
+    $visitedLocationIds = array_map('intval', $visitedStmt->fetchAll(PDO::FETCH_COLUMN));
+    foreach ($plannedStops as $plannedStop) {
+        if ((int)($plannedStop['location_id'] ?? 0) > 0 && !in_array((int)$plannedStop['location_id'],$visitedLocationIds,true)) {
+            $nextPlannedStop = $plannedStop;
+            break;
+        }
+    }
 }
 
 $entryAvailableFrom = $scheduleDay['entry_start'] ?? null;
@@ -180,7 +218,12 @@ json_response([
     ], $programs),
     'marks' => $marks,
     'active_trip' => $activeTrip,
+    'last_work_completion' => $lastWorkCompletion,
+    'waiting_next_destination' => (bool) $waitingNextDestination,
+    'exit_location' => $exitLocation,
     'planned_stops' => $plannedStops,
+    'next_planned_stop' => $nextPlannedStop,
+    'final_planned_stop' => $finalPlannedStop,
     'entry_availability' => [
         'available' => $entryAvailable,
         'available_from' => $entryAvailableFrom ? substr((string) $entryAvailableFrom, 0, 5) : null,

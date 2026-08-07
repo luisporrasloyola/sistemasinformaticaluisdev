@@ -33,6 +33,12 @@ if (!$assignment) {
 $journeyStmt = db()->prepare("SELECT
     EXISTS(SELECT 1 FROM attendance_programs ap
         WHERE ap.assignment_id=:assignment_program AND ap.program_date=:date_program AND ap.status='programada') AS has_program,
+    EXISTS(SELECT 1
+        FROM attendance_programs ap
+        JOIN attendance_program_stops aps ON aps.program_id=ap.id
+        WHERE ap.assignment_id=:assignment_route
+          AND ap.program_date=:date_route
+          AND ap.status='programada') AS has_route,
     EXISTS(SELECT 1 FROM attendance_assignments aa
         JOIN attendance_schedule_days sd ON sd.schedule_id=aa.schedule_id AND sd.status=1
         WHERE aa.id=:assignment_schedule
@@ -42,6 +48,7 @@ $journeyStmt = db()->prepare("SELECT
           AND sd.day_of_week=WEEKDAY(:date_schedule)+1) AS has_regular");
 $journeyStmt->execute([
     'assignment_program' => $assignmentId, 'date_program' => $journeyDate,
+    'assignment_route' => $assignmentId, 'date_route' => $journeyDate,
     'assignment_schedule' => $assignmentId,
     'regular_date_from' => $journeyDate,
     'regular_date_until' => $journeyDate,
@@ -50,6 +57,32 @@ $journeyStmt->execute([
 $journey = $journeyStmt->fetch();
 if (!$journey || (!(bool) $journey['has_program'] && !(bool) $journey['has_regular'])) {
     json_response(['ok' => false, 'message' => 'La fecha seleccionada no contiene un horario habitual ni una programación especial válida.'], 409);
+}
+
+// Los recorridos permanecen ligados a la asignación con la que fueron creados,
+// incluso si después se reemplaza la asignación habitual. Sus cambios se
+// conservan como una personalización exclusiva de esta jornada.
+if ((bool) ($journey['has_route'] ?? false)) {
+    if ($action === 'reset') {
+        $delete = db()->prepare('DELETE FROM attendance_journey_overrides WHERE assignment_id=:assignment_id AND journey_date=:journey_date');
+        $delete->execute(['assignment_id' => $assignmentId, 'journey_date' => $journeyDate]);
+        json_response(['ok' => true, 'message' => 'La jornada volverá a utilizar los datos actuales de la asignación.']);
+    }
+
+    $saveRoute = db()->prepare("INSERT INTO attendance_journey_overrides
+            (assignment_id, journey_date, activity, instructions, updated_by_user_id)
+        VALUES (:assignment_id, :journey_date, :activity, :instructions, :user_id)
+        ON DUPLICATE KEY UPDATE activity=VALUES(activity), instructions=VALUES(instructions),
+            updated_by_user_id=VALUES(updated_by_user_id), updated_at=CURRENT_TIMESTAMP");
+    $saveRoute->execute([
+        'assignment_id' => $assignmentId,
+        'journey_date' => $journeyDate,
+        'activity' => $activity,
+        'instructions' => $instructions,
+        'user_id' => (int) current_user()['id'],
+    ]);
+
+    json_response(['ok' => true, 'message' => 'El recorrido del ' . $date->format('d/m/Y') . ' fue actualizado.']);
 }
 
 // Una programación especial ya es exclusiva de una fecha. Por ello se

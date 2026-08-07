@@ -204,10 +204,38 @@ if ($duplicate->fetch()) {
 }
 
 if ($markType === 'salida') {
+    $baseLocationId = (int)$assignment['location_id'];
+    $hasPlannedRoute = false;
+    if ($programId > 0) {
+        $plannedRouteStmt = db()->prepare('SELECT EXISTS(SELECT 1 FROM attendance_program_stops WHERE program_id=:program_id)');
+        $plannedRouteStmt->execute(['program_id'=>$programId]);
+        $hasPlannedRoute = (bool)$plannedRouteStmt->fetchColumn();
+    }
     $tripCheck = db()->prepare("SELECT id FROM attendance_trips WHERE worker_id=:worker_id AND trip_date=:trip_date AND status='en_ruta' LIMIT 1");
     $tripCheck->execute(['worker_id'=>$workerId,'trip_date'=>$today]);
     if ($tripCheck->fetchColumn()) {
         json_response(['ok'=>false,'title'=>'Desplazamiento en curso','message'=>'Finaliza el desplazamiento laboral antes de registrar tu salida definitiva.'],409);
+    }
+    $lastLocationStmt = db()->prepare("SELECT l.id,COALESCE(l.name,t.first_destination) AS name,l.latitude,l.longitude,l.radius_meters,
+            (t.last_location_id IS NULL) AS is_temporary_location
+        FROM attendance_trips t LEFT JOIN attendance_locations l ON l.id=t.last_location_id
+        WHERE t.worker_id=:worker_id AND t.trip_date=:trip_date AND t.status='finalizado'
+        ORDER BY t.ended_at DESC,t.id DESC LIMIT 1");
+    $lastLocationStmt->execute(['worker_id'=>$workerId,'trip_date'=>$today]);
+    if ($lastLocation = $lastLocationStmt->fetch()) {
+        if (!$hasPlannedRoute && ((int)$lastLocation['is_temporary_location'] === 1 || (int)$lastLocation['id'] !== $baseLocationId)) {
+            json_response([
+                'ok'=>false,
+                'title'=>'Regreso pendiente',
+                'message'=>'Antes de finalizar tu jornada, registra el regreso a tu lugar habitual y confirma la llegada.',
+            ],409);
+        }
+        if ($lastLocation['id'] !== null) {
+            $assignment['location_id'] = (int) $lastLocation['id'];
+            $assignment['location_latitude'] = $lastLocation['latitude'];
+            $assignment['location_longitude'] = $lastLocation['longitude'];
+            $assignment['radius_meters'] = $lastLocation['radius_meters'];
+        }
     }
 }
 

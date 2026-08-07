@@ -102,17 +102,17 @@ require __DIR__ . '/../../includes/header.php';
         <div><span>Puntualidad</span><strong><?= e((string) $summary['punctuality']) ?>%</strong></div>
         <div><span>Jornadas finalizadas</span><strong><?= e((string) $summary['compliance']) ?>%</strong></div>
         <div><span>Minutos de tardanza</span><strong><?= (int) $summary['late_minutes'] ?> min</strong></div>
-        <div><span>Horas extras estimadas</span><strong><?= e(attendance_report_minutes_label((int) $summary['overtime_minutes'])) ?></strong></div>
+        <div><span>Horas extras</span><strong><?= e(attendance_report_minutes_label((int) $summary['overtime_minutes'])) ?></strong></div>
     </div>
 
     <div class="individual-report-section-title"><h3>Detalle diario</h3><p>Marcaciones y novedades del periodo seleccionado.</p></div>
     <div class="table-responsive">
         <table class="table align-middle individual-report-table">
-            <thead><tr><th>Fecha</th><th>Día</th><th>Horario</th><th>Lugar</th><th>Entrada</th><th>Salida</th><th>Tardanza</th><th>H. extras</th><th>Estado de asistencia</th><th>Estado de jornada</th><th>Observación</th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Día</th><th>Horario</th><th>Tolerancia</th><th>Lugar de marcación</th><th>Entrada</th><th>Salida</th><th>Tardanza</th><th>Horas extras</th><th>Estado de asistencia</th><th>Estado de jornada</th><th>Observación</th></tr></thead>
             <tbody>
             <?php foreach ($rows as $row): ?>
                 <tr>
-                    <td><?= e(date('d/m/Y', strtotime($row['date']))) ?></td><td><?= e($row['weekday']) ?></td><td class="attendance-time-cell text-nowrap"><?= e($row['schedule']) ?></td><td><?= e($row['location']) ?></td>
+                    <td><?= e(date('d/m/Y', strtotime($row['date']))) ?></td><td><?= e($row['weekday']) ?></td><td class="attendance-time-cell text-nowrap"><?= e($row['schedule']) ?></td><td class="text-nowrap"><?= $row['tolerance_minutes'] !== null ? (int)$row['tolerance_minutes'].' min' : '-' ?></td><td><?= e($row['location']) ?></td>
                     <td class="attendance-time-cell"><?= e($row['entry']) ?></td><td class="attendance-time-cell"><?= e($row['exit']) ?></td>
                     <td><?= $row['late_minutes'] > 0 ? e(attendance_report_minutes_label((int) $row['late_minutes'])) : '-' ?></td>
                     <td><?= $row['overtime_minutes'] > 0 ? e(attendance_report_minutes_label((int) $row['overtime_minutes'])) : '-' ?></td>
@@ -121,23 +121,24 @@ require __DIR__ . '/../../includes/header.php';
                     <td class="report-observation-cell"><?= e($row['observation']) ?></td>
                 </tr>
             <?php endforeach; ?>
-            <?php if (!$rows): ?><tr><td colspan="11" class="text-center text-muted py-4">No hay jornadas para este trabajador en el periodo seleccionado.</td></tr><?php endif; ?>
+            <?php if (!$rows): ?><tr><td colspan="12" class="text-center text-muted py-4">No hay jornadas para este trabajador en el periodo seleccionado.</td></tr><?php endif; ?>
             </tbody>
         </table>
     </div>
 
     <?php if ($trips): ?>
-    <div class="individual-report-section-title mt-4"><h3>Desplazamientos laborales</h3><p>Salidas temporales realizadas sin finalizar la jornada.</p></div>
+    <div class="individual-report-section-title mt-4"><h3>Salidas temporales</h3><p>Salidas realizadas sin finalizar la jornada laboral.</p></div>
     <div class="table-responsive">
         <table class="table align-middle individual-report-table">
-            <thead><tr><th>Fecha</th><th>Inicio</th><th>Fin</th><th>Origen</th><th>Primer destino</th><th>Motivo</th><th>Puntos visitados</th><th>Estado</th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Horario</th><th>Inicio</th><th>Fin</th><th>Duración</th><th>Origen</th><th>Destino</th><th>Motivo</th><th>Estado</th></tr></thead>
             <tbody><?php foreach ($trips as $trip): ?><tr>
                 <td><?= e(date('d/m/Y', strtotime($trip['trip_date']))) ?></td>
+                <td class="text-nowrap"><?= e($trip['schedule_label']) ?></td>
                 <td><?= e(date('H:i', strtotime($trip['started_at']))) ?></td>
                 <td><?= $trip['ended_at'] ? e(date('H:i', strtotime($trip['ended_at']))) : '-' ?></td>
-                <td><?= e($trip['location_name']) ?></td><td><?= e($trip['first_destination']) ?></td><td><?= e($trip['reason']) ?></td>
-                <td><?php if ($trip['stops']): ?><ol class="mb-0 ps-3"><?php foreach ($trip['stops'] as $stop): ?><li><?= e($stop['destination'] . (!empty($stop['activity']) ? ' · ' . $stop['activity'] : '')) ?></li><?php endforeach; ?></ol><?php else: ?>-<?php endif; ?></td>
-                <td><span class="badge <?= $trip['status']==='finalizado' ? 'text-bg-success' : 'text-bg-warning' ?>"><?= $trip['status']==='finalizado' ? 'Finalizado' : 'En curso' ?></span></td>
+                <td class="text-nowrap"><?= e($trip['duration_label']) ?></td>
+                <td><?= e($trip['location_name']) ?></td><td><?= e($trip['first_destination']) ?></td><td><?= e($trip['reason']) ?><?php if (($trip['completion_type'] ?? '') === 'returned_without_arrival'): ?><small class="d-block text-warning-emphasis mt-1"><strong>Llegada no confirmada:</strong> <?= e($trip['exception_reason'] ?: 'Sin detalle') ?></small><?php endif; ?></td>
+                <?php $tripIncident = ($trip['completion_type'] ?? '') === 'returned_without_arrival'; ?><td><span class="badge <?= $trip['status']!=='finalizado' || $tripIncident ? 'text-bg-warning' : 'text-bg-success' ?>"><?= $trip['status']!=='finalizado' ? 'En curso' : ($tripIncident ? 'Regreso con incidencia' : 'Finalizado') ?></span></td>
             </tr><?php endforeach; ?></tbody>
         </table>
     </div>
