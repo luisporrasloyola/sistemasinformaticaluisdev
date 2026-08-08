@@ -134,6 +134,7 @@ foreach ($rows as $row) {
         'file_name' => $hasRequirement ? (string) ($row['original_file_name'] ?? $requirementText . '.pdf') : '',
     ];
 }
+
 ksort($companies);
 ksort($positions);
 ksort($requirements);

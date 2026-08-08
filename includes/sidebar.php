@@ -6,6 +6,7 @@ $controlPersonalOpen = (!$personalOpen && str_contains($currentPath, '/modulos/a
 $requisitosOpen = $personalOpen || str_contains($currentPath, '/modulos/requisitos/');
 $maquinariaOpen = str_contains($currentPath, '/modulos/maquinaria/');
 $empresaOpen = str_contains($currentPath, '/modulos/empresa/');
+$empresaMaquirentaOpen = str_contains($currentPath, '/modulos/empresa_maquirenta/');
 $usuarioOpen = str_contains($currentPath, '/modulos/usuario/');
 $configuracionOpen = str_contains($currentPath, '/modulos/configuracion/');
 $isAdmin = is_admin();
@@ -83,6 +84,16 @@ $isAdmin = is_admin();
                 </div>
             </div>
 
+            <button class="nav-link nav-parent <?= $empresaMaquirentaOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#empresaMaquirentaMenu" aria-expanded="<?= $empresaMaquirentaOpen ? 'true' : 'false' ?>" aria-controls="empresaMaquirentaMenu">
+                <i class="fa-solid fa-building-circle-check"></i><span>Empresa Maquirenta</span><i class="fa-solid fa-chevron-down nav-caret"></i>
+            </button>
+            <div class="collapse <?= $empresaMaquirentaOpen ? 'show' : '' ?>" id="empresaMaquirentaMenu">
+                <div class="submenu">
+                    <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa_maquirenta/datos_generales.php"><i class="fa-solid fa-address-card"></i><span>Datos generales</span></a>
+                    <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa_maquirenta/documentos.php"><i class="fa-solid fa-file-lines"></i><span>Documentos</span></a>
+                </div>
+            </div>
+
             <a class="nav-link <?= $usuarioOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/usuario/usuarios.php"><i class="fa-solid fa-users-gear"></i><span>Usuarios</span></a>
             <button class="nav-link nav-parent <?= $configuracionOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#configuracionMenu" aria-expanded="<?= $configuracionOpen ? 'true' : 'false' ?>" aria-controls="configuracionMenu">
                 <i class="fa-solid fa-gear"></i><span>Configuración</span><i class="fa-solid fa-chevron-down nav-caret"></i>
@@ -135,6 +146,13 @@ $isAdmin = is_admin();
                     <?php if (current_user_can_module('empresa.seguridad')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa/seguridad.php"><i class="fa-solid fa-shield-halved"></i><span>Seguridad</span></a><?php endif; ?>
                     <?php if (current_user_can_module('empresa.calidad')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa/calidad.php"><i class="fa-solid fa-award"></i><span>Calidad</span></a><?php endif; ?>
                     <?php if (current_user_can_module('empresa.medio_ambiente')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa/medio_ambiente.php"><i class="fa-solid fa-leaf"></i><span>Medio ambiente</span></a><?php endif; ?>
+                </div></div>
+            <?php endif; ?>
+            <?php if (current_user_can_module('empresa_maquirenta')): ?>
+                <button class="nav-link nav-parent <?= $empresaMaquirentaOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#empresaMaquirentaMenuGestor" aria-expanded="<?= $empresaMaquirentaOpen ? 'true' : 'false' ?>" aria-controls="empresaMaquirentaMenuGestor"><i class="fa-solid fa-building-circle-check"></i><span>Empresa Maquirenta</span><i class="fa-solid fa-chevron-down nav-caret"></i></button>
+                <div class="collapse <?= $empresaMaquirentaOpen ? 'show' : '' ?>" id="empresaMaquirentaMenuGestor"><div class="submenu">
+                    <?php if (current_user_can_module('empresa_maquirenta.datos_generales')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa_maquirenta/datos_generales.php"><i class="fa-solid fa-address-card"></i><span>Datos generales</span></a><?php endif; ?>
+                    <?php if (current_user_can_module('empresa_maquirenta.documentos')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa_maquirenta/documentos.php"><i class="fa-solid fa-file-lines"></i><span>Documentos</span></a><?php endif; ?>
                 </div></div>
             <?php endif; ?>
             <?php if (current_user_can_module('usuarios')): ?>

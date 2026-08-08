@@ -4978,6 +4978,131 @@ body {
     height: 0.9rem;
 }
 
+/* Empresa Maquirenta: replica visual del espacio documental de maquinaria */
+#maquirentaDocumentsTable {
+    table-layout: auto;
+    min-width: 860px;
+    font-size: 0.86rem;
+}
+
+#maquirentaDocumentsTable th,
+#maquirentaDocumentsTable td {
+    padding: 0.48rem 0.42rem;
+    vertical-align: middle;
+}
+
+#maquirentaDocumentsTable th:nth-child(1),
+#maquirentaDocumentsTable td:nth-child(1) {
+    width: 72px;
+    text-align: center;
+}
+
+#maquirentaDocumentsTable th:nth-child(2),
+#maquirentaDocumentsTable td:nth-child(2) {
+    min-width: 170px;
+    max-width: 260px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.25;
+}
+
+#maquirentaDocumentsTable th:nth-child(3),
+#maquirentaDocumentsTable td:nth-child(3),
+#maquirentaDocumentsTable th:nth-child(4),
+#maquirentaDocumentsTable td:nth-child(4),
+#maquirentaDocumentsTable th:nth-child(5),
+#maquirentaDocumentsTable td:nth-child(5),
+#maquirentaDocumentsTable th:nth-child(6),
+#maquirentaDocumentsTable td:nth-child(6) {
+    min-width: 92px;
+    white-space: nowrap;
+}
+
+#maquirentaDocumentsTable th:nth-child(7),
+#maquirentaDocumentsTable td:nth-child(7) {
+    min-width: 142px;
+    white-space: nowrap;
+}
+
+#maquirentaDocumentsTable .badge {
+    font-size: 0.68rem;
+    line-height: 1;
+    padding: 0.32rem 0.45rem;
+    white-space: nowrap;
+}
+
+#maquirentaDocumentsTable td.text-nowrap {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+#maquirentaDocumentsTable .btn-sm {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 7px;
+    font-size: 0.78rem;
+    flex: 0 0 auto;
+}
+
+#maquirentaDocumentsTable .form-check-input {
+    width: 0.9rem;
+    height: 0.9rem;
+}
+
+#maquirentaDocumentsTable .maquirenta-document-group-row td {
+    background: #f1f5fb;
+    border-top: 1px solid #cbd7e6;
+    border-bottom: 1px solid #cbd7e6;
+}
+
+.maquirenta-group-toggle {
+    width: 100%;
+    border: 0;
+    padding: 0.15rem 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    color: #172033;
+    background: transparent;
+    text-align: left;
+}
+
+.maquirenta-group-toggle i {
+    width: 14px;
+    color: #2563eb;
+}
+
+.maquirenta-group-toggle span {
+    border-radius: 999px;
+    padding: 0.2rem 0.48rem;
+    color: #526176;
+    background: #e2e8f0;
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+
+.maquirenta-segment-indent {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.48rem;
+    padding-left: 0.5rem;
+    font-weight: 650;
+}
+
+.maquirenta-segment-indent i {
+    color: #94a3b8;
+    font-size: 0.7rem;
+}
+
+#maquirentaDocumentsTable .maquirenta-document-child:hover td {
+    background: #f8fbff;
+}
+
 /* Layout Documentos de maquinaria/empresa alineado con PMI Individual */
 @media (min-width: 992px) {
     #machineDocumentsWorkspace .machine-profile-col,
@@ -5025,6 +5150,78 @@ body {
     }
 }
 
+@media (min-width: 992px) {
+    #maquirentaDocumentsWorkspace .machine-profile-col {
+        flex: 0 0 29% !important;
+        width: 29% !important;
+        max-width: 29% !important;
+    }
+
+    #maquirentaDocumentsWorkspace .machine-table-col {
+        flex: 0 0 71% !important;
+        width: 71% !important;
+        max-width: 71% !important;
+    }
+
+    #maquirentaDocumentsWorkspace .machine-profile-col .work-panel {
+        padding: 18px !important;
+    }
+
+    #maquirentaDocumentsWorkspace .worker-card img {
+        width: 188px !important;
+        height: 188px !important;
+        max-width: 100% !important;
+        padding: 0 !important;
+        object-fit: contain !important;
+        object-position: center center !important;
+        background: #eef2f7 !important;
+        border: 1px solid #cbd5e1 !important;
+        border-radius: 8px !important;
+    }
+
+    #maquirentaDocumentsWorkspace .worker-card .btn {
+        max-width: 100%;
+        padding: 0.42rem 0.62rem;
+        font-size: 0.82rem;
+        white-space: normal;
+    }
+
+    #maquirentaDocumentsWorkspace .info-list {
+        grid-template-columns: 96px minmax(0, 1fr);
+        gap: 8px 10px;
+        font-size: 0.84rem;
+    }
+
+    #maquirentaDocumentsWorkspace .info-list dt,
+    #maquirentaDocumentsWorkspace .info-list dd {
+        min-width: 0;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+    }
+}
+
+@media (min-width: 1200px) {
+    #maquirentaDocumentsWorkspace .machine-profile-col {
+        flex-basis: 28% !important;
+        width: 28% !important;
+        max-width: 28% !important;
+    }
+
+    #maquirentaDocumentsWorkspace .machine-table-col {
+        flex-basis: 72% !important;
+        width: 72% !important;
+        max-width: 72% !important;
+    }
+}
+
+@media (max-width: 991px) {
+    #maquirentaDocumentsWorkspace .machine-profile-col,
+    #maquirentaDocumentsWorkspace .machine-table-col {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+}
+
 @media (min-width: 1200px) {
     #machineDocumentsWorkspace .machine-profile-col,
     #companyDocumentsWorkspace .machine-profile-col {
@@ -5055,6 +5252,16 @@ body {
     align-items: center !important;
 }
 
+#maquirentaDocumentsWorkspace .work-panel > .d-flex:first-child {
+    align-items: center !important;
+}
+
+#maquirentaDocumentsWorkspace .work-panel > .d-flex:first-child > .d-flex {
+    flex-wrap: nowrap !important;
+    gap: 7px !important;
+    align-items: center;
+}
+
 #requirementsWorkspace .work-panel > .d-flex:first-child > .d-flex,
 #machineDocumentsWorkspace .work-panel > .d-flex:first-child > .d-flex,
 #companyDocumentsWorkspace .work-panel > .d-flex:first-child > .d-flex {
@@ -5080,6 +5287,27 @@ body {
     gap: 0.28rem;
 }
 
+#downloadSelectedMaquirentaDocumentsBtn,
+#downloadMaquirentaDocumentsBtn,
+#addMaquirentaDocumentBtn {
+    min-height: 38px;
+    padding: 0.48rem 0.72rem;
+    font-size: 0.84rem;
+    line-height: 1;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.28rem;
+}
+
+#downloadSelectedMaquirentaDocumentsBtn i,
+#downloadMaquirentaDocumentsBtn i,
+#addMaquirentaDocumentBtn i {
+    margin-right: 0.25rem !important;
+    font-size: 0.86rem;
+}
+
 #downloadSelectedRequirementsBtn i,
 #downloadRequirementsBtn i,
 #addRequirementBtn i,
@@ -5100,11 +5328,24 @@ body {
         padding-inline: 0.58rem;
         font-size: 0.78rem;
     }
+
+    #downloadSelectedMaquirentaDocumentsBtn,
+    #downloadMaquirentaDocumentsBtn,
+    #addMaquirentaDocumentBtn {
+        padding-inline: 0.58rem;
+        font-size: 0.78rem;
+    }
 }
 
 @media (max-width: 767px) {
     #requirementsWorkspace .work-panel > .d-flex:first-child > .d-flex,
     #machineDocumentsWorkspace .work-panel > .d-flex:first-child > .d-flex {
+        flex-wrap: wrap !important;
+    }
+
+    #maquirentaDocumentsWorkspace .work-panel > .d-flex:first-child,
+    #maquirentaDocumentsWorkspace .work-panel > .d-flex:first-child > .d-flex {
+        width: 100%;
         flex-wrap: wrap !important;
     }
 }
@@ -5287,6 +5528,7 @@ input[type="checkbox"]:active {
 
 #requirementsTable .form-check-input,
 #machineDocumentsTable .form-check-input,
+#maquirentaDocumentsTable .form-check-input,
 .masivo-table .form-check-input {
     width: 1.12rem;
     height: 1.12rem;

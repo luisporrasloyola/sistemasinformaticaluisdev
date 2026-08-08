@@ -45,6 +45,13 @@ function permission_modules_catalog(): array
                 'empresa.medio_ambiente' => 'Medio ambiente',
             ],
         ],
+        'empresa_maquirenta' => [
+            'label' => 'Empresa Maquirenta',
+            'children' => [
+                'empresa_maquirenta.datos_generales' => 'Datos generales',
+                'empresa_maquirenta.documentos' => 'Documentos',
+            ],
+        ],
         'usuarios' => ['label' => 'Usuarios', 'children' => []],
         'configuracion' => [
             'label' => 'Configuración',
@@ -91,6 +98,12 @@ function permission_document_scopes(): array
         'empresa.medio_ambiente' => [
             'label' => 'Empresa - Medio ambiente',
             'table' => 'empresa_medio_ambiente_catalogo',
+            'name_column' => 'nombre',
+            'active_column' => 'estado',
+        ],
+        'empresa_maquirenta.documentos' => [
+            'label' => 'Empresa Maquirenta - Documentos',
+            'table' => 'empresa_maquirenta_documentos_catalogo',
             'name_column' => 'nombre',
             'active_column' => 'estado',
         ],

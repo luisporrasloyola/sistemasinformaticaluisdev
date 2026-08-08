@@ -218,6 +218,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initMaquinariaDatos();
     initMaquinariaDocumentos();
     initEmpresaModuloDatos();
+    initEmpresaMaquirentaDatos();
     initEmpresaModuloDocumentos();
     initEmpresaSeguridadDocumentos();
     initEmpresaGenericModules();
@@ -2562,6 +2563,92 @@ function renderEmpresaModuloFotoActual(path) {
     }
     box.classList.remove('d-none');
     box.innerHTML = `<i class="fa-solid fa-image text-primary me-2"></i><a target="_blank" href="${BASE_URL}/${path}">Ver foto actual</a>`;
+}
+
+function initEmpresaMaquirentaDatos() {
+    const table = document.getElementById('empresaMaquirentaTable');
+    if (!table) return;
+
+    const form = document.getElementById('empresaMaquirentaForm');
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('empresaMaquirentaModal'));
+    const photoModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('empresaMaquirentaFotoModal'));
+    const currentPhoto = document.getElementById('empresaMaquirentaFotoActual');
+
+    const renderCurrentPhoto = (path) => {
+        if (!path) {
+            currentPhoto.classList.add('d-none');
+            currentPhoto.innerHTML = '';
+            return;
+        }
+        currentPhoto.classList.remove('d-none');
+        currentPhoto.innerHTML = `<i class="fa-solid fa-image text-primary me-2"></i><a target="_blank" href="${BASE_URL}/${path}">Ver foto actual</a>`;
+    };
+
+    document.getElementById('nuevaEmpresaMaquirentaBtn')?.addEventListener('click', () => {
+        form.reset();
+        form.classList.remove('was-validated');
+        document.getElementById('empresaMaquirentaId').value = '';
+        document.getElementById('empresaMaquirentaModalTitle').textContent = 'Nueva empresa Maquirenta';
+        renderCurrentPhoto(null);
+        modal.show();
+    });
+
+    document.querySelectorAll('.js-editar-empresa-maquirenta').forEach((button) => {
+        button.addEventListener('click', () => {
+            form.reset();
+            form.classList.remove('was-validated');
+            document.getElementById('empresaMaquirentaId').value = button.dataset.id || '';
+            document.getElementById('empresaMaquirentaRazonSocial').value = button.dataset.razonSocial || '';
+            document.getElementById('empresaMaquirentaRuc').value = button.dataset.ruc || '';
+            document.getElementById('empresaMaquirentaDireccion').value = button.dataset.direccion || '';
+            document.getElementById('empresaMaquirentaModalTitle').textContent = 'Editar empresa Maquirenta';
+            renderCurrentPhoto(button.dataset.foto || null);
+            modal.show();
+        });
+    });
+
+    document.querySelectorAll('.js-ver-foto-empresa-maquirenta').forEach((button) => {
+        button.addEventListener('click', () => {
+            if (!button.dataset.foto) return;
+            document.getElementById('empresaMaquirentaFotoModalImg').src = `${BASE_URL}/${button.dataset.foto}`;
+            photoModal.show();
+        });
+    });
+
+    document.querySelectorAll('.js-eliminar-empresa-maquirenta').forEach((button) => {
+        button.addEventListener('click', async () => {
+            const ok = await confirmAction('¿Eliminar empresa Maquirenta?');
+            if (!ok) return;
+            const body = new FormData();
+            body.append('csrf_token', csrf);
+            body.append('id', button.dataset.id || '');
+            const response = await fetch(`${BASE_URL}/servicios/empresa_maquirenta/eliminar_empresa.php`, { method: 'POST', body });
+            const data = await response.json();
+            if (data.ok) window.location.reload();
+            else Swal.fire('Atención', data.message || 'No se pudo eliminar la empresa Maquirenta.', 'warning');
+        });
+    });
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (!form.checkValidity()) {
+            form.classList.add('was-validated');
+            return;
+        }
+        const submitButton = form.querySelector('[type="submit"]');
+        submitButton.disabled = true;
+        try {
+            const response = await fetch(`${BASE_URL}/servicios/empresa_maquirenta/guardar_empresa.php`, { method: 'POST', body: new FormData(form) });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo guardar la empresa Maquirenta.');
+            modal.hide();
+            window.location.reload();
+        } catch (error) {
+            Swal.fire('Atención', error.message || 'No se pudo guardar la empresa Maquirenta.', 'warning');
+        } finally {
+            submitButton.disabled = false;
+        }
+    });
 }
 
 function initEmpresaModuloDocumentos() {
