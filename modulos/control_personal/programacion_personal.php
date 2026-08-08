@@ -40,14 +40,25 @@ $programs = db()->query("SELECT ap.id, ap.assignment_id, ap.worker_id,
     ORDER BY ap.program_date, ap.entry_time")->fetchAll();
 
 $programStops = [];
-foreach (db()->query("SELECT aps.id, aps.program_id, aps.location_id, aps.destination, aps.activity, aps.estimated_time
-    FROM attendance_program_stops aps ORDER BY aps.program_id, aps.stop_order")->fetchAll() as $stop) {
+foreach (db()->query("SELECT aps.id, aps.program_id, aps.location_id, aps.destination, aps.activity, aps.estimated_time,
+        (SELECT COUNT(DISTINCT atp.id) FROM attendance_trips atp
+         WHERE (atp.program_id=aps.program_id OR (atp.program_id IS NULL AND atp.assignment_id=ap.assignment_id AND atp.worker_id=ap.worker_id AND atp.trip_date=ap.program_date))
+           AND (atp.first_destination_location_id=aps.location_id OR EXISTS(
+                SELECT 1 FROM attendance_trip_stops ats WHERE ats.trip_id=atp.id AND ats.location_id=aps.location_id))) AS stop_trip_count,
+        (SELECT COUNT(*) FROM attendance_work_completions awc
+         WHERE (awc.program_id=aps.program_id OR (awc.program_id IS NULL AND awc.assignment_id=ap.assignment_id AND awc.worker_id=ap.worker_id AND awc.work_date=ap.program_date))
+           AND awc.location_id=aps.location_id) AS stop_completion_count
+    FROM attendance_program_stops aps
+    JOIN attendance_programs ap ON ap.id=aps.program_id
+    ORDER BY aps.program_id, aps.stop_order")->fetchAll() as $stop) {
     $programStops[(int) $stop['program_id']][] = [
         'id' => (int) $stop['id'],
         'locationId' => (int) ($stop['location_id'] ?? 0),
         'destination' => (string) $stop['destination'],
         'activity' => (string) ($stop['activity'] ?? ''),
         'estimatedTime' => $stop['estimated_time'] ? substr((string) $stop['estimated_time'], 0, 5) : '',
+        'tripCount' => (int) $stop['stop_trip_count'],
+        'completionCount' => (int) $stop['stop_completion_count'],
     ];
 }
 

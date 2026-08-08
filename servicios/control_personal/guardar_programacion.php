@@ -47,6 +47,49 @@ if ($id > 0) {
     if ($editingExistingRoute) $programDate = (string) $existingProgram['program_date'];
 }
 
+// Al retirar el último destino de un recorrido que todavía no fue utilizado,
+// se elimina únicamente la extensión de recorrido. La entrada, las salidas
+// temporales y los trabajos del lugar habitual conservan su historial y
+// vuelven a quedar asociados a la asignación original.
+if ($editingExistingRoute && count($stopLocationIds) === 0) {
+    $pdo = db();
+    $usedStopsStmt = $pdo->prepare("SELECT
+            (SELECT COUNT(DISTINCT atp.id) FROM attendance_trips atp
+             WHERE (atp.program_id=ap.id OR (atp.program_id IS NULL AND atp.assignment_id=ap.assignment_id AND atp.worker_id=ap.worker_id AND atp.trip_date=ap.program_date))
+               AND (atp.first_destination_location_id IN (SELECT aps.location_id FROM attendance_program_stops aps WHERE aps.program_id=ap.id)
+                    OR EXISTS(SELECT 1 FROM attendance_trip_stops ats
+                              WHERE ats.trip_id=atp.id AND ats.location_id IN (SELECT aps2.location_id FROM attendance_program_stops aps2 WHERE aps2.program_id=ap.id)))) AS stop_trips,
+            (SELECT COUNT(*) FROM attendance_work_completions awc
+             WHERE (awc.program_id=ap.id OR (awc.program_id IS NULL AND awc.assignment_id=ap.assignment_id AND awc.worker_id=ap.worker_id AND awc.work_date=ap.program_date))
+               AND awc.location_id IN (SELECT aps.location_id FROM attendance_program_stops aps WHERE aps.program_id=ap.id)) AS stop_completions
+        FROM attendance_programs ap WHERE ap.id=:id LIMIT 1");
+    $usedStopsStmt->execute(['id' => $id]);
+    $usedStops = $usedStopsStmt->fetch();
+    if (!$usedStops) json_response(['ok' => false, 'message' => 'El recorrido ya no existe.'], 404);
+    if ((int) $usedStops['stop_trips'] > 0 || (int) $usedStops['stop_completions'] > 0) {
+        json_response([
+            'ok' => false,
+            'message' => 'No puede retirar el último lugar porque el trabajador ya inició un desplazamiento, confirmó su llegada o finalizó un trabajo allí.',
+        ], 409);
+    }
+
+    try {
+        $pdo->beginTransaction();
+        $pdo->prepare('UPDATE attendance_marks SET program_id=NULL WHERE program_id=:id')->execute(['id' => $id]);
+        $pdo->prepare('UPDATE attendance_trips SET program_id=NULL WHERE program_id=:id')->execute(['id' => $id]);
+        $pdo->prepare('UPDATE attendance_work_completions SET program_id=NULL WHERE program_id=:id')->execute(['id' => $id]);
+        $pdo->prepare('DELETE FROM attendance_programs WHERE id=:id')->execute(['id' => $id]);
+        $pdo->commit();
+        json_response([
+            'ok' => true,
+            'message' => 'El recorrido fue retirado porque no tenía destinos utilizados. La asistencia habitual del trabajador se conservó.',
+        ]);
+    } catch (Throwable $error) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        json_response(['ok' => false, 'message' => 'No se pudo retirar el recorrido. Inténtelo nuevamente.'], 500);
+    }
+}
+
 $stmt = db()->prepare("SELECT aa.*, w.full_name, l.name AS location_name, s.name AS schedule_name
     FROM attendance_assignments aa
     JOIN workers w ON w.id = aa.worker_id
@@ -184,33 +227,6 @@ if ($programInUse && !$editingExistingRoute) {
 }
 
 if ($programInUse && $editingExistingRoute) {
-    // Una vez iniciada la jornada, ninguna parada que ya formaba parte del
-    // recorrido puede retirarse. Se comparan cantidades por lugar para cubrir
-    // también recorridos que repiten una misma ubicación.
-    $existingStopsStmt = $pdo->prepare('SELECT location_id, COUNT(*) AS stop_count
-        FROM attendance_program_stops WHERE program_id=:program_id
-        GROUP BY location_id');
-    $existingStopsStmt->execute(['program_id' => $id]);
-    $submittedStopCounts = [];
-    foreach ($stops as $submittedStop) {
-        $submittedLocationId = (int) $submittedStop['location_id'];
-        $submittedStopCounts[$submittedLocationId] = ($submittedStopCounts[$submittedLocationId] ?? 0) + 1;
-    }
-    foreach ($existingStopsStmt->fetchAll() as $existingStop) {
-        $existingLocationId = (int) $existingStop['location_id'];
-        if (($submittedStopCounts[$existingLocationId] ?? 0) < (int) $existingStop['stop_count']) {
-            $usageReasons = [];
-            if ((int) $usageRow['has_marks'] === 1) $usageReasons[] = 'el trabajador ya marcó su asistencia';
-            if ((int) $usageRow['has_trips'] === 1) $usageReasons[] = 'ya existe un desplazamiento iniciado';
-            if ((int) $usageRow['has_completions'] === 1) $usageReasons[] = 'ya se finalizó un trabajo';
-            json_response([
-                'ok' => false,
-                'title' => 'Este lugar no se puede quitar',
-                'message' => ucfirst(implode(', ', $usageReasons)) . '. Puede actualizar la actividad o la llegada estimada, pero el lugar debe conservarse como parte del historial.',
-            ], 409);
-        }
-    }
-
     $recordedLocationsStmt = $pdo->prepare("SELECT DISTINCT location_id FROM (
             SELECT first_destination_location_id AS location_id
             FROM attendance_trips
@@ -220,8 +236,12 @@ if ($programInUse && $editingExistingRoute) {
             FROM attendance_trip_stops ats
             JOIN attendance_trips atp ON atp.id=ats.trip_id
             WHERE atp.program_id=:stop_program AND ats.location_id IS NOT NULL
+            UNION
+            SELECT awc.location_id
+            FROM attendance_work_completions awc
+            WHERE awc.program_id=:completion_program AND awc.location_id IS NOT NULL
         ) recorded_locations");
-    $recordedLocationsStmt->execute(['trip_program' => $id, 'stop_program' => $id]);
+    $recordedLocationsStmt->execute(['trip_program' => $id, 'stop_program' => $id, 'completion_program' => $id]);
     $submittedLocationIds = array_map(static fn(array $stop): int => (int) $stop['location_id'], $stops);
     foreach ($recordedLocationsStmt->fetchAll(PDO::FETCH_COLUMN) as $recordedLocationId) {
         if (!in_array((int) $recordedLocationId, $submittedLocationIds, true)) {

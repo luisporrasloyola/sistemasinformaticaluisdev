@@ -389,14 +389,12 @@ function initPersonnelProgramming() {
         // parte del recorrido, incluso si una respuesta antigua no incluyera su id.
         const persistedStop = Number(stop.id || 0) > 0 || (Boolean(idField.value) && Object.keys(stop).length > 0);
         removeButton?.addEventListener('click', async () => {
-            const hasMarks = cancelButton.dataset.hasProgramMarks === '1';
-            const hasTrips = cancelButton.dataset.hasProgramTrips === '1';
-            const hasCompletions = cancelButton.dataset.hasWorkCompletions === '1';
-            if (persistedStop && (hasMarks || hasTrips || hasCompletions)) {
+            const stopTripCount = Number(stop.tripCount || 0);
+            const stopCompletionCount = Number(stop.completionCount || 0);
+            if (persistedStop && (stopTripCount > 0 || stopCompletionCount > 0)) {
                 const reasons = [
-                    hasMarks ? 'el trabajador ya marcó su asistencia' : '',
-                    hasTrips ? 'el recorrido ya tiene un desplazamiento iniciado' : '',
-                    hasCompletions ? 'ya se finalizó un trabajo del recorrido' : ''
+                    stopTripCount > 0 ? 'el trabajador ya inició el desplazamiento o confirmó su llegada a este lugar' : '',
+                    stopCompletionCount > 0 ? 'ya finalizó un trabajo en este lugar' : ''
                 ].filter(Boolean);
                 await Swal.fire({
                     icon: 'info',
@@ -705,7 +703,7 @@ function initPersonnelProgramming() {
             const assignmentIds = Array.from(assignmentField.selectedOptions).map(option => option.value).filter(Boolean);
             if (!assignmentIds.length) throw new Error('Seleccione al menos un trabajador.');
             if (editorMode === 'special' && assignmentIds.length > 1) throw new Error('La programación especial se aplica a un trabajador. Para varios trabajadores utilice Recorridos de trabajo.');
-            if (editorMode === 'route' && !stopsContainer?.children.length) throw new Error('Agregue al menos un lugar al recorrido.');
+            if (editorMode === 'route' && !stopsContainer?.children.length && !idField.value) throw new Error('Agregue al menos un lugar al recorrido.');
             let lastMessage = '';
             const targets = idField.value ? [assignmentIds[0]] : assignmentIds;
             for (const assignmentId of targets) {
