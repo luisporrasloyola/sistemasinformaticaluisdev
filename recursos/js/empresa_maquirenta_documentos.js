@@ -68,10 +68,14 @@ async function loadMaquirentaDocuments() {
     tbody.innerHTML = '';
     const groups = new Map();
     (data.rows || []).forEach((row) => {
-        if (!groups.has(String(row.documento_id))) groups.set(String(row.documento_id), { name: row.documento, rows: [] });
+        if (!groups.has(String(row.documento_id))) groups.set(String(row.documento_id), { name: row.documento, type: row.tipo_segmentacion || 'ninguna', rows: [] });
         groups.get(String(row.documento_id)).rows.push(row);
     });
     groups.forEach((group, documentId) => {
+        if (group.type === 'ninguna') {
+            group.rows.forEach((row) => renderMaquirentaDocumentRow(tbody, row, '', true));
+            return;
+        }
         const groupKey = `maquirenta-group-${documentId}`;
         tbody.insertAdjacentHTML('beforeend', `<tr class="maquirenta-document-group-row" data-group="${groupKey}">
             <td class="text-center"><input class="form-check-input maquirenta-group-check" type="checkbox" data-group="${groupKey}" title="Seleccionar archivos de ${escapeHtml(group.name)}"></td>
@@ -91,12 +95,17 @@ async function loadMaquirentaDocuments() {
     }));
 }
 
-function renderMaquirentaDocumentRow(tbody, row, groupKey) {
+function renderMaquirentaDocumentRow(tbody, row, groupKey, flat = false) {
         const hasFile = !!row.archivo_path;
         const download = hasFile ? `<a class="btn btn-sm btn-outline-success" href="${BASE_URL}/${row.archivo_path}" download="${escapeHtml(row.archivo_nombre_original || row.display_name)}" title="Descargar"><i class="fa-solid fa-download"></i></a>` : '';
-        tbody.insertAdjacentHTML('beforeend', `<tr class="maquirenta-document-child" data-group="${groupKey}">
-            <td class="text-center"><input class="form-check-input maquirenta-document-check" data-group="${groupKey}" type="checkbox" value="${row.id}" ${hasFile ? '' : 'disabled'} title="${hasFile ? 'Seleccionar archivo' : 'Sin archivo adjunto'}"></td>
-            <td><span class="maquirenta-segment-indent"><i class="fa-solid fa-turn-up fa-rotate-90"></i>${escapeHtml(row.segment_label || 'Documento general')}</span></td><td>${row.fecha_registro}</td><td>${row.fecha_inicio}</td><td>${row.fecha_fin}</td>
+        const rowClass = flat ? 'maquirenta-document-flat' : 'maquirenta-document-child';
+        const groupAttribute = flat ? '' : ` data-group="${groupKey}"`;
+        const documentLabel = flat
+            ? escapeHtml(row.documento)
+            : `<span class="maquirenta-segment-indent"><i class="fa-solid fa-turn-up fa-rotate-90"></i>${escapeHtml(row.segment_label)}</span>`;
+        tbody.insertAdjacentHTML('beforeend', `<tr class="${rowClass}"${groupAttribute}>
+            <td class="text-center"><input class="form-check-input maquirenta-document-check"${groupAttribute} type="checkbox" value="${row.id}" ${hasFile ? '' : 'disabled'} title="${hasFile ? 'Seleccionar archivo' : 'Sin archivo adjunto'}"></td>
+            <td>${documentLabel}</td><td>${row.fecha_registro}</td><td>${row.fecha_inicio}</td><td>${row.fecha_fin}</td>
             <td><span class="badge ${row.status.class}">${row.status.label}</span></td><td>${escapeHtml(row.registered_by || '')}</td>
             <td class="text-nowrap"><button class="btn btn-sm btn-outline-primary" type="button" onclick="openEditMaquirentaDocument(${row.id})"><i class="fa-solid fa-pen"></i></button>
             <button class="btn btn-sm btn-outline-secondary" type="button" onclick="openViewMaquirentaDocument(${row.id})"><i class="fa-solid fa-eye"></i></button>
@@ -182,11 +191,20 @@ window.deleteMaquirentaDocument = async (id) => { if(!await confirmAction('¿Eli
 window.deleteMaquirentaDocumentFile = async (id) => { if(!await confirmAction('¿Eliminar archivo adjunto?'))return; try{await maquirentaDocumentPost('delete_file',{id});renderMaquirentaCurrentFile(null);await loadMaquirentaDocuments();}catch(error){Swal.fire('Atención',error.message,'warning');} };
 
 async function addMaquirentaCatalogDocument() {
-    const result=await Swal.fire({title:'Nuevo documento',input:'text',inputPlaceholder:'Nombre del documento',showCancelButton:true,confirmButtonText:'Agregar',cancelButtonText:'Cancelar'});
-    if(!result.value)return;
-    const typeResult=await Swal.fire({title:'Tipo de segmentación',input:'select',inputOptions:{ninguna:'Sin segmentación',numero:'Número correlativo',mes:'Mes y año',codigo:'Código',texto:'Texto libre'},inputValue:'ninguna',showCancelButton:true,confirmButtonText:'Crear categoría',cancelButtonText:'Cancelar'});
-    if(!typeResult.value)return;
-    try{const data=await maquirentaDocumentPost('catalog_save',{nombre:result.value,tipo_segmentacion:typeResult.value});const option=new Option(data.text,data.id,true,true);$('#maquirentaDocumentSelect').append(option).trigger('change');configureMaquirentaSegmentation(data.tipo_segmentacion);}catch(error){Swal.fire('Atención',error.message,'warning');}
+    const focusTrap=maquirentaDocumentModal?._focustrap;
+    focusTrap?.deactivate?.();
+    let name=''; let segmentationType='';
+    try{
+        const result=await Swal.fire({title:'Nuevo documento',input:'text',inputPlaceholder:'Nombre del documento',showCancelButton:true,confirmButtonText:'Agregar',cancelButtonText:'Cancelar',didOpen:()=>Swal.getInput()?.focus()});
+        name=(result.value||'').trim();
+        if(!name)return;
+        const typeResult=await Swal.fire({title:'Tipo de segmentación',input:'select',inputOptions:{ninguna:'Sin segmentación',numero:'Número correlativo',mes:'Mes y año',codigo:'Código',texto:'Texto libre'},inputValue:'ninguna',showCancelButton:true,confirmButtonText:'Crear categoría',cancelButtonText:'Cancelar'});
+        segmentationType=typeResult.value||'';
+    }finally{
+        setTimeout(()=>focusTrap?.activate?.(),0);
+    }
+    if(!segmentationType)return;
+    try{const data=await maquirentaDocumentPost('catalog_save',{nombre:name,tipo_segmentacion:segmentationType});const option=new Option(data.text,data.id,true,true);$('#maquirentaDocumentSelect').append(option).trigger('change');configureMaquirentaSegmentation(data.tipo_segmentacion);}catch(error){Swal.fire('Atención',error.message,'warning');}
 }
 
 async function deleteMaquirentaCatalogDocument() {

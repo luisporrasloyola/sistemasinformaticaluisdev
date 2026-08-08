@@ -32,7 +32,7 @@ if ($action === 'catalog') {
 if ($action === 'list') {
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
     $companyId = (int) ($_GET['empresa_maquirenta_id'] ?? 0);
-    $stmt = db()->prepare("SELECT d.*, c.nombre AS documento, COALESCE(u.name, '') AS registered_by
+    $stmt = db()->prepare("SELECT d.*, c.nombre AS documento, c.tipo_segmentacion, COALESCE(u.name, '') AS registered_by
         FROM empresa_maquirenta_documentos d
         JOIN empresa_maquirenta_documentos_catalogo c ON c.id = d.documento_id
         LEFT JOIN users u ON u.id = d.registered_by_user_id

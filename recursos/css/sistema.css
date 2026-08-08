@@ -6818,3 +6818,22 @@ input[type="checkbox"]:active {
 .my-schedule-route-completed{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;background:#dcfce7;color:#166534;font-size:.72rem;font-weight:700;line-height:1.2}
 .my-schedule-route-arrived{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border:0;border-radius:999px;background:#dbeafe;color:#1d4ed8;font-size:.72rem;font-weight:700;line-height:1.2;cursor:pointer;transition:background .18s ease,transform .18s ease}
 .my-schedule-route-arrived:hover{background:#bfdbfe;transform:translateY(-1px)}
+
+/* Empresa Maquirenta - Seguridad: misma composición de Maquinaria/Documentos */
+#maquirentaSecurityTable{table-layout:auto;min-width:860px;font-size:.86rem}
+#maquirentaSecurityTable th,#maquirentaSecurityTable td{padding:.48rem .42rem;vertical-align:middle}
+#maquirentaSecurityTable th:nth-child(1),#maquirentaSecurityTable td:nth-child(1){width:72px;text-align:center}
+#maquirentaSecurityTable th:nth-child(2),#maquirentaSecurityTable td:nth-child(2){min-width:170px;max-width:260px;white-space:normal;overflow-wrap:anywhere;line-height:1.25}
+#maquirentaSecurityTable th:nth-child(3),#maquirentaSecurityTable td:nth-child(3),#maquirentaSecurityTable th:nth-child(4),#maquirentaSecurityTable td:nth-child(4),#maquirentaSecurityTable th:nth-child(5),#maquirentaSecurityTable td:nth-child(5),#maquirentaSecurityTable th:nth-child(6),#maquirentaSecurityTable td:nth-child(6){min-width:92px;white-space:nowrap}
+#maquirentaSecurityTable th:nth-child(7),#maquirentaSecurityTable td:nth-child(7){min-width:142px;white-space:nowrap}
+#maquirentaSecurityTable .badge{font-size:.68rem;line-height:1;padding:.32rem .45rem;white-space:nowrap}
+#maquirentaSecurityTable td.text-nowrap{display:flex;align-items:center;gap:4px}
+#maquirentaSecurityTable .btn-sm{width:30px;height:30px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:7px;font-size:.78rem;flex:0 0 auto}
+#maquirentaSecurityTable .form-check-input{width:1.12rem;height:1.12rem;min-width:1.12rem}
+#maquirentaSecurityWorkspace .work-panel>.d-flex:first-child{align-items:center!important}
+#maquirentaSecurityWorkspace .work-panel>.d-flex:first-child>.d-flex{flex-wrap:nowrap!important;gap:7px!important;align-items:center}
+#downloadSelectedMaquirentaSecurityBtn,#downloadMaquirentaSecurityBtn,#addMaquirentaSecurityBtn{min-height:38px;padding:.48rem .72rem;font-size:.84rem;line-height:1;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;gap:.28rem}
+@media(min-width:992px){#maquirentaSecurityWorkspace .machine-profile-col{flex:0 0 29%!important;width:29%!important;max-width:29%!important}#maquirentaSecurityWorkspace .machine-table-col{flex:0 0 71%!important;width:71%!important;max-width:71%!important}#maquirentaSecurityWorkspace .machine-profile-col .work-panel{padding:18px!important}#maquirentaSecurityWorkspace .worker-card img{width:188px!important;height:188px!important;max-width:100%!important;object-fit:contain!important;object-position:center!important;background:#eef2f7!important;border:1px solid #cbd5e1!important;border-radius:8px!important}#maquirentaSecurityWorkspace .worker-card .btn{max-width:100%;padding:.42rem .62rem;font-size:.82rem;white-space:normal}#maquirentaSecurityWorkspace .info-list{grid-template-columns:96px minmax(0,1fr);gap:8px 10px;font-size:.84rem}#maquirentaSecurityWorkspace .info-list dt,#maquirentaSecurityWorkspace .info-list dd{min-width:0;line-height:1.35;overflow-wrap:anywhere}}
+@media(min-width:1200px){#maquirentaSecurityWorkspace .machine-profile-col{flex-basis:28%!important;width:28%!important;max-width:28%!important}#maquirentaSecurityWorkspace .machine-table-col{flex-basis:72%!important;width:72%!important;max-width:72%!important}}
+@media(max-width:991px){#maquirentaSecurityWorkspace .machine-profile-col,#maquirentaSecurityWorkspace .machine-table-col{width:100%!important;max-width:100%!important}}
+@media(max-width:767px){#maquirentaSecurityWorkspace .work-panel>.d-flex:first-child,#maquirentaSecurityWorkspace .work-panel>.d-flex:first-child>.d-flex{width:100%;flex-wrap:wrap!important}}

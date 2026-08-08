@@ -50,6 +50,7 @@ function permission_modules_catalog(): array
             'children' => [
                 'empresa_maquirenta.datos_generales' => 'Datos generales',
                 'empresa_maquirenta.documentos' => 'Documentos',
+                'empresa_maquirenta.seguridad' => 'Seguridad',
             ],
         ],
         'usuarios' => ['label' => 'Usuarios', 'children' => []],
@@ -104,6 +105,12 @@ function permission_document_scopes(): array
         'empresa_maquirenta.documentos' => [
             'label' => 'Empresa Maquirenta - Documentos',
             'table' => 'empresa_maquirenta_documentos_catalogo',
+            'name_column' => 'nombre',
+            'active_column' => 'estado',
+        ],
+        'empresa_maquirenta.seguridad' => [
+            'label' => 'Empresa Maquirenta - Seguridad',
+            'table' => 'empresa_maquirenta_seguridad_catalogo',
             'name_column' => 'nombre',
             'active_column' => 'estado',
         ],

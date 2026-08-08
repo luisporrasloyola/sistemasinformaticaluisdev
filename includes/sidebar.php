@@ -91,6 +91,7 @@ $isAdmin = is_admin();
                 <div class="submenu">
                     <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa_maquirenta/datos_generales.php"><i class="fa-solid fa-address-card"></i><span>Datos generales</span></a>
                     <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa_maquirenta/documentos.php"><i class="fa-solid fa-file-lines"></i><span>Documentos</span></a>
+                    <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa_maquirenta/seguridad.php"><i class="fa-solid fa-shield-halved"></i><span>Seguridad</span></a>
                 </div>
             </div>
 
@@ -153,6 +154,7 @@ $isAdmin = is_admin();
                 <div class="collapse <?= $empresaMaquirentaOpen ? 'show' : '' ?>" id="empresaMaquirentaMenuGestor"><div class="submenu">
                     <?php if (current_user_can_module('empresa_maquirenta.datos_generales')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa_maquirenta/datos_generales.php"><i class="fa-solid fa-address-card"></i><span>Datos generales</span></a><?php endif; ?>
                     <?php if (current_user_can_module('empresa_maquirenta.documentos')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa_maquirenta/documentos.php"><i class="fa-solid fa-file-lines"></i><span>Documentos</span></a><?php endif; ?>
+                    <?php if (current_user_can_module('empresa_maquirenta.seguridad')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa_maquirenta/seguridad.php"><i class="fa-solid fa-shield-halved"></i><span>Seguridad</span></a><?php endif; ?>
                 </div></div>
             <?php endif; ?>
             <?php if (current_user_can_module('usuarios')): ?>
