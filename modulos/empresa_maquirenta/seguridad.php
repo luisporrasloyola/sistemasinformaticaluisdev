@@ -6,7 +6,7 @@ require_module_access('empresa_maquirenta.seguridad');
 $empresas = db()->query('SELECT id, razon_social, ruc FROM empresas_maquirenta WHERE status=1 ORDER BY razon_social')->fetchAll();
 require __DIR__ . '/../../includes/header.php';
 ?>
-<div class="page-title"><div><h1>Seguridad de Empresa Maquirenta</h1><p>Control de documentos de seguridad por empresa.</p></div></div>
+<div class="page-title"><div><h1>Central Térmica Santa Rosa</h1><p>Control documentario de Empresa Maquirenta.</p></div></div>
 <div class="work-panel mb-3">
     <label class="form-label">Buscar por razón social o RUC</label>
     <select class="form-select" id="maquirentaSecurityCompanySearch"><option value=""></option><?php foreach ($empresas as $empresa): ?><option value="<?= (int)$empresa['id'] ?>"><?= e($empresa['razon_social'].' - '.$empresa['ruc']) ?></option><?php endforeach; ?></select>
@@ -17,7 +17,7 @@ require __DIR__ . '/../../includes/header.php';
         <dl class="info-list mt-3"><dt>Razón social</dt><dd id="maquirentaSecurityName"></dd><dt>RUC</dt><dd id="maquirentaSecurityRuc"></dd><dt>Dirección</dt><dd id="maquirentaSecurityAddress"></dd></dl>
     </div></div>
     <div class="col-lg-9 machine-table-col"><div class="work-panel h-100">
-        <div class="d-flex justify-content-between align-items-center gap-2 mb-3 flex-wrap"><h2 class="mb-0">Seguridad</h2><div class="d-flex gap-2 flex-wrap">
+        <div class="d-flex justify-content-between align-items-center gap-2 mb-3 flex-wrap"><h2 class="mb-0">Central Térmica Santa Rosa</h2><div class="d-flex gap-2 flex-wrap">
             <button class="btn btn-outline-primary" type="button" id="downloadSelectedMaquirentaSecurityBtn"><i class="fa-solid fa-file-zipper me-2"></i>Descargar seleccionados</button>
             <button class="btn btn-outline-primary" type="button" id="downloadMaquirentaSecurityBtn"><i class="fa-solid fa-download me-2"></i>Descargar todo</button>
             <button class="btn btn-primary" type="button" id="addMaquirentaSecurityBtn"><i class="fa-solid fa-plus me-2"></i>Agregar documentos</button>

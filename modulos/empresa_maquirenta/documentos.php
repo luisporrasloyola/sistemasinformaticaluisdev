@@ -10,8 +10,8 @@ require __DIR__ . '/../../includes/header.php';
 ?>
 <div class="page-title">
     <div>
-        <h1>Documentos de Empresa Maquirenta</h1>
-        <p>Control documentario por empresa.</p>
+        <h1>Central Térmica Ventanilla</h1>
+        <p>Control documentario de Empresa Maquirenta.</p>
     </div>
 </div>
 
@@ -45,7 +45,7 @@ require __DIR__ . '/../../includes/header.php';
     <div class="col-lg-9 col-xl-9 machine-table-col">
         <div class="work-panel h-100">
             <div class="d-flex justify-content-between align-items-center gap-2 mb-3 flex-wrap">
-                <h2 class="mb-0">Documentos</h2>
+                <h2 class="mb-0">Central Térmica Ventanilla</h2>
                 <div class="d-flex gap-2 flex-wrap">
                     <button class="btn btn-outline-primary" type="button" id="downloadSelectedMaquirentaDocumentsBtn"><i class="fa-solid fa-file-zipper me-2"></i>Descargar seleccionados</button>
                     <button class="btn btn-outline-primary" type="button" id="downloadMaquirentaDocumentsBtn"><i class="fa-solid fa-download me-2"></i>Descargar todo</button>

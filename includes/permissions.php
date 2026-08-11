@@ -49,8 +49,8 @@ function permission_modules_catalog(): array
             'label' => 'Empresa Maquirenta',
             'children' => [
                 'empresa_maquirenta.datos_generales' => 'Datos generales',
-                'empresa_maquirenta.documentos' => 'Documentos',
-                'empresa_maquirenta.seguridad' => 'Seguridad',
+                'empresa_maquirenta.documentos' => 'Central Térmica Ventanilla',
+                'empresa_maquirenta.seguridad' => 'Central Térmica Santa Rosa',
             ],
         ],
         'usuarios' => ['label' => 'Usuarios', 'children' => []],
@@ -103,13 +103,13 @@ function permission_document_scopes(): array
             'active_column' => 'estado',
         ],
         'empresa_maquirenta.documentos' => [
-            'label' => 'Empresa Maquirenta - Documentos',
+            'label' => 'Empresa Maquirenta - Central Térmica Ventanilla',
             'table' => 'empresa_maquirenta_documentos_catalogo',
             'name_column' => 'nombre',
             'active_column' => 'estado',
         ],
         'empresa_maquirenta.seguridad' => [
-            'label' => 'Empresa Maquirenta - Seguridad',
+            'label' => 'Empresa Maquirenta - Central Térmica Santa Rosa',
             'table' => 'empresa_maquirenta_seguridad_catalogo',
             'name_column' => 'nombre',
             'active_column' => 'estado',
