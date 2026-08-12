@@ -4122,7 +4122,8 @@ body {
 
 .dashboard-pdf-preview-btn,
 .dashboard-observation-btn,
-.dashboard-approve-observation-btn {
+.dashboard-approve-observation-btn,
+.dashboard-record-link-btn {
     width: 34px !important;
     height: 34px !important;
     display: inline-flex !important;
@@ -4134,7 +4135,8 @@ body {
 
 .dashboard-pdf-preview-btn i,
 .dashboard-observation-btn i,
-.dashboard-approve-observation-btn i {
+.dashboard-approve-observation-btn i,
+.dashboard-record-link-btn i {
     font-size: 1rem !important;
 }
 
@@ -6852,3 +6854,20 @@ input[type="checkbox"]:active {
 .obs-source-personal{background:#fff3cd;color:#8a5800}
 .obs-source-maquinaria{background:#dbeafe;color:#1d4ed8}
 .observation-notif-item[data-source="maquinaria"]{cursor:pointer}
+
+/* Distribución de columnas del detalle documental de maquinaria */
+@media (min-width: 992px) {
+    #mdTable {
+        table-layout: fixed;
+        width: 100%;
+    }
+    #mdTable th:nth-child(1), #mdTable td:nth-child(1) { width: 14%; }
+    #mdTable th:nth-child(2), #mdTable td:nth-child(2) { width: 17%; }
+    #mdTable th:nth-child(3), #mdTable td:nth-child(3) { width: 10%; }
+    #mdTable th:nth-child(4), #mdTable td:nth-child(4) { width: 14%; }
+    #mdTable th:nth-child(5), #mdTable td:nth-child(5) { width: 12%; }
+    #mdTable th:nth-child(6), #mdTable td:nth-child(6) { width: 16%; }
+    #mdTable th:nth-child(7), #mdTable td:nth-child(7) { width: 17%; }
+    #mdTable th:nth-child(7) { text-align: center; padding-right: 12px; }
+    #mdTable td:nth-child(7) { padding-left: 6px; padding-right: 12px; }
+}

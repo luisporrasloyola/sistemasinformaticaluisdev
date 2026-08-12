@@ -2101,7 +2101,10 @@ function initMaquinariaDocumentos() {
     });
 
     if (machineSearchElement.value) {
-        loadMachine(machineSearchElement.value);
+        loadMachine(machineSearchElement.value).then(() => {
+            const recordId = Number(window.initialMachineDocumentRecordId || 0);
+            if (recordId > 0) window.setTimeout(() => openEditMachineDocument(recordId), 150);
+        });
     }
 
     document.getElementById('downloadMachineDocumentsBtn')?.addEventListener('click', downloadMachineDocumentsBundle);
@@ -2221,13 +2224,14 @@ function openAddMachineDocument() {
 
 async function openEditMachineDocument(id) {
     machineReadOnlyMode = false;
-    await fillMachineDocumentModal(id);
-    setMachineDocumentReadonly(false);
-    setMachineObservationVisibility(false);
-    document.getElementById('machineDocumentModalTitle').textContent = 'Editar documentos';
+    const data = await fillMachineDocumentModal(id);
+    const canEdit = data?.can_edit === true;
+    machineReadOnlyMode = !canEdit;
+    setMachineDocumentReadonly(!canEdit);
+    setMachineObservationVisibility(!canEdit);
+    document.getElementById('machineDocumentModalTitle').textContent = canEdit ? 'Editar documentos' : 'Visualizar documentos';
     machineDocumentModal.show();
 }
-
 async function openViewMachineDocument(id) {
     machineReadOnlyMode = true;
     await fillMachineDocumentModal(id);
@@ -2254,6 +2258,7 @@ async function fillMachineDocumentModal(id) {
     const option = new Option(row.documento, row.documento_id, true, true);
     $('#machineDocumentSelect').append(option).trigger('change');
     renderMachineCurrentPdf(row);
+    return data;
 }
 
 function setMachineObservationVisibility(viewMode) {

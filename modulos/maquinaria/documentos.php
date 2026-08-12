@@ -9,6 +9,7 @@ $stmtMaquinarias = db()->query("SELECT m.id, m.equipo, m.serie_placa, c.name AS 
     ORDER BY m.equipo, m.serie_placa");
 $maquinarias = $stmtMaquinarias->fetchAll();
 $selectedMaquinariaId = max(0, (int) ($_GET['maquinaria_id'] ?? 0));
+$selectedDocumentRecordId = max(0, (int) ($_GET['documento_registro_id'] ?? 0));
 require __DIR__ . '/../../includes/header.php';
 ?>
 <div class="page-title">
@@ -134,7 +135,7 @@ require __DIR__ . '/../../includes/header.php';
         </form>
     </div>
 </div>
-<script>window.canManageMachineDocumentObservations = <?= (is_admin() || is_gestor_role()) ? 'true' : 'false' ?>;</script>
+<script>window.canManageMachineDocumentObservations = <?= (is_admin() || is_gestor_role()) ? 'true' : 'false' ?>; window.initialMachineDocumentRecordId = <?= $selectedDocumentRecordId ?>;</script>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>
 
 
