@@ -58,6 +58,7 @@ $user = current_user();
                             <i class="fa-solid fa-magnifying-glass search-icon"></i>
                             <input type="text" id="obsNotifSearchInput" placeholder="Buscar observación...">
                         </div>
+                        <div class="obs-notif-source-filter"><button class="active" type="button" data-obs-source="all">Todas</button><button type="button" data-obs-source="personal">Personal</button><button type="button" data-obs-source="maquinaria">Maquinaria</button></div>
                         <div class="notif-dropdown-list" id="obsNotifList">
                             <div class="notif-loading text-center p-3 text-muted">
                                 <i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...

@@ -31,6 +31,7 @@ function permission_modules_catalog(): array
         'maquinaria' => [
             'label' => 'Maquinaria',
             'children' => [
+                'maquinaria.dashboard' => 'Dashboard',
                 'maquinaria.datos_generales' => 'Datos generales',
                 'maquinaria.documentos' => 'Documentos',
             ],

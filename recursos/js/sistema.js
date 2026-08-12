@@ -2100,6 +2100,10 @@ function initMaquinariaDocumentos() {
         if (event.target.value) loadMachine(event.target.value);
     });
 
+    if (machineSearchElement.value) {
+        loadMachine(machineSearchElement.value);
+    }
+
     document.getElementById('downloadMachineDocumentsBtn')?.addEventListener('click', downloadMachineDocumentsBundle);
     document.getElementById('downloadSelectedMachineDocumentsBtn')?.addEventListener('click', downloadSelectedMachineDocumentsBundle);
     document.getElementById('addMachineDocumentBtn')?.addEventListener('click', openAddMachineDocument);
@@ -2187,12 +2191,15 @@ async function loadMachineDocuments() {
     });
 }
 
+let machineCanObserveCurrentDocument = false;
+
 function openAddMachineDocument() {
     if (!currentMachineId) {
         Swal.fire('Atenci\u00f3n', 'Seleccione una maquinaria.', 'warning');
         return;
     }
     machineReadOnlyMode = false;
+    machineCanObserveCurrentDocument = window.canManageMachineDocumentObservations === true;
     const form = document.getElementById('machineDocumentForm');
     form.reset();
     resetMachineDocumentFileInput();
@@ -2201,6 +2208,9 @@ function openAddMachineDocument() {
     document.getElementById('machineDocumentModalTitle').textContent = 'Agregar documentos';
     document.getElementById('machineDocumentId').value = '';
     document.getElementById('machineDocumentMachineId').value = currentMachineId;
+    renderMachineObservationAudit(null, []);
+    renderMachineObservationState(null);
+    setMachineObservationVisibility(false);
     const today = localDateValue();
     document.getElementById('machineRegistrationDate').value = today;
     document.getElementById('machineStartDate').value = '';
@@ -2213,6 +2223,7 @@ async function openEditMachineDocument(id) {
     machineReadOnlyMode = false;
     await fillMachineDocumentModal(id);
     setMachineDocumentReadonly(false);
+    setMachineObservationVisibility(false);
     document.getElementById('machineDocumentModalTitle').textContent = 'Editar documentos';
     machineDocumentModal.show();
 }
@@ -2221,6 +2232,7 @@ async function openViewMachineDocument(id) {
     machineReadOnlyMode = true;
     await fillMachineDocumentModal(id);
     setMachineDocumentReadonly(true);
+    setMachineObservationVisibility(true);
     document.getElementById('machineDocumentModalTitle').textContent = 'Visualizar documentos';
     machineDocumentModal.show();
 }
@@ -2230,15 +2242,53 @@ async function fillMachineDocumentModal(id) {
     const response = await fetch(`${BASE_URL}/servicios/obtener_documento_maquinaria.php?id=${id}`);
     const data = await response.json();
     const row = data.row;
+    machineCanObserveCurrentDocument = data.can_observe === true;
     document.getElementById('machineDocumentId').value = row.id;
     document.getElementById('machineDocumentMachineId').value = row.maquinaria_id;
     document.getElementById('machineRegistrationDate').value = row.fecha_registro;
     document.getElementById('machineStartDate').value = row.fecha_inicio;
     document.getElementById('machineEndDate').value = row.fecha_fin;
-    document.getElementById('machineObservations').value = row.observaciones || '';
+    document.getElementById('machineObservations').value = '';
+    renderMachineObservationAudit(row, data.activity || []);
+    renderMachineObservationState(row.observation_status);
     const option = new Option(row.documento, row.documento_id, true, true);
     $('#machineDocumentSelect').append(option).trigger('change');
     renderMachineCurrentPdf(row);
+}
+
+function setMachineObservationVisibility(viewMode) {
+    const block = document.getElementById('machineObservationBlock');
+    const input = document.getElementById('machineObservations');
+    if (!block || !input) return;
+    const canManage = window.canManageMachineDocumentObservations === true && machineCanObserveCurrentDocument;
+    const visible = canManage || viewMode || document.getElementById('machineDocumentId')?.value === '';
+    block.classList.toggle('d-none', !visible);
+    input.disabled = machineReadOnlyMode || !canManage || !visible;
+    input.classList.toggle('observation-input-locked', input.disabled);
+    input.placeholder = canManage ? 'Escriba una nueva observación...' : 'No tiene autorización para agregar observaciones a este documento.';
+}
+
+function renderMachineObservationState(status) {
+    const badge = document.getElementById('machineObservationState');
+    if (!badge) return;
+    const normalized = String(status || 'none');
+    badge.className = 'requirement-observation-state';
+    if (normalized === 'observed') { badge.classList.add('is-observed'); badge.textContent = 'Observado'; return; }
+    if (normalized === 'approved') { badge.classList.add('is-approved'); badge.textContent = 'Conforme'; return; }
+    badge.classList.add('d-none'); badge.textContent = '';
+}
+
+function renderMachineObservationAudit(row, activity) {
+    const box = document.getElementById('machineObservationAuditBox');
+    const list = document.getElementById('machineObservationAuditList');
+    const title = document.getElementById('machineObservationHistoryTitle');
+    if (!box || !list) return;
+    const entries = (activity || []).filter(entry => entry.action_type === 'observacion_registrada').map(entry => ({author: entry.user_name || 'Usuario', role: requirementObservationRole(entry.user_role), date: entry.created_at, content: cleanRequirementObservation(entry.description)})).filter(entry => entry.content !== '');
+    if (!entries.length && row?.review_observation) entries.push({author: row.observation_by || 'Usuario', role: requirementObservationRole(row.observation_by_role), date: row.observation_at, content: cleanRequirementObservation(row.review_observation)});
+    if (!entries.length) { box.classList.add('d-none'); list.innerHTML = ''; return; }
+    box.classList.remove('d-none');
+    title.textContent = `Historial de observaciones (${entries.length})`;
+    list.innerHTML = `<div class="observation-timeline">${entries.map(entry => `<article class="observation-entry"><div class="observation-entry-header"><span class="observation-avatar"><i class="fa-solid fa-user"></i></span><div class="observation-author"><strong>${escapeHtml(entry.author)}</strong><span>${escapeHtml(entry.role)}</span></div><time>${escapeHtml(formatAuditDate(entry.date))}</time></div><p>${escapeHtml(entry.content)}</p></article>`).join('')}</div>`;
 }
 
 function resetMachineDocumentFileInput() {
@@ -4865,6 +4915,8 @@ function initObservationNotifications() {
 
     let rows = [];
     let query = '';
+    let source = 'all';
+    const sourceButtons = container.querySelectorAll('[data-obs-source]');
 
     function formatDate(dateStr) {
         if (!dateStr) return '';
@@ -4885,12 +4937,12 @@ function initObservationNotifications() {
 
     function render() {
         const term = query.toLowerCase().trim();
-        const filtered = term
-            ? rows.filter((row) => {
-                return [row.full_name, row.requirement, row.observation, row.status_label, row.observed_by]
-                    .some((value) => String(value || '').toLowerCase().includes(term));
-            })
-            : rows;
+        const filtered = rows.filter((row) => {
+            const matchesSource = source === 'all' || row.source === source;
+            const matchesTerm = !term || [row.source_label, row.full_name, row.series, row.requirement, row.observation, row.status_label, row.observed_by]
+                .some((value) => String(value || '').toLowerCase().includes(term));
+            return matchesSource && matchesTerm;
+        });
 
         if (!filtered.length) {
             list.innerHTML = `
@@ -4906,14 +4958,16 @@ function initObservationNotifications() {
             const statusClass = 'obs-status-observed';
             const observedBy = row.observed_by || row.registered_by || 'Usuario';
             return `
-                <div class="notif-item unread observation-notif-item" data-id="${escapeHtml(row.id)}">
+                <div class="notif-item unread observation-notif-item" data-id="${escapeHtml(row.id)}" data-source="${escapeHtml(row.source || 'personal')}">
                     <div class="notif-icon-container ${statusClass}">
                         <i class="fa-solid fa-comment-dots"></i>
                     </div>
                     <div class="notif-content">
                         <div class="notif-body">
-                            <strong>Nombre de personal:</strong> <span class="notif-worker-name">${escapeHtml(row.full_name || '')}</span>
-                            <span class="notif-missing-fields d-block">Requisito: ${escapeHtml(row.requirement || '')}</span>
+                            <span class="obs-source-badge obs-source-${escapeHtml(row.source || 'personal')}">${escapeHtml(row.source_label || 'PERSONAL')}</span>
+                            <strong>${row.source === 'maquinaria' ? 'Equipo:' : 'Nombre de personal:'}</strong> <span class="notif-worker-name">${escapeHtml(row.full_name || '')}</span>
+                            ${row.source === 'maquinaria' ? `<span class="d-block">Serie o placa: ${escapeHtml(row.series || '')}</span>` : ''}
+                            <span class="notif-missing-fields d-block">${row.source === 'maquinaria' ? 'Documento' : 'Requisito'}: ${escapeHtml(row.requirement || '')}</span>
                             <span class="notif-observation-text d-block">Observación: ${escapeHtml(row.observation || '')}</span>
                         </div>
                         <div class="notif-time">
@@ -4943,6 +4997,17 @@ function initObservationNotifications() {
         render();
     });
     searchInput?.addEventListener('click', (event) => event.stopPropagation());
+    sourceButtons.forEach((filterButton) => filterButton.addEventListener('click', (event) => {
+        event.stopPropagation();
+        source = filterButton.dataset.obsSource || 'all';
+        sourceButtons.forEach((item) => item.classList.toggle('active', item === filterButton));
+        render();
+    }));
+    list.addEventListener('click', (event) => {
+        const item = event.target.closest('.observation-notif-item');
+        if (!item || item.dataset.source !== 'maquinaria') return;
+        window.location.href = `${BASE_URL}/modulos/maquinaria/dashboard.php?observation_id=${encodeURIComponent(item.dataset.id || '')}#detalle-maquinaria`;
+    });
 
     button.addEventListener('click', (event) => {
         event.stopPropagation();

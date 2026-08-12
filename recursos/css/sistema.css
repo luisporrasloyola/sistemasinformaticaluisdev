@@ -1,4 +1,4 @@
-﻿:root {
+:root {
     --ink: #172033;
     --muted: #64748b;
     --line: #e2e8f0;
@@ -6837,3 +6837,18 @@ input[type="checkbox"]:active {
 @media(min-width:1200px){#maquirentaSecurityWorkspace .machine-profile-col{flex-basis:28%!important;width:28%!important;max-width:28%!important}#maquirentaSecurityWorkspace .machine-table-col{flex-basis:72%!important;width:72%!important;max-width:72%!important}}
 @media(max-width:991px){#maquirentaSecurityWorkspace .machine-profile-col,#maquirentaSecurityWorkspace .machine-table-col{width:100%!important;max-width:100%!important}}
 @media(max-width:767px){#maquirentaSecurityWorkspace .work-panel>.d-flex:first-child,#maquirentaSecurityWorkspace .work-panel>.d-flex:first-child>.d-flex{width:100%;flex-wrap:wrap!important}}
+
+/* Dashboard documental de maquinaria */
+.machine-dashboard-summary{width:52px;height:52px;border-radius:14px;display:grid;place-items:center;background:#eaf1ff;color:#2563eb;font-size:1.2rem;flex:0 0 auto}
+.machine-dashboard-filters{grid-template-columns:1.15fr 1fr 1fr .8fr 1.2fr}
+@media(max-width:1199px){.machine-dashboard-filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:575px){.machine-dashboard-filters{grid-template-columns:1fr}}
+
+/* Bandeja unificada de observaciones */
+.obs-notif-source-filter{display:flex;gap:6px;padding:8px 14px;border-bottom:1px solid #e2e8f0;background:#f8fafc}
+.obs-notif-source-filter button{border:1px solid #cbd5e1;background:#fff;color:#475569;border-radius:999px;padding:5px 12px;font-size:12px;font-weight:700}
+.obs-notif-source-filter button.active{background:#2563eb;border-color:#2563eb;color:#fff}
+.obs-source-badge{display:inline-flex;margin:0 0 5px;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:.04em}
+.obs-source-personal{background:#fff3cd;color:#8a5800}
+.obs-source-maquinaria{background:#dbeafe;color:#1d4ed8}
+.observation-notif-item[data-source="maquinaria"]{cursor:pointer}

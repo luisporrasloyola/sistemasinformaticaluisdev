@@ -8,6 +8,7 @@ $stmtMaquinarias = db()->query("SELECT m.id, m.equipo, m.serie_placa, c.name AS 
     WHERE m.estado = 1
     ORDER BY m.equipo, m.serie_placa");
 $maquinarias = $stmtMaquinarias->fetchAll();
+$selectedMaquinariaId = max(0, (int) ($_GET['maquinaria_id'] ?? 0));
 require __DIR__ . '/../../includes/header.php';
 ?>
 <div class="page-title">
@@ -22,7 +23,7 @@ require __DIR__ . '/../../includes/header.php';
     <select class="form-select" id="machineSearch">
             <option value=""></option>
             <?php foreach ($maquinarias as $maquinaria): ?>
-                <option value="<?= (int) $maquinaria['id'] ?>"><?= e($maquinaria['equipo'] . ' - ' . $maquinaria['serie_placa'] . (!empty($maquinaria['empresa']) ? ' - ' . $maquinaria['empresa'] : '')) ?></option>
+                <option value="<?= (int) $maquinaria['id'] ?>" <?= $selectedMaquinariaId === (int) $maquinaria['id'] ? 'selected' : '' ?>><?= e($maquinaria['equipo'] . ' - ' . $maquinaria['serie_placa'] . (!empty($maquinaria['empresa']) ? ' - ' . $maquinaria['empresa'] : '')) ?></option>
             <?php endforeach; ?>
         </select>
 </div>
@@ -106,10 +107,12 @@ require __DIR__ . '/../../includes/header.php';
                         <label class="form-label">F. Fin</label>
                         <input class="form-control" type="date" name="fecha_fin" id="machineEndDate" required>
                     </div>
-                    <div class="col-md-12">
-                        <label class="form-label">Observaciones</label>
-                        <textarea class="form-control" name="observaciones" id="machineObservations" rows="3"></textarea>
-                    </div>
+                    <div class="col-md-12" id="machineObservationBlock">
+ <div class="requirement-observation-heading"><label class="form-label mb-0" id="machineObservationLabel">Nueva observación</label><span class="requirement-observation-state d-none" id="machineObservationState"></span></div>
+ <textarea class="form-control mt-2" name="observaciones" id="machineObservations" rows="3" maxlength="3000" placeholder="Escriba una nueva observación..."></textarea>
+ <small class="text-muted d-block mt-1">La nueva observación se agregará al historial sin reemplazar las anteriores.</small>
+ <div class="requirement-audit-box observation-history-box mt-2 d-none" id="machineObservationAuditBox"><h6 id="machineObservationHistoryTitle">Historial de observaciones</h6><div id="machineObservationAuditList"></div></div>
+</div>
                     <div class="col-md-12">
                         <label class="form-label">Adjunto (PDF o imagen)</label>
                         <input class="form-control" type="file" name="pdf" id="machinePdfInput" accept="application/pdf,image/jpeg,image/png,image/webp">
@@ -131,6 +134,7 @@ require __DIR__ . '/../../includes/header.php';
         </form>
     </div>
 </div>
+<script>window.canManageMachineDocumentObservations = <?= (is_admin() || is_gestor_role()) ? 'true' : 'false' ?>;</script>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>
 
 

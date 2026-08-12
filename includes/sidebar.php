@@ -66,6 +66,7 @@ $isAdmin = is_admin();
             </button>
             <div class="collapse <?= $maquinariaOpen ? 'show' : '' ?>" id="maquinariaMenu">
                 <div class="submenu">
+                    <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/maquinaria/dashboard.php"><i class="fa-solid fa-chart-pie"></i><span>Dashboard</span></a>
                     <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/maquinaria/datos_generales.php"><i class="fa-solid fa-clipboard-list"></i><span>Datos generales</span></a>
                     <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/maquinaria/documentos.php"><i class="fa-solid fa-file-lines"></i><span>Documentos</span></a>
                 </div>
@@ -135,6 +136,7 @@ $isAdmin = is_admin();
             <?php if (current_user_can_module('maquinaria')): ?>
                 <button class="nav-link nav-parent <?= $maquinariaOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#maquinariaMenuGestor" aria-expanded="<?= $maquinariaOpen ? 'true' : 'false' ?>" aria-controls="maquinariaMenuGestor"><i class="fa-solid fa-truck-pickup"></i><span>Maquinaria</span><i class="fa-solid fa-chevron-down nav-caret"></i></button>
                 <div class="collapse <?= $maquinariaOpen ? 'show' : '' ?>" id="maquinariaMenuGestor"><div class="submenu">
+                    <?php if (current_user_can_module('maquinaria.dashboard') || current_user_can_module('maquinaria.documentos')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/maquinaria/dashboard.php"><i class="fa-solid fa-chart-pie"></i><span>Dashboard</span></a><?php endif; ?>
                     <?php if (current_user_can_module('maquinaria.datos_generales')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/maquinaria/datos_generales.php"><i class="fa-solid fa-clipboard-list"></i><span>Datos generales</span></a><?php endif; ?>
                     <?php if (current_user_can_module('maquinaria.documentos')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/maquinaria/documentos.php"><i class="fa-solid fa-file-lines"></i><span>Documentos</span></a><?php endif; ?>
                 </div></div>
