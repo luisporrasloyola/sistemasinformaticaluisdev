@@ -51,6 +51,7 @@ function permission_modules_catalog(): array
             'children' => [
                 'empresa_maquirenta.datos_generales' => 'Datos generales',
                 'empresa_maquirenta.documentos' => 'Central Térmica Ventanilla',
+                'empresa_maquirenta.informes' => 'Central Térmica Ventanilla - Informes',
                 'empresa_maquirenta.seguridad' => 'Central Térmica Santa Rosa',
             ],
         ],

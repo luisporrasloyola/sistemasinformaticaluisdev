@@ -7,6 +7,7 @@ $requisitosOpen = $personalOpen || str_contains($currentPath, '/modulos/requisit
 $maquinariaOpen = str_contains($currentPath, '/modulos/maquinaria/');
 $empresaOpen = str_contains($currentPath, '/modulos/empresa/');
 $empresaMaquirentaOpen = str_contains($currentPath, '/modulos/empresa_maquirenta/');
+$ventanillaOpen = str_ends_with($currentPath, '/modulos/empresa_maquirenta/informes.php');
 $usuarioOpen = str_contains($currentPath, '/modulos/usuario/');
 $configuracionOpen = str_contains($currentPath, '/modulos/configuracion/');
 $isAdmin = is_admin();
@@ -91,7 +92,8 @@ $isAdmin = is_admin();
             <div class="collapse <?= $empresaMaquirentaOpen ? 'show' : '' ?>" id="empresaMaquirentaMenu">
                 <div class="submenu">
                     <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa_maquirenta/datos_generales.php"><i class="fa-solid fa-address-card"></i><span>Datos generales</span></a>
-                    <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa_maquirenta/documentos.php"><i class="fa-solid fa-file-lines"></i><span>Central Térmica Ventanilla</span></a>
+                    <button class="nav-link sub-link nav-parent <?= $ventanillaOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#ventanillaMenu" aria-expanded="<?= $ventanillaOpen ? 'true' : 'false' ?>" aria-controls="ventanillaMenu"><i class="fa-solid fa-file-lines"></i><span>Central Térmica Ventanilla</span><i class="fa-solid fa-chevron-down nav-caret"></i></button>
+                    <div class="collapse <?= $ventanillaOpen ? 'show' : '' ?>" id="ventanillaMenu"><div class="submenu ms-3"><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa_maquirenta/informes.php"><i class="fa-solid fa-chart-column"></i><span>Informes</span></a></div></div>
                     <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa_maquirenta/seguridad.php"><i class="fa-solid fa-shield-halved"></i><span>Central Térmica Santa Rosa</span></a>
                 </div>
             </div>
@@ -155,7 +157,10 @@ $isAdmin = is_admin();
                 <button class="nav-link nav-parent <?= $empresaMaquirentaOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#empresaMaquirentaMenuGestor" aria-expanded="<?= $empresaMaquirentaOpen ? 'true' : 'false' ?>" aria-controls="empresaMaquirentaMenuGestor"><i class="fa-solid fa-building-circle-check"></i><span>Empresa Maquirenta</span><i class="fa-solid fa-chevron-down nav-caret"></i></button>
                 <div class="collapse <?= $empresaMaquirentaOpen ? 'show' : '' ?>" id="empresaMaquirentaMenuGestor"><div class="submenu">
                     <?php if (current_user_can_module('empresa_maquirenta.datos_generales')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa_maquirenta/datos_generales.php"><i class="fa-solid fa-address-card"></i><span>Datos generales</span></a><?php endif; ?>
-                    <?php if (current_user_can_module('empresa_maquirenta.documentos')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa_maquirenta/documentos.php"><i class="fa-solid fa-file-lines"></i><span>Central Térmica Ventanilla</span></a><?php endif; ?>
+                    <?php if (current_user_can_module('empresa_maquirenta.documentos') || current_user_can_module('empresa_maquirenta.informes')): ?>
+                    <button class="nav-link sub-link nav-parent <?= $ventanillaOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#ventanillaMenuGestor" aria-expanded="<?= $ventanillaOpen ? 'true' : 'false' ?>" aria-controls="ventanillaMenuGestor"><i class="fa-solid fa-file-lines"></i><span>Central Térmica Ventanilla</span><i class="fa-solid fa-chevron-down nav-caret"></i></button>
+                    <div class="collapse <?= $ventanillaOpen ? 'show' : '' ?>" id="ventanillaMenuGestor"><div class="submenu ms-3"><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa_maquirenta/informes.php"><i class="fa-solid fa-chart-column"></i><span>Informes</span></a></div></div>
+                    <?php endif; ?>
                     <?php if (current_user_can_module('empresa_maquirenta.seguridad')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa_maquirenta/seguridad.php"><i class="fa-solid fa-shield-halved"></i><span>Central Térmica Santa Rosa</span></a><?php endif; ?>
                 </div></div>
             <?php endif; ?>
