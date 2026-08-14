@@ -44,12 +44,6 @@ function status_alert_scopes(): array
             'name_column' => 'nombre',
             'active_column' => 'estado',
         ],
-        'empresa_maquirenta.seguridad' => [
-            'label' => 'Empresa Maquirenta - Central Térmica Santa Rosa',
-            'table' => 'empresa_maquirenta_seguridad_catalogo',
-            'name_column' => 'nombre',
-            'active_column' => 'estado',
-        ],
     ];
 }
 
