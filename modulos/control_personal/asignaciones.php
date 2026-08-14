@@ -332,7 +332,7 @@ require __DIR__ . '/../../includes/header.php';
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Lugar de marcación</label>
-                        <select class="form-select" name="location_id" id="assignmentLocationId" required>
+                        <select class="form-select select2-searchable" name="location_id" id="assignmentLocationId" required data-placeholder="Buscar lugar de marcación" data-no-results="No se encontraron lugares">
                             <option value="">Seleccione</option>
                             <?php foreach ($locations as $location): ?>
                                 <option value="<?= (int) $location['id'] ?>"><?= e($location['name']) ?></option>
@@ -342,7 +342,7 @@ require __DIR__ . '/../../includes/header.php';
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Horario</label>
-                        <select class="form-select" name="schedule_id" id="assignmentScheduleId" required>
+                        <select class="form-select select2-searchable" name="schedule_id" id="assignmentScheduleId" required data-placeholder="Buscar horario" data-no-results="No se encontraron horarios">
                             <option value="">Seleccione</option>
                             <?php foreach ($schedules as $schedule): ?>
                                 <option value="<?= (int) $schedule['id'] ?>"><?= e($schedule['name']) ?></option>
