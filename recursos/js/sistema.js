@@ -3797,10 +3797,10 @@ function initDashboardEjecutivo() {
         const observationState = filters.observationState?.value || '';
 
         rows.forEach((row) => {
-            const visible = (!company || normalizarTexto(row.dataset.company).includes(company))
+            const visible = (!company || normalizarTexto(row.dataset.company) === company)
                 && (!name || normalizarTexto(row.dataset.name).includes(name))
-                && (!position || normalizarTexto(row.dataset.position).includes(position))
-                && (!requirement || normalizarTexto(row.dataset.requirement).includes(requirement))
+                && (!position || normalizarTexto(row.dataset.position) === position)
+                && (!requirement || normalizarTexto(row.dataset.requirement) === requirement)
                 && (!state || row.dataset.state === state)
                 && (!observationState
                     || row.dataset.observationState === observationState
@@ -3813,6 +3813,18 @@ function initDashboardEjecutivo() {
         field?.addEventListener('input', applyFilters);
         field?.addEventListener('change', applyFilters);
     });
+    // Select2 emite sus eventos mediante jQuery. Se enlazan expresamente para
+    // que los selectores buscables actualicen la tabla igual que los nativos.
+    if (window.jQuery) {
+        [filters.company, filters.position, filters.requirement].forEach((field) => {
+            if (!field) return;
+            jQuery(field)
+                .off('.dashboardPersonalFilters')
+                .on('select2:select.dashboardPersonalFilters select2:clear.dashboardPersonalFilters change.dashboardPersonalFilters', applyFilters);
+        });
+    }
+
+    applyFilters();
 
     if (!window.Chart || !window.dashboardEjecutivoData) return;
 
@@ -4548,8 +4560,8 @@ function initAttendanceControl() {
                 && (!month || row.dataset.month === month)
                 && (!name || normalizarTexto(row.dataset.name).includes(name))
                 && (!activity || normalizarTexto(row.dataset.activity).includes(activity))
-                && (!company || normalizarTexto(row.dataset.company).includes(company))
-                && (!position || normalizarTexto(row.dataset.position).includes(position))
+                && (!company || normalizarTexto(row.dataset.company) === company)
+                && (!position || normalizarTexto(row.dataset.position) === position)
                 && (!rating || row.dataset.rating === rating);
             row.classList.toggle('d-none', !visible);
         });
