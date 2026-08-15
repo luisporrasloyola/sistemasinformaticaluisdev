@@ -347,7 +347,7 @@ require __DIR__ . '/includes/header.php';
     <div class="dashboard-filters mb-3">
         <div class="dashboard-filter-company">
             <label class="form-label">Empresa</label>
-            <select class="form-select" id="dashboardEmpresaFilter">
+            <select class="form-select select2-searchable" id="dashboardEmpresaFilter" data-placeholder="Buscar empresa" data-no-results="No se encontraron empresas">
                 <option value="">Todas</option>
                 <?php foreach (array_keys($companies) as $company): ?>
                     <option value="<?= e($company) ?>"><?= e($company) ?></option>
@@ -360,7 +360,7 @@ require __DIR__ . '/includes/header.php';
         </div>
         <div>
             <label class="form-label">Puesto de trabajo</label>
-            <select class="form-select" id="dashboardPuestoFilter">
+            <select class="form-select select2-searchable" id="dashboardPuestoFilter" data-placeholder="Buscar puesto de trabajo" data-no-results="No se encontraron puestos">
                 <option value="">Todos</option>
                 <?php foreach (array_keys($positions) as $position): ?>
                     <option value="<?= e($position) ?>"><?= e($position) ?></option>
