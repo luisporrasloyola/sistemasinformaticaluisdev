@@ -369,7 +369,7 @@ require __DIR__ . '/includes/header.php';
         </div>
         <div>
             <label class="form-label">Requisito</label>
-            <select class="form-select" id="dashboardRequisitoFilter">
+            <select class="form-select select2-searchable" id="dashboardRequisitoFilter" data-placeholder="Buscar requisito" data-no-results="No se encontraron requisitos">
                 <option value="">Todos</option>
                 <?php foreach (array_keys($requirements) as $requirement): ?>
                     <option value="<?= e($requirement) ?>"><?= e($requirement) ?></option>
