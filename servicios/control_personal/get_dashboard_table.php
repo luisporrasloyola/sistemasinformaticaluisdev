@@ -131,8 +131,9 @@ if ($filterCompany !== '') {
     $queryParams['company'] = $filterCompany;
 }
 if ($filterName !== '') {
-    $whereClauses[] = "(t.full_name LIKE :name OR t.document_number LIKE :name)";
-    $queryParams['name'] = '%' . $filterName . '%';
+    $whereClauses[] = "(t.full_name LIKE :name1 OR t.document_number LIKE :name2)";
+    $queryParams['name1'] = '%' . $filterName . '%';
+    $queryParams['name2'] = '%' . $filterName . '%';
 }
 if ($filterPosition !== '') {
     $whereClauses[] = "t.position_name = :position";
