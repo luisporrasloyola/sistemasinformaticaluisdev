@@ -57,6 +57,7 @@ function permission_modules_catalog(): array
                 'empresa_maquirenta.informes_santa_rosa' => "Central Térmica Santa Rosa - Informes",
                 'empresa_maquirenta.charla_preoperacional_santa_rosa' => 'Central Térmica Santa Rosa - Charla preoperacional',
                 'empresa_maquirenta.formatos' => 'Formatos',
+                'empresa_maquirenta.pms' => 'Central Térmica Ventanilla - PMS',
             ],
         ],
         'usuarios' => ['label' => 'Usuarios', 'children' => []],
