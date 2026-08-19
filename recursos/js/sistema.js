@@ -3778,6 +3778,10 @@ function initDashboardEjecutivo() {
     const table = document.getElementById('dashboardPersonalTable');
     if (!table) return;
 
+    const tbody = table.querySelector('tbody');
+    const pagination = document.getElementById('dashboardPagination');
+    const paginationInfo = document.getElementById('dashboardPaginationInfo');
+
     const filters = {
         company: document.getElementById('dashboardEmpresaFilter'),
         name: document.getElementById('dashboardNombreFilter'),
@@ -3786,45 +3790,116 @@ function initDashboardEjecutivo() {
         state: document.getElementById('dashboardEstadoFilter'),
         observationState: document.getElementById('dashboardObservationStateFilter'),
     };
-    const rows = Array.from(table.querySelectorAll('tbody tr'));
 
-    const applyFilters = () => {
-        const company = normalizarTexto(filters.company?.value || '');
-        const name = normalizarTexto(filters.name?.value || '');
-        const position = normalizarTexto(filters.position?.value || '');
-        const requirement = normalizarTexto(filters.requirement?.value || '');
-        const state = filters.state?.value || '';
-        const observationState = filters.observationState?.value || '';
+    let currentPage = 1;
+    const limit = 10;
 
-        rows.forEach((row) => {
-            const visible = (!company || normalizarTexto(row.dataset.company) === company)
-                && (!name || normalizarTexto(row.dataset.name).includes(name))
-                && (!position || normalizarTexto(row.dataset.position) === position)
-                && (!requirement || normalizarTexto(row.dataset.requirement) === requirement)
-                && (!state || row.dataset.state === state)
-                && (!observationState
-                    || row.dataset.observationState === observationState
-                    || (observationState === 'approved' && ['none', 'approved'].includes(row.dataset.observationState || 'none')));
-            row.classList.toggle('d-none', !visible);
+    const fetchTableData = async (page = 1) => {
+        currentPage = page;
+        if (tbody) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-muted text-center py-4"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando registros...</td></tr>';
+        }
+
+        const params = new URLSearchParams({
+            page: String(currentPage),
+            limit: String(limit),
+            company: filters.company?.value || '',
+            name: filters.name?.value || '',
+            position: filters.position?.value || '',
+            requirement: filters.requirement?.value || '',
+            state: filters.state?.value || '',
+            observation_state: filters.observationState?.value || '',
         });
+
+        try {
+            const response = await fetch(`${BASE_URL}/servicios/control_personal/get_dashboard_table.php?${params.toString()}`);
+            const data = await response.json();
+            if (!data.ok) {
+                if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="text-danger text-center py-4">${escapeHtml(data.message || 'Error al cargar los datos')}</td></tr>`;
+                return;
+            }
+
+            if (tbody) tbody.innerHTML = data.html;
+
+            // Render pagination info
+            if (paginationInfo) {
+                paginationInfo.textContent = `Mostrando ${data.start_record} a ${data.end_record} de ${data.total_records} registros`;
+            }
+
+            // Render pagination buttons
+            renderPagination(data.total_pages, data.current_page);
+
+        } catch (error) {
+            if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-danger text-center py-4">No se pudo conectar con el servidor.</td></tr>';
+        }
+    };
+
+    const renderPagination = (totalPages, currentPage) => {
+        if (!pagination) return;
+        pagination.innerHTML = '';
+
+        if (totalPages <= 1) return;
+
+        const maxVisiblePages = 5;
+        let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+        let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+        if (endPage - startPage + 1 < maxVisiblePages) {
+            startPage = Math.max(1, endPage - maxVisiblePages + 1);
+        }
+
+        // Prev page button
+        const prevLi = document.createElement('li');
+        prevLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
+        prevLi.innerHTML = `<button class="page-link" type="button" aria-label="Anterior"><span aria-hidden="true">&laquo;</span></button>`;
+        if (currentPage > 1) {
+            prevLi.querySelector('button').addEventListener('click', () => fetchTableData(currentPage - 1));
+        }
+        pagination.appendChild(prevLi);
+
+        // Page number buttons
+        for (let i = startPage; i <= endPage; i++) {
+            const li = document.createElement('li');
+            li.className = `page-item ${i === currentPage ? 'active' : ''}`;
+            li.innerHTML = `<button class="page-link" type="button">${i}</button>`;
+            li.querySelector('button').addEventListener('click', () => fetchTableData(i));
+            pagination.appendChild(li);
+        }
+
+        // Next page button
+        const nextLi = document.createElement('li');
+        nextLi.className = `page-item ${currentPage === totalPages ? 'disabled' : ''}`;
+        nextLi.innerHTML = `<button class="page-link" type="button" aria-label="Siguiente"><span aria-hidden="true">&raquo;</span></button>`;
+        if (currentPage < totalPages) {
+            nextLi.querySelector('button').addEventListener('click', () => fetchTableData(currentPage + 1));
+        }
+        pagination.appendChild(nextLi);
+    };
+
+    let debounceTimeout = null;
+    const triggerSearch = () => {
+        clearTimeout(debounceTimeout);
+        debounceTimeout = setTimeout(() => fetchTableData(1), 300);
     };
 
     Object.values(filters).forEach((field) => {
-        field?.addEventListener('input', applyFilters);
-        field?.addEventListener('change', applyFilters);
+        if (field?.tagName === 'INPUT') {
+            field.addEventListener('input', triggerSearch);
+        } else {
+            field?.addEventListener('change', () => fetchTableData(1));
+        }
     });
-    // Select2 emite sus eventos mediante jQuery. Se enlazan expresamente para
-    // que los selectores buscables actualicen la tabla igual que los nativos.
+
     if (window.jQuery) {
         [filters.company, filters.position, filters.requirement].forEach((field) => {
             if (!field) return;
             jQuery(field)
                 .off('.dashboardPersonalFilters')
-                .on('select2:select.dashboardPersonalFilters select2:clear.dashboardPersonalFilters change.dashboardPersonalFilters', applyFilters);
+                .on('select2:select.dashboardPersonalFilters select2:clear.dashboardPersonalFilters change.dashboardPersonalFilters', () => fetchTableData(1));
         });
     }
 
-    applyFilters();
+    fetchTableData(1);
 
     if (!window.Chart || !window.dashboardEjecutivoData) return;
 

@@ -4,135 +4,41 @@ require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/includes/status_alerts.php';
 require_module_access('dashboard');
 
-$hasObservationAudit = dashboard_db_column_exists('worker_requirements', 'observation_status');
-$observationSelect = $hasObservationAudit
-    ? "wr.observation_status,
-        wr.observation_at,
-        wr.observation_resolved_at,
-        observed_by.name AS observation_by,
-        resolved_by.name AS observation_resolved_by,"
-    : "'none' AS observation_status,
-        NULL AS observation_at,
-        NULL AS observation_resolved_at,
-        '' AS observation_by,
-        '' AS observation_resolved_by,";
-$observationJoin = $hasObservationAudit
-    ? "LEFT JOIN users observed_by ON observed_by.id = wr.observation_by_user_id
-    LEFT JOIN users resolved_by ON resolved_by.id = wr.observation_resolved_by_user_id"
-    : '';
+$hasObservationAudit = true;
 
-$rows = db()->query("SELECT
+$summaryRows = db()->query("SELECT
         wr.id AS requirement_row_id,
         wr.end_date,
-        w.id AS worker_id,
-        w.full_name,
-        w.document_number,
         COALESCE(c.name, 'Sin empresa') AS company,
-        p.id AS position_id,
-        p.name AS position_name,
-        wr.requirement_id,
-        rc.name AS requirement_name,
-        wr.observations,
-        {$observationSelect}
-        wr.file_path,
-        wr.original_file_name,
-        u.name AS registered_by
+        COALESCE(p.name, 'Sin puesto asignado') AS position_name,
+        COALESCE(rc.name, 'No tiene requisitos') AS requirement_name,
+        wr.requirement_id
     FROM workers w
     LEFT JOIN companies c ON c.id = w.company_id
     LEFT JOIN worker_positions wp ON wp.worker_id = w.id
     LEFT JOIN positions p ON p.id = wp.position_id
     LEFT JOIN worker_requirements wr ON wr.worker_id = w.id AND wr.position_id = p.id
-    LEFT JOIN requirements_catalog rc ON rc.id = wr.requirement_id
-    LEFT JOIN users u ON u.id = wr.registered_by_user_id
-    {$observationJoin}
-    ORDER BY c.name, w.full_name, p.name, rc.name")->fetchAll();
+    LEFT JOIN requirements_catalog rc ON rc.id = wr.requirement_id")->fetchAll();
 
-$dashboardRows = [];
-$companyCounts = [];
-$positionCounts = [];
 $companies = [];
 $positions = [];
 $requirements = [];
 $counts = ['verde' => 0, 'amarillo' => 0, 'rojo' => 0];
 
-$companyWorkerKeys = [];
-$positionWorkerKeys = [];
-
-foreach ($rows as $row) {
+foreach ($summaryRows as $row) {
     $hasRequirement = !empty($row['requirement_row_id']);
     if ($hasRequirement) {
-        $status = dashboard_document_status($row['end_date'], (int) $row['requirement_id']);
-        $stateKey = $status['key'];
-        $stateText = $status['label'];
-        $counts[$stateKey]++;
-        $stateClass = match ($stateKey) {
-            'rojo' => 'text-bg-danger',
-            'amarillo' => 'text-bg-warning',
-            default => 'text-bg-success',
-        };
-    } else {
-        $stateKey = 'sin_estado';
-        $stateText = 'SIN ESTADO';
-        $stateClass = 'text-bg-secondary';
+        $status = status_alert_document_status($row['end_date'], 'requisitos.pmi_individual', (int) $row['requirement_id'], true);
+        $counts[$status['key']]++;
     }
 
     $company = (string) $row['company'];
     $positionText = $row['position_name'] ? (string) $row['position_name'] : 'Sin puesto asignado';
     $requirementText = $hasRequirement ? (string) $row['requirement_name'] : 'No tiene requisitos';
-    $observationText = $hasRequirement ? (string) ($row['observations'] ?? '') : '';
-    $editableObservation = dashboard_editable_observation($observationText);
-    $observationStatus = $hasRequirement ? (string) ($row['observation_status'] ?? 'none') : 'none';
-    // Compatibilidad con registros anteriores: "corrected" ahora se presenta como observado.
-    if ($observationStatus === 'corrected') {
-        $observationStatus = 'observed';
-    }
-    if ($observationText !== '' && $observationStatus === 'none') {
-        $observationStatus = 'observed';
-    }
-    $observationMeta = dashboard_observation_status_meta($observationStatus);
+
     $companies[$company] = true;
     $positions[$positionText] = true;
-
-    $companyWorkerKey = $company . '|' . (int) $row['worker_id'];
-    if (!isset($companyWorkerKeys[$companyWorkerKey])) {
-        $companyCounts[$company] = ($companyCounts[$company] ?? 0) + 1;
-        $companyWorkerKeys[$companyWorkerKey] = true;
-    }
-
-    $positionWorkerKey = $positionText . '|' . (int) $row['worker_id'];
-    if (!isset($positionWorkerKeys[$positionWorkerKey])) {
-        $positionCounts[$positionText] = ($positionCounts[$positionText] ?? 0) + 1;
-        $positionWorkerKeys[$positionWorkerKey] = true;
-    }
-
     $requirements[$requirementText] = true;
-
-    $dashboardRows[] = [
-        'company' => $company,
-        'name' => (string) $row['full_name'],
-        'document' => (string) $row['document_number'],
-        'position' => $positionText,
-        'requirement' => $requirementText,
-        'requirement_row_id' => $hasRequirement ? (int) $row['requirement_row_id'] : 0,
-        'state_key' => $stateKey,
-        'state_text' => $stateText,
-        'state_class' => $stateClass,
-        'registered_by' => $hasRequirement ? (string) ($row['registered_by'] ?? '') : '',
-        'observations' => $observationText,
-        'editable_observation' => $editableObservation,
-        'observation_status' => $observationStatus,
-        'observation_label' => $observationMeta['label'],
-        'observation_badge' => $observationMeta['badge'],
-        'observation_row_class' => $observationMeta['row_class'],
-        'observation_button_class' => $observationMeta['button_class'],
-        'observation_button_title' => $observationMeta['button_title'],
-        'observation_by' => $hasRequirement ? (string) ($row['observation_by'] ?? '') : '',
-        'observation_at' => dashboard_format_datetime($row['observation_at'] ?? null),
-        'observation_resolved_by' => $hasRequirement ? (string) ($row['observation_resolved_by'] ?? '') : '',
-        'observation_resolved_at' => dashboard_format_datetime($row['observation_resolved_at'] ?? null),
-        'file_path' => $hasRequirement ? (string) ($row['file_path'] ?? '') : '',
-        'file_name' => $hasRequirement ? (string) ($row['original_file_name'] ?? $requirementText . '.pdf') : '',
-    ];
 }
 
 ksort($companies);
@@ -161,7 +67,7 @@ foreach ($positionChartRows as $chartRow) {
 
 $topCompanies = $companyCounts;
 $topPositions = $positionCounts;
-$total = count($dashboardRows);
+$total = count($summaryRows);
 $totalDocuments = array_sum($counts);
 
 $chartPayload = [
@@ -410,76 +316,25 @@ require __DIR__ . '/includes/header.php';
             </tr>
             </thead>
             <tbody>
-            <?php foreach ($dashboardRows as $item): ?>
-                <tr class="<?= e($item['observation_row_class']) ?>" data-company="<?= e(mb_strtolower($item['company'], 'UTF-8')) ?>" data-name="<?= e(mb_strtolower($item['name'] . ' ' . $item['document'], 'UTF-8')) ?>" data-position="<?= e(mb_strtolower($item['position'], 'UTF-8')) ?>" data-requirement="<?= e(mb_strtolower($item['requirement'], 'UTF-8')) ?>" data-state="<?= e($item['state_key']) ?>" data-observation-state="<?= e($item['observation_status']) ?>">
-                    <td><?= e($item['company']) ?></td>
-                    <td>
-                        <strong><?= e($item['name']) ?></strong>
-                        <span class="d-block text-muted small"><?= e($item['document']) ?></span>
-                    </td>
-                    <td><?= e($item['position']) ?></td>
-                    <td><?= e($item['requirement']) ?></td>
-                    <td><span class="badge <?= e($item['state_class']) ?>"><?= e($item['state_text']) ?></span></td>
-                    <td><?= e($item['registered_by']) ?></td>
-                    <td>
-                        <div class="dashboard-action-group">
-                            <?php if ($item['file_path'] !== ''): ?>
-                                <?php $isImageAttachment = in_array(strtolower(pathinfo($item['file_path'], PATHINFO_EXTENSION)), ['jpg', 'jpeg', 'png', 'webp'], true); ?>
-                                <button
-                                    class="btn btn-sm <?= $isImageAttachment ? 'btn-outline-primary' : 'btn-outline-danger' ?> dashboard-pdf-preview-btn"
-                                    type="button"
-                                    title="Previsualizar archivo"
-                                    data-pdf-url="<?= e(APP_URL . '/' . $item['file_path']) ?>"
-                                    data-pdf-title="<?= e($item['file_name']) ?>"
-                                >
-                                    <i class="fa-solid <?= $isImageAttachment ? 'fa-file-image' : 'fa-file-pdf' ?>"></i>
-                                </button>
-                            <?php else: ?>
-                                <button class="btn btn-sm btn-outline-secondary dashboard-pdf-preview-btn" type="button" title="Sin archivo adjunto" disabled>
-                                    <i class="fa-solid fa-paperclip"></i>
-                                </button>
-                            <?php endif; ?>
-
-                            <?php if ($item['requirement_row_id'] > 0 && $hasObservationAudit): ?>
-                                <button
-                                    class="btn btn-sm <?= e($item['observation_button_class']) ?> dashboard-observation-btn"
-                                    type="button"
-                                    title="<?= e($item['observation_button_title']) ?>"
-                                    data-requirement-id="<?= (int) $item['requirement_row_id'] ?>"
-                                    data-worker-name="<?= e($item['name']) ?>"
-                                    data-requirement-name="<?= e($item['requirement']) ?>"
-                                    data-observations="<?= e($item['editable_observation']) ?>"
-                                    data-observation-status="<?= e($item['observation_status']) ?>"
-                                    data-observation-label="<?= e($item['observation_label']) ?>"
-                                    data-observation-by="<?= e($item['observation_by']) ?>"
-                                    data-observation-at="<?= e($item['observation_at']) ?>"
-                                    data-resolved-by="<?= e($item['observation_resolved_by']) ?>"
-                                    data-resolved-at="<?= e($item['observation_resolved_at']) ?>"
-                                >
-                                    <i class="fa-solid fa-comment-dots"></i>
-                                </button>
-                            <?php else: ?>
-                                <button class="btn btn-sm btn-outline-secondary dashboard-observation-btn" type="button" title="<?= $hasObservationAudit ? 'Sin requisito registrado' : 'Ejecute el SQL de observaciones para habilitar' ?>" disabled>
-                                    <i class="fa-solid fa-comment-dots"></i>
-                                </button>
-                            <?php endif; ?>
-
-                            <?php if ($hasObservationAudit && is_admin() && $item['observation_status'] === 'observed'): ?>
-                                <button
-                                    class="btn btn-sm btn-outline-success dashboard-approve-observation-btn"
-                                    type="button"
-                                    title="Marcar conforme"
-                                    data-requirement-id="<?= (int) $item['requirement_row_id'] ?>"
-                                >
-                                    <i class="fa-solid fa-check"></i>
-                                </button>
-                            <?php endif; ?>
-                        </div>
+                <tr>
+                    <td colspan="7" class="text-muted text-center py-4">
+                        <i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando registros...
                     </td>
                 </tr>
-            <?php endforeach; ?>
             </tbody>
         </table>
+    </div>
+    
+    <!-- Paginador del Dashboard -->
+    <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
+        <div class="text-muted small" id="dashboardPaginationInfo">
+            Mostrando 0 a 0 de 0 registros
+        </div>
+        <nav>
+            <ul class="pagination pagination-sm mb-0" id="dashboardPagination">
+                <!-- Páginas dinámicas -->
+            </ul>
+        </nav>
     </div>
 </div>
 
@@ -549,6 +404,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const frame = document.getElementById('dashboardPdfPreviewFrame');
     const title = document.getElementById('dashboardPdfPreviewTitle');
     const modal = modalElement && window.bootstrap ? bootstrap.Modal.getOrCreateInstance(modalElement) : null;
+    
+    modalElement?.addEventListener('hidden.bs.modal', () => {
+        if (frame) frame.src = '';
+    });
+
     const observationModalElement = document.getElementById('dashboardObservationModal');
     const observationForm = document.getElementById('dashboardObservationForm');
     const observationModal = observationModalElement && window.bootstrap ? bootstrap.Modal.getOrCreateInstance(observationModalElement) : null;
@@ -583,25 +443,26 @@ document.addEventListener('DOMContentLoaded', () => {
         observationSubmitBtn?.classList.toggle('d-none', !changed);
     };
 
-    document.querySelectorAll('.dashboard-pdf-preview-btn[data-pdf-url]').forEach((button) => {
-        button.addEventListener('click', () => {
+    const dashboardTable = document.getElementById('dashboardPersonalTable');
+    
+    dashboardTable?.addEventListener('click', async (event) => {
+        // 1. PDF/Image preview
+        const pdfButton = event.target.closest('.dashboard-pdf-preview-btn');
+        if (pdfButton && pdfButton.dataset.pdfUrl) {
             if (!modal || !frame || !title) return;
-            title.textContent = button.dataset.pdfTitle || 'Previsualizar documento';
-            frame.src = button.dataset.pdfUrl || '';
+            title.textContent = pdfButton.dataset.pdfTitle || 'Previsualizar documento';
+            frame.src = pdfButton.dataset.pdfUrl || '';
             modal.show();
-        });
-    });
+            return;
+        }
 
-    modalElement?.addEventListener('hidden.bs.modal', () => {
-        if (frame) frame.src = '';
-    });
-
-    document.querySelectorAll('.dashboard-observation-btn[data-requirement-id]').forEach((button) => {
-        button.addEventListener('click', async () => {
+        // 2. Observations
+        const obsButton = event.target.closest('.dashboard-observation-btn');
+        if (obsButton && obsButton.dataset.requirementId) {
             if (!observationModal) return;
-            document.getElementById('dashboardObservationRequirementId').value = button.dataset.requirementId || '';
-            document.getElementById('dashboardObservationWorker').textContent = button.dataset.workerName || '';
-            document.getElementById('dashboardObservationRequirement').textContent = button.dataset.requirementName ? `Requisito: ${button.dataset.requirementName}` : '';
+            document.getElementById('dashboardObservationRequirementId').value = obsButton.dataset.requirementId || '';
+            document.getElementById('dashboardObservationWorker').textContent = obsButton.dataset.workerName || '';
+            document.getElementById('dashboardObservationRequirement').textContent = obsButton.dataset.requirementName ? `Requisito: ${obsButton.dataset.requirementName}` : '';
             document.getElementById('dashboardObservationText').value = '';
             setObservationPermission(false);
             originalObservationText = '';
@@ -612,25 +473,25 @@ document.addEventListener('DOMContentLoaded', () => {
             const statusDate = document.getElementById('dashboardObservationStatusDate');
             const statusUser = document.getElementById('dashboardObservationStatusUser');
             const resolvedInfo = document.getElementById('dashboardObservationResolvedInfo');
-            const status = button.dataset.observationStatus || 'none';
-            statusBox?.classList.toggle('d-none', status === 'none' && !button.dataset.observationAt);
+            const status = obsButton.dataset.observationStatus || 'none';
+            statusBox?.classList.toggle('d-none', status === 'none' && !obsButton.dataset.observationAt);
             if (statusBadge) {
                 statusBadge.className = 'badge';
                 statusBadge.classList.add(status === 'approved' ? 'text-bg-success' : 'text-bg-warning');
-                statusBadge.textContent = button.dataset.observationLabel || 'Observado';
+                statusBadge.textContent = obsButton.dataset.observationLabel || 'Observado';
             }
-            if (statusDate) statusDate.textContent = button.dataset.observationAt ? `Actualizado: ${button.dataset.observationAt}` : '';
-            if (statusUser) statusUser.textContent = button.dataset.observationBy ? `Última observación por: ${button.dataset.observationBy}` : '';
+            if (statusDate) statusDate.textContent = obsButton.dataset.observationAt ? `Actualizado: ${obsButton.dataset.observationAt}` : '';
+            if (statusUser) statusUser.textContent = obsButton.dataset.observationBy ? `Última observación por: ${obsButton.dataset.observationBy}` : '';
             if (resolvedInfo) {
-                resolvedInfo.textContent = button.dataset.resolvedAt
-                    ? `Conforme por: ${button.dataset.resolvedBy || 'Administrador'} - ${button.dataset.resolvedAt}`
+                resolvedInfo.textContent = obsButton.dataset.resolvedAt
+                    ? `Conforme por: ${obsButton.dataset.resolvedBy || 'Administrador'} - ${obsButton.dataset.resolvedAt}`
                     : '';
             }
             renderDashboardObservationAudit(null, []);
             observationModal.show();
 
             try {
-                const response = await fetch(`<?= APP_URL ?>/servicios/obtener_requisito.php?id=${encodeURIComponent(button.dataset.requirementId || '')}`);
+                const response = await fetch(`<?= APP_URL ?>/servicios/obtener_requisito.php?id=${encodeURIComponent(obsButton.dataset.requirementId || '')}`);
                 const data = await response.json();
                 if (data.ok) {
                     setObservationPermission(data.can_observe === true);
@@ -639,13 +500,12 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (error) {
                 renderDashboardObservationAudit(null, []);
             }
-        });
-    });
+            return;
+        }
 
-    observationText?.addEventListener('input', syncObservationSubmit);
-
-    document.querySelectorAll('.dashboard-approve-observation-btn').forEach((button) => {
-        button.addEventListener('click', async () => {
+        // 3. Mark Conforme
+        const approveButton = event.target.closest('.dashboard-approve-observation-btn');
+        if (approveButton && approveButton.dataset.requirementId) {
             const result = await Swal.fire({
                 title: '¿Marcar conforme?',
                 text: 'La fila volverá a su estado visual normal y quedará registrado en el historial.',
@@ -658,7 +518,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const body = new FormData();
             body.append('csrf_token', '<?= e(csrf_token()) ?>');
-            body.append('id', button.dataset.requirementId || '');
+            body.append('id', approveButton.dataset.requirementId || '');
 
             const response = await fetch('<?= APP_URL ?>/servicios/marcar_conforme_requisito.php', {
                 method: 'POST',
@@ -670,7 +530,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             window.location.reload();
-        });
+            return;
+        }
     });
 
     observationForm?.addEventListener('submit', async (event) => {
