@@ -225,8 +225,8 @@ try {
             
             // Build buttons
             $fileButton = '';
-            if ($hasRequirement && $row['file_path'] !== '') {
-                $isImage = in_array(strtolower(pathinfo($row['file_path'], PATHINFO_EXTENSION)), ['jpg', 'jpeg', 'png', 'webp'], true);
+            if ($hasRequirement && $row['file_path'] !== null && $row['file_path'] !== '') {
+                $isImage = in_array(strtolower(pathinfo((string) $row['file_path'], PATHINFO_EXTENSION)), ['jpg', 'jpeg', 'png', 'webp'], true);
                 $btnClass = $isImage ? 'btn-outline-primary' : 'btn-outline-danger';
                 $iconClass = $isImage ? 'fa-file-image' : 'fa-file-pdf';
                 $fileButton = '<button class="btn btn-sm ' . $btnClass . ' dashboard-pdf-preview-btn" type="button" title="Previsualizar archivo" data-pdf-url="' . e(APP_URL . '/' . $row['file_path']) . '" data-pdf-title="' . e($row['original_file_name'] ?? $requirementText . '.pdf') . '"><i class="fa-solid ' . $iconClass . '"></i></button>';
