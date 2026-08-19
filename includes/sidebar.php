@@ -9,6 +9,7 @@ $empresaOpen = str_contains($currentPath, '/modulos/empresa/');
 $empresaMaquirentaOpen = str_contains($currentPath, '/modulos/empresa_maquirenta/');
 $ventanillaOpen = str_ends_with($currentPath, '/modulos/empresa_maquirenta/informes.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/charla_preoperacional.php');
 $santaRosaOpen = str_ends_with($currentPath, '/modulos/empresa_maquirenta/informes_santa_rosa.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/charla_preoperacional_santa_rosa.php');
+$formatosOpen = str_ends_with($currentPath, '/modulos/empresa_maquirenta/formatos.php');
 $usuarioOpen = str_contains($currentPath, '/modulos/usuario/');
 $configuracionOpen = str_contains($currentPath, '/modulos/configuracion/');
 $isAdmin = is_admin();
@@ -97,6 +98,7 @@ $isAdmin = is_admin();
                     <div class="collapse <?= $ventanillaOpen ? 'show' : '' ?>" id="ventanillaMenu"><div class="submenu ms-3"><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa_maquirenta/informes.php"><i class="fa-solid fa-chart-column"></i><span>Informes</span></a><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa_maquirenta/charla_preoperacional.php"><i class="fa-solid fa-person-chalkboard"></i><span>Charla preoperacional</span></a></div></div>
                     <button class="nav-link sub-link nav-parent <?= $santaRosaOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#santaRosaMenu" aria-expanded="<?= $santaRosaOpen ? 'true' : 'false' ?>" aria-controls="santaRosaMenu"><i class="fa-solid fa-shield-halved"></i><span>Central Térmica Santa Rosa</span><i class="fa-solid fa-chevron-down nav-caret"></i></button>
                     <div class="collapse <?= $santaRosaOpen ? 'show' : '' ?>" id="santaRosaMenu"><div class="submenu ms-3"><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa_maquirenta/informes_santa_rosa.php"><i class="fa-solid fa-chart-column"></i><span>Informes</span></a><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa_maquirenta/charla_preoperacional_santa_rosa.php"><i class="fa-solid fa-person-chalkboard"></i><span>Charla preoperacional</span></a></div></div>
+                    <a class="nav-link sub-link <?= $formatosOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/empresa_maquirenta/formatos.php"><i class="fa-solid fa-file-invoice"></i><span>Formatos</span></a>
                 </div>
             </div>
 
@@ -166,6 +168,9 @@ $isAdmin = is_admin();
                     <?php if (current_user_can_module('empresa_maquirenta.seguridad') || current_user_can_module('empresa_maquirenta.informes_santa_rosa') || current_user_can_module('empresa_maquirenta.charla_preoperacional_santa_rosa')): ?>
                     <button class="nav-link sub-link nav-parent <?= $santaRosaOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#santaRosaMenuGestor" aria-expanded="<?= $santaRosaOpen ? 'true' : 'false' ?>" aria-controls="santaRosaMenuGestor"><i class="fa-solid fa-shield-halved"></i><span>Central Térmica Santa Rosa</span><i class="fa-solid fa-chevron-down nav-caret"></i></button>
                     <div class="collapse <?= $santaRosaOpen ? 'show' : '' ?>" id="santaRosaMenuGestor"><div class="submenu ms-3"><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa_maquirenta/informes_santa_rosa.php"><i class="fa-solid fa-chart-column"></i><span>Informes</span></a><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa_maquirenta/charla_preoperacional_santa_rosa.php"><i class="fa-solid fa-person-chalkboard"></i><span>Charla preoperacional</span></a></div></div>
+                    <?php endif; ?>
+                    <?php if (current_user_can_module('empresa_maquirenta.formatos')): ?>
+                    <a class="nav-link sub-link <?= $formatosOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/empresa_maquirenta/formatos.php"><i class="fa-solid fa-file-invoice"></i><span>Formatos</span></a>
                     <?php endif; ?>
                 </div></div>
             <?php endif; ?>

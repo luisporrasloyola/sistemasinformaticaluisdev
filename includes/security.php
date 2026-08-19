@@ -243,6 +243,7 @@ function default_user_landing_path(): string
         'empresa_maquirenta.datos_generales' => 'modulos/empresa_maquirenta/datos_generales.php',
         'empresa_maquirenta.documentos' => 'modulos/empresa_maquirenta/documentos.php',
         'empresa_maquirenta.seguridad' => 'modulos/empresa_maquirenta/seguridad.php',
+        'empresa_maquirenta.formatos' => 'modulos/empresa_maquirenta/formatos.php',
         'usuarios' => 'modulos/usuario/usuarios.php',
     ];
 

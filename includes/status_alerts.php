@@ -44,6 +44,12 @@ function status_alert_scopes(): array
             'name_column' => 'nombre',
             'active_column' => 'estado',
         ],
+        'empresa_maquirenta.formatos' => [
+            'label' => 'Empresa Maquirenta - Formatos',
+            'table' => 'empresa_maquirenta_formatos_catalogo',
+            'name_column' => 'nombre',
+            'active_column' => 'estado',
+        ],
     ];
 }
 

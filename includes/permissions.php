@@ -56,6 +56,7 @@ function permission_modules_catalog(): array
                 'empresa_maquirenta.seguridad' => 'Central Térmica Santa Rosa',
                 'empresa_maquirenta.informes_santa_rosa' => "Central Térmica Santa Rosa - Informes",
                 'empresa_maquirenta.charla_preoperacional_santa_rosa' => 'Central Térmica Santa Rosa - Charla preoperacional',
+                'empresa_maquirenta.formatos' => 'Formatos',
             ],
         ],
         'usuarios' => ['label' => 'Usuarios', 'children' => []],
@@ -116,6 +117,12 @@ function permission_document_scopes(): array
         'empresa_maquirenta.seguridad' => [
             'label' => 'Empresa Maquirenta - Central Térmica Santa Rosa',
             'table' => 'empresa_maquirenta_seguridad_catalogo',
+            'name_column' => 'nombre',
+            'active_column' => 'estado',
+        ],
+        'empresa_maquirenta.formatos' => [
+            'label' => 'Empresa Maquirenta - Formatos',
+            'table' => 'empresa_maquirenta_formatos_catalogo',
             'name_column' => 'nombre',
             'active_column' => 'estado',
         ],
