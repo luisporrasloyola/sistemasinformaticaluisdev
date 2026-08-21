@@ -60,6 +60,7 @@ function permission_modules_catalog(): array
                 'empresa_maquirenta.pms' => 'Central Térmica Ventanilla - PMS',
                 'empresa_maquirenta.permiso_trabajo' => 'Central Térmica Ventanilla - Permiso de trabajo',
                 'empresa_maquirenta.pms_santa_rosa' => 'Central Térmica Santa Rosa - PMS',
+                'empresa_maquirenta.permiso_trabajo_santa_rosa' => 'Central Térmica Santa Rosa - Permiso de trabajo',
             ],
         ],
         'usuarios' => ['label' => 'Usuarios', 'children' => []],
