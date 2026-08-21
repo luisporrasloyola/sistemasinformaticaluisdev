@@ -58,6 +58,7 @@ function permission_modules_catalog(): array
                 'empresa_maquirenta.charla_preoperacional_santa_rosa' => 'Central Térmica Santa Rosa - Charla preoperacional',
                 'empresa_maquirenta.formatos' => 'Formatos',
                 'empresa_maquirenta.pms' => 'Central Térmica Ventanilla - PMS',
+                'empresa_maquirenta.permiso_trabajo' => 'Central Térmica Ventanilla - Permiso de trabajo',
                 'empresa_maquirenta.pms_santa_rosa' => 'Central Térmica Santa Rosa - PMS',
             ],
         ],

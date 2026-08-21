@@ -245,6 +245,7 @@ function default_user_landing_path(): string
         'empresa_maquirenta.seguridad' => 'modulos/empresa_maquirenta/seguridad.php',
         'empresa_maquirenta.formatos' => 'modulos/empresa_maquirenta/formatos.php',
         'empresa_maquirenta.pms' => 'modulos/empresa_maquirenta/pms.php',
+        'empresa_maquirenta.permiso_trabajo' => 'modulos/empresa_maquirenta/permiso_trabajo.php',
         'empresa_maquirenta.pms_santa_rosa' => 'modulos/empresa_maquirenta/pms_santa_rosa.php',
         'usuarios' => 'modulos/usuario/usuarios.php',
     ];
