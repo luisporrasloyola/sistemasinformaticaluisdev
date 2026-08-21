@@ -49,6 +49,7 @@ function permission_modules_catalog(): array
         'empresa_maquirenta' => [
             'label' => 'Empresa Maquirenta',
             'children' => [
+                'empresa_maquirenta.dashboard' => 'Dashboard',
                 'empresa_maquirenta.datos_generales' => 'Datos generales',
                 'empresa_maquirenta.documentos' => 'Central Térmica Ventanilla',
                 'empresa_maquirenta.informes' => 'Central Térmica Ventanilla - Informes',
