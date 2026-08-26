@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS empresa_maquirenta_santa_rosa_permisos_trabajo (
 CREATE TABLE IF NOT EXISTS empresa_maquirenta_santa_rosa_permiso_vigencias (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
     permiso_trabajo_id INT UNSIGNED NOT NULL,
+    fecha_registro DATE DEFAULT NULL,
     fecha_inicio DATE NOT NULL,
     fecha_vencimiento DATE NOT NULL,
     observaciones TEXT DEFAULT NULL,
@@ -91,3 +92,15 @@ ALTER TABLE empresa_maquirenta_santa_rosa_permiso_vigencias
 
 ALTER TABLE empresa_maquirenta_santa_rosa_permiso_archivos
     ADD COLUMN IF NOT EXISTS tipo_archivo VARCHAR(20) NOT NULL DEFAULT 'vigencia' AFTER archivo_nombre_original;
+-- Fecha de registro independiente para cada vigencia y ampliación.
+ALTER TABLE empresa_maquirenta_santa_rosa_permiso_vigencias
+    ADD COLUMN IF NOT EXISTS fecha_registro DATE DEFAULT NULL AFTER permiso_trabajo_id;
+
+UPDATE empresa_maquirenta_santa_rosa_permiso_vigencias v
+JOIN empresa_maquirenta_santa_rosa_permisos_trabajo p ON p.id = v.permiso_trabajo_id
+SET v.fecha_registro = CASE
+    WHEN v.id = (SELECT vi.id FROM empresa_maquirenta_santa_rosa_permiso_vigencias vi WHERE vi.permiso_trabajo_id = v.permiso_trabajo_id ORDER BY vi.fecha_vencimiento, vi.id LIMIT 1)
+        THEN p.fecha_registro
+    ELSE DATE(v.created_at)
+END
+WHERE v.fecha_registro IS NULL;

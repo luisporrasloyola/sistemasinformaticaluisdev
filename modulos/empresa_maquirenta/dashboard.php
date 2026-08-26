@@ -57,17 +57,18 @@ $pmsPending=max(0,$pmsTotal-$pmsDocumented);
 
 $permit = db()->query("SELECT COUNT(*) total,
  SUM(v.fecha_cierre IS NOT NULL AND EXISTS(SELECT 1 FROM empresa_maquirenta_permiso_archivos a WHERE a.vigencia_id=v.id)) cerrados,
- SUM(v.fecha_cierre IS NULL AND CURDATE() BETWEEN v.fecha_inicio AND v.fecha_vencimiento) vigentes,
- SUM(v.fecha_cierre IS NULL AND CURDATE() NOT BETWEEN v.fecha_inicio AND v.fecha_vencimiento) no_aptos
+ SUM(v.fecha_cierre IS NULL AND CURDATE() BETWEEN (SELECT MIN(vi.fecha_inicio) FROM empresa_maquirenta_permiso_vigencias vi WHERE vi.permiso_trabajo_id=v.permiso_trabajo_id) AND v.fecha_vencimiento) vigentes,
+ SUM(v.fecha_cierre IS NULL AND CURDATE() NOT BETWEEN (SELECT MIN(vi.fecha_inicio) FROM empresa_maquirenta_permiso_vigencias vi WHERE vi.permiso_trabajo_id=v.permiso_trabajo_id) AND v.fecha_vencimiento) no_aptos
  FROM empresa_maquirenta_permisos_trabajo p JOIN empresa_maquirenta_permiso_vigencias v ON v.id=(
  SELECT v2.id FROM empresa_maquirenta_permiso_vigencias v2 WHERE v2.permiso_trabajo_id=p.id ORDER BY v2.fecha_vencimiento DESC,v2.id DESC LIMIT 1)")->fetch() ?: [];
 $permisoDetalle = db()->query("SELECT 'permisos' modulo,0 maquinaria_id,'Central Térmica Ventanilla' maquinaria,v.id vigencia_id,
  p.permiso_nombre referencia,
  CONCAT(DATE_FORMAT(v.fecha_inicio,'%d/%m/%Y'),' al ',DATE_FORMAT(v.fecha_vencimiento,'%d/%m/%Y')) periodo,
- DATE_FORMAT(v.fecha_inicio,'%d/%m/%Y') fecha_inicio_modal,
- DATE_FORMAT(v.fecha_vencimiento,'%d/%m/%Y') fecha_vencimiento_modal,
+ DATE_FORMAT((SELECT MIN(vi.fecha_inicio) FROM empresa_maquirenta_permiso_vigencias vi WHERE vi.permiso_trabajo_id=p.id),'%d/%m/%Y') fecha_inicio_modal,
+ DATE_FORMAT((SELECT vi.fecha_vencimiento FROM empresa_maquirenta_permiso_vigencias vi WHERE vi.permiso_trabajo_id=p.id ORDER BY vi.fecha_vencimiento,vi.id LIMIT 1),'%d/%m/%Y') fecha_vencimiento_modal,
+ CASE WHEN (SELECT COUNT(*) FROM empresa_maquirenta_permiso_vigencias vc WHERE vc.permiso_trabajo_id=p.id)>1 THEN DATE_FORMAT(v.fecha_vencimiento,'%d/%m/%Y') ELSE NULL END fecha_ampliacion_modal,
  CASE WHEN v.fecha_cierre IS NOT NULL AND EXISTS(SELECT 1 FROM empresa_maquirenta_permiso_archivos a WHERE a.vigencia_id=v.id) THEN 'cerrado'
-      WHEN v.fecha_cierre IS NULL AND CURDATE() BETWEEN v.fecha_inicio AND v.fecha_vencimiento THEN 'vigente'
+      WHEN v.fecha_cierre IS NULL AND CURDATE() BETWEEN (SELECT MIN(vi.fecha_inicio) FROM empresa_maquirenta_permiso_vigencias vi WHERE vi.permiso_trabajo_id=v.permiso_trabajo_id) AND v.fecha_vencimiento THEN 'vigente'
       ELSE 'no_apto' END estado,
  COALESCE(u.name,'Sin usuario') registrado_por
  FROM empresa_maquirenta_permisos_trabajo p
@@ -151,17 +152,18 @@ $srPmsDetalle = db()->query("SELECT 'sr_pms' modulo,0 maquinaria_id,'Central Té
 
 $srPermit = db()->query("SELECT COUNT(*) total,
  SUM(v.fecha_cierre IS NOT NULL AND EXISTS(SELECT 1 FROM empresa_maquirenta_santa_rosa_permiso_archivos a WHERE a.vigencia_id=v.id)) cerrados,
- SUM(v.fecha_cierre IS NULL AND CURDATE() BETWEEN v.fecha_inicio AND v.fecha_vencimiento) vigentes,
- SUM(v.fecha_cierre IS NULL AND CURDATE() NOT BETWEEN v.fecha_inicio AND v.fecha_vencimiento) no_aptos
+ SUM(v.fecha_cierre IS NULL AND CURDATE() BETWEEN (SELECT MIN(vi.fecha_inicio) FROM empresa_maquirenta_santa_rosa_permiso_vigencias vi WHERE vi.permiso_trabajo_id=v.permiso_trabajo_id) AND v.fecha_vencimiento) vigentes,
+ SUM(v.fecha_cierre IS NULL AND CURDATE() NOT BETWEEN (SELECT MIN(vi.fecha_inicio) FROM empresa_maquirenta_santa_rosa_permiso_vigencias vi WHERE vi.permiso_trabajo_id=v.permiso_trabajo_id) AND v.fecha_vencimiento) no_aptos
  FROM empresa_maquirenta_santa_rosa_permisos_trabajo p JOIN empresa_maquirenta_santa_rosa_permiso_vigencias v ON v.id=(
  SELECT v2.id FROM empresa_maquirenta_santa_rosa_permiso_vigencias v2 WHERE v2.permiso_trabajo_id=p.id ORDER BY v2.fecha_vencimiento DESC,v2.id DESC LIMIT 1)")->fetch() ?: [];
 $srPermisoDetalle = db()->query("SELECT 'sr_permisos' modulo,0 maquinaria_id,'Central Térmica Santa Rosa' maquinaria,v.id vigencia_id,
  p.permiso_nombre referencia,
  CONCAT(DATE_FORMAT(v.fecha_inicio,'%d/%m/%Y'),' al ',DATE_FORMAT(v.fecha_vencimiento,'%d/%m/%Y')) periodo,
- DATE_FORMAT(v.fecha_inicio,'%d/%m/%Y') fecha_inicio_modal,
- DATE_FORMAT(v.fecha_vencimiento,'%d/%m/%Y') fecha_vencimiento_modal,
+ DATE_FORMAT((SELECT MIN(vi.fecha_inicio) FROM empresa_maquirenta_santa_rosa_permiso_vigencias vi WHERE vi.permiso_trabajo_id=p.id),'%d/%m/%Y') fecha_inicio_modal,
+ DATE_FORMAT((SELECT vi.fecha_vencimiento FROM empresa_maquirenta_santa_rosa_permiso_vigencias vi WHERE vi.permiso_trabajo_id=p.id ORDER BY vi.fecha_vencimiento,vi.id LIMIT 1),'%d/%m/%Y') fecha_vencimiento_modal,
+ CASE WHEN (SELECT COUNT(*) FROM empresa_maquirenta_santa_rosa_permiso_vigencias vc WHERE vc.permiso_trabajo_id=p.id)>1 THEN DATE_FORMAT(v.fecha_vencimiento,'%d/%m/%Y') ELSE NULL END fecha_ampliacion_modal,
  CASE WHEN v.fecha_cierre IS NOT NULL AND EXISTS(SELECT 1 FROM empresa_maquirenta_santa_rosa_permiso_archivos a WHERE a.vigencia_id=v.id) THEN 'cerrado'
-      WHEN v.fecha_cierre IS NULL AND CURDATE() BETWEEN v.fecha_inicio AND v.fecha_vencimiento THEN 'vigente'
+      WHEN v.fecha_cierre IS NULL AND CURDATE() BETWEEN (SELECT MIN(vi.fecha_inicio) FROM empresa_maquirenta_santa_rosa_permiso_vigencias vi WHERE vi.permiso_trabajo_id=v.permiso_trabajo_id) AND v.fecha_vencimiento THEN 'vigente'
       ELSE 'no_apto' END estado,
  COALESCE(u.name,'Sin usuario') registrado_por
  FROM empresa_maquirenta_santa_rosa_permisos_trabajo p
@@ -357,7 +359,7 @@ require __DIR__ . '/../../includes/header.php';
    <div class="modal-header status-modal-header"><div><small id="statusModalModule"></small><h5 class="modal-title" id="statusModalTitle">Detalle de registros</h5></div><button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
    <div class="modal-body">
     <div class="status-modal-summary" id="statusModalSummary"></div>
-    <div class="table-responsive"><table class="table align-middle status-modal-table"><thead><tr><th id="statusReferenceHead">Registro</th><th id="statusDetailHead">Detalle</th><th id="statusEndDateHead" class="d-none">Fecha de vencimiento</th><th id="statusThirdDateHead" class="d-none">F. Fin</th><th>Estado</th><th>Registrado por</th><th id="statusDocumentsHead">Documentos</th></tr></thead><tbody id="statusModalBody"></tbody></table></div>
+    <div class="table-responsive"><table class="table align-middle status-modal-table"><thead><tr><th id="statusReferenceHead">Registro</th><th id="statusDetailHead">Detalle</th><th id="statusEndDateHead" class="d-none">Fecha de vencimiento</th><th id="statusThirdDateHead" class="d-none">F. Fin</th><th id="statusExtensionDateHead" class="d-none">Ampliación</th><th>Estado</th><th>Registrado por</th><th id="statusDocumentsHead">Documentos</th></tr></thead><tbody id="statusModalBody"></tbody></table></div>
     <div class="status-modal-empty d-none" id="statusModalEmpty"><i class="fa-solid fa-folder-open"></i><span>No existen registros para este estado.</span></div>
    </div>
    <div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cerrar</button><a class="btn btn-primary" id="statusModalGo" href="#"><i class="fa-solid fa-arrow-up-right-from-square me-2"></i>Ir al submódulo</a></div>
@@ -406,12 +408,13 @@ document.addEventListener('DOMContentLoaded',()=>{
   secondDateHead.textContent=isFormats?'F. Inicio':'Fecha de vencimiento';
   secondDateHead.classList.toggle('d-none',!(isPermits||isFormats));
   document.getElementById('statusThirdDateHead').classList.toggle('d-none',!isFormats);
+  document.getElementById('statusExtensionDateHead').classList.toggle('d-none',!isPermits);
   document.getElementById('statusDocumentsHead').textContent=isFormats?'Adjunto':'Documentos';
   const summary=document.getElementById('statusModalSummary');
   summary.className='status-modal-summary '+(isClosed?'summary-closed':(isWarning?'summary-warning':(isPositive?'summary-ok':'summary-bad')));
   const description=isFormats?(isWarning?'Registro próximo a vencer':(isPositive?'Registro vigente':'Registro vencido')):(isPermits?(isClosed?'Vigencia cerrada con documento':(isPositive?'Registro dentro de fecha':'Registro fuera de fecha')):(isPositive?'Registro con archivo adjunto':'Registro sin archivo adjunto'));
   summary.innerHTML='<i class="fa-solid '+(isClosed?'fa-lock':(isWarning?'fa-clock':(isPositive?'fa-circle-check':'fa-circle-xmark')))+'"></i><div><strong>'+rows.length+' '+(rows.length===1?'registro':'registros')+'</strong><span>'+description+'</span></div>';
-  body.innerHTML=rows.map(row=>{const badgeClass=isClosed?'state-closed':(isWarning?'state-warning':(isPositive?'state-ok':'state-bad')),label=isClosed?'CERRADO':(isWarning?'POR VENCER':(state==='vigente'?'VIGENTE':(state==='apto'?'APTO':'NO APTO'))),documents=(row.documentos||[]).map((doc,index)=>'<a class="modal-download-btn" href="'+esc(doc.url)+'" title="'+esc(doc.name)+'"><i class="fa-solid fa-download"></i><span>'+(isPermits?'Doc. '+(index+1):'Doc.')+'</span></a>').join('');return '<tr><td><strong>'+esc(row.referencia)+'</strong></td><td>'+esc(isPermits?row.fecha_inicio_modal:(isFormats?row.fecha_registro_modal:row.periodo))+'</td>'+(isPermits?'<td>'+esc(row.fecha_vencimiento_modal)+'</td>':(isFormats?'<td>'+esc(row.fecha_inicio_modal)+'</td><td>'+esc(row.fecha_fin_modal)+'</td>':''))+'<td><span class="state-badge '+badgeClass+'">'+label+'</span></td><td>'+esc(row.registrado_por)+'</td><td><div class="modal-documents">'+(documents||'<span class="no-document">Sin documento</span>')+'</div></td></tr>'}).join('');
+  body.innerHTML=rows.map(row=>{const badgeClass=isClosed?'state-closed':(isWarning?'state-warning':(isPositive?'state-ok':'state-bad')),label=isClosed?'CERRADO':(isWarning?'POR VENCER':(state==='vigente'?'VIGENTE':(state==='apto'?'APTO':'NO APTO'))),documents=(row.documentos||[]).map((doc,index)=>'<a class="modal-download-btn" href="'+esc(doc.url)+'" title="'+esc(doc.name)+'"><i class="fa-solid fa-download"></i><span>'+(isPermits?'Doc. '+(index+1):'Doc.')+'</span></a>').join('');return '<tr><td><strong>'+esc(row.referencia)+'</strong></td><td>'+esc(isPermits?row.fecha_inicio_modal:(isFormats?row.fecha_registro_modal:row.periodo))+'</td>'+(isPermits?'<td>'+esc(row.fecha_vencimiento_modal)+'</td><td>'+(row.fecha_ampliacion_modal?esc(row.fecha_ampliacion_modal):'—')+'</td>':(isFormats?'<td>'+esc(row.fecha_inicio_modal)+'</td><td>'+esc(row.fecha_fin_modal)+'</td>':''))+'<td><span class="state-badge '+badgeClass+'">'+label+'</span></td><td>'+esc(row.registrado_por)+'</td><td><div class="modal-documents">'+(documents||'<span class="no-document">Sin documento</span>')+'</div></td></tr>'}).join('');
   empty.classList.toggle('d-none',rows.length>0);body.closest('.table-responsive').classList.toggle('d-none',rows.length===0);
   const targetBase=isFormats?'formatos':(isReports?'informes':(isPms?'pms':(isPermits?'permiso_trabajo':'charla_preoperacional')));
   document.getElementById('statusModalGo').href='<?=APP_URL?>/modulos/empresa_maquirenta/'+targetBase+(isSanta?'_santa_rosa':'')+'.php';

@@ -6,7 +6,7 @@ require_once __DIR__ . '/../../config/database.php';
 require_module_access('empresa_maquirenta.permiso_trabajo_santa_rosa');
 
 $action = (string) ($_GET['action'] ?? $_POST['action'] ?? '');
-if (in_array($action, ['save', 'upload', 'extend', 'close', 'delete'], true)) verify_csrf($_POST['csrf_token'] ?? null);
+if (in_array($action, ['save', 'upload', 'extend', 'close', 'update_stage', 'delete_stage', 'replace_file', 'delete_file', 'delete'], true)) verify_csrf($_POST['csrf_token'] ?? null);
 
 $allowedMimes = array_merge(document_attachment_mimes(), [
     'application/vnd.ms-excel',
@@ -15,7 +15,7 @@ $allowedMimes = array_merge(document_attachment_mimes(), [
 ]);
 
 $validDate = static fn(string $value): bool => (bool) preg_match('/^\d{4}-\d{2}-\d{2}$/', $value);
-$statusSql = "CASE WHEN v.fecha_cierre IS NOT NULL AND EXISTS(SELECT 1 FROM empresa_maquirenta_santa_rosa_permiso_archivos ax WHERE ax.vigencia_id=v.id) THEN 'cerrado' WHEN CURDATE() BETWEEN v.fecha_inicio AND v.fecha_vencimiento THEN 'vigente' ELSE 'no_apto' END";
+$statusSql = "CASE WHEN v.fecha_cierre IS NOT NULL AND EXISTS(SELECT 1 FROM empresa_maquirenta_santa_rosa_permiso_archivos ax WHERE ax.vigencia_id=v.id) THEN 'cerrado' WHEN CURDATE() BETWEEN (SELECT MIN(vi.fecha_inicio) FROM empresa_maquirenta_santa_rosa_permiso_vigencias vi WHERE vi.permiso_trabajo_id=v.permiso_trabajo_id) AND v.fecha_vencimiento THEN 'vigente' ELSE 'no_apto' END";
 
 if ($action === 'list') {
     $search = mb_substr(trim((string) ($_GET['search'] ?? '')), 0, 100);
@@ -37,6 +37,9 @@ if ($action === 'list') {
     $offset = ($page - 1) * $perPage;
     $sql = "SELECT p.id,p.permiso_nombre,p.fecha_registro,p.registered_by_user_id,
         v.id AS vigencia_id,v.fecha_inicio,v.fecha_vencimiento,v.fecha_cierre,v.observaciones,v.created_at AS vigencia_created_at,
+        (SELECT vi.fecha_inicio FROM empresa_maquirenta_santa_rosa_permiso_vigencias vi WHERE vi.permiso_trabajo_id=p.id ORDER BY vi.fecha_vencimiento,vi.id LIMIT 1) AS fecha_inicio_original,
+        (SELECT vi.fecha_vencimiento FROM empresa_maquirenta_santa_rosa_permiso_vigencias vi WHERE vi.permiso_trabajo_id=p.id ORDER BY vi.fecha_vencimiento,vi.id LIMIT 1) AS fecha_vencimiento_original,
+        CASE WHEN (SELECT COUNT(*) FROM empresa_maquirenta_santa_rosa_permiso_vigencias vc WHERE vc.permiso_trabajo_id=p.id)>1 THEN v.fecha_vencimiento ELSE NULL END AS fecha_ampliacion,
         COALESCE(u.name,'') AS registered_by,
         (SELECT COUNT(*) FROM empresa_maquirenta_santa_rosa_permiso_archivos a WHERE a.vigencia_id=v.id) AS archivo_count,
         (SELECT COUNT(*) FROM empresa_maquirenta_santa_rosa_permiso_archivos ad WHERE ad.vigencia_id=v.id) AS documento_count,
@@ -64,7 +67,7 @@ if ($action === 'list') {
 }
 if ($action === 'history') {
     $permitId=(int)($_GET['id']??0);
-    $stmt=db()->prepare("SELECT v.id,v.fecha_inicio,v.fecha_vencimiento,v.fecha_cierre,v.observaciones,v.created_at,p.fecha_registro AS permiso_fecha_registro,
+    $stmt=db()->prepare("SELECT v.id,v.fecha_inicio,v.fecha_vencimiento,v.fecha_cierre,v.observaciones,COALESCE(v.fecha_registro,DATE(v.created_at)) AS fecha_registro_etapa,v.created_at,p.fecha_registro AS permiso_fecha_registro,
         COALESCE(u.name,'') AS registered_by,
         (SELECT COUNT(*) FROM empresa_maquirenta_santa_rosa_permiso_archivos a WHERE a.vigencia_id=v.id) AS archivo_count,
         (SELECT COUNT(*) FROM empresa_maquirenta_santa_rosa_permiso_archivos ad WHERE ad.vigencia_id=v.id) AS documento_count,
@@ -103,13 +106,13 @@ if ($action === 'save') {
             if(!$latest)throw new RuntimeException('No se encontró el permiso de trabajo.');
             if((int)$latest['archivo_count']>0)throw new DomainException('La vigencia está cerrada. Use la opción Ampliar.');
             $pdo->prepare('UPDATE empresa_maquirenta_santa_rosa_permisos_trabajo SET permiso_nombre=:name,fecha_registro=:registration,fecha_inicio=:start,fecha_vencimiento=:end,observaciones=:obs WHERE id=:id')->execute(['name'=>$name,'registration'=>$registration,'start'=>$start,'end'=>$end,'obs'=>trim((string)($_POST['observaciones']??'')),'id'=>$id]);
-            $pdo->prepare('UPDATE empresa_maquirenta_santa_rosa_permiso_vigencias SET fecha_inicio=:start,fecha_vencimiento=:end,observaciones=:obs WHERE id=:id')->execute(['start'=>$start,'end'=>$end,'obs'=>trim((string)($_POST['observaciones']??'')),'id'=>(int)$latest['id']]);
+            $pdo->prepare('UPDATE empresa_maquirenta_santa_rosa_permiso_vigencias SET fecha_registro=:registration,fecha_inicio=:start,fecha_vencimiento=:end,observaciones=:obs WHERE id=:id')->execute(['registration'=>$registration,'start'=>$start,'end'=>$end,'obs'=>trim((string)($_POST['observaciones']??'')),'id'=>(int)$latest['id']]);
             permit_store_files((int)$latest['id'],$uploaded);
         }else{
             $first=$uploaded[0]??null;
             $pdo->prepare('INSERT INTO empresa_maquirenta_santa_rosa_permisos_trabajo(permiso_nombre,fecha_registro,fecha_inicio,fecha_vencimiento,observaciones,archivo_path,archivo_nombre_original,registered_by_user_id) VALUES(:name,:registration,:start,:end,:obs,:path,:original,:user)')->execute(['name'=>$name,'registration'=>$registration,'start'=>$start,'end'=>$end,'obs'=>trim((string)($_POST['observaciones']??'')),'path'=>$first['path']??null,'original'=>$first['name']??null,'user'=>(int)(current_user()['id']??0)?:null]);
             $permitId=(int)$pdo->lastInsertId();
-            $pdo->prepare('INSERT INTO empresa_maquirenta_santa_rosa_permiso_vigencias(permiso_trabajo_id,fecha_inicio,fecha_vencimiento,observaciones,registered_by_user_id) VALUES(:permit,:start,:end,:obs,:user)')->execute(['permit'=>$permitId,'start'=>$start,'end'=>$end,'obs'=>trim((string)($_POST['observaciones']??'')),'user'=>(int)(current_user()['id']??0)?:null]);
+            $pdo->prepare('INSERT INTO empresa_maquirenta_santa_rosa_permiso_vigencias(permiso_trabajo_id,fecha_registro,fecha_inicio,fecha_vencimiento,observaciones,registered_by_user_id) VALUES(:permit,:registration,:start,:end,:obs,:user)')->execute(['permit'=>$permitId,'registration'=>$registration,'start'=>$start,'end'=>$end,'obs'=>trim((string)($_POST['observaciones']??'')),'user'=>(int)(current_user()['id']??0)?:null]);
             permit_store_files((int)$pdo->lastInsertId(),$uploaded);
         }
         $pdo->commit();json_response(['ok'=>true]);
@@ -134,8 +137,6 @@ if ($action === 'upload') {
         $closeDate=(string)($_POST['fecha_cierre']??'');
         if($wantsClose){
             if(!$validDate($closeDate))throw new InvalidArgumentException('Seleccione la fecha de cierre.');
-            if($closeDate<$current['fecha_inicio'])throw new InvalidArgumentException('La fecha de cierre no puede ser anterior al inicio de la vigencia.');
-            if($closeDate>date('Y-m-d'))throw new InvalidArgumentException('La fecha de cierre no puede ser futura.');
         }
         $pdo=db();$pdo->beginTransaction();
         permit_store_files((int)$current['id'],$uploaded,'vigencia');
@@ -155,7 +156,7 @@ if ($action === 'extend') {
     try{
         $uploaded=permit_upload_files($_FILES['adjuntos']??[],3,$allowedMimes);
         $pdo=db();$pdo->beginTransaction();
-        $pdo->prepare('INSERT INTO empresa_maquirenta_santa_rosa_permiso_vigencias(permiso_trabajo_id,fecha_inicio,fecha_vencimiento,observaciones,registered_by_user_id) VALUES(:permit,:start,:end,:obs,:user)')->execute(['permit'=>$permitId,'start'=>$newStart,'end'=>$newEnd,'obs'=>trim((string)($_POST['observaciones']??'')),'user'=>(int)(current_user()['id']??0)?:null]);
+        $pdo->prepare('INSERT INTO empresa_maquirenta_santa_rosa_permiso_vigencias(permiso_trabajo_id,fecha_registro,fecha_inicio,fecha_vencimiento,observaciones,registered_by_user_id) VALUES(:permit,:registration,:start,:end,:obs,:user)')->execute(['permit'=>$permitId,'registration'=>date('Y-m-d'),'start'=>$newStart,'end'=>$newEnd,'obs'=>trim((string)($_POST['observaciones']??'')),'user'=>(int)(current_user()['id']??0)?:null]);
         $vigenciaId=(int)$pdo->lastInsertId();permit_store_files($vigenciaId,$uploaded);
         $pdo->prepare('UPDATE empresa_maquirenta_santa_rosa_permisos_trabajo SET fecha_vencimiento=:end WHERE id=:id')->execute(['end'=>$newEnd,'id'=>$permitId]);
         $pdo->commit();json_response(['ok'=>true]);
@@ -170,8 +171,6 @@ if ($action === 'close') {
     if(!$current)json_response(['ok'=>false,'message'=>'No se encontró el permiso de trabajo.'],404);
     if(!empty($current['fecha_cierre']))json_response(['ok'=>false,'message'=>'Esta vigencia ya se encuentra cerrada.'],409);
     if(!$validDate($closeDate))json_response(['ok'=>false,'message'=>'Seleccione la fecha de cierre.'],422);
-    if($closeDate<$current['fecha_inicio'])json_response(['ok'=>false,'message'=>'La fecha de cierre no puede ser anterior al inicio de la vigencia.'],422);
-    if($closeDate>date('Y-m-d'))json_response(['ok'=>false,'message'=>'La fecha de cierre no puede ser futura.'],422);
     $limit=(int)$current['vigencia_count']===1?2:3;
     if((int)$current['documento_count']>=$limit)json_response(['ok'=>false,'message'=>'Se alcanzó el máximo de documentos; el cierre debe confirmarse durante la última carga.'],409);
     $uploaded=[];
@@ -182,6 +181,28 @@ if ($action === 'close') {
         $pdo->prepare('UPDATE empresa_maquirenta_santa_rosa_permiso_vigencias SET fecha_cierre=:date,closed_by_user_id=:user WHERE id=:id')->execute(['date'=>$closeDate,'user'=>(int)(current_user()['id']??0)?:null,'id'=>(int)$current['id']]);
         $pdo->commit();json_response(['ok'=>true]);
     }catch(Throwable $error){if(db()->inTransaction())db()->rollBack();permit_delete_new_files($uploaded);json_response(['ok'=>false,'message'=>$error->getMessage()?:'No se pudo cerrar la vigencia.'],422);}
+}
+if ($action === 'update_stage') {
+    $stageId=(int)($_POST['vigencia_id']??0);$registration=(string)($_POST['fecha_registro']??'');$start=(string)($_POST['fecha_inicio']??'');$end=(string)($_POST['fecha_vencimiento']??'');
+    $stmt=db()->prepare('SELECT * FROM empresa_maquirenta_santa_rosa_permiso_vigencias WHERE permiso_trabajo_id=(SELECT permiso_trabajo_id FROM empresa_maquirenta_santa_rosa_permiso_vigencias WHERE id=:id) ORDER BY fecha_vencimiento,id');$stmt->execute(['id'=>$stageId]);$stages=$stmt->fetchAll();
+    $position=false;foreach($stages as $i=>$stage)if((int)$stage['id']===$stageId){$position=$i;break;}if($position===false)json_response(['ok'=>false,'message'=>'No se encontró la etapa.'],404);
+    $current=$stages[$position];$isInitial=$position===0;
+    if(!$validDate($registration)||!$validDate($end)||($isInitial&&!$validDate($start)))json_response(['ok'=>false,'message'=>'Complete correctamente las fechas.'],422);
+    if($isInitial&&$start>$end)json_response(['ok'=>false,'message'=>'La fecha de inicio no puede ser posterior al vencimiento.'],422);
+    if(!$isInitial){$previous=$stages[$position-1];if($end<=$previous['fecha_vencimiento'])json_response(['ok'=>false,'message'=>'La ampliación debe ser posterior al vencimiento anterior.'],422);$start=date('Y-m-d',strtotime($previous['fecha_vencimiento'].' +1 day'));}
+    if(isset($stages[$position+1])&&$end>=$stages[$position+1]['fecha_vencimiento'])json_response(['ok'=>false,'message'=>'La fecha debe ser anterior a la siguiente ampliación.'],422);
+    if(!empty($current['fecha_cierre'])&&$current['fecha_cierre']<$start)json_response(['ok'=>false,'message'=>'La fecha de inicio no puede ser posterior al cierre registrado.'],422);
+    $pdo=db();$pdo->beginTransaction();try{$pdo->prepare('UPDATE empresa_maquirenta_santa_rosa_permiso_vigencias SET fecha_registro=:registration,fecha_inicio=:start,fecha_vencimiento=:end WHERE id=:id')->execute(['registration'=>$registration,'start'=>$start,'end'=>$end,'id'=>$stageId]);if(isset($stages[$position+1]))$pdo->prepare('UPDATE empresa_maquirenta_santa_rosa_permiso_vigencias SET fecha_inicio=:start WHERE id=:id')->execute(['start'=>date('Y-m-d',strtotime($end.' +1 day')),'id'=>(int)$stages[$position+1]['id']]);$permitId=(int)$current['permiso_trabajo_id'];if($isInitial){if(!$validDate($registration))throw new InvalidArgumentException('Seleccione la fecha de registro.');$pdo->prepare('UPDATE empresa_maquirenta_santa_rosa_permisos_trabajo SET fecha_registro=:registration,fecha_inicio=:start WHERE id=:id')->execute(['registration'=>$registration,'start'=>$start,'id'=>$permitId]);}if($position===count($stages)-1)$pdo->prepare('UPDATE empresa_maquirenta_santa_rosa_permisos_trabajo SET fecha_vencimiento=:end WHERE id=:id')->execute(['end'=>$end,'id'=>$permitId]);$pdo->commit();json_response(['ok'=>true]);}catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();json_response(['ok'=>false,'message'=>$e->getMessage()?:'No se pudo actualizar la etapa.'],422);}
+}
+if ($action === 'delete_stage') {
+    $stageId=(int)($_POST['vigencia_id']??0);$stmt=db()->prepare('SELECT * FROM empresa_maquirenta_santa_rosa_permiso_vigencias WHERE permiso_trabajo_id=(SELECT permiso_trabajo_id FROM empresa_maquirenta_santa_rosa_permiso_vigencias WHERE id=:id) ORDER BY fecha_vencimiento,id');$stmt->execute(['id'=>$stageId]);$stages=$stmt->fetchAll();$position=false;foreach($stages as $i=>$stage)if((int)$stage['id']===$stageId){$position=$i;break;}if($position===false)json_response(['ok'=>false,'message'=>'No se encontró la etapa.'],404);if($position===0)json_response(['ok'=>false,'message'=>'La vigencia inicial no se elimina por separado.'],409);if($position!==count($stages)-1)json_response(['ok'=>false,'message'=>'Solo puede eliminar la ampliación más reciente.'],409);
+    $files=db()->prepare('SELECT archivo_path FROM empresa_maquirenta_santa_rosa_permiso_archivos WHERE vigencia_id=:id');$files->execute(['id'=>$stageId]);$paths=$files->fetchAll(PDO::FETCH_COLUMN);$pdo=db();$pdo->beginTransaction();try{$pdo->prepare('DELETE FROM empresa_maquirenta_santa_rosa_permiso_vigencias WHERE id=:id')->execute(['id'=>$stageId]);$previous=$stages[$position-1];$pdo->prepare('UPDATE empresa_maquirenta_santa_rosa_permisos_trabajo SET fecha_vencimiento=:end WHERE id=:id')->execute(['end'=>$previous['fecha_vencimiento'],'id'=>(int)$previous['permiso_trabajo_id']]);$pdo->commit();foreach($paths as $filePath)delete_uploaded_file($filePath?:null);json_response(['ok'=>true]);}catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();json_response(['ok'=>false,'message'=>'No se pudo eliminar la ampliación.'],422);}
+}
+if ($action === 'replace_file') {
+    $fileId=(int)($_POST['file_id']??0);$stmt=db()->prepare('SELECT * FROM empresa_maquirenta_santa_rosa_permiso_archivos WHERE id=:id');$stmt->execute(['id'=>$fileId]);$old=$stmt->fetch();if(!$old)json_response(['ok'=>false,'message'=>'No se encontró el archivo.'],404);$uploaded=[];try{$uploaded=permit_upload_files($_FILES['archivo']??[],1,$allowedMimes,true);$new=$uploaded[0];db()->prepare('UPDATE empresa_maquirenta_santa_rosa_permiso_archivos SET archivo_path=:path,archivo_nombre_original=:name,uploaded_by_user_id=:user,created_at=NOW() WHERE id=:id')->execute(['path'=>$new['path'],'name'=>$new['name'],'user'=>(int)(current_user()['id']??0)?:null,'id'=>$fileId]);delete_uploaded_file($old['archivo_path']?:null);json_response(['ok'=>true]);}catch(Throwable $e){permit_delete_new_files($uploaded);json_response(['ok'=>false,'message'=>$e->getMessage()?:'No se pudo reemplazar el archivo.'],422);}
+}
+if ($action === 'delete_file') {
+    $fileId=(int)($_POST['file_id']??0);$stmt=db()->prepare('SELECT * FROM empresa_maquirenta_santa_rosa_permiso_archivos WHERE id=:id');$stmt->execute(['id'=>$fileId]);$file=$stmt->fetch();if(!$file)json_response(['ok'=>false,'message'=>'No se encontró el archivo.'],404);$pdo=db();$pdo->beginTransaction();try{$pdo->prepare('DELETE FROM empresa_maquirenta_santa_rosa_permiso_archivos WHERE id=:id')->execute(['id'=>$fileId]);$count=$pdo->prepare('SELECT COUNT(*) FROM empresa_maquirenta_santa_rosa_permiso_archivos WHERE vigencia_id=:id');$count->execute(['id'=>(int)$file['vigencia_id']]);if((int)$count->fetchColumn()===0)$pdo->prepare('UPDATE empresa_maquirenta_santa_rosa_permiso_vigencias SET fecha_cierre=NULL,closed_by_user_id=NULL WHERE id=:id')->execute(['id'=>(int)$file['vigencia_id']]);$pdo->commit();delete_uploaded_file($file['archivo_path']?:null);json_response(['ok'=>true]);}catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();json_response(['ok'=>false,'message'=>'No se pudo eliminar el archivo.'],422);}
 }
 if ($action === 'delete') {
     $permitId=(int)($_POST['id']??0);
