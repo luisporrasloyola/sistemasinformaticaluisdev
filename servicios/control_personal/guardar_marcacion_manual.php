@@ -11,6 +11,7 @@ function manual_valid_time(string $v):bool{return (bool)preg_match('/^(?:[01]\d|
 $workerId=max(0,(int)($_POST['worker_id']??0));$markDate=trim((string)($_POST['mark_date']??''));
 $entryTime=trim((string)($_POST['entry_time']??''));$exitTime=trim((string)($_POST['exit_time']??''));$reason=trim((string)($_POST['reason']??''));$requestedLocationId=max(0,(int)($_POST['location_id']??0));$attendanceResult=trim((string)($_POST['attendance_result']??''));
 if(!$workerId||!manual_valid_date($markDate))manual_response(['ok'=>false,'message'=>'El trabajador o la fecha no son válidos.'],422);
+if($markDate>=date('Y-m-d'))manual_response(['ok'=>false,'message'=>'Solo se pueden corregir jornadas anteriores al día actual.'],409);
 if($entryTime===''&&$exitTime==='')manual_response(['ok'=>false,'message'=>'Ingrese al menos la hora de entrada o de salida.'],422);
 if(($entryTime!==''&&!manual_valid_time($entryTime))||($exitTime!==''&&!manual_valid_time($exitTime)))manual_response(['ok'=>false,'message'=>'Ingrese horas válidas.'],422);
 if(!in_array($attendanceResult,['puntual','tardanza'],true))manual_response(['ok'=>false,'message'=>'Seleccione el resultado de la asistencia.'],422);

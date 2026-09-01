@@ -6984,3 +6984,10 @@ input[type="checkbox"]:active {
 #attendanceMatrixDetailModal .attendance-manual-location .select2-search__field{height:36px;padding:6px 10px!important;border:1px solid #bfdbfe!important;border-radius:7px!important}
 #attendanceMatrixDetailModal .attendance-manual-location .select2-container--bootstrap4 .select2-selection--single .select2-selection__arrow{top:0!important;right:8px!important;height:100%!important;width:28px!important;display:flex!important;align-items:center!important;justify-content:center!important}
 #attendanceMatrixDetailModal .attendance-manual-location .select2-container--bootstrap4 .select2-selection--single .select2-selection__arrow b{position:static!important;top:auto!important;left:auto!important;margin:0!important;transform:none!important}
+#attendanceMatrixDetailModal .attendance-manual-locked{display:flex;align-items:flex-start;justify-content:center;gap:14px;min-height:100%;padding:28px 24px;border:1px solid #fcd34d;border-radius:14px;background:linear-gradient(145deg,#fffbeb 0%,#fff7ed 100%);color:#92400e}
+#attendanceMatrixDetailModal .attendance-manual-locked>span{display:grid;place-items:center;width:48px;height:48px;min-width:48px;border-radius:14px;background:#fef3c7;color:#d97706;font-size:21px;box-shadow:0 6px 16px rgba(217,119,6,.13)}
+#attendanceMatrixDetailModal .attendance-manual-locked>div{align-self:center}
+#attendanceMatrixDetailModal .attendance-manual-locked strong{display:block;margin-bottom:5px;font-size:1rem;color:#78350f}
+#attendanceMatrixDetailModal .attendance-manual-locked p{margin:0 0 5px;font-size:.86rem;font-weight:700;color:#92400e}
+#attendanceMatrixDetailModal .attendance-manual-locked small{font-size:.75rem;color:#a16207}
+#attendanceMatrixDetailModal .attendance-manual-locked.d-none{display:none!important}

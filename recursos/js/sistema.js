@@ -70,7 +70,9 @@ function initAttendanceMatrixDetail() {
         manualReason: document.getElementById('matrixManualReason'),
         manualAudit: document.getElementById('matrixManualAudit'),
         manualAuditUser: document.getElementById('matrixManualAuditUser'),
-        manualAuditDate: document.getElementById('matrixManualAuditDate')
+        manualAuditDate: document.getElementById('matrixManualAuditDate'),
+        manualLocked: document.getElementById('matrixManualLocked'),
+        manualLockedMessage: document.getElementById('matrixManualLockedMessage')
     };
 
     const openDetail = (cell) => {
@@ -104,6 +106,16 @@ function initAttendanceMatrixDetail() {
             }
         }
 
+        const manualAllowed = cell.dataset.manualEnabled === '1';
+        if (manualForm) manualForm.classList.toggle('d-none', !manualAllowed);
+        if (fields.manualLocked) {
+            fields.manualLocked.classList.toggle('d-none', manualAllowed);
+            if (!manualAllowed && fields.manualLockedMessage) {
+                fields.manualLockedMessage.textContent = cell.dataset.manualLock === 'future'
+                    ? 'No se pueden registrar correcciones en fechas futuras.'
+                    : 'La jornada actual todavía está en curso.';
+            }
+        }
         const code = cell.dataset.code || '-';
         fields.badge.textContent = code;
         fields.badge.className = 'badge attendance-detail-badge';

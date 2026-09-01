@@ -733,6 +733,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 ? 'No aplica'
                                 : ($incidents ? implode(' / ', $incidents) : 'Sin incidencias'));
                         $manualAudit = $manualAdjustmentsByWorkerDate[(int) $worker['worker_id']][$cellDate] ?? null;
+                        $manualCorrectionAllowed = is_admin() && $cellDate < $today;
                         $entryLocation = (string) ($entry['location'] ?? '');
                         $exitLocation = (string) ($exit['location'] ?? '');
                         $detailLocation = $entryLocation !== '' && $exitLocation !== '' && $entryLocation !== $exitLocation
@@ -744,9 +745,11 @@ document.addEventListener('DOMContentLoaded', () => {
                             data-date="<?= e(date('d/m/Y', strtotime($cellDate))) ?>"
                             data-date-iso="<?= e($cellDate) ?>"
                             data-worker-id="<?= (int) $worker['worker_id'] ?>"
-                            data-manual-enabled="<?= is_admin() ? '1' : '0' ?>"
+                            data-manual-enabled="<?= $manualCorrectionAllowed ? '1' : '0' ?>"
+                            data-manual-lock="<?= $cellDate === $today ? 'today' : ($cellDate > $today ? 'future' : '') ?>"
                             data-adjusted-by="<?= e((string) ($manualAudit['administrator'] ?? '')) ?>"
-                            data-adjusted-at="<?= $manualAudit ? e(date('d/m/Y H:i', strtotime((string) $manualAudit['created_at']))) : '' ?>"                            data-worker="<?= e($worker['name']) ?>"
+                            data-adjusted-at="<?= $manualAudit ? e(date('d/m/Y H:i', strtotime((string) $manualAudit['created_at']))) : '' ?>"
+                            data-worker="<?= e($worker['name']) ?>"
                             data-company="<?= e($worker['company']) ?>"
                             data-entry="<?= e($entry['time'] ?? '-') ?>"
                             data-exit="<?= e($exit['time'] ?? '-') ?>"
@@ -872,6 +875,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         <?php if (is_admin()): ?><div class="attendance-manual-audit d-none" id="matrixManualAudit"><span><i class="fa-solid fa-shield-halved"></i></span><div><small>Última actualización administrativa</small><strong id="matrixManualAuditUser"></strong><time id="matrixManualAuditDate"></time></div></div><?php endif; ?>
                     </section>
                     <?php if (is_admin()): ?>
+                    <div class="attendance-manual-locked d-none" id="matrixManualLocked" role="status">
+                        <span><i class="fa-solid fa-calendar-day"></i></span>
+                        <div><strong>Corrección aún no disponible</strong><p id="matrixManualLockedMessage">La jornada actual todavía está en curso.</p><small>Podrá corregirse a partir del día siguiente.</small></div>
+                    </div>
                     <form id="attendanceManualCorrectionForm" class="attendance-manual-form">
                         <input type="hidden" name="worker_id" id="matrixManualWorkerId"><input type="hidden" name="mark_date" id="matrixManualDate">
                         <div class="attendance-manual-heading"><span><i class="fa-solid fa-user-clock"></i></span><div><strong>Corrección administrativa</strong><small>Corrige la primera entrada y la última salida; los puntos de ruta se conservan.</small></div></div>
