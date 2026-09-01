@@ -59,7 +59,18 @@ function initAttendanceMatrixDetail() {
         entry: document.getElementById('matrixDetailEntry'),
         exit: document.getElementById('matrixDetailExit'),
         location: document.getElementById('matrixDetailLocation'),
-        incidents: document.getElementById('matrixDetailIncidents')
+        incidents: document.getElementById('matrixDetailIncidents'),
+        manualWorkerId: document.getElementById('matrixManualWorkerId'),
+        manualDate: document.getElementById('matrixManualDate'),
+        manualEntry: document.getElementById('matrixManualEntry'),
+        manualExit: document.getElementById('matrixManualExit'),
+        manualResultPunctual: document.getElementById('matrixManualResultPunctual'),
+        manualResultLate: document.getElementById('matrixManualResultLate'),
+        manualLocation: document.getElementById('matrixManualLocation'),
+        manualReason: document.getElementById('matrixManualReason'),
+        manualAudit: document.getElementById('matrixManualAudit'),
+        manualAuditUser: document.getElementById('matrixManualAuditUser'),
+        manualAuditDate: document.getElementById('matrixManualAuditDate')
     };
 
     const openDetail = (cell) => {
@@ -71,6 +82,27 @@ function initAttendanceMatrixDetail() {
         fields.exit.textContent = cell.dataset.exit || '-';
         fields.location.textContent = cell.dataset.location || '-';
         fields.incidents.textContent = cell.dataset.incidents || 'Sin incidencias';
+        if (fields.manualWorkerId) {
+            fields.manualWorkerId.value = cell.dataset.workerId || '';
+            fields.manualDate.value = cell.dataset.dateIso || '';
+            fields.manualEntry.value = cell.dataset.entry && cell.dataset.entry !== '-' ? cell.dataset.entry : '';
+            fields.manualExit.value = cell.dataset.exit && cell.dataset.exit !== '-' ? cell.dataset.exit : '';
+            const isLateResult = cell.dataset.code === 'T' || cell.dataset.code === 'ATSA';
+            fields.manualResultPunctual.checked = !isLateResult;
+            fields.manualResultLate.checked = isLateResult;
+            fields.manualLocation.value = cell.dataset.locationId || '';
+            if (window.jQuery && jQuery.fn.select2 && jQuery(fields.manualLocation).hasClass('select2-hidden-accessible')) {
+                jQuery(fields.manualLocation).trigger('change.select2');
+            }
+            fields.manualReason.value = '';
+            const adjustedBy = (cell.dataset.adjustedBy || '').trim();
+            const adjustedAt = (cell.dataset.adjustedAt || '').trim();
+            if (fields.manualAudit) {
+                fields.manualAudit.classList.toggle('d-none', adjustedBy === '');
+                fields.manualAuditUser.textContent = adjustedBy;
+                fields.manualAuditDate.textContent = adjustedAt ? 'Actualizado el ' + adjustedAt : '';
+            }
+        }
 
         const code = cell.dataset.code || '-';
         fields.badge.textContent = code;
@@ -84,6 +116,28 @@ function initAttendanceMatrixDetail() {
         modal.show();
     };
 
+    const manualForm = document.getElementById('attendanceManualCorrectionForm');
+    if (manualForm && manualForm.dataset.bound !== '1') {
+        manualForm.dataset.bound = '1';
+        manualForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const button = manualForm.querySelector('button[type="submit"]');
+            const body = new FormData(manualForm);
+            body.append('csrf_token', csrf);
+            button.disabled = true;
+            try {
+                const response = await fetch(`${window.APP_URL}/servicios/control_personal/guardar_marcacion_manual.php`, { method: 'POST', body });
+                const data = await response.json();
+                if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo guardar la corrección.');
+                await Swal.fire({ icon: 'success', title: 'Asistencia actualizada', text: data.message, timer: 1800, showConfirmButton: false });
+                window.location.reload();
+            } catch (error) {
+                Swal.fire('Atención', error.message || 'No se pudo guardar la corrección.', 'warning');
+            } finally {
+                button.disabled = false;
+            }
+        });
+    }
     document.querySelectorAll('.js-attendance-matrix-cell').forEach((cell) => {
         cell.addEventListener('click', () => openDetail(cell));
         cell.addEventListener('keydown', (event) => {
@@ -264,10 +318,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const $field = $(this);
             if ($field.hasClass('select2-hidden-accessible')) return;
             const $modal = $field.closest('.modal');
+            const $manualLocation = $field.attr('id') === 'matrixManualLocation'
+                ? $field.closest('.attendance-manual-location')
+                : $();
             $field.select2({
                 theme: 'bootstrap4',
                 width: '100%',
-                dropdownParent: $modal.length ? $modal : $(document.body),
+                dropdownParent: $manualLocation.length ? $manualLocation : ($modal.length ? $modal : $(document.body)),
                 placeholder: $field.data('placeholder') || 'Buscar',
                 minimumResultsForSearch: 0,
                 templateSelection: (option) => {

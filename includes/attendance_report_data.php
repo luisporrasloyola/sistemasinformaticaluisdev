@@ -158,7 +158,45 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
     $stmt = db()->prepare($markSql);
     $stmt->execute($markParams);
     foreach ($stmt->fetchAll() as $mark) {
-        $marksByWorkerAndDateAndAssignment[(int) $mark['worker_id']][(string) $mark['mark_date']][(int) $mark['assignment_id']][(string) $mark['mark_type']] = $mark;
+        $reportWorkerId = (int) $mark['worker_id'];
+        $reportMarkDate = (string) $mark['mark_date'];
+        $reportAssignmentId = (int) $mark['assignment_id'];
+        $reportMarkType = (string) $mark['mark_type'];
+        $hasExtremeMark = isset($marksByWorkerAndDateAndAssignment[$reportWorkerId][$reportMarkDate][$reportAssignmentId][$reportMarkType]);
+        if ($reportMarkType !== 'entrada' || !$hasExtremeMark) {
+            $marksByWorkerAndDateAndAssignment[$reportWorkerId][$reportMarkDate][$reportAssignmentId][$reportMarkType] = $mark;
+        }
+    }
+
+    $latestManualComments = [];
+    try {
+        $manualParams = ['date_from' => $dateFrom, 'date_to' => $dateTo];
+        $manualSql = 'SELECT ama.worker_id, ama.mark_date, am.assignment_id,
+                ama.reason, ama.created_at, u.name AS administrator
+            FROM attendance_manual_adjustments ama
+            JOIN attendance_marks am ON am.id = ama.attendance_mark_id
+            LEFT JOIN users u ON u.id = ama.adjusted_by_user_id
+            WHERE ama.mark_date BETWEEN :date_from AND :date_to
+              AND ama.id = (
+                  SELECT MAX(last_ama.id)
+                  FROM attendance_manual_adjustments last_ama
+                  JOIN attendance_marks last_am ON last_am.id = last_ama.attendance_mark_id
+                  WHERE last_ama.worker_id = ama.worker_id
+                    AND last_ama.mark_date = ama.mark_date
+                    AND last_am.assignment_id = am.assignment_id
+              )';
+        if ($workerId > 0) {
+            $manualSql .= ' AND ama.worker_id = :worker_id';
+            $manualParams['worker_id'] = $workerId;
+        }
+        $manualStmt = db()->prepare($manualSql);
+        $manualStmt->execute($manualParams);
+        foreach ($manualStmt->fetchAll() as $manualComment) {
+            $latestManualComments[(int) $manualComment['worker_id']][(string) $manualComment['mark_date']][(int) $manualComment['assignment_id']] = $manualComment;
+        }
+    } catch (Throwable $error) {
+        // Mantiene compatible el reporte mientras la tabla de auditoría aún no haya sido migrada.
+        $latestManualComments = [];
     }
 
     $calendarEvents = attendance_calendar_events_between($dateFrom, $dateTo);
@@ -308,13 +346,20 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 }
             }
 
-            $observations = array_values(array_filter([
-                trim((string) ($entry['observations'] ?? '')),
-                trim((string) ($exit['observations'] ?? '')),
-                $toleranceObservation,
-                $lateMinutes > 0 ? $lateMinutes . ' min de tardanza' : '',
-                $journeyKey === 'exit_incomplete' ? 'Salida no registrada' : '',
-            ]));
+            $latestManualComment = $latestManualComments[$id][$date][$aid] ?? null;
+            if ($latestManualComment) {
+                $reason = trim((string) ($latestManualComment['reason'] ?? ''));
+                $observation = $reason !== '' ? $reason : '-';
+            } else {
+                $observations = array_values(array_filter([
+                    trim((string) ($entry['observations'] ?? '')),
+                    trim((string) ($exit['observations'] ?? '')),
+                    $toleranceObservation,
+                    $lateMinutes > 0 ? $lateMinutes . ' min de tardanza' : '',
+                    $journeyKey === 'exit_incomplete' ? 'Salida no registrada' : '',
+                ]));
+                $observation = $observations ? implode(' · ', array_unique($observations)) : '-';
+            }
             $state = attendance_report_state($stateKey);
             $journey = attendance_report_journey_state($journeyKey);
             $entryLocation = (string) ($entry['mark_location'] ?? $assignment['location_name'] ?? '-');
@@ -335,7 +380,7 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 'journey_key' => $journeyKey, 'journey_label' => $journey['label'], 'journey_class' => $journey['class'],
                 'worked_minutes' => $workedMinutes, 'scheduled_minutes' => $scheduledMinutes,
                 'late_minutes' => $lateMinutes, 'overtime_minutes' => $overtimeMinutes,
-                'observation' => $observations ? implode(' · ', array_unique($observations)) : '-',
+                'observation' => $observation,
                 'is_workday' => $hasSchedule && !$isNonWorking,
             ];
             }
