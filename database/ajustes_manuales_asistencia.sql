@@ -30,3 +30,19 @@ ALTER TABLE attendance_manual_adjustments
 ALTER TABLE attendance_manual_adjustments
     ADD COLUMN IF NOT EXISTS previous_status VARCHAR(40) DEFAULT NULL AFTER new_location_id,
     ADD COLUMN IF NOT EXISTS new_status VARCHAR(40) DEFAULT NULL AFTER previous_status;
+-- Anulación administrativa de una jornada como falta, sin eliminar marcaciones ni rutas originales.
+CREATE TABLE IF NOT EXISTS attendance_manual_day_overrides (
+    id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    worker_id INT UNSIGNED NOT NULL,
+    mark_date DATE NOT NULL,
+    attendance_status ENUM('falta') NOT NULL DEFAULT 'falta',
+    reason VARCHAR(500) NOT NULL,
+    adjusted_by_user_id INT UNSIGNED DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_amdo_worker_date (worker_id, mark_date),
+    KEY idx_amdo_user (adjusted_by_user_id),
+    CONSTRAINT fk_amdo_worker FOREIGN KEY (worker_id) REFERENCES workers (id) ON DELETE CASCADE,
+    CONSTRAINT fk_amdo_user FOREIGN KEY (adjusted_by_user_id) REFERENCES users (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

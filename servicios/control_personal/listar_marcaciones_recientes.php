@@ -20,6 +20,13 @@ $stmt = db()->prepare("SELECT am.id, am.assignment_id, am.marked_at, am.mark_typ
     JOIN workers w ON w.id = am.worker_id
     JOIN attendance_locations l ON l.id = am.location_id
     WHERE am.worker_id = :worker_id
+      AND NOT EXISTS (
+          SELECT 1
+          FROM attendance_manual_day_overrides override_day
+          WHERE override_day.worker_id = am.worker_id
+            AND override_day.mark_date = am.mark_date
+            AND override_day.attendance_status = 'falta'
+      )
     ORDER BY am.marked_at DESC, am.id DESC
     LIMIT 80");
 $stmt->execute(['worker_id' => $workerId]);

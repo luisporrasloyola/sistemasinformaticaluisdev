@@ -66,6 +66,7 @@ function initAttendanceMatrixDetail() {
         manualExit: document.getElementById('matrixManualExit'),
         manualResultPunctual: document.getElementById('matrixManualResultPunctual'),
         manualResultLate: document.getElementById('matrixManualResultLate'),
+        manualResultAbsent: document.getElementById('matrixManualResultAbsent'),
         manualLocation: document.getElementById('matrixManualLocation'),
         manualReason: document.getElementById('matrixManualReason'),
         manualAudit: document.getElementById('matrixManualAudit'),
@@ -75,6 +76,15 @@ function initAttendanceMatrixDetail() {
         manualLockedMessage: document.getElementById('matrixManualLockedMessage')
     };
 
+    const setManualAbsenceMode = (isAbsent) => {
+        modalElement.querySelectorAll('.attendance-mark-input').forEach((container) => {
+            container.classList.toggle('attendance-mark-input-disabled', isAbsent);
+            container.querySelectorAll('input, select').forEach((control) => { control.disabled = isAbsent; });
+        });
+        if (fields.manualLocation && window.jQuery && jQuery.fn.select2 && jQuery(fields.manualLocation).hasClass('select2-hidden-accessible')) {
+            jQuery(fields.manualLocation).trigger('change.select2');
+        }
+    };
     const openDetail = (cell) => {
         fields.date.textContent = cell.dataset.date || '';
         fields.worker.textContent = cell.dataset.worker || '';
@@ -89,14 +99,17 @@ function initAttendanceMatrixDetail() {
             fields.manualDate.value = cell.dataset.dateIso || '';
             fields.manualEntry.value = cell.dataset.entry && cell.dataset.entry !== '-' ? cell.dataset.entry : '';
             fields.manualExit.value = cell.dataset.exit && cell.dataset.exit !== '-' ? cell.dataset.exit : '';
+            const isAbsentResult = cell.dataset.code === 'F';
             const isLateResult = cell.dataset.code === 'T' || cell.dataset.code === 'ATSA';
-            fields.manualResultPunctual.checked = !isLateResult;
+            fields.manualResultPunctual.checked = !isLateResult && !isAbsentResult;
             fields.manualResultLate.checked = isLateResult;
+            fields.manualResultAbsent.checked = isAbsentResult;
+            setManualAbsenceMode(isAbsentResult);
             fields.manualLocation.value = cell.dataset.locationId || '';
             if (window.jQuery && jQuery.fn.select2 && jQuery(fields.manualLocation).hasClass('select2-hidden-accessible')) {
                 jQuery(fields.manualLocation).trigger('change.select2');
             }
-            fields.manualReason.value = '';
+            fields.manualReason.value = cell.dataset.manualReason || '';
             const adjustedBy = (cell.dataset.adjustedBy || '').trim();
             const adjustedAt = (cell.dataset.adjustedAt || '').trim();
             if (fields.manualAudit) {
@@ -128,6 +141,9 @@ function initAttendanceMatrixDetail() {
         modal.show();
     };
 
+    fields.manualResultPunctual?.addEventListener('change', () => setManualAbsenceMode(false));
+    fields.manualResultLate?.addEventListener('change', () => setManualAbsenceMode(false));
+    fields.manualResultAbsent?.addEventListener('change', () => setManualAbsenceMode(true));
     const manualForm = document.getElementById('attendanceManualCorrectionForm');
     if (manualForm && manualForm.dataset.bound !== '1') {
         manualForm.dataset.bound = '1';

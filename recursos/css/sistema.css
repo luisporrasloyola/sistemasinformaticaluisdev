@@ -6991,3 +6991,9 @@ input[type="checkbox"]:active {
 #attendanceMatrixDetailModal .attendance-manual-locked p{margin:0 0 5px;font-size:.86rem;font-weight:700;color:#92400e}
 #attendanceMatrixDetailModal .attendance-manual-locked small{font-size:.75rem;color:#a16207}
 #attendanceMatrixDetailModal .attendance-manual-locked.d-none{display:none!important}
+#attendanceMatrixDetailModal .attendance-result-options{grid-template-columns:repeat(3,minmax(0,1fr))}
+#attendanceMatrixDetailModal .attendance-result-option.result-absent input:checked+span{border-color:#ef4444;background:#fee2e2;color:#b91c1c;box-shadow:0 0 0 2px rgba(239,68,68,.13)}
+#attendanceMatrixDetailModal .attendance-mark-input{transition:opacity .16s ease,filter .16s ease}
+#attendanceMatrixDetailModal .attendance-mark-input-disabled{opacity:.48;filter:grayscale(.2)}
+#attendanceMatrixDetailModal .attendance-mark-input-disabled .select2-selection{background:#f1f5f9!important;cursor:not-allowed}
+@media(max-width:767.98px){#attendanceMatrixDetailModal .attendance-result-options{grid-template-columns:1fr}}

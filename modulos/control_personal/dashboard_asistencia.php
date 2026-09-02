@@ -289,6 +289,19 @@ foreach ($stmt->fetchAll() as $row) {
     }
 }
 
+$manualDayOverrides = [];
+try {
+    $overrideStmt = db()->prepare("SELECT o.*, u.name AS administrator
+        FROM attendance_manual_day_overrides o
+        LEFT JOIN users u ON u.id = o.adjusted_by_user_id
+        WHERE o.mark_date BETWEEN :date_from AND :date_to");
+    $overrideStmt->execute(['date_from' => $monthStart, 'date_to' => $monthEnd]);
+    foreach ($overrideStmt->fetchAll() as $overrideRow) {
+        $manualDayOverrides[(int) $overrideRow['worker_id']][(string) $overrideRow['mark_date']] = $overrideRow;
+    }
+} catch (Throwable $error) {
+    $manualDayOverrides = [];
+}
 $manualAdjustmentsByWorkerDate = [];
 try {
     $manualAuditStmt = db()->prepare("SELECT a.worker_id, a.mark_date, a.created_at, u.name AS administrator
@@ -308,7 +321,14 @@ try {
 } catch (Throwable $error) {
     $manualAdjustmentsByWorkerDate = [];
 }
-$matrixSummary = [];
+foreach ($manualDayOverrides as $overrideWorkerId => $overrideDates) {
+    foreach ($overrideDates as $overrideDate => $overrideRow) {
+        $manualAdjustmentsByWorkerDate[$overrideWorkerId][$overrideDate] = [
+            'administrator' => $overrideRow['administrator'] ?? '',
+            'created_at' => $overrideRow['updated_at'] ?? $overrideRow['created_at'] ?? null,
+        ];
+    }
+}$matrixSummary = [];
 foreach ($matrixRows as $workerId => $worker) {
     $matrixSummary[$workerId] = [
         'name' => (string) $worker['name'],
@@ -334,6 +354,8 @@ foreach ($matrixRows as $workerId => $worker) {
         $cell = $worker['days'][$cellDate] ?? [];
         $entry = $cell['entrada'] ?? null;
         $exit = $cell['salida'] ?? null;
+        $manualAbsence = isset($manualDayOverrides[$workerId][$cellDate]);
+        if ($manualAbsence) { $entry = null; $exit = null; }
         $weekdayNumber = (int) date('N', strtotime($cellDate));
         $scheduleId = (int) $worker['schedule_id'];
         $assignmentStartDate = (string) $worker['assignment_start_date'];
@@ -350,7 +372,7 @@ foreach ($matrixRows as $workerId => $worker) {
         $isWeeklyScheduled = isset($scheduleDaysBySchedule[$scheduleId][$weekdayNumber]);
         $isExplicitlyProgrammed = isset($programmedDaysByWorker[(int)$worker['worker_id']][$cellDate]);
         $isScheduledDay = !$isNonWorkingDay && ($isExplicitlyProgrammed || ($isAssignedPeriod && $isWeeklyScheduled));
-        $isAbsence = !$entry && !$exit && $cellDate < $today && $isScheduledDay;
+        $isAbsence = $manualAbsence || (!$entry && !$exit && $cellDate < $today && $isScheduledDay);
         $isLate = ($entry['status'] ?? '') === 'tardanza';
         $isEarlyExit = ($exit['status'] ?? '') === 'salida_anticipada';
 
@@ -650,6 +672,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         $cell = $worker['days'][$cellDate] ?? [];
                         $entry = $cell['entrada'] ?? null;
                         $exit = $cell['salida'] ?? null;
+                        $manualOverride = $manualDayOverrides[(int) $worker['worker_id']][$cellDate] ?? null;
+                        $manualAbsence = $manualOverride !== null;
+                        if ($manualAbsence) { $entry = null; $exit = null; }
                         $weekdayNumber = (int) date('N', strtotime($cellDate));
                         $scheduleId = (int) $worker['schedule_id'];
                         $assignmentStartDate = (string) $worker['assignment_start_date'];
@@ -671,7 +696,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             && !$isWeeklyScheduled
                             && !$isExplicitlyProgrammed;
                         $isScheduledDay = !$isNonWorkingDay && ($isExplicitlyProgrammed || ($isAssignedPeriod && $isWeeklyScheduled));
-                        $isAbsence = !$entry && !$exit && $cellDate < $today && $isScheduledDay;
+                        $isAbsence = $manualAbsence || (!$entry && !$exit && $cellDate < $today && $isScheduledDay);
                         $isLate = ($entry['status'] ?? '') === 'tardanza';
                         $isEarlyExit = ($exit['status'] ?? '') === 'salida_anticipada';
                         $attendanceCode = '';
@@ -681,7 +706,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         if ($isAbsence) {
                             $attendanceCode = 'F';
                             $attendanceLabel = 'Faltó';
-                            $incidents[] = 'No registró asistencia';
+                            $incidents[] = $manualAbsence ? ('Falta administrativa: ' . (string) ($manualOverride['reason'] ?? '')) : 'No registró asistencia';
                         } elseif ($entry || $exit) {
                             if ($isLate) $incidents[] = 'Tardanza';
                             if ($isEarlyExit) $incidents[] = 'Salida anticipada';
@@ -749,6 +774,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             data-manual-lock="<?= $cellDate === $today ? 'today' : ($cellDate > $today ? 'future' : '') ?>"
                             data-adjusted-by="<?= e((string) ($manualAudit['administrator'] ?? '')) ?>"
                             data-adjusted-at="<?= $manualAudit ? e(date('d/m/Y H:i', strtotime((string) $manualAudit['created_at']))) : '' ?>"
+                            data-manual-reason="<?= e((string) ($manualOverride['reason'] ?? '')) ?>"
                             data-worker="<?= e($worker['name']) ?>"
                             data-company="<?= e($worker['company']) ?>"
                             data-entry="<?= e($entry['time'] ?? '-') ?>"
@@ -885,12 +911,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         <fieldset class="attendance-result-choice"><legend>Resultado de asistencia</legend><div class="attendance-result-options">
                             <label class="attendance-result-option result-on-time" for="matrixManualResultPunctual"><input type="radio" name="attendance_result" id="matrixManualResultPunctual" value="puntual" required><span><i class="fa-solid fa-circle-check"></i><strong>Asistió sin incidencias</strong></span></label>
                             <label class="attendance-result-option result-late" for="matrixManualResultLate"><input type="radio" name="attendance_result" id="matrixManualResultLate" value="tardanza" required><span><i class="fa-solid fa-clock"></i><strong>Asistió con tardanza</strong></span></label>
+                            <label class="attendance-result-option result-absent" for="matrixManualResultAbsent"><input type="radio" name="attendance_result" id="matrixManualResultAbsent" value="falta" required><span><i class="fa-solid fa-user-xmark"></i><strong>Faltó</strong></span></label>
                         </div></fieldset>
                         <div class="attendance-manual-fields">
-                            <div><label class="form-label" for="matrixManualEntry">Primera entrada</label><input class="form-control" type="time" name="entry_time" id="matrixManualEntry"></div>
-                            <div><label class="form-label" for="matrixManualExit">Última salida</label><input class="form-control" type="time" name="exit_time" id="matrixManualExit"></div>
-                            <div class="attendance-manual-location"><label class="form-label" for="matrixManualLocation">Lugar de marcación</label><select class="form-select select2-searchable" name="location_id" id="matrixManualLocation" required data-placeholder="Buscar lugar de marcación" data-no-results="No se encontraron lugares"><option value="">Seleccione un lugar</option><?php foreach ($attendanceLocations as $location): ?><option value="<?= (int) $location['id'] ?>"><?= e($location['name']) ?></option><?php endforeach; ?></select><small class="attendance-location-help">Las ubicaciones ya registradas y los puntos de ruta no serán modificados.</small></div>
-                            <div class="attendance-manual-reason"><label class="form-label" for="matrixManualReason">Motivo de la corrección</label><textarea class="form-control" name="reason" id="matrixManualReason" rows="2" maxlength="500" required placeholder="Ej.: El servidor no estuvo disponible durante el ingreso."></textarea></div>
+                            <div class="attendance-mark-input"><label class="form-label" for="matrixManualEntry">Primera entrada</label><input class="form-control" type="time" name="entry_time" id="matrixManualEntry"></div>
+                            <div class="attendance-mark-input"><label class="form-label" for="matrixManualExit">Última salida</label><input class="form-control" type="time" name="exit_time" id="matrixManualExit"></div>
+                            <div class="attendance-manual-location attendance-mark-input"><label class="form-label" for="matrixManualLocation">Lugar de marcación</label><select class="form-select select2-searchable" name="location_id" id="matrixManualLocation" required data-placeholder="Buscar lugar de marcación" data-no-results="No se encontraron lugares"><option value="">Seleccione un lugar</option><?php foreach ($attendanceLocations as $location): ?><option value="<?= (int) $location['id'] ?>"><?= e($location['name']) ?></option><?php endforeach; ?></select><small class="attendance-location-help">Las ubicaciones ya registradas y los puntos de ruta no serán modificados.</small></div>
+                            <div class="attendance-manual-reason"><label class="form-label" for="matrixManualReason">Observación</label><textarea class="form-control" name="reason" id="matrixManualReason" rows="2" maxlength="500" required placeholder="Ej.: El servidor no estuvo disponible durante el ingreso."></textarea></div>
                         </div>
                         <div class="attendance-manual-actions"><small><i class="fa-solid fa-lock"></i> El cambio quedará auditado con su usuario y fecha.</small><button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk me-1"></i> Guardar corrección</button></div>
                     </form>

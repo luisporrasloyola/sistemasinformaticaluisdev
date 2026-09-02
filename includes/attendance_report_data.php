@@ -199,6 +199,24 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
         $latestManualComments = [];
     }
 
+    $manualDayOverrides = [];
+    try {
+        $overrideParams = ['date_from' => $dateFrom, 'date_to' => $dateTo];
+        $overrideSql = 'SELECT worker_id, mark_date, reason, adjusted_by_user_id, updated_at
+            FROM attendance_manual_day_overrides
+            WHERE mark_date BETWEEN :date_from AND :date_to';
+        if ($workerId > 0) {
+            $overrideSql .= ' AND worker_id = :worker_id';
+            $overrideParams['worker_id'] = $workerId;
+        }
+        $overrideStmt = db()->prepare($overrideSql);
+        $overrideStmt->execute($overrideParams);
+        foreach ($overrideStmt->fetchAll() as $overrideRow) {
+            $manualDayOverrides[(int) $overrideRow['worker_id']][(string) $overrideRow['mark_date']] = $overrideRow;
+        }
+    } catch (Throwable $error) {
+        $manualDayOverrides = [];
+    }
     $calendarEvents = attendance_calendar_events_between($dateFrom, $dateTo);
     $rows = [];
     $periodStart = new DateTimeImmutable($dateFrom);
@@ -250,6 +268,8 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 $marks = $markedAssignmentsMap[$aid] ?? [];
                 $entry = $marks['entrada'] ?? null;
                 $exit = $marks['salida'] ?? null;
+                $manualOverride = $manualDayOverrides[$id][$date] ?? null;
+                if ($manualOverride) { $entry = null; $exit = null; }
                 $scheduleDay = $scheduleDaysBySchedule[(int) $assignment['schedule_id']][$weekday] ?? null;
                 $program = $dateProgramsMap[$aid] ?? null;
                 if ($program) {
@@ -266,7 +286,9 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 $isLate = $entry && (($entry['schedule_status'] ?? '') === 'tardanza' || ($entry['final_status'] ?? '') === 'tardanza');
                 $isEarlyExit = $exit && (($exit['schedule_status'] ?? '') === 'salida_anticipada' || ($exit['final_status'] ?? '') === 'salida_anticipada');
 
-            if ($entry || $exit) {
+            if ($manualOverride) {
+                $stateKey = 'absent';
+            } elseif ($entry || $exit) {
                 $stateKey = !$entry ? 'incomplete'
                     : ($isLate && $isEarlyExit ? 'late_early_exit'
                     : ($isLate ? 'late' : ($isEarlyExit ? 'early_exit' : 'attended')));
@@ -347,7 +369,10 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
             }
 
             $latestManualComment = $latestManualComments[$id][$date][$aid] ?? null;
-            if ($latestManualComment) {
+            if ($manualOverride) {
+                $reason = trim((string) ($manualOverride['reason'] ?? ''));
+                $observation = $reason !== '' ? $reason : '-';
+            } elseif ($latestManualComment) {
                 $reason = trim((string) ($latestManualComment['reason'] ?? ''));
                 $observation = $reason !== '' ? $reason : '-';
             } else {
@@ -362,8 +387,8 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
             }
             $state = attendance_report_state($stateKey);
             $journey = attendance_report_journey_state($journeyKey);
-            $entryLocation = (string) ($entry['mark_location'] ?? $assignment['location_name'] ?? '-');
-            $exitLocation = (string) ($exit['mark_location'] ?? $entryLocation);
+            $entryLocation = $manualOverride ? '-' : (string) ($entry['mark_location'] ?? $assignment['location_name'] ?? '-');
+            $exitLocation = $manualOverride ? '-' : (string) ($exit['mark_location'] ?? $entryLocation);
             $journeyLocations = $entryLocation === $exitLocation ? $entryLocation : $entryLocation . ' → ' . $exitLocation;
             $rows[] = [
                 'worker_id' => $id, 'date' => $date, 'weekday' => $weekdayLabels[$weekday],
