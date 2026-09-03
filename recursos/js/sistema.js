@@ -873,6 +873,33 @@ function initPersonalList() {
     const table = document.getElementById('personalTable');
     if (!table) return;
 
+    if (window.jQuery && $.fn.DataTable && table.dataset.companyFilterBound !== '1') {
+        table.dataset.companyFilterBound = '1';
+        const hasSelectionColumn = !!table.querySelector('.js-worker-replica');
+        const companyColumn = hasSelectionColumn ? 1 : 0;
+        const normalizeSearchValue = (value) => String(value || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .toLowerCase();
+        const companyNames = new Set(
+            [...table.tBodies[0].rows].map(row => normalizeSearchValue(row.cells[companyColumn]?.textContent))
+        );
+
+        $.fn.dataTable.ext.search.push((settings, rowData) => {
+            if (settings.nTable !== table) return true;
+            const query = normalizeSearchValue(settings.oPreviousSearch?.sSearch);
+            if (!query || !companyNames.has(query)) return true;
+            const company = normalizeSearchValue($('<div>').html(rowData[companyColumn] || '').text());
+            return company === query;
+        });
+
+        $(table).on('init.dt', () => {
+            $(`#${table.id}_filter input`).attr('placeholder', 'Empresa, personal o DNI');
+        });
+    }
+
     table.querySelectorAll('.js-eliminar-personal').forEach((button) => {
         button.addEventListener('click', async () => {
             const ok = await confirmAction('¿Eliminar personal?');
