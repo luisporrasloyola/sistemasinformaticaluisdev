@@ -14,6 +14,12 @@ function status_alert_scopes(): array
             'name_column' => 'name',
             'active_column' => 'status',
         ],
+        'empresa_maquirenta.pmi_individual' => [
+            'label' => 'Empresa Maquirenta - Formatos - PMI Individual',
+            'table' => 'empresa_maquirenta_formato_requisitos_catalogo',
+            'name_column' => 'name',
+            'active_column' => 'status',
+        ],
         'maquinaria.documentos' => [
             'label' => 'Maquinaria - Documentos',
             'table' => 'maquinaria_documentos_catalogo',

@@ -11,6 +11,8 @@ $empresaMaquirentaDashboardOpen = str_ends_with($currentPath, '/modulos/empresa_
 $ventanillaOpen = str_ends_with($currentPath, '/modulos/empresa_maquirenta/informes.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/charla_preoperacional.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/pms.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/permiso_trabajo.php');
 $santaRosaOpen = str_ends_with($currentPath, '/modulos/empresa_maquirenta/informes_santa_rosa.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/charla_preoperacional_santa_rosa.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/pms_santa_rosa.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/permiso_trabajo_santa_rosa.php');
 $formatosOpen = str_ends_with($currentPath, '/modulos/empresa_maquirenta/formatos.php');
+$formatoPersonalOpen = str_ends_with($currentPath, '/modulos/empresa_maquirenta/personal.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/formulario_personal.php');
+$formatoPmiOpen = str_ends_with($currentPath, '/modulos/empresa_maquirenta/pmi_individual.php');
 $pmsOpen = str_ends_with($currentPath, '/modulos/empresa_maquirenta/pms.php');
 $permisoTrabajoOpen = str_ends_with($currentPath, '/modulos/empresa_maquirenta/permiso_trabajo.php');
 $pmsSantaRosaOpen = str_ends_with($currentPath, '/modulos/empresa_maquirenta/pms_santa_rosa.php');
@@ -105,6 +107,8 @@ $isAdmin = is_admin();
                     <button class="nav-link sub-link nav-parent <?= $santaRosaOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#santaRosaMenu" aria-expanded="<?= $santaRosaOpen ? 'true' : 'false' ?>" aria-controls="santaRosaMenu"><i class="fa-solid fa-shield-halved"></i><span>Central Térmica Santa Rosa</span><i class="fa-solid fa-chevron-down nav-caret"></i></button>
                     <div class="collapse <?= $santaRosaOpen ? 'show' : '' ?>" id="santaRosaMenu"><div class="submenu ms-3"><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa_maquirenta/informes_santa_rosa.php"><i class="fa-solid fa-chart-column"></i><span>Informes</span></a><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa_maquirenta/charla_preoperacional_santa_rosa.php"><i class="fa-solid fa-person-chalkboard"></i><span>Charla preoperacional</span></a><a class="nav-link sub-link <?= $pmsSantaRosaOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/empresa_maquirenta/pms_santa_rosa.php"><i class="fa-solid fa-file-invoice"></i><span>PMS</span></a><a class="nav-link sub-link <?= $permisoTrabajoSantaRosaOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/empresa_maquirenta/permiso_trabajo_santa_rosa.php"><i class="fa-solid fa-file-signature"></i><span>Permiso de trabajo</span></a></div></div>
                     <a class="nav-link sub-link <?= $formatosOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/empresa_maquirenta/formatos.php"><i class="fa-solid fa-file-invoice"></i><span>Formatos</span></a>
+                    <?php if ($isAdmin || current_user_can_module('empresa_maquirenta.personal')): ?><a class="nav-link sub-link <?= $formatoPersonalOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/empresa_maquirenta/personal.php"><i class="fa-solid fa-users"></i><span>Personal</span></a><?php endif; ?>
+                    <?php if ($isAdmin || current_user_can_module('empresa_maquirenta.pmi_individual')): ?><a class="nav-link sub-link <?= $formatoPmiOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/empresa_maquirenta/pmi_individual.php"><i class="fa-solid fa-file-shield"></i><span>PMI Individual</span></a><?php endif; ?>
                 </div>
             </div>
 
@@ -179,6 +183,8 @@ $isAdmin = is_admin();
                     <?php if (current_user_can_module('empresa_maquirenta.formatos')): ?>
                     <a class="nav-link sub-link <?= $formatosOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/empresa_maquirenta/formatos.php"><i class="fa-solid fa-file-invoice"></i><span>Formatos</span></a>
                     <?php endif; ?>
+                    <?php if (current_user_can_module('empresa_maquirenta.personal')): ?><a class="nav-link sub-link <?= $formatoPersonalOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/empresa_maquirenta/personal.php"><i class="fa-solid fa-users"></i><span>Personal</span></a><?php endif; ?>
+                    <?php if (current_user_can_module('empresa_maquirenta.pmi_individual')): ?><a class="nav-link sub-link <?= $formatoPmiOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/empresa_maquirenta/pmi_individual.php"><i class="fa-solid fa-file-shield"></i><span>PMI Individual</span></a><?php endif; ?>
                 </div></div>
             <?php endif; ?>
             <?php if (current_user_can_module('usuarios')): ?>

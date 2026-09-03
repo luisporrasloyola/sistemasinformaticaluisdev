@@ -1,12 +1,12 @@
 <?php
 require_once __DIR__ . '/../../includes/security.php';
-require_module_access('requisitos.pmi_individual');
+require_module_access('empresa_maquirenta.pmi_individual');
 require __DIR__ . '/../../includes/header.php';
 ?>
 <div class="page-title">
     <div>
-        <h1>Requisitos PMI Individual</h1>
-        <p>Control documentario por trabajador y puesto.</p>
+        <h1>PMI Individual - Empresa Maquirenta</h1>
+        <p>Control documentario independiente del personal de Empresa Maquirenta.</p>
     </div>
 </div>
 
@@ -87,7 +87,7 @@ require __DIR__ . '/../../includes/header.php';
                         <label class="form-label">Requisito</label>
                         <div class="input-group">
                             <select class="form-select" name="requirement_id" id="requirementSelect" required></select>
-                            <?php if (current_user_can_manage_scope('requisitos.pmi_individual')): ?>
+                            <?php if (current_user_can_manage_scope('empresa_maquirenta.pmi_individual')): ?>
                                 <button class="btn btn-outline-primary" type="button" id="newCatalogRequirementBtn" title="Agregar requisito"><i class="fa-solid fa-plus"></i></button>
                                 <button class="btn btn-outline-danger" type="button" id="deleteCatalogRequirementBtn" title="Eliminar requisito"><i class="fa-solid fa-trash"></i></button>
                             <?php endif; ?>
@@ -138,31 +138,8 @@ require __DIR__ . '/../../includes/header.php';
         </form>
     </div>
 </div>
-<div class="modal fade" id="replicateRequirementModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <div><h5 class="modal-title"><i class="fa-solid fa-copy me-2 text-primary"></i>Replicar registro</h5><small class="text-muted">Seleccione uno o varios puestos de destino.</small></div>
-                <button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-            </div>
-            <div class="modal-body">
-                <input type="hidden" id="replicateRequirementId">
-                <div class="replicate-record-summary mb-3" id="replicateRecordSummary"></div>
-                <label class="form-label fw-semibold">Puestos de trabajo</label>
-                <div class="replicate-position-list" id="replicatePositionList"></div>
-                <div class="small text-muted mt-2"><i class="fa-solid fa-circle-info me-1"></i>Los puestos donde el requisito ya existe no pueden seleccionarse.</div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancelar</button>
-                <button class="btn btn-primary" type="button" id="confirmReplicateRequirementBtn"><i class="fa-solid fa-copy me-2"></i>Replicar registro</button>
-            </div>
-        </div>
-    </div>
-</div>
-<style>
-.replicate-record-summary{padding:.75rem .9rem;border:1px solid #cfe0ff;border-radius:.65rem;background:#f3f7ff}.replicate-record-summary strong{display:block;color:#173b7a}.replicate-position-list{display:grid;gap:.5rem}.replicate-position-option{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.7rem .8rem;border:1px solid #d9e2ef;border-radius:.6rem;background:#fff}.replicate-position-option:has(input:checked){border-color:#4d83f3;background:#eef4ff}.replicate-position-option.is-disabled{background:#f5f6f8;color:#7b8492}.replicate-position-option label{display:flex;align-items:center;gap:.6rem;margin:0;cursor:pointer;flex:1}
-</style>
 <script>
+window.personalServiceBase = <?= json_encode(APP_URL . '/servicios/empresa_maquirenta/formatos') ?>;
 window.canManageRequirementObservations = <?= (is_admin() || is_gestor_role()) ? 'true' : 'false' ?>;
 </script>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>

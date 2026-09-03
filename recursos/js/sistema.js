@@ -1,5 +1,6 @@
 const BASE_URL = window.APP_URL || window.location.origin;
 const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+const personalServiceUrl = (file) => `${window.personalServiceBase || BASE_URL + "/servicios"}/${file}`;
 
 const attendanceReportNoteForm = document.getElementById('attendanceReportNoteForm');
 if (attendanceReportNoteForm) {
@@ -26,6 +27,8 @@ let currentPositionId = null;
 let requirementModal = null;
 let readOnlyMode = false;
 let canObserveCurrentRequirement = true;
+let currentWorkerPositions = [];
+let replicateRequirementModal = null;
 
 function localDateValue(date = new Date()) {
     const year = date.getFullYear();
@@ -857,7 +860,7 @@ function bindWorkerFileDelete() {
             form.append('csrf_token', csrf);
             form.append('id', button.dataset.id);
             form.append('type', button.dataset.type);
-            const response = await fetch(`${BASE_URL}/servicios/eliminar_archivo_personal.php`, { method: 'POST', body: form });
+            const response = await fetch(personalServiceUrl('eliminar_archivo_personal.php'), { method: 'POST', body: form });
             const data = await response.json();
             if (data.ok) {
                 window.location.reload();
@@ -879,7 +882,7 @@ function initPersonalList() {
             body.append('csrf_token', csrf);
             body.append('id', button.dataset.id);
 
-            const response = await fetch(`${BASE_URL}/servicios/eliminar_personal.php`, { method: 'POST', body });
+            const response = await fetch(personalServiceUrl('eliminar_personal.php'), { method: 'POST', body });
             const data = await response.json();
             if (data.ok) {
                 window.location.reload();
@@ -1018,7 +1021,7 @@ async function agregarPuestoTrabajo(input, grid, control) {
     if (button) button.disabled = true;
 
     try {
-        const response = await fetch(`${BASE_URL}/servicios/guardar_puesto.php`, { method: 'POST', body });
+        const response = await fetch(personalServiceUrl('guardar_puesto.php'), { method: 'POST', body });
         const data = await response.json();
         if (!data.ok) {
             Swal.fire('Atención', data.message || 'No se pudo guardar el puesto.', 'warning');
@@ -1081,7 +1084,7 @@ async function eliminarPuestoTrabajo(button, control) {
     body.append('csrf_token', csrf);
     body.append('id', id);
 
-    const response = await fetch(`${BASE_URL}/servicios/eliminar_puesto.php`, { method: 'POST', body });
+    const response = await fetch(personalServiceUrl('eliminar_puesto.php'), { method: 'POST', body });
     const data = await response.json();
     if (!data.ok) {
         Swal.fire('Atención', data.message || 'No se pudo eliminar el puesto.', 'warning');
@@ -1346,13 +1349,18 @@ function initRequirementsModule() {
     if (!workerSearch.length) return;
 
     requirementModal = new bootstrap.Modal(document.getElementById('requirementModal'));
+    const replicateModalElement = document.getElementById('replicateRequirementModal');
+    if (replicateModalElement) {
+        replicateRequirementModal = new bootstrap.Modal(replicateModalElement);
+        document.getElementById('confirmReplicateRequirementBtn')?.addEventListener('click', confirmReplicateRequirement);
+    }
 
     workerSearch.select2({
         theme: 'bootstrap4',
         width: '100%',
         placeholder: 'Escriba nombre o documento',
         ajax: {
-            url: `${BASE_URL}/servicios/buscar_personal.php`,
+            url: personalServiceUrl('buscar_personal.php'),
             dataType: 'json',
             delay: 250,
             data: (params) => ({ q: params.term || '' })
@@ -1371,7 +1379,7 @@ function initRequirementsModule() {
         width: '100%',
         placeholder: 'Buscar requisito',
         ajax: {
-            url: `${BASE_URL}/servicios/catalogo_requisitos.php`,
+            url: personalServiceUrl('catalogo_requisitos.php'),
             dataType: 'json',
             delay: 200,
             data: (params) => ({ q: params.term || '', puesto_id: currentPositionId || 0 })
@@ -1389,7 +1397,7 @@ function initRequirementsModule() {
 
 async function loadWorker(id) {
     currentWorkerId = id;
-    const response = await fetch(`${BASE_URL}/servicios/perfil_personal.php?id=${id}`);
+    const response = await fetch(`${personalServiceUrl('perfil_personal.php')}?id=${id}`);
     const data = await response.json();
     if (!data.ok) return;
 
@@ -1400,6 +1408,7 @@ async function loadWorker(id) {
     document.getElementById('workerName').textContent = worker.full_name;
     document.getElementById('workerCompany').textContent = worker.company || '';
     document.getElementById('workerPositions').textContent = data.positions.map((p) => p.name).join(', ');
+    currentWorkerPositions = data.positions || [];
     document.getElementById('workerActive').checked = Number(worker.status) === 1;
 
     const select = document.getElementById('positionSelect');
@@ -1410,7 +1419,7 @@ async function loadWorker(id) {
 
 async function loadRequirements() {
     if (!currentWorkerId || !currentPositionId) return;
-    const response = await fetch(`${BASE_URL}/servicios/listar_requisitos.php?trabajador_id=${currentWorkerId}&puesto_id=${currentPositionId}&t=${Date.now()}`);
+    const response = await fetch(`${personalServiceUrl('listar_requisitos.php')}?trabajador_id=${currentWorkerId}&puesto_id=${currentPositionId}&t=${Date.now()}`);
     const data = await response.json();
     const tbody = document.querySelector('#requirementsTable tbody');
     tbody.innerHTML = '';
@@ -1419,6 +1428,10 @@ async function loadRequirements() {
         const downloadName = escapeHtml(row.original_file_name || `${row.requirement}`);
         const downloadButton = hasAttachment
             ? `<a class="btn btn-sm btn-outline-success" href="${BASE_URL}/${row.file_path}" download="${downloadName}" title="Descargar documento"><i class="fa-solid fa-download"></i></a>`
+            : '';
+const replicateEnabled = currentWorkerPositions.length > 1;
+        const replicateButton = document.getElementById('replicateRequirementModal')
+            ? `<button class="btn btn-sm btn-outline-info" type="button" onclick="openReplicateRequirement(${row.id})" ${replicateEnabled ? '' : 'disabled'} title="${replicateEnabled ? 'Replicar a otro puesto' : 'El trabajador no tiene otro puesto'}"><i class="fa-solid fa-copy"></i></button>`
             : '';
         tbody.insertAdjacentHTML('beforeend', `
             <tr>
@@ -1436,6 +1449,7 @@ async function loadRequirements() {
                     <button class="btn btn-sm btn-outline-secondary" onclick="openViewRequirement(${row.id})"><i class="fa-solid fa-eye"></i></button>
                     <button class="btn btn-sm btn-outline-danger" onclick="deleteRequirement(${row.id})"><i class="fa-solid fa-trash"></i></button>
                     ${downloadButton}
+                    ${replicateButton}
                 </td>
             </tr>
         `);
@@ -1483,7 +1497,7 @@ async function openViewRequirement(id) {
 
 async function fillRequirementModal(id) {
     resetRequirementFileInput();
-    const response = await fetch(`${BASE_URL}/servicios/obtener_requisito.php?id=${id}`);
+    const response = await fetch(`${personalServiceUrl('obtener_requisito.php')}?id=${id}`);
     const data = await response.json();
     const row = data.row;
     canObserveCurrentRequirement = data.can_observe === true;
@@ -1673,7 +1687,7 @@ function renderRequirementObservationState(status) {
 async function saveRequirementLegacy(event) {
     event.preventDefault();
     if (readOnlyMode || !event.currentTarget.checkValidity()) return;
-    const response = await fetch(`${BASE_URL}/servicios/guardar_requisito.php`, {
+    const response = await fetch(personalServiceUrl('guardar_requisito.php'), {
         method: 'POST',
         body: new FormData(event.currentTarget)
     });
@@ -1710,7 +1724,7 @@ async function saveRequirement(event) {
 
     try {
         const data = await postFormWithProgress(
-            `${BASE_URL}/servicios/guardar_requisito.php`,
+            personalServiceUrl('guardar_requisito.php'),
             new FormData(form),
             renderProgress
         );
@@ -1738,7 +1752,7 @@ async function deleteRequirement(id) {
     const form = new FormData();
     form.append('csrf_token', csrf);
     form.append('id', id);
-    const response = await fetch(`${BASE_URL}/servicios/eliminar_requisito.php`, { method: 'POST', body: form });
+    const response = await fetch(personalServiceUrl('eliminar_requisito.php'), { method: 'POST', body: form });
     const data = await response.json();
     if (data.ok) loadRequirements();
 }
@@ -1749,7 +1763,7 @@ async function deleteRequirementPdf(id) {
     const form = new FormData();
     form.append('csrf_token', csrf);
     form.append('id', id);
-    const response = await fetch(`${BASE_URL}/servicios/eliminar_pdf_requisito.php`, { method: 'POST', body: form });
+    const response = await fetch(personalServiceUrl('eliminar_pdf_requisito.php'), { method: 'POST', body: form });
     const data = await response.json();
     if (data.ok) {
         resetRequirementFileInput();
@@ -1783,7 +1797,7 @@ async function addCatalogRequirement() {
     form.append('csrf_token', csrf);
     form.append('name', value);
     form.append('position_id', currentPositionId || 0);
-    const response = await fetch(`${BASE_URL}/servicios/guardar_catalogo_requisito.php`, { method: 'POST', body: form });
+    const response = await fetch(personalServiceUrl('guardar_catalogo_requisito.php'), { method: 'POST', body: form });
     const data = await response.json();
     if (!data.ok) {
         Swal.fire('Atención', data.message || 'No se pudo agregar.', 'warning');
@@ -1817,7 +1831,7 @@ async function deleteCatalogRequirement() {
     form.append('csrf_token', csrf);
     form.append('id', requirementId);
 
-    const response = await fetch(`${BASE_URL}/servicios/eliminar_catalogo_requisito.php`, { method: 'POST', body: form });
+    const response = await fetch(personalServiceUrl('eliminar_catalogo_requisito.php'), { method: 'POST', body: form });
     const data = await response.json();
 
     if (!data.ok) {
@@ -1862,7 +1876,7 @@ async function downloadRequirementsZip(selectedIds = []) {
         params.set('ids', selectedIds.join(','));
     }
 
-    const response = await fetch(`${BASE_URL}/servicios/descargar_requisitos.php?${params.toString()}`);
+    const response = await fetch(`${personalServiceUrl('descargar_requisitos.php')}?${params.toString()}`);
 
     if (!response.ok) {
         const data = await response.json().catch(() => ({ message: 'No se pudo generar la descarga.' }));
@@ -1897,7 +1911,7 @@ async function uploadQuickPhoto(event) {
     form.append('csrf_token', csrf);
     form.append('worker_id', currentWorkerId);
     form.append('photo', file);
-    const response = await fetch(`${BASE_URL}/servicios/subir_foto_personal.php`, { method: 'POST', body: form });
+    const response = await fetch(personalServiceUrl('subir_foto_personal.php'), { method: 'POST', body: form });
     const data = await response.json();
     if (data.ok) {
         document.getElementById('workerPhoto').src = data.path;
@@ -1906,6 +1920,57 @@ async function uploadQuickPhoto(event) {
     }
 }
 
+async function openReplicateRequirement(id) {
+    if (!replicateRequirementModal || currentWorkerPositions.length <= 1) return;
+    const list = document.getElementById('replicatePositionList');
+    const summary = document.getElementById('replicateRecordSummary');
+    const confirm = document.getElementById('confirmReplicateRequirementBtn');
+    list.innerHTML = '<div class="text-center py-3 text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Cargando puestos...</div>';
+    summary.innerHTML = '';
+    confirm.disabled = true;
+    document.getElementById('replicateRequirementId').value = id;
+    replicateRequirementModal.show();
+    try {
+        const response = await fetch(`${BASE_URL}/servicios/obtener_destinos_replica_requisito.php?id=${id}`);
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudieron cargar los puestos.');
+        summary.innerHTML = `<strong>${escapeHtml(data.record.requirement)}</strong><span class="small text-muted">Puesto actual: ${escapeHtml(data.record.source_position)}</span>`;
+        if (!data.positions.length) {
+            list.innerHTML = '<div class="alert alert-secondary mb-0">El trabajador no tiene otros puestos de trabajo.</div>';
+            return;
+        }
+        list.innerHTML = data.positions.map(position => `<div class="replicate-position-option ${Number(position.already_exists) ? 'is-disabled' : ''}"><label><input class="form-check-input replicate-target-position" type="checkbox" value="${position.id}" ${Number(position.already_exists) ? 'disabled' : 'checked'}><span>${escapeHtml(position.name)}</span></label>${Number(position.already_exists) ? '<span class="badge text-bg-secondary">Ya registrado</span>' : '<span class="badge text-bg-primary">Disponible</span>'}</div>`).join('');
+        const update = () => { confirm.disabled = !list.querySelector('.replicate-target-position:checked'); };
+        list.onchange = update;
+        update();
+    } catch (error) {
+        list.innerHTML = `<div class="alert alert-danger mb-0">${escapeHtml(error.message)}</div>`;
+    }
+}
+
+async function confirmReplicateRequirement() {
+    const id = document.getElementById('replicateRequirementId')?.value;
+    const positions = [...document.querySelectorAll('.replicate-target-position:checked')].map(input => input.value);
+    if (!id || !positions.length) return;
+    const button = document.getElementById('confirmReplicateRequirementBtn');
+    const body = new FormData();
+    body.append('csrf_token', csrf);
+    body.append('id', id);
+    positions.forEach(positionId => body.append('position_ids[]', positionId));
+    button.disabled = true;
+    try {
+        const response = await fetch(`${BASE_URL}/servicios/replicar_requisito_puesto.php`, { method: 'POST', body });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo replicar el registro.');
+        replicateRequirementModal.hide();
+        await Swal.fire({ icon: 'success', title: 'Registro replicado', text: `Se replicó correctamente a ${data.created} puesto(s).`, timer: 1800, showConfirmButton: false });
+        loadRequirements();
+    } catch (error) {
+        Swal.fire('Atención', error.message, 'warning');
+    } finally {
+        button.disabled = false;
+    }
+}
 async function confirmAction(title) {
     const result = await Swal.fire({
         title,
@@ -2074,7 +2139,7 @@ function initMachineCompanyQuickActions() {
         const submitButton = quickForm.querySelector('button[type="submit"]');
         submitButton.disabled = true;
         try {
-            const response = await fetch(`${BASE_URL}/servicios/guardar_empresa.php`, {
+            const response = await fetch(personalServiceUrl('guardar_empresa.php'), {
                 method: 'POST',
                 body: new FormData(quickForm)
             });
@@ -2121,7 +2186,7 @@ function initMachineCompanyQuickActions() {
         body.append('csrf_token', csrf);
         body.append('id', value);
 
-        const response = await fetch(`${BASE_URL}/servicios/eliminar_empresa.php`, { method: 'POST', body });
+        const response = await fetch(personalServiceUrl('eliminar_empresa.php'), { method: 'POST', body });
         const data = await response.json();
         if (!data.ok) {
             Swal.fire('Atenci\u00f3n', data.message || 'No se pudo eliminar la empresa.', 'warning');

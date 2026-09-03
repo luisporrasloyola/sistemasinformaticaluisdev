@@ -58,6 +58,8 @@ function permission_modules_catalog(): array
                 'empresa_maquirenta.informes_santa_rosa' => "Central Térmica Santa Rosa - Informes",
                 'empresa_maquirenta.charla_preoperacional_santa_rosa' => 'Central Térmica Santa Rosa - Charla preoperacional',
                 'empresa_maquirenta.formatos' => 'Formatos',
+                'empresa_maquirenta.personal' => 'Formatos - Personal',
+                'empresa_maquirenta.pmi_individual' => 'Formatos - PMI Individual',
                 'empresa_maquirenta.pms' => 'Central Térmica Ventanilla - PMS',
                 'empresa_maquirenta.permiso_trabajo' => 'Central Térmica Ventanilla - Permiso de trabajo',
                 'empresa_maquirenta.pms_santa_rosa' => 'Central Térmica Santa Rosa - PMS',
@@ -80,6 +82,12 @@ function permission_document_scopes(): array
         'requisitos.pmi_individual' => [
             'label' => 'Requisitos - PMI Individual',
             'table' => 'requirements_catalog',
+            'name_column' => 'name',
+            'active_column' => 'status',
+        ],
+        'empresa_maquirenta.pmi_individual' => [
+            'label' => 'Empresa Maquirenta - Formatos - PMI Individual',
+            'table' => 'empresa_maquirenta_formato_requisitos_catalogo',
             'name_column' => 'name',
             'active_column' => 'status',
         ],
