@@ -40,9 +40,7 @@ require __DIR__ . '/../../includes/header.php';
             <thead>
             <tr>
                 <th>Empresa</th>
-                <th class="text-nowrap" title="Tipo de documento">Tipo</th>
-                <th class="text-nowrap" title="Número de documento">N.º doc.</th>
-                <th>Apellidos y Nombres</th>
+                <th>Personal</th>
                 <th>Correo</th>
                 <th>Progreso</th>
                 <th>Estado</th>
@@ -53,9 +51,10 @@ require __DIR__ . '/../../includes/header.php';
             <?php foreach ($workers as $worker): $progress = worker_progress($worker); ?>
                 <tr>
                     <td><?= e($worker['company'] ?? '') ?></td>
-                    <td><?= e($worker['document_type']) ?></td>
-                    <td><?= e($worker['document_number']) ?></td>
-                    <td><?= e($worker['full_name']) ?></td>
+                    <td class="personal-identity">
+                        <strong><?= e($worker['full_name']) ?></strong>
+                        <small><?= e($worker['document_type']) ?>: <?= e($worker['document_number']) ?></small>
+                    </td>
                     <td><?= e($worker['email'] ?? '') ?></td>
                     <td>
                         <?php if ($progress === 100): ?>
@@ -84,6 +83,7 @@ require __DIR__ . '/../../includes/header.php';
         </table>
     </div>
 </div>
+<style>.personal-identity strong{display:block;color:#172033;font-weight:650;line-height:1.25}.personal-identity small{display:block;margin-top:.15rem;color:#7a8799;font-size:.72rem;line-height:1.2}#personalTable th{white-space:nowrap}</style>
 <script>window.personalServiceBase = <?= json_encode(APP_URL . '/servicios/empresa_maquirenta/formatos') ?>;</script>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>
 

@@ -49,9 +49,7 @@ require __DIR__ . '/../../includes/header.php';
             <tr>
                 <th class="text-center replica-select-column" data-orderable="false" title="Seleccionar personal">Sel.</th>
                 <th>Empresa</th>
-                <th class="text-nowrap" title="Tipo de documento">Tipo</th>
-                <th class="text-nowrap" title="Número de documento">N.º doc.</th>
-                <th>Apellidos y Nombres</th>
+                <th>Personal</th>
                 <th>Correo</th>
                 <th>Progreso</th>
                 <th>Estado</th>
@@ -63,9 +61,10 @@ require __DIR__ . '/../../includes/header.php';
                 <tr>
                     <td class="text-center replica-select-column"><input class="form-check-input js-worker-replica" type="checkbox" value="<?= (int) $worker['id'] ?>" aria-label="Seleccionar <?= e($worker['full_name']) ?>"></td>
                     <td><?= e($worker['company'] ?? '') ?></td>
-                    <td><?= e($worker['document_type']) ?></td>
-                    <td><?= e($worker['document_number']) ?></td>
-                    <td><?= e($worker['full_name']) ?></td>
+                    <td class="personal-identity">
+                        <strong><?= e($worker['full_name']) ?></strong>
+                        <small><?= e($worker['document_type']) ?>: <?= e($worker['document_number']) ?></small>
+                    </td>
                     <td><?= e($worker['email'] ?? '') ?></td>
                     <td>
                         <?php if ($progress === 100): ?>
@@ -114,8 +113,8 @@ require __DIR__ . '/../../includes/header.php';
     </div>
 </div>
 <style>
-.replica-select-column{width:42px!important;min-width:42px!important;max-width:42px!important;padding-left:.25rem!important;padding-right:.25rem!important}
-@media (min-width:1300px){.personal-table-responsive{overflow-x:auto}#personalTable{width:100%!important;table-layout:fixed}#personalTable th,#personalTable td{padding-left:.38rem;padding-right:.38rem;font-size:.82rem;overflow-wrap:anywhere}#personalTable th{white-space:nowrap;overflow-wrap:normal}#personalTable th:nth-child(1){width:4%!important}#personalTable th:nth-child(2){width:16%!important}#personalTable th:nth-child(3){width:7%!important}#personalTable th:nth-child(4){width:11%!important}#personalTable th:nth-child(5){width:16%!important}#personalTable th:nth-child(6){width:18%!important}#personalTable th:nth-child(7){width:13%!important}#personalTable th:nth-child(8){width:9%!important}#personalTable th:nth-child(9){width:6%!important}#personalTable td:nth-child(6){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#personalTable td:nth-child(9) .d-flex{justify-content:center;gap:.2rem!important}#personalTable td:nth-child(9) .btn{padding:.3rem .42rem}}
+.personal-identity strong{display:block;color:#172033;font-weight:650;line-height:1.25}.personal-identity small{display:block;margin-top:.15rem;color:#7a8799;font-size:.72rem;line-height:1.2}.replica-select-column{width:42px!important;min-width:42px!important;max-width:42px!important;padding-left:.25rem!important;padding-right:.25rem!important}
+@media (min-width:1300px){.personal-table-responsive{overflow-x:auto}#personalTable{width:100%!important;table-layout:fixed}#personalTable th,#personalTable td{padding-left:.38rem;padding-right:.38rem;font-size:.82rem;overflow-wrap:anywhere}#personalTable th{white-space:nowrap;overflow-wrap:normal}#personalTable th:nth-child(1){width:4%!important}#personalTable th:nth-child(2){width:18%!important}#personalTable th:nth-child(3){width:22%!important}#personalTable th:nth-child(4){width:22%!important}#personalTable th:nth-child(5){width:15%!important}#personalTable th:nth-child(6){width:11%!important}#personalTable th:nth-child(7){width:8%!important}#personalTable td:nth-child(4){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#personalTable td:nth-child(7) .d-flex{justify-content:center;gap:.2rem!important}#personalTable td:nth-child(7) .btn{padding:.3rem .42rem}}
 @media (max-width:1299.98px){#personalTable{min-width:1000px!important;table-layout:auto}.personal-table-responsive{overflow-x:auto;padding-bottom:.25rem}}.replica-toolbar{padding:.7rem .8rem;background:#f7f9fc;border:1px solid #dce5f2;border-radius:.65rem}.replication-preview{display:grid;gap:.8rem}.replica-worker{border:1px solid #d9e2ef;border-radius:.75rem;overflow:hidden}.replica-worker-head{display:flex;align-items:center;gap:.65rem;padding:.75rem 1rem;background:#f5f8fd}.replica-worker-body{padding:.75rem 1rem}.replica-position{border-left:3px solid #2f6fed;padding:.35rem 0 .35rem .75rem;margin:.35rem 0 .7rem}.replica-requirements{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.35rem;margin:.45rem 0 0 1.6rem}.replica-requirement{padding:.45rem .55rem;background:#f8fafc;border:1px solid #e4eaf2;border-radius:.45rem}.replica-empty{color:#718096;font-size:.82rem;margin-left:1.6rem}
 </style>
 <script>
