@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
 require_module_access('control_personal.personal');
+if (is_personal_role()) deny_access_or_redirect();
 
 $id = isset($_GET['id']) ? (int) $_GET['id'] : 0;
 $worker = [

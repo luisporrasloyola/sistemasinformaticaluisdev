@@ -59,6 +59,28 @@ $isAdmin = is_admin();
         </div>
         <?php endif; ?>
 
+        <?php if (is_personal_role()): ?>
+            <?php if (current_user_can_module('requisitos')): ?>
+                <button class="nav-link nav-parent <?= $requisitosOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#requisitosMenuPersonal" aria-expanded="<?= $requisitosOpen ? 'true' : 'false' ?>">
+                    <i class="fa-solid fa-folder-open"></i><span>Requisitos</span><i class="fa-solid fa-chevron-down nav-caret"></i>
+                </button>
+                <div class="collapse <?= $requisitosOpen ? 'show' : '' ?>" id="requisitosMenuPersonal"><div class="submenu">
+                    <?php if (current_user_can_module('control_personal.personal')): ?><a class="nav-link sub-link <?= $personalOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/aliados/personal.php"><i class="fa-solid fa-users"></i><span>Personal</span></a><?php endif; ?>
+                    <?php if (current_user_can_module('requisitos.pmi_individual')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/requisitos/pmi_individual.php"><i class="fa-solid fa-file-shield"></i><span>PMI Individual</span></a><?php endif; ?>
+                </div></div>
+            <?php endif; ?>
+
+            <?php if (current_user_can_module('empresa_maquirenta')): ?>
+                <button class="nav-link nav-parent <?= $empresaMaquirentaOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#empresaMaquirentaMenuPersonal" aria-expanded="<?= $empresaMaquirentaOpen ? 'true' : 'false' ?>">
+                    <i class="fa-solid fa-building-circle-check"></i><span>Empresa Maquirenta</span><i class="fa-solid fa-chevron-down nav-caret"></i>
+                </button>
+                <div class="collapse <?= $empresaMaquirentaOpen ? 'show' : '' ?>" id="empresaMaquirentaMenuPersonal"><div class="submenu">
+                    <?php if (current_user_can_module('empresa_maquirenta.personal')): ?><a class="nav-link sub-link <?= $formatoPersonalOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/empresa_maquirenta/personal.php"><i class="fa-solid fa-users"></i><span>Personal</span></a><?php endif; ?>
+                    <?php if (current_user_can_module('empresa_maquirenta.pmi_individual')): ?><a class="nav-link sub-link <?= $formatoPmiOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/empresa_maquirenta/pmi_individual.php"><i class="fa-solid fa-file-shield"></i><span>PMI Individual</span></a><?php endif; ?>
+                </div></div>
+            <?php endif; ?>
+        <?php endif; ?>
+
         <?php if ($isAdmin): ?>
             <button class="nav-link nav-parent <?= $requisitosOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#requisitosMenu" aria-expanded="<?= $requisitosOpen ? 'true' : 'false' ?>" aria-controls="requisitosMenu">
                 <i class="fa-solid fa-folder-open"></i><span>Requisitos</span><i class="fa-solid fa-chevron-down nav-caret"></i>

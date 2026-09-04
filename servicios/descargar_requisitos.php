@@ -8,6 +8,7 @@ require_login();
 $workerId = (int) ($_GET['trabajador_id'] ?? 0);
 $positionId = (int) ($_GET['puesto_id'] ?? 0);
 $selectedIds = array_values(array_filter(array_map('intval', explode(',', (string) ($_GET['ids'] ?? '')))));
+require_personal_own_worker($workerId, false);
 
 if (!$workerId || !$positionId) {
     json_response(['ok' => false, 'message' => 'Seleccione un trabajador y puesto.'], 400);
@@ -19,7 +20,7 @@ if ((int) $assigned->fetchColumn() === 0) {
     json_response(['ok' => false, 'message' => 'El puesto seleccionado no pertenece al trabajador.'], 403);
 }
 
-$sql = "SELECT wr.id, wr.file_path, wr.original_file_name, rc.name AS requirement, w.full_name, w.document_number, p.name AS position_name
+$sql = "SELECT wr.id, wr.requirement_id, wr.file_path, wr.original_file_name, rc.name AS requirement, w.full_name, w.document_number, p.name AS position_name
     FROM worker_requirements wr
     JOIN requirements_catalog rc ON rc.id = wr.requirement_id
     JOIN workers w ON w.id = wr.worker_id
@@ -43,7 +44,7 @@ if ($selectedIds) {
 $sql .= ' ORDER BY rc.name';
 $stmt = db()->prepare($sql);
 $stmt->execute($params);
-$rows = $stmt->fetchAll();
+$rows = filter_allowed_documents('requisitos.pmi_individual', $stmt->fetchAll(), 'requirement_id', 'view');
 
 $files = [];
 $archivosRoot = realpath(UPLOAD_PATH);

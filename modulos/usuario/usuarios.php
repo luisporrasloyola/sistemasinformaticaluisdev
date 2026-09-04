@@ -158,6 +158,9 @@ window.usuarioPermisos = <?= json_encode([
                                                     <label class="form-check">
                                                         <input class="form-check-input usuario-module-permission" type="checkbox" name="module_permissions[]" value="<?= e($childKey) ?>" data-parent="<?= e($moduleKey) ?>">
                                                         <span class="form-check-label"><?= e($childLabel) ?></span>
+                                                        <?php if (in_array($childKey, ['requisitos.pmi_individual', 'empresa_maquirenta.pmi_individual'], true)): ?>
+                                                            <button class="btn btn-sm btn-outline-primary ms-auto js-open-personal-pmi-permissions" type="button" data-scope="<?= e($childKey) ?>" title="Configurar requisitos visibles" onclick="event.preventDefault(); event.stopPropagation();"><i class="fa-solid fa-list-check"></i></button>
+                                                        <?php endif; ?>
                                                     </label>
                                                 <?php endforeach; ?>
                                             </div>
@@ -167,6 +170,7 @@ window.usuarioPermisos = <?= json_encode([
                             </div>
                         </div>
 
+                        <input type="hidden" name="personal_pmi_permissions_configured" value="1">
                         <div class="permission-section">
                             <div class="mb-2">
                                 <h6 class="mb-1">Requisitos y documentos permitidos</h6>
@@ -235,6 +239,19 @@ window.usuarioPermisos = <?= json_encode([
                 <button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk me-2"></i>Guardar</button>
             </div>
         </form>
+    </div>
+</div>
+
+<div class="modal fade" id="personalPmiPermissionsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div><h5 class="modal-title" id="personalPmiPermissionsTitle">Requisitos visibles</h5><small class="text-muted">Marque o desmarque los requisitos que podrá visualizar el trabajador.</small></div>
+                <button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body"><div class="list-group" id="personalPmiPermissionsList"></div></div>
+            <div class="modal-footer"><button class="btn btn-primary" type="button" data-bs-dismiss="modal"><i class="fa-solid fa-check me-2"></i>Aplicar selección</button></div>
+        </div>
     </div>
 </div>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>

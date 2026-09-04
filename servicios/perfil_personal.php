@@ -4,6 +4,7 @@ require_once __DIR__ . '/../config/database.php';
 require_login();
 
 $id = (int) ($_GET['id'] ?? 0);
+require_personal_own_worker($id, false);
 $stmt = db()->prepare("SELECT w.*, c.name AS company FROM workers w LEFT JOIN companies c ON c.id = w.company_id WHERE w.id = :id");
 $stmt->execute(['id' => $id]);
 $worker = $stmt->fetch();

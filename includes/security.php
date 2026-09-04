@@ -107,7 +107,22 @@ function current_user_can_module(string $moduleKey): bool
     }
 
     if (is_personal_role()) {
-        return in_array($moduleKey, ['control_personal', 'control_personal.control_asistencia'], true);
+        if (in_array($moduleKey, ['control_personal', 'control_personal.control_asistencia'], true)) return true;
+        require_once __DIR__ . '/../config/database.php';
+        require_once __DIR__ . '/permissions.php';
+        if (!in_array($moduleKey, array_merge(['requisitos', 'empresa_maquirenta'], permission_personal_configurable_modules()), true)) return false;
+        $userId = (int) ($_SESSION['user']['id'] ?? 0);
+        if ($userId <= 0) return false;
+        try {
+            $configured = db()->prepare("SELECT COUNT(*) FROM user_module_permissions WHERE user_id = :user_id AND module_key IN ('control_personal.personal','requisitos.pmi_individual','empresa_maquirenta.personal','empresa_maquirenta.pmi_individual')");
+            $configured->execute(['user_id' => $userId]);
+            if ((int) $configured->fetchColumn() === 0) return true;
+            $stmt = db()->prepare('SELECT can_access FROM user_module_permissions WHERE user_id = :user_id AND module_key = :module_key LIMIT 1');
+            $stmt->execute(['user_id' => $userId, 'module_key' => $moduleKey]);
+            return (int) $stmt->fetchColumn() === 1;
+        } catch (Throwable $e) {
+            return true;
+        }
     }
 
     if (!is_gestor_role()) {
@@ -135,9 +150,11 @@ function current_user_can_document(string $scopeKey, int $catalogId, string $mod
         return true;
     }
 
-    if (!is_gestor_role() || $catalogId <= 0) {
+    if ((!is_gestor_role() && !is_personal_role()) || $catalogId <= 0) {
         return false;
     }
+
+    if (is_personal_role() && $mode !== 'view') return false;
 
     $column = match ($mode) {
         'upload' => 'can_upload',
@@ -153,12 +170,35 @@ function current_user_can_document(string $scopeKey, int $catalogId, string $mod
     try {
         $stmt = db()->prepare("SELECT 1 FROM user_document_permissions WHERE user_id = :user_id AND scope_key = :scope_key AND catalog_id = :catalog_id AND {$column} = 1 LIMIT 1");
         $stmt->execute(['user_id' => $userId, 'scope_key' => $scopeKey, 'catalog_id' => $catalogId]);
-        return (bool) $stmt->fetchColumn();
+        if ($stmt->fetchColumn()) return true;
+        if (!is_personal_role()) return false;
+
+        $configured = db()->prepare('SELECT COUNT(*) FROM user_document_permissions WHERE user_id = :user_id AND scope_key = :scope_key');
+        $configured->execute(['user_id' => $userId, 'scope_key' => $scopeKey]);
+        if ((int) $configured->fetchColumn() > 0) return false;
+
+        require_once __DIR__ . '/permissions.php';
+        $defaults = permission_personal_default_documents()[$scopeKey] ?? [];
+        return isset($defaults[(string) $catalogId]);
     } catch (Throwable $e) {
         return false;
     }
 }
 
+function require_personal_own_worker(int $workerId, bool $empresaMaquirenta = false): void
+{
+    if (!is_personal_role()) return;
+    $linkedWorkerId = current_user_worker_id();
+    if (!$linkedWorkerId) json_response(['ok' => false, 'message' => 'El usuario no tiene un trabajador vinculado.'], 403);
+    $allowedWorkerId = $linkedWorkerId;
+    if ($empresaMaquirenta) {
+        require_once __DIR__ . '/../config/database.php';
+        $stmt = db()->prepare('SELECT em.id FROM workers w JOIN empresa_maquirenta_formato_personal em ON em.document_number = w.document_number WHERE w.id = :id LIMIT 1');
+        $stmt->execute(['id' => $linkedWorkerId]);
+        $allowedWorkerId = (int) $stmt->fetchColumn();
+    }
+    if ($allowedWorkerId <= 0 || $workerId !== $allowedWorkerId) json_response(['ok' => false, 'message' => 'Solo puede consultar su propia información.'], 403);
+}
 function filter_allowed_documents(string $scopeKey, array $rows, string $idKey = 'id', string $mode = 'view'): array
 {
     if (is_admin()) {
@@ -192,13 +232,23 @@ function current_user_can_manage_scope(string $scopeKey): bool
     }
 }
 
+function deny_access_or_redirect(): never
+{
+    $script = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+    $accept = strtolower((string) ($_SERVER['HTTP_ACCEPT'] ?? ''));
+    $isService = str_contains($script, '/servicios/') || str_contains($accept, 'application/json');
+    if ($isService) {
+        json_response(['ok' => false, 'message' => 'No tiene permisos para realizar esta operación.'], 403);
+    }
+
+    $target = rtrim(APP_URL, '/') . '/' . ltrim(default_user_landing_path(), '/');
+    header('Location: ' . $target, true, 302);
+    exit;
+}
 function require_module_access(string $moduleKey): void
 {
     require_login();
-    if (!current_user_can_module($moduleKey)) {
-        http_response_code(403);
-        exit('No tiene permisos para acceder a esta seccion.');
-    }
+    if (!current_user_can_module($moduleKey)) deny_access_or_redirect();
 }
 
 function require_any_module_access(array $moduleKeys): void
@@ -209,8 +259,7 @@ function require_any_module_access(array $moduleKeys): void
             return;
         }
     }
-    http_response_code(403);
-    exit('No tiene permisos para acceder a esta seccion.');
+    deny_access_or_redirect();
 }
 
 function default_user_landing_path(): string
@@ -265,10 +314,7 @@ function require_role(array|string $roles): void
 {
     require_login();
     $allowed = is_array($roles) ? $roles : [$roles];
-    if (!in_array(current_user_role(), $allowed, true)) {
-        http_response_code(403);
-        exit('No tiene permisos para acceder a esta seccion.');
-    }
+    if (!in_array(current_user_role(), $allowed, true)) deny_access_or_redirect();
 }
 
 function json_response(array $payload, int $status = 200): never

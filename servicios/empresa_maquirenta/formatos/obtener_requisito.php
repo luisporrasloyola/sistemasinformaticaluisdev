@@ -22,6 +22,8 @@ $row = $stmt->fetch();
 if (!$row) {
     json_response(['ok' => false], 404);
 }
+require_personal_own_worker((int) $row['worker_id'], true);
+if (!current_user_can_document('empresa_maquirenta.pmi_individual', (int) $row['requirement_id'], 'view')) json_response(['ok' => false, 'message' => 'No tiene permiso para visualizar este requisito.'], 403);
 
 $logStmt = db()->prepare("SELECT al.action_type, al.description, al.created_at, u.name AS user_name, u.role AS user_role
     FROM empresa_maquirenta_formato_requisito_actividad al

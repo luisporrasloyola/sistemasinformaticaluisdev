@@ -3,15 +3,19 @@ require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
 require_module_access('control_personal.personal');
 
+$personalView = is_personal_role();
 $sql = "SELECT w.*, c.name AS company,
         GROUP_CONCAT(p.name ORDER BY p.name SEPARATOR ', ') AS positions
         FROM workers w
         LEFT JOIN companies c ON c.id = w.company_id
         LEFT JOIN worker_positions wp ON wp.worker_id = w.id
         LEFT JOIN positions p ON p.id = wp.position_id
+        WHERE (:personal_view = 0 OR w.id = :worker_id)
         GROUP BY w.id
         ORDER BY w.full_name";
-$workers = db()->query($sql)->fetchAll();
+$stmt = db()->prepare($sql);
+$stmt->execute(['personal_view' => $personalView ? 1 : 0, 'worker_id' => current_user_worker_id() ?? 0]);
+$workers = $stmt->fetchAll();
 
 function worker_progress(array $w): int
 {
@@ -32,10 +36,10 @@ require __DIR__ . '/../../includes/header.php';
         <h1>Personal</h1>
         <p>Gestión de trabajadores aliados.</p>
     </div>
-    <a class="btn btn-primary" href="<?= APP_URL ?>/modulos/aliados/formulario_personal.php"><i class="fa-solid fa-plus me-2"></i>Nuevo</a>
+    <a class="btn btn-primary <?= $personalView ? 'd-none' : '' ?>" href="<?= APP_URL ?>/modulos/aliados/formulario_personal.php"><i class="fa-solid fa-plus me-2"></i>Nuevo</a>
 </div>
 <div class="work-panel">
-    <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap mb-3 replica-toolbar">
+    <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap mb-3 replica-toolbar <?= $personalView ? 'd-none' : '' ?>">
         <div class="d-flex align-items-center gap-2 flex-wrap">
             <button class="btn btn-sm btn-outline-primary" type="button" id="selectAllWorkersBtn"><i class="fa-solid fa-check-double me-1"></i>Seleccionar todo</button>
             <button class="btn btn-sm btn-outline-secondary d-none" type="button" id="clearWorkerSelectionBtn">Limpiar selección</button>
@@ -47,7 +51,7 @@ require __DIR__ . '/../../includes/header.php';
         <table class="table table-hover align-middle data-table" id="personalTable">
             <thead>
             <tr>
-                <th class="text-center replica-select-column" data-orderable="false" title="Seleccionar personal">Sel.</th>
+                <th class="text-center replica-select-column <?= $personalView ? 'd-none' : '' ?>" data-orderable="false" title="Seleccionar personal">Sel.</th>
                 <th>Empresa</th>
                 <th>Personal</th>
                 <th>Correo</th>
@@ -59,7 +63,7 @@ require __DIR__ . '/../../includes/header.php';
             <tbody>
             <?php foreach ($workers as $worker): $progress = worker_progress($worker); ?>
                 <tr>
-                    <td class="text-center replica-select-column"><input class="form-check-input js-worker-replica" type="checkbox" value="<?= (int) $worker['id'] ?>" aria-label="Seleccionar <?= e($worker['full_name']) ?>"></td>
+                    <td class="text-center replica-select-column <?= $personalView ? 'd-none' : '' ?>"><input class="form-check-input js-worker-replica" type="checkbox" value="<?= (int) $worker['id'] ?>" aria-label="Seleccionar <?= e($worker['full_name']) ?>"></td>
                     <td><?= e($worker['company'] ?? '') ?></td>
                     <td class="personal-identity">
                         <strong><?= e($worker['full_name']) ?></strong>
@@ -82,10 +86,14 @@ require __DIR__ . '/../../includes/header.php';
                         <?php endif; ?>
                     </td>
                     <td>
+                        <?php if ($personalView): ?>
+                            <a class="btn btn-sm btn-outline-secondary" href="<?= APP_URL ?>/modulos/requisitos/pmi_individual.php" title="Ver mis requisitos"><i class="fa-solid fa-eye"></i></a>
+                        <?php else: ?>
                         <div class="d-flex gap-1">
                             <a class="btn btn-sm btn-outline-primary" href="<?= APP_URL ?>/modulos/aliados/formulario_personal.php?id=<?= (int) $worker['id'] ?>" title="Editar"><i class="fa-solid fa-pen-to-square"></i></a>
                             <button class="btn btn-sm btn-outline-danger js-eliminar-personal" type="button" data-id="<?= (int) $worker['id'] ?>" title="Eliminar"><i class="fa-solid fa-trash"></i></button>
                         </div>
+                        <?php endif; ?>
                     </td>
                 </tr>
             <?php endforeach; ?>

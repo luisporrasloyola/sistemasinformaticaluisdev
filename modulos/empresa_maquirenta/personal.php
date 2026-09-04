@@ -3,15 +3,20 @@ require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
 require_module_access('empresa_maquirenta.personal');
 
+$personalView = is_personal_role();
 $sql = "SELECT w.*, c.name AS company,
         GROUP_CONCAT(p.name ORDER BY p.name SEPARATOR ', ') AS positions
         FROM empresa_maquirenta_formato_personal w
         LEFT JOIN empresa_maquirenta_formato_empresas c ON c.id = w.company_id
         LEFT JOIN empresa_maquirenta_formato_personal_puestos wp ON wp.worker_id = w.id
         LEFT JOIN empresa_maquirenta_formato_puestos p ON p.id = wp.position_id
+        LEFT JOIN workers source_worker ON source_worker.document_number = w.document_number
+        WHERE (:personal_view = 0 OR source_worker.id = :worker_id)
         GROUP BY w.id
         ORDER BY w.full_name";
-$workers = db()->query($sql)->fetchAll();
+$stmt = db()->prepare($sql);
+$stmt->execute(['personal_view' => $personalView ? 1 : 0, 'worker_id' => current_user_worker_id() ?? 0]);
+$workers = $stmt->fetchAll();
 
 function worker_progress(array $w): int
 {
@@ -32,7 +37,7 @@ require __DIR__ . '/../../includes/header.php';
         <h1>Personal</h1>
         <p>Gestión de trabajadores aliados.</p>
     </div>
-    <a class="btn btn-primary" href="<?= APP_URL ?>/modulos/empresa_maquirenta/formulario_personal.php"><i class="fa-solid fa-plus me-2"></i>Nuevo</a>
+    <a class="btn btn-primary <?= $personalView ? 'd-none' : '' ?>" href="<?= APP_URL ?>/modulos/empresa_maquirenta/formulario_personal.php"><i class="fa-solid fa-plus me-2"></i>Nuevo</a>
 </div>
 <div class="work-panel">
     <div class="table-responsive">
@@ -72,10 +77,14 @@ require __DIR__ . '/../../includes/header.php';
                         <?php endif; ?>
                     </td>
                     <td>
+                        <?php if ($personalView): ?>
+                            <a class="btn btn-sm btn-outline-secondary" href="<?= APP_URL ?>/modulos/empresa_maquirenta/pmi_individual.php" title="Ver mis requisitos"><i class="fa-solid fa-eye"></i></a>
+                        <?php else: ?>
                         <div class="d-flex gap-1">
                             <a class="btn btn-sm btn-outline-primary" href="<?= APP_URL ?>/modulos/empresa_maquirenta/formulario_personal.php?id=<?= (int) $worker['id'] ?>" title="Editar"><i class="fa-solid fa-pen-to-square"></i></a>
                             <button class="btn btn-sm btn-outline-danger js-eliminar-personal" type="button" data-id="<?= (int) $worker['id'] ?>" title="Eliminar"><i class="fa-solid fa-trash"></i></button>
                         </div>
+                        <?php endif; ?>
                     </td>
                 </tr>
             <?php endforeach; ?>

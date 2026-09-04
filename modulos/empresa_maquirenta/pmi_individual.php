@@ -1,6 +1,17 @@
 <?php
 require_once __DIR__ . '/../../includes/security.php';
 require_module_access('empresa_maquirenta.pmi_individual');
+$personalView = is_personal_role();
+$pmiWorkerId = 0;
+$pmiWorkerLabel = '';
+if ($personalView && current_user_worker_id()) {
+    require_once __DIR__ . '/../../config/database.php';
+    $stmt = db()->prepare("SELECT em.id, CONCAT(em.full_name, ' - ', em.document_number) AS label FROM workers w JOIN empresa_maquirenta_formato_personal em ON em.document_number = w.document_number WHERE w.id = :id LIMIT 1");
+    $stmt->execute(['id' => current_user_worker_id()]);
+    $own = $stmt->fetch();
+    $pmiWorkerId = (int) ($own['id'] ?? 0);
+    $pmiWorkerLabel = (string) ($own['label'] ?? '');
+}
 require __DIR__ . '/../../includes/header.php';
 ?>
 <div class="page-title">
@@ -11,8 +22,8 @@ require __DIR__ . '/../../includes/header.php';
 </div>
 
 <div class="work-panel mb-3">
-    <label class="form-label">Buscar por nombre o DNI / documento</label>
-    <select class="form-select" id="workerSearch"></select>
+    <label class="form-label"><?= $personalView ? 'Mi información' : 'Buscar por nombre o DNI / documento' ?></label>
+    <select class="form-select" id="workerSearch" <?= $personalView ? 'disabled' : '' ?>><?php if ($pmiWorkerId): ?><option value="<?= $pmiWorkerId ?>" selected><?= e($pmiWorkerLabel) ?></option><?php endif; ?></select>
 </div>
 
 <div class="row g-3 d-none" id="requirementsWorkspace">
@@ -20,7 +31,7 @@ require __DIR__ . '/../../includes/header.php';
         <div class="work-panel h-100">
             <div class="worker-card text-center">
                 <img id="workerPhoto" src="<?= APP_URL ?>/recursos/imagen_referencial.php" alt="Foto trabajador">
-                <label class="btn btn-sm btn-outline-primary mt-2">
+                <label class="btn btn-sm btn-outline-primary mt-2 <?= $personalView ? 'd-none' : '' ?>">
                     Clic para cambiar foto
                     <input class="d-none" id="quickPhotoInput" type="file" accept="image/png,image/jpeg,image/webp">
                 </label>
@@ -46,7 +57,7 @@ require __DIR__ . '/../../includes/header.php';
                 <div class="d-flex gap-2 flex-wrap">
                     <button class="btn btn-outline-primary" type="button" id="downloadSelectedRequirementsBtn"><i class="fa-solid fa-file-zipper me-2"></i>Descargar seleccionados</button>
                     <button class="btn btn-outline-primary" type="button" id="downloadRequirementsBtn"><i class="fa-solid fa-download me-2"></i>Descargar todo</button>
-                    <button class="btn btn-primary" type="button" id="addRequirementBtn"><i class="fa-solid fa-plus me-2"></i>Agregar Requisito</button>
+                    <button class="btn btn-primary <?= $personalView ? 'd-none' : '' ?>" type="button" id="addRequirementBtn"><i class="fa-solid fa-plus me-2"></i>Agregar Requisito</button>
                 </div>
             </div>
             <div class="table-responsive">
@@ -140,6 +151,8 @@ require __DIR__ . '/../../includes/header.php';
 </div>
 <script>
 window.personalServiceBase = <?= json_encode(APP_URL . '/servicios/empresa_maquirenta/formatos') ?>;
+window.pmiPersonalReadOnly = <?= $personalView ? 'true' : 'false' ?>;
+window.pmiPersonalWorkerId = <?= $pmiWorkerId ?>;
 window.canManageRequirementObservations = <?= (is_admin() || is_gestor_role()) ? 'true' : 'false' ?>;
 </script>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>

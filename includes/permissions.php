@@ -164,11 +164,58 @@ function permission_default_modules_for_role(string $role): array
         return [
             'control_personal' => true,
             'control_personal.control_asistencia' => true,
+            'requisitos' => true,
+            'control_personal.personal' => true,
+            'requisitos.pmi_individual' => true,
+            'empresa_maquirenta' => true,
+            'empresa_maquirenta.personal' => true,
+            'empresa_maquirenta.pmi_individual' => true,
         ];
     }
     return [];
 }
 
+function permission_personal_configurable_modules(): array
+{
+    return [
+        'control_personal.personal',
+        'requisitos.pmi_individual',
+        'empresa_maquirenta.personal',
+        'empresa_maquirenta.pmi_individual',
+    ];
+}
+function permission_personal_pmi_scopes(): array
+{
+    return ['requisitos.pmi_individual', 'empresa_maquirenta.pmi_individual'];
+}
+
+function permission_personal_default_requirement_names(): array
+{
+    return ['contrato de trabajo', 'camo', 'dni', 'sctr', 'vida ley', 'boleta firmada'];
+}
+
+function permission_normalize_requirement_name(string $name): string
+{
+    $name = mb_strtolower(trim($name), 'UTF-8');
+    $converted = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $name);
+    return preg_replace('/[^a-z0-9]+/', ' ', $converted !== false ? $converted : $name) ?: '';
+}
+
+function permission_personal_default_documents(): array
+{
+    $permissions = [];
+    $allowed = permission_personal_default_requirement_names();
+    foreach (permission_catalog_items() as $scopeKey => $scope) {
+        if (!in_array($scopeKey, permission_personal_pmi_scopes(), true)) continue;
+        foreach ($scope['items'] as $item) {
+            $normalized = trim(permission_normalize_requirement_name((string) $item['name']));
+            $matches = in_array($normalized, $allowed, true) || str_starts_with($normalized, 'camo ') || str_starts_with($normalized, 'boleta firmada ');
+            if (!$matches) continue;
+            $permissions[$scopeKey][(string) (int) $item['id']] = ['view' => true, 'upload' => false, 'manage' => false];
+        }
+    }
+    return $permissions;
+}
 function permission_catalog_items(): array
 {
     $items = [];
@@ -212,7 +259,7 @@ function permission_payload_for_user(int $userId, string $role): array
 {
     $defaultModules = permission_default_modules_for_role($role);
     $modulePermissions = $defaultModules;
-    $documentPermissions = [];
+    $documentPermissions = $role === 'Personal' ? permission_personal_default_documents() : [];
 
     if ($role === 'Administrador') {
         return [
@@ -226,12 +273,13 @@ function permission_payload_for_user(int $userId, string $role): array
             $stmt = db()->prepare('SELECT module_key, can_access FROM user_module_permissions WHERE user_id = :user_id');
             $stmt->execute(['user_id' => $userId]);
             $storedModules = $stmt->fetchAll();
-            if ($storedModules) {
-                $modulePermissions = [];
+            $hasPersonalConfiguration = $role === 'Personal' && (bool) array_filter($storedModules, static fn(array $row): bool => in_array((string) $row['module_key'], permission_personal_configurable_modules(), true));
+            if ($storedModules && ($role !== 'Personal' || $hasPersonalConfiguration)) {
+                $modulePermissions = $role === 'Personal'
+                    ? ['control_personal' => true, 'control_personal.control_asistencia' => true]
+                    : [];
                 foreach ($storedModules as $row) {
-                    if ((int) $row['can_access'] === 1) {
-                        $modulePermissions[(string) $row['module_key']] = true;
-                    }
+                    if ((int) $row['can_access'] === 1) $modulePermissions[(string) $row['module_key']] = true;
                 }
             }
         } catch (Throwable $e) {
@@ -241,7 +289,9 @@ function permission_payload_for_user(int $userId, string $role): array
         try {
             $stmt = db()->prepare('SELECT scope_key, catalog_id, can_view, can_upload, can_manage_catalog FROM user_document_permissions WHERE user_id = :user_id');
             $stmt->execute(['user_id' => $userId]);
-            foreach ($stmt->fetchAll() as $row) {
+            $storedDocuments = $stmt->fetchAll();
+            if ($storedDocuments && $role === 'Personal') $documentPermissions = [];
+            foreach ($storedDocuments as $row) {
                 $scope = (string) $row['scope_key'];
                 $catalogId = (int) $row['catalog_id'];
                 $documentPermissions[$scope][(string) $catalogId] = [
@@ -251,7 +301,7 @@ function permission_payload_for_user(int $userId, string $role): array
                 ];
             }
         } catch (Throwable $e) {
-            $documentPermissions = [];
+            $documentPermissions = $role === 'Personal' ? permission_personal_default_documents() : [];
         }
     }
 
@@ -269,22 +319,31 @@ function save_user_permissions(int $userId, string $role, array $post): void
     if ($role === 'Administrador') {
         $selectedModules = $moduleKeys;
     } elseif ($role === 'Personal') {
-        $selectedModules = array_keys(permission_default_modules_for_role('Personal'));
+        $allowed = permission_personal_configurable_modules();
+        $selectedModules = array_values(array_intersect($selectedModules, $allowed));
+        $selectedModules[] = 'control_personal';
+        $selectedModules[] = 'control_personal.control_asistencia';
+        if (array_intersect($selectedModules, ['control_personal.personal', 'requisitos.pmi_individual'])) $selectedModules[] = 'requisitos';
+        if (array_intersect($selectedModules, ['empresa_maquirenta.personal', 'empresa_maquirenta.pmi_individual'])) $selectedModules[] = 'empresa_maquirenta';
+        $selectedModules = array_values(array_unique($selectedModules));
     }
 
     db()->prepare('DELETE FROM user_module_permissions WHERE user_id = :user_id')->execute(['user_id' => $userId]);
-    if ($selectedModules) {
-        $stmt = db()->prepare('INSERT INTO user_module_permissions (user_id, module_key, can_access) VALUES (:user_id, :module_key, 1)');
-        foreach ($selectedModules as $moduleKey) {
-            $stmt->execute(['user_id' => $userId, 'module_key' => $moduleKey]);
+    if ($role === 'Personal') {
+        $storedKeys = array_values(array_unique(array_merge(
+            ['control_personal', 'control_personal.control_asistencia', 'requisitos', 'empresa_maquirenta'],
+            permission_personal_configurable_modules()
+        )));
+        $stmt = db()->prepare('INSERT INTO user_module_permissions (user_id, module_key, can_access) VALUES (:user_id, :module_key, :can_access)');
+        foreach ($storedKeys as $moduleKey) {
+            $stmt->execute(['user_id' => $userId, 'module_key' => $moduleKey, 'can_access' => in_array($moduleKey, $selectedModules, true) ? 1 : 0]);
         }
+    } elseif ($selectedModules) {
+        $stmt = db()->prepare('INSERT INTO user_module_permissions (user_id, module_key, can_access) VALUES (:user_id, :module_key, 1)');
+        foreach ($selectedModules as $moduleKey) $stmt->execute(['user_id' => $userId, 'module_key' => $moduleKey]);
     }
 
     db()->prepare('DELETE FROM user_document_permissions WHERE user_id = :user_id')->execute(['user_id' => $userId]);
-    if ($role === 'Personal') {
-        return;
-    }
-
     $viewPermissions = (array) ($post['document_view_permissions'] ?? []);
     $uploadPermissions = (array) ($post['document_upload_permissions'] ?? []);
     $managePermissions = (array) ($post['document_manage_permissions'] ?? []);
@@ -296,6 +355,26 @@ function save_user_permissions(int $userId, string $role, array $post): void
         $viewIds = array_map('intval', (array) ($viewPermissions[$scopeKey] ?? []));
         $uploadIds = array_map('intval', (array) ($uploadPermissions[$scopeKey] ?? []));
         $manageIds = array_map('intval', (array) ($managePermissions[$scopeKey] ?? []));
+        if ($role === 'Personal') {
+            if (!in_array($scopeKey, permission_personal_pmi_scopes(), true)) continue;
+            $uploadIds = [];
+            $manageIds = [];
+        }
+        if ($role === 'Personal' && !$viewIds) {
+            $catalog = permission_catalog_items()[$scopeKey]['items'] ?? [];
+            $sentinelId = (int) ($catalog[0]['id'] ?? 0);
+            if ($sentinelId > 0) {
+                $insert->execute([
+                    'user_id' => $userId,
+                    'scope_key' => $scopeKey,
+                    'catalog_id' => $sentinelId,
+                    'can_view' => 0,
+                    'can_upload' => 0,
+                    'can_manage_catalog' => 0,
+                ]);
+            }
+            continue;
+        }
         if ($role === 'Administrador') {
             $catalog = permission_catalog_items()[$scopeKey]['items'] ?? [];
             $viewIds = array_map(static fn(array $item): int => (int) $item['id'], $catalog);

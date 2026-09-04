@@ -1420,6 +1420,8 @@ function initRequirementsModule() {
     document.getElementById('newCatalogRequirementBtn')?.addEventListener('click', addCatalogRequirement);
     document.getElementById('deleteCatalogRequirementBtn')?.addEventListener('click', deleteCatalogRequirement);
     document.getElementById('quickPhotoInput').addEventListener('change', uploadQuickPhoto);
+
+    if (window.pmiPersonalWorkerId) loadWorker(window.pmiPersonalWorkerId);
 }
 
 async function loadWorker(id) {
@@ -1456,8 +1458,12 @@ async function loadRequirements() {
         const downloadButton = hasAttachment
             ? `<a class="btn btn-sm btn-outline-success" href="${BASE_URL}/${row.file_path}" download="${downloadName}" title="Descargar documento"><i class="fa-solid fa-download"></i></a>`
             : '';
-const replicateEnabled = currentWorkerPositions.length > 1;
-        const replicateButton = document.getElementById('replicateRequirementModal')
+        const personalReadOnly = window.pmiPersonalReadOnly === true;
+        const editButton = personalReadOnly ? '' : `<button class="btn btn-sm btn-outline-primary" onclick="openEditRequirement(${row.id})"><i class="fa-solid fa-pen"></i></button>`;
+        const viewButton = personalReadOnly ? '' : `<button class="btn btn-sm btn-outline-secondary" onclick="openViewRequirement(${row.id})"><i class="fa-solid fa-eye"></i></button>`;
+        const deleteButton = personalReadOnly ? '' : `<button class="btn btn-sm btn-outline-danger" onclick="deleteRequirement(${row.id})"><i class="fa-solid fa-trash"></i></button>`;
+        const replicateEnabled = !personalReadOnly && currentWorkerPositions.length > 1;
+        const replicateButton = !personalReadOnly && document.getElementById('replicateRequirementModal')
             ? `<button class="btn btn-sm btn-outline-info" type="button" onclick="openReplicateRequirement(${row.id})" ${replicateEnabled ? '' : 'disabled'} title="${replicateEnabled ? 'Replicar a otro puesto' : 'El trabajador no tiene otro puesto'}"><i class="fa-solid fa-copy"></i></button>`
             : '';
         tbody.insertAdjacentHTML('beforeend', `
@@ -1472,9 +1478,9 @@ const replicateEnabled = currentWorkerPositions.length > 1;
                 <td><span class="badge ${row.status.class}">${row.status.label}</span></td>
                 <td>${escapeHtml(row.registered_by || '')}</td>
                 <td class="text-nowrap">
-                    <button class="btn btn-sm btn-outline-primary" onclick="openEditRequirement(${row.id})"><i class="fa-solid fa-pen"></i></button>
-                    <button class="btn btn-sm btn-outline-secondary" onclick="openViewRequirement(${row.id})"><i class="fa-solid fa-eye"></i></button>
-                    <button class="btn btn-sm btn-outline-danger" onclick="deleteRequirement(${row.id})"><i class="fa-solid fa-trash"></i></button>
+                    ${editButton}
+                    ${viewButton}
+                    ${deleteButton}
                     ${downloadButton}
                     ${replicateButton}
                 </td>
@@ -4519,6 +4525,42 @@ function initUsuariosModule() {
     const scopeAllChecks = Array.from(document.querySelectorAll('.usuario-document-scope-all'));
     const permissionData = window.usuarioPermisos || { users: {} };
     const allModuleKeys = moduleChecks.map((check) => check.value);
+    const personalPmiModalElement = document.getElementById('personalPmiPermissionsModal');
+    const personalPmiModal = personalPmiModalElement ? bootstrap.Modal.getOrCreateInstance(personalPmiModalElement) : null;
+    const personalPmiList = document.getElementById('personalPmiPermissionsList');
+    let reopenUserModalAfterPmi = false;
+
+    document.querySelectorAll('.js-open-personal-pmi-permissions').forEach((button) => {
+        button.addEventListener('click', () => {
+            const scope = button.dataset.scope || '';
+            const catalog = permissionData.catalogs?.[scope];
+            if (!personalPmiModal || !personalPmiList || !catalog) return;
+            document.getElementById('personalPmiPermissionsTitle').textContent = scope === 'requisitos.pmi_individual'
+                ? 'PMI Individual - Requisitos visibles'
+                : 'Empresa Maquirenta - PMI Individual';
+            personalPmiList.innerHTML = '';
+            (catalog.items || []).forEach((item) => {
+                const sourceCheck = viewChecks.find((check) => check.dataset.scope === scope && check.dataset.catalogId === String(item.id));
+                const row = document.createElement('label');
+                row.className = 'list-group-item d-flex align-items-center gap-3 py-3';
+                row.innerHTML = `<input class="form-check-input flex-shrink-0 personal-pmi-modal-check" type="checkbox" ${sourceCheck?.checked ? 'checked' : ''}><span>${escapeHtml(item.name)}</span>`;
+                row.querySelector('input').addEventListener('change', (event) => {
+                    if (sourceCheck) sourceCheck.checked = event.currentTarget.checked;
+                    syncScopeAll(scope);
+                });
+                personalPmiList.appendChild(row);
+            });
+            reopenUserModalAfterPmi = true;
+            modal.hide();
+            setTimeout(() => personalPmiModal.show(), 180);
+        });
+    });
+    personalPmiModalElement?.addEventListener('hidden.bs.modal', () => {
+        if (!reopenUserModalAfterPmi) return;
+        reopenUserModalAfterPmi = false;
+        modal.show();
+        setTimeout(() => bootstrap.Tab.getOrCreateInstance(document.getElementById('usuarioPermisosTab'))?.show(), 120);
+    });
 
     function fillUserFromSelectedWorker(force = false) {
         if (!workerSelect || roleSelect?.value !== 'Personal') return;
@@ -4539,6 +4581,19 @@ function initUsuariosModule() {
         return permissions;
     }
 
+    function buildPersonalDocumentPermissions() {
+        const permissions = {};
+        const allowedScopes = new Set(['requisitos.pmi_individual', 'empresa_maquirenta.pmi_individual']);
+        const allowedNames = new Set(['contrato de trabajo', 'camo', 'dni', 'sctr', 'vida ley', 'boleta firmada']);
+        viewChecks.forEach((check) => {
+            if (!allowedScopes.has(check.dataset.scope)) return;
+            const rowName = (check.closest('tr')?.querySelector('td')?.textContent || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ');
+            if (!allowedNames.has(rowName) && !rowName.startsWith('camo ') && !rowName.startsWith('boleta firmada ')) return;
+            permissions[check.dataset.scope] = permissions[check.dataset.scope] || {};
+            permissions[check.dataset.scope][check.dataset.catalogId] = { view: true, upload: false, manage: false };
+        });
+        return permissions;
+    }
     function permissionsForUserPayload(userId, role) {
         if (role === 'Administrador') {
             return defaultPermissionsForRole('Administrador');
@@ -4551,7 +4606,7 @@ function initUsuariosModule() {
             return { modules: allModuleKeys, documents: buildAllDocumentPermissions() };
         }
         if (role === 'Personal') {
-            return { modules: ['control_personal', 'control_personal.control_asistencia'], documents: {} };
+            return { modules: ['control_personal', 'control_personal.control_asistencia', 'requisitos', 'control_personal.personal', 'requisitos.pmi_individual', 'empresa_maquirenta', 'empresa_maquirenta.personal', 'empresa_maquirenta.pmi_individual'], documents: buildPersonalDocumentPermissions() };
         }
         return { modules: [], documents: {} };
     }
@@ -4645,6 +4700,7 @@ function initUsuariosModule() {
     function toggleUserWorkerField() {
         const role = roleSelect?.value || 'Administrador';
         const isPersonal = role === 'Personal';
+        document.querySelectorAll('#usuarioDocumentPermissions .accordion-item').forEach((item) => item.classList.remove('d-none'));
         workerGroup?.classList.toggle('d-none', !isPersonal);
         if (workerSelect) {
             workerSelect.required = isPersonal;
@@ -4660,8 +4716,16 @@ function initUsuariosModule() {
         }
         if (role === 'Personal') {
             permissionNote.className = 'permission-role-note mb-3 alert alert-info';
-            permissionNote.textContent = 'Personal solo tiene acceso a Control de personal - Control de asistencia.';
+            permissionNote.textContent = 'Personal puede ver únicamente su propia información. Seleccione abajo los requisitos visibles en PMI Individual; no tendrá permisos para editar, subir ni eliminar.';
             setPermissionsEnabled(false);
+            const personalModules = new Set(['control_personal.personal', 'requisitos.pmi_individual', 'empresa_maquirenta.personal', 'empresa_maquirenta.pmi_individual']);
+            moduleChecks.forEach((check) => { check.disabled = !personalModules.has(check.value); });
+            const personalScopes = new Set(['requisitos.pmi_individual', 'empresa_maquirenta.pmi_individual']);
+            viewChecks.forEach((check) => { check.disabled = !personalScopes.has(check.dataset.scope); });
+            document.querySelectorAll('#usuarioDocumentPermissions .accordion-item').forEach((item) => {
+                const scope = item.querySelector('.usuario-document-view')?.dataset.scope || '';
+                item.classList.toggle('d-none', !personalScopes.has(scope));
+            });
             return;
         }
         permissionNote.className = 'permission-role-note mb-3 alert alert-warning';

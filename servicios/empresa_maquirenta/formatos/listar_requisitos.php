@@ -14,6 +14,7 @@ function requirement_status(string $endDate, string $startDate, int $requirement
 
 $workerId = (int) ($_GET['trabajador_id'] ?? 0);
 $positionId = (int) ($_GET['puesto_id'] ?? 0);
+require_personal_own_worker($workerId, true);
 
 $stmt = db()->prepare("SELECT wr.*, rc.name AS requirement, COALESCE(u.name, '') AS registered_by
     FROM empresa_maquirenta_formato_requisitos wr
@@ -22,7 +23,7 @@ $stmt = db()->prepare("SELECT wr.*, rc.name AS requirement, COALESCE(u.name, '')
     WHERE wr.worker_id = :worker_id AND wr.position_id = :position_id
     ORDER BY rc.name");
 $stmt->execute(['worker_id' => $workerId, 'position_id' => $positionId]);
-$rows = $stmt->fetchAll();
+$rows = filter_allowed_documents('empresa_maquirenta.pmi_individual', $stmt->fetchAll(), 'requirement_id', 'view');
 
 foreach ($rows as &$row) {
     $row['status'] = requirement_status($row['end_date'], $row['start_date'], (int) $row['requirement_id']);
