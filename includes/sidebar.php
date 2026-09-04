@@ -49,7 +49,13 @@ $isAdmin = is_admin();
                     <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/asignaciones.php"><i class="fa-solid fa-user-check"></i><span>Asignaciones</span></a>
                     <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/programacion_personal.php"><i class="fa-solid fa-calendar-plus"></i><span>Calendario y programación de jornadas</span></a>
                 <?php endif; ?>
+                <?php if (is_personal_role() && current_user_can_module('control_personal.dashboard')): ?>
+                    <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/dashboard_asistencia.php"><i class="fa-solid fa-chart-line"></i><span>Dashboard de asistencia</span></a>
+                <?php endif; ?>
                 <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/control_asistencia.php"><i class="fa-solid fa-camera"></i><span>Control de asistencia</span></a>
+                <?php if (is_personal_role() && current_user_can_module('control_personal.reporte_asistencias')): ?>
+                    <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/reporte_asistencias.php"><i class="fa-solid fa-clipboard-check"></i><span>Reporte de asistencias</span></a>
+                <?php endif; ?>
                 <?php if ($isAdmin): ?>
                     <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/reportes.php"><i class="fa-solid fa-file-export"></i><span>Reporte de marcaciones</span></a>
                     <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/reporte_asistencias.php"><i class="fa-solid fa-clipboard-check"></i><span>Reporte de asistencias</span></a>

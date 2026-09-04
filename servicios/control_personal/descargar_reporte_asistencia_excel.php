@@ -7,6 +7,7 @@ require_once __DIR__ . '/../../includes/simple_xlsx.php';
 require_module_access('control_personal.reporte_asistencias');
 
 $workerId = (int) ($_GET['trabajador_id'] ?? 0);
+require_personal_own_worker($workerId);
 $dateFrom = trim((string) ($_GET['desde'] ?? ''));
 $dateTo = trim((string) ($_GET['hasta'] ?? ''));
 if ($workerId <= 0 || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateTo) || $dateFrom > $dateTo) {

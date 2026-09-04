@@ -4606,7 +4606,7 @@ function initUsuariosModule() {
             return { modules: allModuleKeys, documents: buildAllDocumentPermissions() };
         }
         if (role === 'Personal') {
-            return { modules: ['control_personal', 'control_personal.control_asistencia', 'requisitos', 'control_personal.personal', 'requisitos.pmi_individual', 'empresa_maquirenta', 'empresa_maquirenta.personal', 'empresa_maquirenta.pmi_individual'], documents: buildPersonalDocumentPermissions() };
+            return { modules: ['control_personal', 'control_personal.control_asistencia', 'control_personal.dashboard', 'control_personal.reporte_asistencias', 'requisitos', 'control_personal.personal', 'requisitos.pmi_individual', 'empresa_maquirenta', 'empresa_maquirenta.personal', 'empresa_maquirenta.pmi_individual'], documents: buildPersonalDocumentPermissions() };
         }
         return { modules: [], documents: {} };
     }
@@ -4718,7 +4718,7 @@ function initUsuariosModule() {
             permissionNote.className = 'permission-role-note mb-3 alert alert-info';
             permissionNote.textContent = 'Personal puede ver únicamente su propia información. Seleccione abajo los requisitos visibles en PMI Individual; no tendrá permisos para editar, subir ni eliminar.';
             setPermissionsEnabled(false);
-            const personalModules = new Set(['control_personal.personal', 'requisitos.pmi_individual', 'empresa_maquirenta.personal', 'empresa_maquirenta.pmi_individual']);
+            const personalModules = new Set(['control_personal.dashboard', 'control_personal.reporte_asistencias', 'control_personal.personal', 'requisitos.pmi_individual', 'empresa_maquirenta.personal', 'empresa_maquirenta.pmi_individual']);
             moduleChecks.forEach((check) => { check.disabled = !personalModules.has(check.value); });
             const personalScopes = new Set(['requisitos.pmi_individual', 'empresa_maquirenta.pmi_individual']);
             viewChecks.forEach((check) => { check.disabled = !personalScopes.has(check.dataset.scope); });

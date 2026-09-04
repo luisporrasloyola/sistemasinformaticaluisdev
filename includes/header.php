@@ -45,6 +45,7 @@ $user = current_user();
                 </div>
                 <?php endif; ?>
 
+                <?php if (!is_personal_role()): ?>
                 <div class="topbar-notif-container" id="obsNotifContainer">
                     <button class="topbar-notif-btn" id="obsNotifBtn" type="button" aria-label="Observaciones">
                         <i class="fa-solid fa-comment-dots"></i>
@@ -87,6 +88,8 @@ $user = current_user();
                         </div>
                     </div>
                 </div>
+
+                <?php endif; ?>
 
                 <div class="topbar-user">
                     <span class="topbar-avatar"><img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&h=100&q=80" alt="Usuario"></span>

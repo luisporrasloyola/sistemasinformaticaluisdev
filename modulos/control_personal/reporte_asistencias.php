@@ -9,12 +9,13 @@ $today = date('Y-m-d');
 $defaultFrom = date('Y-m-01');
 $dateFrom = trim((string) ($_GET['desde'] ?? $defaultFrom));
 $dateTo = trim((string) ($_GET['hasta'] ?? $today));
-$workerId = (int) ($_GET['trabajador_id'] ?? 0);
+$personalView = is_personal_role();
+$workerId = $personalView ? (int) (current_user_worker_id() ?? 0) : (int) ($_GET['trabajador_id'] ?? 0);
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom)) $dateFrom = $defaultFrom;
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateTo)) $dateTo = $today;
 if ($dateFrom > $dateTo) [$dateFrom, $dateTo] = [$dateTo, $dateFrom];
 
-$catalog = attendance_report_build($dateFrom, $dateTo, 0)['workers'];
+$catalog = attendance_report_build($dateFrom, $dateTo, $personalView ? $workerId : 0)['workers'];
 $report = $workerId > 0 ? attendance_report_build($dateFrom, $dateTo, $workerId) : null;
 $worker = $report['worker'] ?? null;
 $assignment = $report['assignment'] ?? null;
@@ -51,7 +52,8 @@ require __DIR__ . '/../../includes/header.php';
         </div>
         <div class="col-xl-4">
             <label class="form-label">Trabajador</label>
-            <select class="form-select select2-searchable" name="trabajador_id" data-placeholder="Buscar trabajador" data-no-results="No se encontraron trabajadores" required>
+            <?php if ($personalView): ?><input type="hidden" name="trabajador_id" value="<?= $workerId ?>"><?php endif; ?>
+            <select class="form-select select2-searchable" name="trabajador_id" <?= $personalView ? 'disabled' : '' ?> data-placeholder="Buscar trabajador" data-no-results="No se encontraron trabajadores" required>
                 <option value="">Seleccione un trabajador</option>
                 <?php foreach ($catalog as $item): ?>
                     <option value="<?= (int) $item['id'] ?>" <?= $workerId === (int) $item['id'] ? 'selected' : '' ?>><?= e($item['full_name'] . ' - ' . $item['document_number']) ?></option>
@@ -144,6 +146,7 @@ require __DIR__ . '/../../includes/header.php';
     </div>
     <?php endif; ?>
 
+    <?php if (!$personalView): ?>
     <div class="individual-report-bottom">
         <form id="attendanceReportNoteForm" class="report-note-card report-note-card-full">
             <input type="hidden" name="worker_id" value="<?= (int) $worker['id'] ?>"><input type="hidden" name="date_from" value="<?= e($dateFrom) ?>"><input type="hidden" name="date_to" value="<?= e($dateTo) ?>">
@@ -152,6 +155,7 @@ require __DIR__ . '/../../includes/header.php';
             <div><small><?= $note ? 'Última actualización: ' . e(date('d/m/Y H:i', strtotime($note['updated_at']))) : 'Esta observación aparecerá en el PDF.' ?></small><button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk me-2"></i>Guardar observación</button></div>
         </form>
     </div>
+    <?php endif; ?>
 </section>
 <?php endif; ?>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>

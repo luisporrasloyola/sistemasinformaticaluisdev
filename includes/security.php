@@ -119,7 +119,8 @@ function current_user_can_module(string $moduleKey): bool
             if ((int) $configured->fetchColumn() === 0) return true;
             $stmt = db()->prepare('SELECT can_access FROM user_module_permissions WHERE user_id = :user_id AND module_key = :module_key LIMIT 1');
             $stmt->execute(['user_id' => $userId, 'module_key' => $moduleKey]);
-            return (int) $stmt->fetchColumn() === 1;
+            $storedAccess = $stmt->fetchColumn();
+            return $storedAccess === false ? true : (int) $storedAccess === 1;
         } catch (Throwable $e) {
             return true;
         }

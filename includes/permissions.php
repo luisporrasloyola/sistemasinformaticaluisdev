@@ -164,6 +164,8 @@ function permission_default_modules_for_role(string $role): array
         return [
             'control_personal' => true,
             'control_personal.control_asistencia' => true,
+            'control_personal.dashboard' => true,
+            'control_personal.reporte_asistencias' => true,
             'requisitos' => true,
             'control_personal.personal' => true,
             'requisitos.pmi_individual' => true,
@@ -178,6 +180,8 @@ function permission_default_modules_for_role(string $role): array
 function permission_personal_configurable_modules(): array
 {
     return [
+        'control_personal.dashboard',
+        'control_personal.reporte_asistencias',
         'control_personal.personal',
         'requisitos.pmi_individual',
         'empresa_maquirenta.personal',
@@ -275,11 +279,11 @@ function permission_payload_for_user(int $userId, string $role): array
             $storedModules = $stmt->fetchAll();
             $hasPersonalConfiguration = $role === 'Personal' && (bool) array_filter($storedModules, static fn(array $row): bool => in_array((string) $row['module_key'], permission_personal_configurable_modules(), true));
             if ($storedModules && ($role !== 'Personal' || $hasPersonalConfiguration)) {
-                $modulePermissions = $role === 'Personal'
-                    ? ['control_personal' => true, 'control_personal.control_asistencia' => true]
-                    : [];
+                $modulePermissions = $role === 'Personal' ? $defaultModules : [];
                 foreach ($storedModules as $row) {
-                    if ((int) $row['can_access'] === 1) $modulePermissions[(string) $row['module_key']] = true;
+                    $storedKey = (string) $row['module_key'];
+                    if ((int) $row['can_access'] === 1) $modulePermissions[$storedKey] = true;
+                    elseif ($role === 'Personal') unset($modulePermissions[$storedKey]);
                 }
             }
         } catch (Throwable $e) {

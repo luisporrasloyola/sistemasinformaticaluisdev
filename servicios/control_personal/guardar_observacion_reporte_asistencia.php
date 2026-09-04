@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
 require_module_access('control_personal.reporte_asistencias');
+if (is_personal_role()) json_response(['ok' => false, 'message' => 'El rol Personal solo puede visualizar su reporte.'], 403);
 verify_csrf($_POST['csrf_token'] ?? null);
 header('Content-Type: application/json; charset=utf-8');
 

@@ -11,14 +11,22 @@ $defaultRangeStart = date('Y-m-01');
 $defaultRangeEnd = date('Y-m-t');
 $rangeStart = (string) ($_GET['desde'] ?? $defaultRangeStart);
 $rangeEnd = (string) ($_GET['hasta'] ?? $defaultRangeEnd);
+$personalView = is_personal_role();
 $selectedCompanyId = max(0, (int) ($_GET['empresa_id'] ?? 0));
 $selectedWorkerId = max(0, (int) ($_GET['trabajador_id'] ?? 0));
 
-$dashboardCompanies = db()->query('SELECT id, name FROM companies ORDER BY name')->fetchAll();
-$dashboardWorkers = db()->query("SELECT w.id, w.company_id, w.full_name, w.document_number, c.name AS company
-    FROM workers w
-    LEFT JOIN companies c ON c.id = w.company_id
-    ORDER BY w.full_name")->fetchAll();
+if ($personalView) {
+    $ownStmt = db()->prepare("SELECT w.id, w.company_id, w.full_name, w.document_number, c.name AS company FROM workers w LEFT JOIN companies c ON c.id = w.company_id WHERE w.id = :id LIMIT 1");
+    $ownStmt->execute(['id' => current_user_worker_id() ?? 0]);
+    $ownWorker = $ownStmt->fetch();
+    $dashboardWorkers = $ownWorker ? [$ownWorker] : [];
+    $dashboardCompanies = $ownWorker && (int) $ownWorker['company_id'] > 0 ? [['id' => (int) $ownWorker['company_id'], 'name' => (string) ($ownWorker['company'] ?? '')]] : [];
+    $selectedWorkerId = (int) ($ownWorker['id'] ?? 0);
+    $selectedCompanyId = (int) ($ownWorker['company_id'] ?? 0);
+} else {
+    $dashboardCompanies = db()->query('SELECT id, name FROM companies ORDER BY name')->fetchAll();
+    $dashboardWorkers = db()->query("SELECT w.id, w.company_id, w.full_name, w.document_number, c.name AS company FROM workers w LEFT JOIN companies c ON c.id = w.company_id ORDER BY w.full_name")->fetchAll();
+}
 $attendanceLocations = db()->query("SELECT id, name FROM attendance_locations WHERE status = 1 ORDER BY name")->fetchAll();
 
 if ($selectedWorkerId > 0) {
@@ -156,8 +164,18 @@ $stmt = db()->prepare("SELECT
     ORDER BY w.full_name");
 $stmt->execute(['today_entry' => $today, 'today_exit' => $today]);
 $todayRows = $stmt->fetchAll();
+if ($personalView) {
+    $todayRows = array_values(array_filter($todayRows, static fn(array $row): bool => (int) $row['worker_id'] === $selectedWorkerId));
+    $ownStats = db()->prepare("SELECT SUM(mark_type = 'entrada') AS entradas, SUM(mark_type = 'salida') AS salidas, SUM(mark_type = 'entrada' AND schedule_status = 'tardanza') AS tardanzas, SUM(within_radius = 0) AS fuera_radio FROM attendance_marks WHERE mark_date = :today AND worker_id = :worker_id");
+    $ownStats->execute(['today' => $today, 'worker_id' => $selectedWorkerId]);
+    $todayStats = $ownStats->fetch() ?: [];
+    $entriesToday = (int) ($todayStats['entradas'] ?? 0);
+    $exitsToday = (int) ($todayStats['salidas'] ?? 0);
+    $lateToday = (int) ($todayStats['tardanzas'] ?? 0);
+    $outsideToday = (int) ($todayStats['fuera_radio'] ?? 0);
+}
 
-$stmt = db()->prepare("SELECT mark_date, mark_type, schedule_status
+$stmt = db()->prepare("SELECT worker_id, mark_date, mark_type, schedule_status
     FROM attendance_marks
     WHERE mark_date >= DATE_SUB(:today_from, INTERVAL 6 DAY) AND mark_date <= :today_to
     ORDER BY mark_date");
@@ -168,6 +186,7 @@ for ($i = 6; $i >= 0; $i--) {
     $trend[$date] = ['entrada' => 0, 'salida' => 0, 'tardanza' => 0];
 }
 foreach ($stmt->fetchAll() as $row) {
+    if ($personalView && (int) $row['worker_id'] !== $selectedWorkerId) continue;
     $date = (string) $row['mark_date'];
     if (!isset($trend[$date])) {
         continue;
@@ -415,9 +434,10 @@ require __DIR__ . '/../../includes/header.php';
         <p>Resumen operativo de asistencias, faltas, tardanzas y cobertura diaria.</p>
     </div>
     <form class="attendance-dashboard-filters" method="get">
+        <?php if ($personalView): ?><input type="hidden" name="empresa_id" value="<?= $selectedCompanyId ?>"><input type="hidden" name="trabajador_id" value="<?= $selectedWorkerId ?>"><?php endif; ?>
         <div class="attendance-filter-company">
             <label class="form-label small fw-bold text-muted" for="attendanceCompanyFilter">Por empresa</label>
-            <select class="form-select select2-searchable" id="attendanceCompanyFilter" name="empresa_id"
+            <select class="form-select select2-searchable" id="attendanceCompanyFilter" name="empresa_id" <?= $personalView ? 'disabled' : '' ?>
                 data-placeholder="Todas las empresas" data-no-results="No se encontraron empresas">
                 <option value="0">Todas las empresas</option>
                 <?php foreach ($dashboardCompanies as $company): ?>
@@ -429,7 +449,7 @@ require __DIR__ . '/../../includes/header.php';
         </div>
         <div class="attendance-filter-worker">
             <label class="form-label small fw-bold text-muted" for="attendanceWorkerFilter">Por trabajador</label>
-            <select class="form-select select2-searchable" id="attendanceWorkerFilter" name="trabajador_id"
+            <select class="form-select select2-searchable" id="attendanceWorkerFilter" name="trabajador_id" <?= $personalView ? 'disabled' : '' ?>
                 data-placeholder="Todo el personal" data-no-results="No se encontraron trabajadores">
                 <option value="0">Todo el personal</option>
                 <?php foreach ($dashboardWorkers as $worker): ?>
