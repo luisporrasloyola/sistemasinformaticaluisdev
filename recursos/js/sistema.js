@@ -4737,6 +4737,7 @@ function initUsuariosModule() {
         form.reset();
         form.classList.remove('was-validated');
         document.getElementById('usuarioId').value = '';
+        if (roleSelect) roleSelect.disabled = false;
         document.getElementById('usuarioModalTitle').textContent = 'Nuevo usuario';
         password.required = true;
         applyPermissions(defaultPermissionsForRole(roleSelect?.value || 'Administrador'));
@@ -4753,12 +4754,14 @@ function initUsuariosModule() {
             document.getElementById('usuarioId').value = button.dataset.id || '';
             document.getElementById('usuarioName').value = button.dataset.name || '';
             document.getElementById('usuarioEmail').value = button.dataset.email || '';
+            document.getElementById('usuarioRole').disabled = false;
             document.getElementById('usuarioRole').value = button.dataset.role || 'Administrador';
             if (workerSelect) workerSelect.value = button.dataset.workerId || '';
             document.getElementById('usuarioModalTitle').textContent = 'Editar usuario';
             password.required = false;
             applyPermissions(permissionsForUserPayload(button.dataset.id || '', button.dataset.role || 'Administrador'));
             toggleUserWorkerField();
+            if (button.dataset.self === '1' && button.dataset.role === 'Administrador') roleSelect.disabled = true;
             bootstrap.Tab.getOrCreateInstance(document.getElementById('usuarioDatosTab'))?.show();
             passwordHelp.textContent = 'Dejar vacio para mantener la contrasena actual.';
             modal.show();
@@ -4841,7 +4844,9 @@ function initUsuariosModule() {
             form.classList.add('was-validated');
             return;
         }
-        const response = await fetch(`${BASE_URL}/servicios/guardar_usuario.php`, { method: 'POST', body: new FormData(form) });
+        const payload = new FormData(form);
+        if (roleSelect?.disabled) payload.set('role', roleSelect.value);
+        const response = await fetch(`${BASE_URL}/servicios/guardar_usuario.php`, { method: 'POST', body: payload });
         const data = await response.json();
         if (!data.ok) {
             Swal.fire('Atencion', data.message || 'No se pudo guardar el usuario.', 'warning');

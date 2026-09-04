@@ -62,6 +62,7 @@ window.usuarioPermisos = <?= json_encode([
                             data-email="<?= e($user['email']) ?>"
                             data-role="<?= e($user['role']) ?>"
                             data-worker-id="<?= (int) ($user['worker_id'] ?? 0) ?>"
+                            data-self="<?= $currentUser && (int) $currentUser['id'] === (int) $user['id'] ? '1' : '0' ?>"
                             title="Editar"><i class="fa-solid fa-pen"></i></button>
                         <?php if (!$currentUser || (int) $currentUser['id'] !== (int) $user['id']): ?>
                             <button class="btn btn-sm btn-outline-danger js-eliminar-usuario" type="button" data-id="<?= (int) $user['id'] ?>" title="Eliminar"><i class="fa-solid fa-trash"></i></button>

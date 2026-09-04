@@ -13,6 +13,11 @@ $role = trim((string) ($_POST['role'] ?? ''));
 $workerId = (int) ($_POST['worker_id'] ?? 0);
 $password = (string) ($_POST['password'] ?? '');
 $allowedRoles = ['Administrador', 'Gestor', 'Personal'];
+$currentSessionUser = current_user();
+if ($id > 0 && (int) ($currentSessionUser['id'] ?? 0) === $id && (string) ($currentSessionUser['role'] ?? '') === 'Administrador') {
+    // Un administrador no puede quitarse accidentalmente su propio acceso total.
+    $role = 'Administrador';
+}
 
 if ($name === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || !in_array($role, $allowedRoles, true)) {
     json_response(['ok' => false, 'message' => 'Complete los campos obligatorios.'], 400);
