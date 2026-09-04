@@ -209,7 +209,7 @@ function permission_personal_default_documents(): array
         if (!in_array($scopeKey, permission_personal_pmi_scopes(), true)) continue;
         foreach ($scope['items'] as $item) {
             $normalized = trim(permission_normalize_requirement_name((string) $item['name']));
-            $matches = in_array($normalized, $allowed, true) || str_starts_with($normalized, 'camo ') || str_starts_with($normalized, 'boleta firmada ');
+            $matches = in_array($normalized, $allowed, true);
             if (!$matches) continue;
             $permissions[$scopeKey][(string) (int) $item['id']] = ['view' => true, 'upload' => false, 'manage' => false];
         }

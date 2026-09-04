@@ -4588,7 +4588,7 @@ function initUsuariosModule() {
         viewChecks.forEach((check) => {
             if (!allowedScopes.has(check.dataset.scope)) return;
             const rowName = (check.closest('tr')?.querySelector('td')?.textContent || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ');
-            if (!allowedNames.has(rowName) && !rowName.startsWith('camo ') && !rowName.startsWith('boleta firmada ')) return;
+            if (!allowedNames.has(rowName)) return;
             permissions[check.dataset.scope] = permissions[check.dataset.scope] || {};
             permissions[check.dataset.scope][check.dataset.catalogId] = { view: true, upload: false, manage: false };
         });
