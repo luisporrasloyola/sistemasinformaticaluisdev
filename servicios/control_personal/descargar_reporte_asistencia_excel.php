@@ -62,18 +62,18 @@ if (!$rows) $summaryRows[] = xlsx_row(21, [xlsx_cell(1, 21, 'No hay jornadas en 
 $extraMerge = '';
 if ($trips) {
     $sectionRow = $excelRow + 1;
-    $summaryRows[] = xlsx_row($sectionRow, [xlsx_cell(1,$sectionRow,'SALIDAS TEMPORALES',1)],24);
+    $summaryRows[] = xlsx_row($sectionRow, [xlsx_cell(1,$sectionRow,'DESPLAZAMIENTOS LABORALES',1)],24);
     $extraMerge = '<mergeCell ref="A'.$sectionRow.':L'.$sectionRow.'"/>';
     $excelRow = $sectionRow + 1;
-    $tripHeaders=['Fecha','Horario','Inicio','Fin','Duración','Origen','Destino','Motivo','Estado'];
+    $tripHeaders=['Fecha','Horario','Inicio','Fin','Duración','Origen','Destino','Proyecto','Estado'];
     $cells=[]; foreach($tripHeaders as $index=>$header)$cells[]=xlsx_cell($index+1,$excelRow,$header,1);
     $summaryRows[]=xlsx_row($excelRow,$cells,25); $excelRow++;
     foreach($trips as $trip){
         $incident=($trip['completion_type']??'')==='returned_without_arrival';
-        $reason=$trip['reason'].($incident?' | Llegada no confirmada: '.($trip['exception_reason']?:'Sin detalle'):'');
+        $project=($trip['project_name']?:($trip['status']!=='finalizado'?'Pendiente':'-')).($incident?' | Llegada no confirmada: '.($trip['exception_reason']?:'Sin detalle'):'');
         $status=$trip['status']!=='finalizado'?'En curso':($incident?'Regreso con incidencia':'Finalizado');
         $values=[date('d/m/Y',strtotime($trip['trip_date'])),$trip['schedule_label'],date('H:i',strtotime($trip['started_at'])),$trip['ended_at']?date('H:i',strtotime($trip['ended_at'])):'-',$trip['duration_label'],
-            $trip['location_name'],$trip['first_destination'],$reason,$status];
+            $trip['location_name'],$trip['first_destination'],$project,$status];
         $cells=[];foreach($values as $index=>$value)$cells[]=xlsx_cell($index+1,$excelRow,$value,9);
         $summaryRows[]=xlsx_row($excelRow,$cells,mb_strlen(implode(' ',$values))>100?42:28);$excelRow++;
     }

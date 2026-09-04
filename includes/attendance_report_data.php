@@ -473,6 +473,12 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                  ORDER BY origin_trip.ended_at DESC,origin_trip.id DESC LIMIT 1),
                 l.name
             ) AS location_name,
+                (SELECT awc.activity FROM attendance_work_completions awc
+                 WHERE awc.worker_id=at.worker_id
+                   AND awc.work_date=at.trip_date
+                   AND awc.location_id=COALESCE(at.last_location_id,at.first_destination_location_id)
+                   AND (at.ended_at IS NULL OR awc.completed_at>=at.ended_at)
+                 ORDER BY awc.completed_at,awc.id LIMIT 1) AS project_name,
                 COALESCE(ap.entry_time,sd.entry_time,sd.entry_start) AS schedule_entry_time,
                 COALESCE(ap.exit_time,sd.exit_time,sd.exit_start) AS schedule_exit_time
                 FROM attendance_trips at

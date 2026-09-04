@@ -14,7 +14,7 @@ if ($workerId <= 0) {
     json_response(['ok' => false, 'message' => 'Seleccione un trabajador.'], 400);
 }
 
-$stmt = db()->prepare("SELECT am.id, am.assignment_id, am.marked_at, am.mark_type, am.distance_meters,
+$stmt = db()->prepare("SELECT am.id, am.assignment_id, am.mark_date, am.marked_at, am.mark_type, am.distance_meters,
         am.final_status, am.photo_path, w.full_name, l.name AS location_name
     FROM attendance_marks am
     JOIN workers w ON w.id = am.worker_id
@@ -34,29 +34,27 @@ $stmt->execute(['worker_id' => $workerId]);
 $grouped = [];
 foreach ($stmt->fetchAll() as $row) {
     $timestamp = strtotime((string) $row['marked_at']);
-    $assignmentId = (int) $row['assignment_id'];
-    $dateKey = date('Y-m-d', $timestamp) . '_' . $assignmentId;
+    $dateKey = (string) $row['mark_date'];
     if (!isset($grouped[$dateKey])) {
         $grouped[$dateKey] = [
-            'date_key' => date('Y-m-d', $timestamp),
-            'date' => date('d/m/Y', $timestamp),
+            'date_key' => $dateKey,
+            'date' => date('d/m/Y', strtotime($dateKey)),
             'worker' => (string) $row['full_name'],
-            'locations' => [],
             'entry' => null,
             'exit' => null,
         ];
     }
 
-    $grouped[$dateKey]['locations'][(string) $row['location_name']] = true;
     $mark = [
         'time' => date('H:i', $timestamp),
         'distance' => round((float) $row['distance_meters'], 2),
         'status' => (string) $row['final_status'],
         'photo_path' => $row['photo_path'] ? (string) $row['photo_path'] : null,
+        'location' => (string) $row['location_name'],
     ];
     if ((string) $row['mark_type'] === 'entrada') {
         $grouped[$dateKey]['entry'] = $mark;
-    } elseif ((string) $row['mark_type'] === 'salida') {
+    } elseif ((string) $row['mark_type'] === 'salida' && $grouped[$dateKey]['exit'] === null) {
         $grouped[$dateKey]['exit'] = $mark;
     }
 }
@@ -87,7 +85,6 @@ foreach ($grouped as $day) {
     $rows[] = [
         'date' => $day['date'],
         'worker' => $day['worker'],
-        'location' => implode(', ', array_keys($day['locations'])),
         'entry' => $entry,
         'exit' => $exit,
         'daily_status' => $dailyStatus,

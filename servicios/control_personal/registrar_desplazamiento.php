@@ -102,31 +102,32 @@ if ($action === 'iniciar') {
         $readyStmt->execute(['worker_id'=>$workerId,'today'=>$today]);
         $ready = $readyStmt->fetch();
         if (!$ready || ($ready['last_trip_started_at'] && strtotime((string)$ready['completed_at']) < strtotime((string)$ready['last_trip_started_at']))) {
-            json_response(['ok'=>false,'message'=>'Primero finaliza el trabajo en tu lugar actual. Esto avisará al administrador que estás listo para el siguiente destino del recorrido.'],409);
+            json_response(['ok'=>false,'message'=>'Primero finaliza el trabajo en tu lugar actual. Luego podrás iniciar el traslado hacia el siguiente destino.'],409);
         }
     }
     $originLocation = $assignment;
-    if ($programId > 0) {
-        $originStmt = db()->prepare("SELECT l.id AS location_id,l.name AS location_name,l.latitude,l.longitude,l.radius_meters
-            FROM attendance_work_completions awc
-            JOIN attendance_locations l ON l.id=awc.location_id
-            WHERE awc.program_id=:program_id AND awc.worker_id=:worker_id AND awc.work_date=:today
-            ORDER BY awc.completed_at DESC,awc.id DESC LIMIT 1");
-        $originStmt->execute(['program_id'=>$programId,'worker_id'=>$workerId,'today'=>$today]);
-        $lastCompletedLocation = $originStmt->fetch();
-        if ($lastCompletedLocation) {
-            $originLocation = [
-                'name'=>$lastCompletedLocation['location_name'],
-                'latitude'=>$lastCompletedLocation['latitude'],
-                'longitude'=>$lastCompletedLocation['longitude'],
-                'radius_meters'=>$lastCompletedLocation['radius_meters'],
-            ];
-        }
+    $originLocationId = (int) $assignment['location_id'];
+    $originStmt = db()->prepare("SELECT l.id AS location_id,l.name AS location_name,l.latitude,l.longitude,l.radius_meters
+        FROM attendance_work_completions awc
+        JOIN attendance_locations l ON l.id=awc.location_id AND l.status=1
+        WHERE awc.worker_id=:worker_id AND awc.work_date=:today
+        ORDER BY awc.completed_at DESC,awc.id DESC LIMIT 1");
+    $originStmt->execute(['worker_id'=>$workerId,'today'=>$today]);
+    $lastCompletedLocation = $originStmt->fetch();
+    if ($lastCompletedLocation) {
+        $originLocationId = (int) $lastCompletedLocation['location_id'];
+        $originLocation = [
+            'name'=>$lastCompletedLocation['location_name'],
+            'latitude'=>$lastCompletedLocation['latitude'],
+            'longitude'=>$lastCompletedLocation['longitude'],
+            'radius_meters'=>$lastCompletedLocation['radius_meters'],
+        ];
     }
     // Al iniciar se valida exclusivamente el punto de partida. El destino se
     // comprobará con GPS cuando el trabajador confirme su llegada.
     require_trip_location_radius($originLocation,$latitude,$longitude,$accuracy,'departure');
     $destinationLocation = trip_location(db(), $destinationLocationId);
+    if ($destinationLocation && $destinationLocationId === $originLocationId) json_response(['ok'=>false,'message'=>'Seleccione un lugar diferente al lugar actual.'],422);
     if ($hasPlannedRoute && !$destinationLocation) json_response(['ok'=>false,'message'=>'Seleccione el destino programado.'],422);
     $destinationName = $destinationLocation ? (string)$destinationLocation['name'] : mb_substr($destination,0,180);
     if ($destinationName === '' || $reason === '') json_response(['ok'=>false,'message'=>'Escriba el destino y el motivo del desplazamiento.'],422);

@@ -266,19 +266,37 @@ if ($markType === 'salida') {
     if ($tripCheck->fetchColumn()) {
         json_response(['ok'=>false,'title'=>'Desplazamiento en curso','message'=>'Finaliza el desplazamiento laboral antes de registrar tu salida definitiva.'],409);
     }
-    $lastLocationStmt = db()->prepare("SELECT l.id,COALESCE(l.name,t.first_destination) AS name,l.latitude,l.longitude,l.radius_meters,
+    $lastLocationStmt = db()->prepare("SELECT l.id,COALESCE(l.name,t.first_destination) AS name,l.latitude,l.longitude,l.radius_meters,t.ended_at,
             (t.last_location_id IS NULL) AS is_temporary_location
         FROM attendance_trips t LEFT JOIN attendance_locations l ON l.id=t.last_location_id
         WHERE t.worker_id=:worker_id AND t.trip_date=:trip_date AND t.status='finalizado'
         ORDER BY t.ended_at DESC,t.id DESC LIMIT 1");
     $lastLocationStmt->execute(['worker_id'=>$workerId,'trip_date'=>$today]);
     if ($lastLocation = $lastLocationStmt->fetch()) {
-        if (!$hasPlannedRoute && ((int)$lastLocation['is_temporary_location'] === 1 || (int)$lastLocation['id'] !== $baseLocationId)) {
+        if (!$hasPlannedRoute && (int)$lastLocation['is_temporary_location'] === 1) {
             json_response([
                 'ok'=>false,
                 'title'=>'Regreso pendiente',
-                'message'=>'Antes de finalizar tu jornada, registra el regreso a tu lugar habitual y confirma la llegada.',
+                'message'=>'Antes de finalizar tu jornada, confirma la llegada a un lugar de marcación registrado.',
             ],409);
+        }
+        if (!$hasPlannedRoute && $lastLocation['id'] !== null && (int)$lastLocation['id'] !== $baseLocationId) {
+            $completionCheck = db()->prepare("SELECT 1 FROM attendance_work_completions
+                WHERE worker_id=:worker_id AND work_date=:work_date AND location_id=:location_id
+                  AND completed_at>=:arrival_time ORDER BY completed_at DESC LIMIT 1");
+            $completionCheck->execute([
+                'worker_id'=>$workerId,
+                'work_date'=>$today,
+                'location_id'=>(int)$lastLocation['id'],
+                'arrival_time'=>$lastLocation['ended_at'],
+            ]);
+            if (!$completionCheck->fetchColumn()) {
+                json_response([
+                    'ok'=>false,
+                    'title'=>'Trabajo pendiente',
+                    'message'=>'Finaliza el trabajo del lugar actual antes de marcar tu salida.',
+                ],409);
+            }
         }
         if ($lastLocation['id'] !== null) {
             $assignment['location_id'] = (int) $lastLocation['id'];

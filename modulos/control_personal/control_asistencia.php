@@ -103,7 +103,18 @@ require __DIR__ . '/../../includes/header.php';
             <label class="form-label">Observaciones</label>
             <textarea class="form-control mb-3" id="markObservations" rows="3" disabled></textarea>
 
-            <div class="d-grid gap-2 mb-3">
+            <section class="attendance-next-location-card d-none" id="nextLocationPanel" role="status">
+                <div class="attendance-next-location-title">
+                    <span><i class="fa-solid fa-location-arrow"></i></span>
+                    <strong>Elija su próximo destino</strong>
+                </div>
+                <select class="form-select" id="nextLocationSelect" aria-label="Siguiente lugar de marcación">
+                    <option value="">Seleccione un lugar</option>
+                    <?php foreach ($markingLocations as $location): ?><option value="<?= (int) $location['id'] ?>"><?= e($location['name']) ?></option><?php endforeach; ?>
+                </select>
+                <button class="btn attendance-next-location-btn" type="button" id="chooseNextLocationBtn" disabled><i class="fa-solid fa-person-walking-arrow-right"></i><span>Dirigirme a este lugar</span></button>
+            </section>
+            <div class="d-grid gap-2 mb-3 attendance-primary-mark-action">
                 <button class="btn btn-success" type="button" id="markEntryBtn" disabled><i class="fa-solid fa-right-to-bracket me-2"></i>Marcar entrada</button>
             </div>
 
@@ -117,9 +128,8 @@ require __DIR__ . '/../../includes/header.php';
             <section class="attendance-mobility-actions d-none" id="mobilityActionPanel">
                 <div class="d-grid gap-2">
                 <button class="btn btn-warning d-none" type="button" id="startTripBtn"><i class="fa-solid fa-route me-2"></i>Iniciar desplazamiento</button>
-                <button class="btn btn-outline-primary d-none" type="button" id="addTripStopBtn"><i class="fa-solid fa-location-dot me-2"></i>Registrar visita</button>
-                <button class="btn btn-outline-success d-none" type="button" id="finishTripBtn"><i class="fa-solid fa-flag-checkered me-2"></i>Confirmar llegada</button>
-                <button class="btn attendance-return-work-btn d-none" type="button" id="returnWithoutArrivalBtn"><span class="attendance-return-work-icon"><i class="fa-solid fa-house-circle-check"></i></span><span><strong>Regresé a mi lugar de trabajo</strong><small>Confirmar regreso mediante GPS</small></span><i class="fa-solid fa-chevron-right ms-auto"></i></button>
+                <button class="btn attendance-confirm-arrival-btn d-none" type="button" id="finishTripBtn"><span class="attendance-confirm-arrival-icon"><i class="fa-solid fa-location-crosshairs"></i></span><span><strong>Confirmar llegada</strong><small>Validar ubicación mediante GPS</small></span></button>
+                <button class="btn attendance-return-work-btn d-none" type="button" id="returnWithoutArrivalBtn"><span class="attendance-return-work-icon"><i class="fa-solid fa-house-circle-check"></i></span><span><strong>Regresé a mi lugar de trabajo</strong><small>Confirmar regreso mediante GPS</small></span></button>
                 <button class="btn btn-primary" type="button" id="markExitBtn" disabled><i class="fa-solid fa-right-from-bracket me-2"></i>Marcar salida</button>
                 </div>
             </section>
@@ -190,7 +200,7 @@ require __DIR__ . '/../../includes/header.php';
             <div class="tab-pane fade" id="recent-trips-pane" role="tabpanel" aria-labelledby="recent-trips-tab">
                 <div class="table-responsive">
                     <table class="table table-hover align-middle attendance-recent-table attendance-trips-table">
-                        <thead><tr><th>Fecha</th><th>Inicio</th><th>Fin</th><th>Duración</th><th>Origen</th><th>Destino</th><th>Motivo</th><th>Estado</th></tr></thead>
+                        <thead><tr><th>Fecha</th><th>Inicio</th><th>Fin</th><th>Duración</th><th>Origen</th><th>Destino</th><th>Proyecto</th><th>Estado</th></tr></thead>
                         <tbody id="recentAttendanceTrips"><tr><td colspan="8" class="text-muted text-center py-4">Seleccione un trabajador para consultar sus desplazamientos.</td></tr></tbody>
                     </table>
                 </div>
@@ -247,7 +257,7 @@ require __DIR__ . '/../../includes/header.php';
         <div class="modal-body">
             <div class="alert alert-primary py-2"><i class="fa-solid fa-circle-info me-2"></i>Al confirmar, el administrador sabrá que estás disponible para recibir un nuevo destino.</div>
             <div class="mb-3"><label class="form-label">Lugar actual</label><input class="form-control bg-light fw-semibold" id="finishWorkLocation" readonly></div>
-            <div class="mb-3"><label class="form-label">Trabajo realizado</label><input class="form-control" id="finishWorkActivity" name="activity" maxlength="255" required placeholder="Ej.: Trabajos de izaje"></div>
+            <div class="mb-3"><label class="form-label">Nombre del proyecto</label><input class="form-control" id="finishWorkActivity" name="activity" maxlength="255" required placeholder="Ej.: Proyecto Central Ventanilla"></div>
             <div><label class="form-label">Observación <span class="text-muted fw-normal">(opcional)</span></label><textarea class="form-control" name="observations" rows="3" maxlength="500" placeholder="Detalle breve del trabajo terminado"></textarea></div>
         </div>
         <div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-warning" type="submit"><i class="fa-solid fa-check me-2"></i>Confirmar trabajo finalizado</button></div>

@@ -129,17 +129,17 @@ require __DIR__ . '/../../includes/header.php';
     </div>
 
     <?php if ($trips): ?>
-    <div class="individual-report-section-title mt-4"><h3>Salidas temporales</h3><p>Salidas realizadas sin finalizar la jornada laboral.</p></div>
+    <div class="individual-report-section-title mt-4"><h3>Desplazamientos laborales</h3><p>Recorridos realizados entre lugares durante la jornada laboral.</p></div>
     <div class="table-responsive">
         <table class="table align-middle individual-report-table">
-            <thead><tr><th>Fecha</th><th>Horario</th><th>Inicio</th><th>Fin</th><th>Duración</th><th>Origen</th><th>Destino</th><th>Motivo</th><th>Estado</th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Horario</th><th>Inicio</th><th>Fin</th><th>Duración</th><th>Origen</th><th>Destino</th><th>Proyecto</th><th>Estado</th></tr></thead>
             <tbody><?php foreach ($trips as $trip): ?><tr>
                 <td><?= e(date('d/m/Y', strtotime($trip['trip_date']))) ?></td>
                 <td class="text-nowrap"><?= e($trip['schedule_label']) ?></td>
                 <td><?= e(date('H:i', strtotime($trip['started_at']))) ?></td>
                 <td><?= $trip['ended_at'] ? e(date('H:i', strtotime($trip['ended_at']))) : '-' ?></td>
                 <td class="text-nowrap"><?= e($trip['duration_label']) ?></td>
-                <td><?= e($trip['location_name']) ?></td><td><?= e($trip['first_destination']) ?></td><td><?= e($trip['reason']) ?><?php if (($trip['completion_type'] ?? '') === 'returned_without_arrival'): ?><small class="d-block text-warning-emphasis mt-1"><strong>Llegada no confirmada:</strong> <?= e($trip['exception_reason'] ?: 'Sin detalle') ?></small><?php endif; ?></td>
+                <td><?= e($trip['location_name']) ?></td><td><?= e($trip['first_destination']) ?></td><td><?= e($trip['project_name'] ?: (($trip['status'] ?? '') !== 'finalizado' ? 'Pendiente' : '-')) ?><?php if (($trip['completion_type'] ?? '') === 'returned_without_arrival'): ?><small class="d-block text-warning-emphasis mt-1"><strong>Llegada no confirmada:</strong> <?= e($trip['exception_reason'] ?: 'Sin detalle') ?></small><?php endif; ?></td>
                 <?php $tripIncident = ($trip['completion_type'] ?? '') === 'returned_without_arrival'; ?><td><span class="badge <?= $trip['status']!=='finalizado' || $tripIncident ? 'text-bg-warning' : 'text-bg-success' ?>"><?= $trip['status']!=='finalizado' ? 'En curso' : ($tripIncident ? 'Regreso con incidencia' : 'Finalizado') ?></span></td>
             </tr><?php endforeach; ?></tbody>
         </table>

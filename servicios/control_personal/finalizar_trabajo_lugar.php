@@ -112,13 +112,6 @@ try {
         $nextDestination = $nextStmt->fetch();
     }
     $nextDestinationName = trim((string)($nextDestination['location_name'] ?? $nextDestination['destination'] ?? ''));
-    $availabilityMessage = $nextDestinationName !== ''
-        ? 'Su siguiente destino programado es '.$nextDestinationName.'.'
-        : 'Está esperando que se le indique un nuevo destino.';
-    $body = $assignment['full_name'].' terminó “'.mb_substr($activity,0,120).'” en '.$location['name'].' a las '.date('H:i').'. Su jornada continúa activa. '.$availabilityMessage;
-    $notification = $pdo->prepare("INSERT INTO notifications (type,title,body,worker_id,is_read,created_at)
-        VALUES ('work_location_completed','Trabajo finalizado en un lugar',:body,:worker_id,0,NOW())");
-    $notification->execute(['body'=>$body,'worker_id'=>$workerId]);
     $pdo->commit();
 } catch (Throwable $error) {
     if ($pdo->inTransaction()) $pdo->rollBack();
@@ -127,5 +120,5 @@ try {
 
 $finalMessage = isset($nextDestinationName) && $nextDestinationName !== ''
     ? 'Trabajo finalizado en '.$location['name'].'. Tu jornada continúa activa. Tu siguiente destino es '.$nextDestinationName.'.'
-    : 'Trabajo finalizado en '.$location['name'].'. Tu jornada continúa activa; espera la indicación de tu siguiente destino.';
+    : 'Trabajo finalizado en '.$location['name'].'. Tu jornada continúa activa. Selecciona ahora tu siguiente lugar de marcación.';
 json_response(['ok'=>true,'message'=>$finalMessage]);

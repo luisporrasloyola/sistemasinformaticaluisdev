@@ -4860,34 +4860,20 @@ function initAttendanceControl() {
     const importModal = new bootstrap.Modal(document.getElementById('attendanceImportModal'));
     const form = document.getElementById('attendanceForm');
     const importForm = document.getElementById('attendanceImportForm');
-    const rows = Array.from(table.querySelectorAll('tbody tr'));
-
-    const applyFilters = () => {
-        const date = document.getElementById('attendanceFilterDate')?.value || '';
-        const month = document.getElementById('attendanceFilterMonth')?.value || '';
-        const name = normalizarTexto(document.getElementById('attendanceFilterName')?.value || '');
-        const activity = normalizarTexto(document.getElementById('attendanceFilterActivity')?.value || '');
-        const company = normalizarTexto(document.getElementById('attendanceFilterCompany')?.value || '');
-        const position = normalizarTexto(document.getElementById('attendanceFilterPosition')?.value || '');
-        const rating = document.getElementById('attendanceFilterRating')?.value || '';
-
-        rows.forEach((row) => {
-            const visible = (!date || row.dataset.date === date)
-                && (!month || row.dataset.month === month)
-                && (!name || normalizarTexto(row.dataset.name).includes(name))
-                && (!activity || normalizarTexto(row.dataset.activity).includes(activity))
-                && (!company || normalizarTexto(row.dataset.company) === company)
-                && (!position || normalizarTexto(row.dataset.position) === position)
-                && (!rating || row.dataset.rating === rating);
-            row.classList.toggle('d-none', !visible);
-        });
-    };
-
+    const filtersForm = document.getElementById('attendanceFiltersForm');
+    let filterTimer = null;
     document.querySelectorAll('.attendance-filter').forEach((field) => {
-        field.addEventListener('input', applyFilters);
-        field.addEventListener('change', applyFilters);
+        const isTextSearch = field.tagName === 'INPUT' && (field.type === 'text' || !field.type);
+        const submitFilters = () => {
+            if (!filtersForm) return;
+            window.clearTimeout(filterTimer);
+            filterTimer = window.setTimeout(() => filtersForm.requestSubmit(), isTextSearch ? 450 : 0);
+        };
+        field.addEventListener(isTextSearch ? 'input' : 'change', submitFilters);
     });
-
+    document.getElementById('attendancePerPage')?.addEventListener('change', (event) => {
+        event.currentTarget.form?.requestSubmit();
+    });
     document.getElementById('newAttendanceBtn')?.addEventListener('click', () => {
         form.reset();
         form.classList.remove('was-validated');
@@ -5844,6 +5830,9 @@ function initControlPersonalLocations() {
     let map = null;
     let marker = null;
     let circle = null;
+    let reverseAddressTimer = null;
+    let reverseAddressRequest = 0;
+    let reverseAddressController = null;
 
     function updateRadiusLabel() {
         if (radiusLabel && radius) radiusLabel.textContent = `${radius.value} metros`;
@@ -5869,14 +5858,43 @@ function initControlPersonalLocations() {
     }
 
     async function reverseAddress(lat, lng) {
-        if (!addressInput || addressInput.value.trim() !== '') return;
+        if (!addressInput || !Number.isFinite(lat) || !Number.isFinite(lng)
+            || lat < -90 || lat > 90 || lng < -180 || lng > 180) return;
+        const requestId = ++reverseAddressRequest;
+        reverseAddressController?.abort();
+        reverseAddressController = new AbortController();
+        const previousPlaceholder = addressInput.placeholder;
+        addressInput.placeholder = 'Buscando dirección para las coordenadas...';
+        addressInput.setAttribute('aria-busy', 'true');
         try {
-            const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`);
+            const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=es&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}`, {
+                signal: reverseAddressController.signal,
+                headers: { Accept: 'application/json' }
+            });
+            if (!response.ok) throw new Error('No se pudo consultar la dirección.');
             const data = await response.json();
-            if (data.display_name) addressInput.value = data.display_name;
+            if (requestId !== reverseAddressRequest) return;
+            addressInput.value = String(data.display_name || '').trim();
+            if (!addressInput.value) addressInput.placeholder = 'No se encontró una dirección; puede escribirla manualmente.';
         } catch (error) {
-            // La dirección puede ingresarse manualmente si el servicio externo no responde.
+            if (error.name !== 'AbortError' && requestId === reverseAddressRequest) {
+                addressInput.placeholder = 'No se pudo obtener la dirección; puede escribirla manualmente.';
+            }
+        } finally {
+            if (requestId === reverseAddressRequest) {
+                addressInput.removeAttribute('aria-busy');
+                if (addressInput.value) addressInput.placeholder = previousPlaceholder;
+            }
         }
+    }
+
+    function syncCoordinatesAndAddress(delay = 500) {
+        const lat = normalizeCoordinate(latInput);
+        const lng = normalizeCoordinate(lngInput);
+        if (lat === null || lng === null || lat < -90 || lat > 90 || lng < -180 || lng > 180) return;
+        setMapPoint(lat, lng);
+        clearTimeout(reverseAddressTimer);
+        reverseAddressTimer = setTimeout(() => reverseAddress(lat, lng), delay);
     }
 
     function initMap() {
@@ -5930,13 +5948,10 @@ function initControlPersonalLocations() {
         updateRadiusLabel();
         setMapPoint(Number(latInput.value), Number(lngInput.value));
     });
-    [latInput, lngInput].forEach((input) => input?.addEventListener('change', () => {
-        const lat = normalizeCoordinate(latInput);
-        const lng = normalizeCoordinate(lngInput);
-        if (lat === null || lng === null) return;
-        setMapPoint(lat, lng);
-        reverseAddress(lat, lng);
-    }));
+    [latInput, lngInput].forEach((input) => {
+        input?.addEventListener('input', () => syncCoordinatesAndAddress(650));
+        input?.addEventListener('change', () => syncCoordinatesAndAddress(0));
+    });
 
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
@@ -6830,6 +6845,32 @@ function initControlPersonalMarking() {
     let recentMarksRequestId = 0;
     let recentTripsRequestId = 0;
     let availabilityTimer = null;
+    const nextLocationPanel = document.getElementById('nextLocationPanel');
+    const nextLocationSelect = document.getElementById('nextLocationSelect');
+    const chooseNextLocationBtn = document.getElementById('chooseNextLocationBtn');
+
+    if (nextLocationSelect && window.jQuery && jQuery.fn.select2) {
+        const $nextLocationSelect = jQuery(nextLocationSelect);
+        $nextLocationSelect.select2({
+            theme: 'bootstrap4',
+            width: '100%',
+            placeholder: 'Buscar lugar de marcación',
+            allowClear: true,
+            minimumResultsForSearch: 0,
+            dropdownParent: jQuery(nextLocationPanel),
+            language: {
+                noResults: () => 'No se encontraron lugares',
+                searching: () => 'Buscando...'
+            }
+        });
+        $nextLocationSelect.on('select2:open', () => {
+            document.querySelector('.select2-container--open .select2-search__field')?.focus();
+        });
+        $nextLocationSelect.on('change.nextLocation', () => {
+            if (chooseNextLocationBtn) chooseNextLocationBtn.disabled = !nextLocationSelect.value;
+        });
+
+    }
 
     function value(id, text) {
         const element = document.getElementById(id);
@@ -6907,8 +6948,7 @@ function initControlPersonalMarking() {
         const marks = rows.flatMap((row) => {
             const common = {
                 date: row.date,
-                worker: row.worker,
-                location: row.location
+                worker: row.worker
             };
             return [
                 row.entry ? { ...common, ...row.entry, type: 'Entrada', typeKey: 'entrada' } : null,
@@ -7003,7 +7043,7 @@ function initControlPersonalMarking() {
                 <td class="text-nowrap">${escapeHtml(formatTripDuration(trip.duration_seconds, trip.started_at, trip.ended_at))}</td>
                 <td>${escapeHtml(trip.origin || '-')}</td>
                 <td><strong>${escapeHtml(trip.first_destination || '-')}</strong></td>
-                <td>${escapeHtml(trip.reason || '-')}</td>
+                <td>${escapeHtml(trip.arrival?.activity || (inProgress ? 'Pendiente' : '-'))}</td>
                 <td><span class="badge ${inProgress || trip.completion_type === 'returned_without_arrival' ? 'text-bg-warning' : 'text-bg-success'}"><i class="fa-solid ${inProgress ? 'fa-route' : (trip.completion_type === 'returned_without_arrival' ? 'fa-triangle-exclamation' : 'fa-circle-check')} me-1"></i>${inProgress ? 'En curso' : (trip.completion_type === 'returned_without_arrival' ? 'Regreso con incidencia' : 'Finalizado')}</span></td>
             </tr>`;
         }).join('');
@@ -7199,7 +7239,7 @@ function initControlPersonalMarking() {
         if (exitLocationLabel) exitLocationLabel.textContent = finalPlannedStop ? 'Lugar final del recorrido' : (isAwayFromBase ? 'Ubicación actual' : 'Lugar de salida');
         value('markExitLocationName', finalPlannedStop
             ? `${finalPlannedStop.destination}${routeCompleted ? ' · habilitado' : ' · pendiente'}`
-            : `${data.exit_location?.name || assignment.location_name}${isAwayFromBase ? ' · regreso pendiente' : ''}`);
+            : `${data.exit_location?.name || assignment.location_name}`);
         value('markScheduleName', assignment.schedule_name);
         value('markActivity', assignment.activity || '-');
         value('markWorkDate', data.work_date_formatted || '-');
@@ -7213,7 +7253,19 @@ function initControlPersonalMarking() {
         const hasExitMark = data.marks.some((mark) => mark.mark_type === 'salida');
         const activeTrip = data.active_trip || null;
         const waitingNextDestination = data.waiting_next_destination === true;
+        const canChooseNextLocation = data.is_personal === true && waitingNextDestination && !activeTrip && !finalPlannedStop;
         currentActiveTrip = activeTrip;
+        nextLocationPanel?.classList.toggle('d-none', !canChooseNextLocation);
+        if (nextLocationSelect) {
+            Array.from(nextLocationSelect.options).forEach(option => {
+                option.disabled = Number(option.value || 0) === currentLocationId;
+            });
+            if (!canChooseNextLocation) {
+                nextLocationSelect.value = '';
+                if (window.jQuery && jQuery.fn.select2) jQuery(nextLocationSelect).trigger('change.select2');
+            }
+        }
+        if (chooseNextLocationBtn) chooseNextLocationBtn.disabled = !canChooseNextLocation || !nextLocationSelect?.value;
         const destinationField = document.getElementById('tripDestination');
         if (destinationField && !currentActiveTrip) {
             if (data.next_planned_stop?.location_id) destinationField.value = String(data.next_planned_stop.location_id);
@@ -7226,11 +7278,11 @@ function initControlPersonalMarking() {
         value('currentWorkLocation', data.exit_location?.name || assignment.location_name || '-');
         value('currentWorkActivity', currentPlannedStop?.activity || assignment.activity || 'Actividad del lugar');
         entryBtn.disabled = !hasSchedule || hasEntryMark || entryTooEarly;
-        exitBtn.disabled = !hasSchedule || hasExitMark || !hasEntryMark || !!activeTrip || isAwayFromBase || (!!finalPlannedStop && !routeCompleted);
+        const canFinishJourneyHere = waitingNextDestination && !activeTrip && !finalPlannedStop && data.exit_location?.is_temporary_location != 1;
+        exitBtn.disabled = !hasSchedule || hasExitMark || !hasEntryMark || !!activeTrip || (isAwayFromBase && !canFinishJourneyHere) || (!!finalPlannedStop && !routeCompleted);
         finishLocationWorkBtn?.classList.toggle('d-none', !canFinishCurrentWork);
         const canStartRouteTrip = !!finalPlannedStop && waitingNextDestination && !routeCompleted && !activeTrip;
-        const canStartTemporaryTrip = !finalPlannedStop && hasEntryMark && !hasExitMark && !activeTrip && !waitingNextDestination;
-        startTripBtn?.classList.toggle('d-none', !(canStartRouteTrip || canStartTemporaryTrip));
+        startTripBtn?.classList.toggle('d-none', !canStartRouteTrip);
         if (startTripBtn) startTripBtn.innerHTML = nextPlannedStop?.destination
             ? `<i class="fa-solid fa-route me-2"></i>Ir a ${escapeHtml(nextPlannedStop.destination)}`
             : (isAwayFromBase
@@ -7241,12 +7293,13 @@ function initControlPersonalMarking() {
             && Number(activeTrip.first_destination_location_id || 0) === baseLocationId;
         // En un recorrido programado el destino ya está definido. No se ofrecen
         // acciones adicionales que puedan confundirse con la llegada real.
-        addTripStopBtn?.classList.toggle('d-none', !activeTrip || isFreeTemporaryTrip || !!finalPlannedStop);
+        addTripStopBtn?.classList.add('d-none');
         finishTripBtn?.classList.toggle('d-none', !activeTrip || isFreeTemporaryTrip);
         returnWithoutArrivalBtn?.classList.toggle('d-none', !isFreeTemporaryTrip);
-        if (finishTripBtn && activeTrip) finishTripBtn.innerHTML = isReturningToBase
-            ? `<i class="fa-solid fa-house-circle-check me-2"></i>Confirmar regreso a ${escapeHtml(assignment.location_name)}`
-            : `<i class="fa-solid fa-location-dot me-2"></i>Confirmar llegada a ${escapeHtml(activeTrip.first_destination || 'destino')}`;
+        if (finishTripBtn && activeTrip) {
+            const arrivalDestination = isReturningToBase ? assignment.location_name : (activeTrip.first_destination || 'Destino seleccionado');
+            finishTripBtn.innerHTML = `<span class="attendance-confirm-arrival-icon"><i class="fa-solid ${isReturningToBase ? 'fa-house-circle-check' : 'fa-location-crosshairs'}"></i></span><span><strong>${isReturningToBase ? 'Confirmar regreso' : 'Confirmar llegada'}</strong><small>${escapeHtml(arrivalDestination)}</small></span>`;
+        }
         activeTripPanel?.classList.toggle('d-none', !activeTrip);
         if (activeTripText && activeTrip) activeTripText.textContent = `${activeTrip.first_destination} · iniciado ${formatTime(String(activeTrip.started_at).slice(11))}`;
         if (entryTooEarly) {
@@ -7264,7 +7317,7 @@ function initControlPersonalMarking() {
             ...(activeTrip ? [{ text: 'Desplazamiento en curso', className: 'text-bg-warning' }] : []),
             ...(isAwayFromBase ? [{ text: 'Fuera del lugar habitual', className: 'text-bg-info' }] : []),
             ...(waitingNextDestination ? [{
-                text: routeCompleted ? 'Recorrido completado' : (nextPlannedStop?.destination ? `Siguiente destino: ${nextPlannedStop.destination}` : 'Esperando asignación de destino'),
+                text: routeCompleted ? 'Recorrido completado' : (nextPlannedStop?.destination ? `Siguiente destino: ${nextPlannedStop.destination}` : 'Selecciona tu siguiente lugar'),
                 className: routeCompleted ? 'text-bg-success' : (nextPlannedStop?.destination ? 'text-bg-info' : 'text-bg-warning')
             }] : []),
         ]);
@@ -7272,10 +7325,10 @@ function initControlPersonalMarking() {
             permissionHelp.textContent = routeCompleted
                 ? `Recorrido completado. La salida está habilitada en ${finalPlannedStop.destination}.`
                 : `La salida se habilitará en ${finalPlannedStop.destination} después de completar todos los lugares y finalizar el último trabajo.`;
-        } else if (permissionHelp && isAwayFromBase) {
-            permissionHelp.textContent = `Estás fuera de ${assignment.location_name}. Registra tu regreso y confirma la llegada antes de marcar la salida laboral.`;
+        } else if (permissionHelp && isAwayFromBase && !waitingNextDestination) {
+            permissionHelp.textContent = `Finaliza el trabajo de ${data.exit_location?.name || assignment.location_name} para elegir otro destino o terminar tu jornada.`;
         } else if (permissionHelp && waitingNextDestination) {
-            permissionHelp.textContent = 'Trabajo finalizado. Tu jornada continúa activa; espera que el administrador asigne el siguiente destino.';
+            permissionHelp.textContent = 'Trabajo finalizado. Puedes elegir otro destino o marcar tu salida en este lugar.';
         }
         updateMap();
     }
@@ -7406,6 +7459,20 @@ function initControlPersonalMarking() {
     }
 
     async function mark(type) {
+        if (type === 'salida') {
+            const confirmation = await Swal.fire({
+                icon: 'question',
+                title: '¿Finalizar tu jornada?',
+                html: '<p class="mb-2">Al marcar tu salida finalizarás la jornada laboral y ya no podrás iniciar nuevos desplazamientos.</p><p class="small text-muted mb-0"><i class="fa-solid fa-location-crosshairs me-1"></i>La salida se validará con tu ubicación GPS actual.</p>',
+                showCancelButton: true,
+                confirmButtonText: '<i class="fa-solid fa-right-from-bracket me-2"></i>Marcar mi salida',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#2563eb',
+                reverseButtons: true,
+                focusCancel: true
+            });
+            if (!confirmation.isConfirmed) return;
+        }
         const button = type === 'entrada' ? entryBtn : exitBtn;
         button.disabled = true;
         const originalText = button.innerHTML;
@@ -7845,6 +7912,27 @@ function initControlPersonalMarking() {
         if (!data.ok) throw new Error(data.message || 'No se pudo registrar el desplazamiento.');
         return data;
     }
+    nextLocationSelect?.addEventListener('change', () => {
+        if (chooseNextLocationBtn) chooseNextLocationBtn.disabled = !nextLocationSelect.value;
+    });
+    chooseNextLocationBtn?.addEventListener('click', async () => {
+        const locationId = Number(nextLocationSelect?.value || 0);
+        const destination = nextLocationSelect?.selectedOptions?.[0]?.textContent?.trim() || '';
+        if (!locationId) return;
+        chooseNextLocationBtn.disabled = true;
+        try {
+            const data = await submitTrip('iniciar', {
+                destination_location_id: locationId,
+                reason: `Traslado al siguiente lugar de marcación: ${destination}`
+            });
+            await Swal.fire('Desplazamiento iniciado', data.message, 'success');
+            await loadMarkContext();
+        } catch (error) {
+            Swal.fire('Atención', error.message || String(error), 'warning');
+        } finally {
+            if (chooseNextLocationBtn && !context?.active_trip) chooseNextLocationBtn.disabled = !nextLocationSelect?.value;
+        }
+    });
     tripForm?.addEventListener('submit', async event => {
         event.preventDefault(); const button=tripForm.querySelector('[type="submit"]'); button.disabled=true;
         try { const fields=new FormData(tripForm); const data=await submitTrip(fields.get('action'),{destination_location_id:context?.next_planned_stop?.location_id || tripForm.dataset.forcedDestinationId || fields.get('destination_location_id'),destination:fields.get('destination'),reason:fields.get('reason'),activity:fields.get('activity')}); tripModal?.hide(); await Swal.fire('Registro exitoso',data.message,'success'); await loadMarkContext(); }

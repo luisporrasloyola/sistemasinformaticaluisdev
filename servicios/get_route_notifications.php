@@ -29,8 +29,7 @@ try {
         LEFT JOIN attendance_assignments aa ON aa.id=awc.assignment_id
         LEFT JOIN attendance_schedule_days sd ON sd.schedule_id=COALESCE(ap.schedule_id,aa.schedule_id)
             AND sd.day_of_week=WEEKDAY(awc.work_date)+1 AND sd.status=1
-        WHERE (n.type='work_location_completed' AND awc.program_id IS NULL)
-           OR (n.type='temporary_trip_exception' AND n.is_read=0)
+        WHERE n.type='temporary_trip_exception' AND n.is_read=0
         ORDER BY n.created_at DESC,n.id DESC LIMIT 50");
 
     $notifications=[];
