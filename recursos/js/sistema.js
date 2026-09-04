@@ -7258,10 +7258,12 @@ function initControlPersonalMarking() {
         const hasExitMark = data.marks.some((mark) => mark.mark_type === 'salida');
         const activeTrip = data.active_trip || null;
         const waitingNextDestination = data.waiting_next_destination === true;
-        const canChooseNextLocation = data.can_self_mark === true && waitingNextDestination && !activeTrip && !finalPlannedStop;
+        const canChooseNextLocation = data.can_self_mark === true && hasEntryMark && !hasExitMark && waitingNextDestination && !activeTrip && !finalPlannedStop;
         currentActiveTrip = activeTrip;
         nextLocationPanel?.classList.toggle('d-none', !canChooseNextLocation);
         if (nextLocationSelect) {
+            nextLocationSelect.disabled = !canChooseNextLocation;
+            if (window.jQuery && jQuery.fn.select2) jQuery(nextLocationSelect).trigger('change.select2');
             Array.from(nextLocationSelect.options).forEach(option => {
                 option.disabled = Number(option.value || 0) === currentLocationId;
             });
@@ -7286,7 +7288,7 @@ function initControlPersonalMarking() {
         const canFinishJourneyHere = waitingNextDestination && !activeTrip && !finalPlannedStop && data.exit_location?.is_temporary_location != 1;
         exitBtn.disabled = !hasSchedule || hasExitMark || !hasEntryMark || !!activeTrip || (isAwayFromBase && !canFinishJourneyHere) || (!!finalPlannedStop && !routeCompleted);
         finishLocationWorkBtn?.classList.toggle('d-none', !canFinishCurrentWork);
-        const canStartRouteTrip = !!finalPlannedStop && waitingNextDestination && !routeCompleted && !activeTrip;
+        const canStartRouteTrip = !hasExitMark && !!finalPlannedStop && waitingNextDestination && !routeCompleted && !activeTrip;
         startTripBtn?.classList.toggle('d-none', !canStartRouteTrip);
         if (startTripBtn) startTripBtn.innerHTML = nextPlannedStop?.destination
             ? `<i class="fa-solid fa-route me-2"></i>Ir a ${escapeHtml(nextPlannedStop.destination)}`
@@ -7321,12 +7323,14 @@ function initControlPersonalMarking() {
             { text: hasExitMark ? 'Salida registrada' : 'Salida no registrada', className: hasExitMark ? 'text-bg-primary' : 'text-bg-secondary' },
             ...(activeTrip ? [{ text: 'Desplazamiento en curso', className: 'text-bg-warning' }] : []),
             ...(isAwayFromBase ? [{ text: 'Fuera del lugar habitual', className: 'text-bg-info' }] : []),
-            ...(waitingNextDestination ? [{
+            ...(!hasExitMark && waitingNextDestination ? [{
                 text: routeCompleted ? 'Recorrido completado' : (nextPlannedStop?.destination ? `Siguiente destino: ${nextPlannedStop.destination}` : 'Selecciona tu siguiente lugar'),
                 className: routeCompleted ? 'text-bg-success' : (nextPlannedStop?.destination ? 'text-bg-info' : 'text-bg-warning')
             }] : []),
         ]);
-        if (permissionHelp && finalPlannedStop) {
+        if (permissionHelp && hasExitMark) {
+            permissionHelp.textContent = 'Jornada finalizada. La salida ya fue registrada.';
+        } else if (permissionHelp && finalPlannedStop) {
             permissionHelp.textContent = routeCompleted
                 ? `Recorrido completado. La salida está habilitada en ${finalPlannedStop.destination}.`
                 : `La salida se habilitará en ${finalPlannedStop.destination} después de completar todos los lugares y finalizar el último trabajo.`;
