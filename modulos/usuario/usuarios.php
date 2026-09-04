@@ -111,7 +111,7 @@ window.usuarioPermisos = <?= json_encode([
                                     <option value="Personal">Personal</option>
                                 </select>
                             </div>
-                            <div class="col-md-6 d-none" id="usuarioWorkerGroup">
+                            <div class="col-md-6" id="usuarioWorkerGroup">
                                 <label class="form-label">Trabajador vinculado</label>
                                 <select class="form-select" name="worker_id" id="usuarioWorkerId">
                                     <option value="">Seleccione</option>
@@ -123,7 +123,7 @@ window.usuarioPermisos = <?= json_encode([
                                         </option>
                                     <?php endforeach; ?>
                                 </select>
-                                <div class="form-text">Obligatorio para rol Personal. No se permitir&aacute;n dos usuarios para el mismo trabajador.</div>
+                                <div class="form-text">Obligatorio para Personal y opcional para Administrador o Gestor. El v&iacute;nculo permite registrar la asistencia propia sin modificar los permisos del rol.</div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Contrase&ntilde;a</label>

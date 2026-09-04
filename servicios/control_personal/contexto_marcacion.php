@@ -264,4 +264,5 @@ json_response([
         'seconds_remaining' => $entrySecondsRemaining,
     ],
     'is_personal' => is_personal_role(),
+    'can_self_mark' => (int) (current_user_worker_id() ?? 0) === $workerId,
 ]);

@@ -4430,10 +4430,10 @@ function initUsuariosModule() {
 
     function toggleUserWorkerField() {
         const isPersonal = roleSelect?.value === 'Personal';
-        workerGroup?.classList.toggle('d-none', !isPersonal);
+        workerGroup?.classList.remove('d-none');
         if (workerSelect) {
             workerSelect.required = isPersonal;
-            if (!isPersonal) workerSelect.value = '';
+
             if (isPersonal) fillUserFromSelectedWorker();
         }
     }
@@ -4701,10 +4701,10 @@ function initUsuariosModule() {
         const role = roleSelect?.value || 'Administrador';
         const isPersonal = role === 'Personal';
         document.querySelectorAll('#usuarioDocumentPermissions .accordion-item').forEach((item) => item.classList.remove('d-none'));
-        workerGroup?.classList.toggle('d-none', !isPersonal);
+        workerGroup?.classList.remove('d-none');
         if (workerSelect) {
             workerSelect.required = isPersonal;
-            if (!isPersonal) workerSelect.value = '';
+
             if (isPersonal) fillUserFromSelectedWorker();
         }
         if (!permissionNote) return;
@@ -7253,7 +7253,7 @@ function initControlPersonalMarking() {
         const hasExitMark = data.marks.some((mark) => mark.mark_type === 'salida');
         const activeTrip = data.active_trip || null;
         const waitingNextDestination = data.waiting_next_destination === true;
-        const canChooseNextLocation = data.is_personal === true && waitingNextDestination && !activeTrip && !finalPlannedStop;
+        const canChooseNextLocation = data.can_self_mark === true && waitingNextDestination && !activeTrip && !finalPlannedStop;
         currentActiveTrip = activeTrip;
         nextLocationPanel?.classList.toggle('d-none', !canChooseNextLocation);
         if (nextLocationSelect) {

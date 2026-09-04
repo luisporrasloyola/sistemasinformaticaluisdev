@@ -18,11 +18,11 @@ if ($name === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || !in_array($rol
     json_response(['ok' => false, 'message' => 'Complete los campos obligatorios.'], 400);
 }
 
-if ($role === 'Personal') {
-    if ($workerId <= 0) {
-        json_response(['ok' => false, 'message' => 'Seleccione el trabajador vinculado para el rol Personal.'], 400);
-    }
+if ($role === 'Personal' && $workerId <= 0) {
+    json_response(['ok' => false, 'message' => 'Seleccione el trabajador vinculado para el rol Personal.'], 400);
+}
 
+if ($workerId > 0) {
     $workerStmt = db()->prepare('SELECT id FROM workers WHERE id = :id LIMIT 1');
     $workerStmt->execute(['id' => $workerId]);
     if (!$workerStmt->fetch()) {
@@ -34,8 +34,6 @@ if ($role === 'Personal') {
     if ($duplicateWorkerStmt->fetch()) {
         json_response(['ok' => false, 'message' => 'Este trabajador ya tiene un usuario vinculado.'], 409);
     }
-} else {
-    $workerId = 0;
 }
 
 if ($id === 0 && strlen($password) < 8) {
@@ -86,6 +84,12 @@ try {
     }
 
     save_user_permissions($userId, $role, $_POST);
+    if ((int) (current_user()['id'] ?? 0) === $userId) {
+        $_SESSION['user']['name'] = $name;
+        $_SESSION['user']['email'] = $email;
+        $_SESSION['user']['role'] = $role;
+        $_SESSION['user']['worker_id'] = $workerId ?: null;
+    }
     db()->commit();
     json_response(['ok' => true]);
 } catch (PDOException $e) {

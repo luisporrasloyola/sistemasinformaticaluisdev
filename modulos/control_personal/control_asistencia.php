@@ -5,7 +5,7 @@ require_module_access('control_personal.control_asistencia');
 
 $isAdmin = is_admin();
 $currentWorkerId = current_user_worker_id();
-$requestedWorkerId = $isAdmin ? (int) ($_GET['worker_id'] ?? 0) : 0;
+$requestedWorkerId = $isAdmin ? (int) ($_GET['worker_id'] ?? ($currentWorkerId ?: 0)) : 0;
 $workers = [];
 $markingLocations = db()->query("SELECT id, name FROM attendance_locations WHERE status=1 ORDER BY name")->fetchAll();
 
