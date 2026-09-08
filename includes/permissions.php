@@ -13,6 +13,7 @@ function permission_modules_catalog(): array
                 'control_personal.horarios' => 'Plantillas de horarios',
                 'control_personal.puntos_marcacion' => 'Lugares de marcación',
                 'control_personal.asignaciones' => 'Asignaciones',
+                'control_personal.proyectos' => 'Proyectos',
                 'control_personal.programacion' => 'Calendario y programación de jornadas',
                 'control_personal.control_asistencia' => 'Control de asistencia',
                 'control_personal.reportes' => 'Reporte de marcaciones',

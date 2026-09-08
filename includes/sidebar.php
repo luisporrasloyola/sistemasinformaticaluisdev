@@ -47,6 +47,7 @@ $isAdmin = is_admin();
                     <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/horarios.php"><i class="fa-solid fa-clock"></i><span>Plantillas de horarios</span></a>
                     <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/puntos_marcacion.php"><i class="fa-solid fa-location-dot"></i><span>Lugares de marcación</span></a>
                     <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/asignaciones.php"><i class="fa-solid fa-user-check"></i><span>Asignaciones</span></a>
+                    <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/proyectos.php"><i class="fa-solid fa-diagram-project"></i><span>Proyectos</span></a>
                     <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/programacion_personal.php"><i class="fa-solid fa-calendar-plus"></i><span>Calendario y programación de jornadas</span></a>
                 <?php endif; ?>
                 <?php if (is_personal_role() && current_user_can_module('control_personal.dashboard')): ?>
@@ -163,6 +164,7 @@ $isAdmin = is_admin();
                     <?php if (current_user_can_module('control_personal.horarios')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/horarios.php"><i class="fa-solid fa-clock"></i><span>Plantillas de horarios</span></a><?php endif; ?>
                     <?php if (current_user_can_module('control_personal.puntos_marcacion')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/puntos_marcacion.php"><i class="fa-solid fa-location-dot"></i><span>Lugares de marcación</span></a><?php endif; ?>
                     <?php if (current_user_can_module('control_personal.asignaciones')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/asignaciones.php"><i class="fa-solid fa-user-check"></i><span>Asignaciones</span></a><?php endif; ?>
+                    <?php if (current_user_can_module('control_personal.proyectos')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/proyectos.php"><i class="fa-solid fa-diagram-project"></i><span>Proyectos</span></a><?php endif; ?>
                     <?php if (current_user_can_module('control_personal.programacion')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/programacion_personal.php"><i class="fa-solid fa-calendar-plus"></i><span>Calendario y programación de jornadas</span></a><?php endif; ?>
                     <?php if (current_user_can_module('control_personal.control_asistencia')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/control_asistencia.php"><i class="fa-solid fa-camera"></i><span>Control de asistencia</span></a><?php endif; ?>
                     <?php if (current_user_can_module('control_personal.reportes')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/reportes.php"><i class="fa-solid fa-file-export"></i><span>Reporte de marcaciones</span></a><?php endif; ?>

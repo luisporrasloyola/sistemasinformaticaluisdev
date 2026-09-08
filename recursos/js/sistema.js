@@ -318,6 +318,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initControlPersonalCalendar();
     initControlPersonalLocations();
     initControlPersonalAssignments();
+    initControlPersonalProjects();
     initControlPersonalMarking();
     initNotifications();
     initRouteNotifications();
@@ -5821,6 +5822,71 @@ function initControlPersonalCalendar() {
     syncFields();
 }
 
+function initControlPersonalProjects() {
+    const table = document.getElementById('projectsTable');
+    const form = document.getElementById('projectForm');
+    const modalElement = document.getElementById('projectModal');
+    if (!table || !form || !modalElement) return;
+
+    const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+    const idField = document.getElementById('projectId');
+    const nameField = document.getElementById('projectName');
+    const title = document.getElementById('projectModalTitle');
+
+    document.getElementById('newProjectBtn')?.addEventListener('click', () => {
+        form.reset();
+        form.classList.remove('was-validated');
+        idField.value = '';
+        title.textContent = 'Nuevo proyecto';
+        modal.show();
+        modalElement.addEventListener('shown.bs.modal', () => nameField.focus(), { once: true });
+    });
+
+    document.querySelectorAll('.js-edit-project').forEach((button) => {
+        button.addEventListener('click', () => {
+            form.reset();
+            form.classList.remove('was-validated');
+            idField.value = button.dataset.id || '';
+            nameField.value = button.dataset.name || '';
+            title.textContent = 'Editar proyecto';
+            modal.show();
+            modalElement.addEventListener('shown.bs.modal', () => nameField.focus(), { once: true });
+        });
+    });
+
+    document.querySelectorAll('.js-delete-project').forEach((button) => {
+        button.addEventListener('click', async () => {
+            const confirmed = await confirmAction('¿Eliminar proyecto?');
+            if (!confirmed) return;
+            const body = new FormData();
+            body.append('csrf_token', csrf);
+            body.append('id', button.dataset.id || '');
+            const response = await fetch(`${BASE_URL}/servicios/control_personal/eliminar_proyecto.php`, { method: 'POST', body });
+            const data = await response.json();
+            if (!data.ok) return Swal.fire('Atención', data.message || 'No se pudo eliminar el proyecto.', 'warning');
+            window.location.reload();
+        });
+    });
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (!form.checkValidity()) {
+            form.classList.add('was-validated');
+            return;
+        }
+        const submitButton = form.querySelector('[type="submit"]');
+        submitButton.disabled = true;
+        try {
+            const response = await fetch(`${BASE_URL}/servicios/control_personal/guardar_proyecto.php`, { method: 'POST', body: new FormData(form) });
+            const data = await response.json();
+            if (!data.ok) return Swal.fire('Atención', data.message || 'No se pudo guardar el proyecto.', 'warning');
+            modal.hide();
+            window.location.reload();
+        } finally {
+            submitButton.disabled = false;
+        }
+    });
+}
 function initControlPersonalLocations() {
     const form = document.getElementById('locationForm');
     if (!form) return;
