@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../includes/attendance_projects.php';
+ensure_quick_attendance_marking_schema();
 require_module_access('control_personal.control_asistencia');
 
 $workerId = (int) ($_GET['worker_id'] ?? 0);
@@ -15,10 +17,11 @@ if ($workerId <= 0) {
 }
 
 $stmt = db()->prepare("SELECT am.id, am.assignment_id, am.mark_date, am.marked_at, am.mark_type, am.distance_meters,
-        am.final_status, am.photo_path, w.full_name, l.name AS location_name
+        am.final_status, am.photo_path, w.full_name, l.name AS location_name, p.name AS project_name
     FROM attendance_marks am
     JOIN workers w ON w.id = am.worker_id
     JOIN attendance_locations l ON l.id = am.location_id
+    LEFT JOIN attendance_projects p ON p.id = am.project_id
     WHERE am.worker_id = :worker_id
       AND NOT EXISTS (
           SELECT 1
@@ -31,8 +34,9 @@ $stmt = db()->prepare("SELECT am.id, am.assignment_id, am.mark_date, am.marked_a
     LIMIT 80");
 $stmt->execute(['worker_id' => $workerId]);
 
+$rawMarks = $stmt->fetchAll();
 $grouped = [];
-foreach ($stmt->fetchAll() as $row) {
+foreach ($rawMarks as $row) {
     $timestamp = strtotime((string) $row['marked_at']);
     $dateKey = (string) $row['mark_date'];
     if (!isset($grouped[$dateKey])) {
@@ -51,6 +55,7 @@ foreach ($stmt->fetchAll() as $row) {
         'status' => (string) $row['final_status'],
         'photo_path' => $row['photo_path'] ? (string) $row['photo_path'] : null,
         'location' => (string) $row['location_name'],
+        'project' => (string) ($row['project_name'] ?? ''),
     ];
     if ((string) $row['mark_type'] === 'entrada') {
         $grouped[$dateKey]['entry'] = $mark;
@@ -91,4 +96,83 @@ foreach ($grouped as $day) {
     ];
 }
 
-json_response(['ok' => true, 'rows' => $rows]);
+$marks = array_map(static function (array $row): array {
+    return [
+        'date'=>date('d/m/Y',strtotime((string)$row['mark_date'])),
+        'time'=>date('H:i',strtotime((string)$row['marked_at'])),
+        'type'=>$row['mark_type']==='entrada'?'Entrada':'Salida',
+        'worker'=>(string)$row['full_name'],
+        'location'=>(string)$row['location_name'],
+        'project'=>(string)($row['project_name']??''),
+        'distance'=>round((float)$row['distance_meters'],2),
+        'status'=>(string)$row['final_status'],
+        'photo_path'=>$row['photo_path']?(string)$row['photo_path']:null,
+    ];
+}, $rawMarks);
+$movements = [];
+$previousEntryByDate = [];
+foreach (array_reverse($rawMarks) as $row) {
+    if ((string) $row['mark_type'] !== 'entrada') {
+        continue;
+    }
+
+    $dateKey = (string) $row['mark_date'];
+    if (isset($previousEntryByDate[$dateKey])) {
+        $previous = $previousEntryByDate[$dateKey];
+        $startTimestamp = strtotime((string) $previous['marked_at']);
+        $endTimestamp = strtotime((string) $row['marked_at']);
+        $durationMinutes = max(0, (int) floor(($endTimestamp - $startTimestamp) / 60));
+        $hours = intdiv($durationMinutes, 60);
+        $minutes = $durationMinutes % 60;
+        $duration = $hours > 0 ? $hours . ' h ' . $minutes . ' min' : $minutes . ' min';
+
+        $movements[] = [
+            'date' => date('d/m/Y', strtotime($dateKey)),
+            'start' => date('H:i', $startTimestamp),
+            'end' => date('H:i', $endTimestamp),
+            'duration' => $duration,
+            'origin' => (string) $previous['location_name'],
+            'destination' => (string) $row['location_name'],
+            'project' => (string) ($row['project_name'] ?? ''),
+            'photo_path' => $row['photo_path'] ? (string) $row['photo_path'] : null,
+            'status' => 'Registrado',
+        ];
+    }
+    $previousEntryByDate[$dateKey] = $row;
+}
+$movements = array_reverse($movements);
+
+$perPage = 10;
+$marksPage = max(1, (int) ($_GET['marks_page'] ?? 1));
+$movementsPage = max(1, (int) ($_GET['movements_page'] ?? 1));
+
+$journeyMarks = [];
+foreach ($rows as $day) {
+    if ($day['entry']) {
+        $journeyMarks[] = array_merge($day['entry'], [
+            'date' => $day['date'], 'worker' => $day['worker'], 'type' => 'Entrada',
+        ]);
+    }
+    if ($day['exit']) {
+        $journeyMarks[] = array_merge($day['exit'], [
+            'date' => $day['date'], 'worker' => $day['worker'], 'type' => 'Salida',
+        ]);
+    }
+}
+
+$marksTotal = count($journeyMarks);
+$movementsTotal = count($movements);
+$marksPages = max(1, (int) ceil($marksTotal / $perPage));
+$movementsPages = max(1, (int) ceil($movementsTotal / $perPage));
+$marksPage = min($marksPage, $marksPages);
+$movementsPage = min($movementsPage, $movementsPages);
+
+json_response([
+    'ok' => true,
+    'journey_marks' => array_slice($journeyMarks, ($marksPage - 1) * $perPage, $perPage),
+    'movements' => array_slice($movements, ($movementsPage - 1) * $perPage, $perPage),
+    'pagination' => [
+               'marks' => ['page' => $marksPage, 'pages' => $marksPages, 'total' => $marksTotal, 'per_page' => $perPage],
+        'movements' => ['page' => $movementsPage, 'pages' => $movementsPages, 'total' => $movementsTotal, 'per_page' => $perPage],
+    ],
+]);

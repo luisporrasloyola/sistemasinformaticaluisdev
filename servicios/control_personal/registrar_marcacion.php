@@ -1,404 +1,47 @@
 <?php
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
-require_once __DIR__ . '/../../includes/attendance_calendar.php';
-require_once __DIR__ . '/../../includes/attendance_programming.php';
+require_once __DIR__ . '/../../includes/attendance_projects.php';
 require_module_access('control_personal.control_asistencia');
-
 verify_csrf($_POST['csrf_token'] ?? null);
+ensure_quick_attendance_marking_schema();
 
-$workerId = (int) ($_POST['worker_id'] ?? 0);
-$markType = (string) ($_POST['mark_type'] ?? '');
-$latitude = (float) ($_POST['latitude'] ?? 0);
-$longitude = (float) ($_POST['longitude'] ?? 0);
-$accuracy = (float) ($_POST['accuracy'] ?? 0);
-$address = trim((string) ($_POST['address'] ?? ''));
-$observations = trim((string) ($_POST['observations'] ?? ''));
-$photoData = (string) ($_POST['photo_data'] ?? '');
-$evidenceData = (string) ($_POST['evidence_data'] ?? '');
-$requestedProgramId = (int) ($_POST['program_id'] ?? 0);
+$workerId=(int)($_POST['worker_id']??0);
+if(is_personal_role()) $workerId=(int)current_user_worker_id();
+$type=(string)($_POST['mark_type']??'');
+$locationId=(int)($_POST['location_id']??0);
+$scheduleId=(int)($_POST['schedule_id']??0);
+$projectId=(int)($_POST['project_id']??0);
+$latitude=(float)($_POST['latitude']??0); $longitude=(float)($_POST['longitude']??0); $accuracy=(float)($_POST['accuracy']??0);
+$address=trim((string)($_POST['address']??'')); $observations=trim((string)($_POST['observations']??''));
+$photoData=(string)($_POST['photo_data']??'');
+if($workerId<=0 || !in_array($type,['entrada','salida'],true) || $locationId<=0 || $scheduleId<=0 || $projectId<=0) json_response(['ok'=>false,'message'=>'Seleccione lugar de marcación, horario y proyecto.'],400);
+if($latitude < -90 || $latitude > 90 || $longitude < -180 || $longitude > 180 || $accuracy<=0) json_response(['ok'=>false,'message'=>'Ubicación GPS no válida.'],400);
 
-if (is_personal_role()) {
-    $workerId = (int) current_user_worker_id();
-}
+function quick_mark_distance(float $lat1,float $lon1,float $lat2,float $lon2):float { $r=6371000;$dLat=deg2rad($lat2-$lat1);$dLon=deg2rad($lon2-$lon1);$a=sin($dLat/2)**2+cos(deg2rad($lat1))*cos(deg2rad($lat2))*sin($dLon/2)**2;return $r*2*atan2(sqrt($a),sqrt(1-$a)); }
+function quick_mark_photo(string $dataUrl):string { if(!preg_match('/^data:image\/(png|jpeg|jpg|webp);base64,/',$dataUrl,$m)) throw new RuntimeException('Debe capturar una fotografía para marcar asistencia.');$binary=base64_decode(substr($dataUrl,strpos($dataUrl,',')+1),true);if($binary===false||strlen($binary)>MAX_UPLOAD_SIZE) throw new RuntimeException('No se pudo procesar la fotografía.');$dir=UPLOAD_PATH.DIRECTORY_SEPARATOR.'marcaciones';if(!is_dir($dir)) mkdir($dir,0755,true);$ext=$m[1]==='jpeg'?'jpg':$m[1];$name=bin2hex(random_bytes(16)).'.'.$ext;if(file_put_contents($dir.DIRECTORY_SEPARATOR.$name,$binary)===false) throw new RuntimeException('No se pudo guardar la fotografía.');return 'archivos/marcaciones/'.$name; }
 
-if ($workerId <= 0 || !in_array($markType, ['entrada', 'salida'], true)) {
-    json_response(['ok' => false, 'message' => 'Datos de marcacion incompletos.'], 400);
-}
+$catalog=db()->prepare("SELECT l.name location_name,l.latitude,l.longitude,l.radius_meters,s.name schedule_name,p.name project_name
+ FROM attendance_locations l JOIN attendance_schedules s ON s.id=:schedule_id AND s.status=1
+ JOIN attendance_projects p ON p.id=:project_id AND p.status=1 WHERE l.id=:location_id AND l.status=1 LIMIT 1");
+$catalog->execute(['schedule_id'=>$scheduleId,'project_id'=>$projectId,'location_id'=>$locationId]); $selected=$catalog->fetch();
+if(!$selected) json_response(['ok'=>false,'message'=>'Alguna de las opciones seleccionadas ya no está disponible.'],409);
+$day=(int)date('N');$dayStmt=db()->prepare('SELECT * FROM attendance_schedule_days WHERE schedule_id=:schedule_id AND day_of_week=:day AND status=1 LIMIT 1');$dayStmt->execute(['schedule_id'=>$scheduleId,'day'=>$day]);$scheduleDay=$dayStmt->fetch();
+if(!$scheduleDay) json_response(['ok'=>false,'message'=>'El horario seleccionado no tiene una jornada configurada para hoy.'],409);
+$today=date('Y-m-d');$now=date('Y-m-d H:i:s');$time=date('H:i:s');
+$state=db()->prepare('SELECT mark_type,location_id FROM attendance_marks WHERE worker_id=:worker AND mark_date=:date ORDER BY marked_at,id');$state->execute(['worker'=>$workerId,'date'=>$today]);$markState=$state->fetchAll();
+$types=array_column($markState,'mark_type');
+$hasEntry=in_array('entrada',$types,true);$hasExit=in_array('salida',$types,true);
+$lastEntryLocationId=0;
+foreach(array_reverse($markState) as $registeredMark){if((string)$registeredMark['mark_type']==='entrada'){$lastEntryLocationId=(int)$registeredMark['location_id'];break;}}
+if($hasExit) json_response(['ok'=>false,'message'=>'La jornada de hoy ya fue finalizada.'],409);
+if($type==='salida'&&!$hasEntry) json_response(['ok'=>false,'message'=>'Primero debe registrar una entrada.'],409);
+if($type==='entrada'&&$hasEntry&&$lastEntryLocationId===$locationId) json_response(['ok'=>false,'message'=>'Ya se encuentra en este lugar. Seleccione un lugar de marcación diferente.'],409);
+if($type==='entrada'&&!empty($scheduleDay['entry_start'])) { $available=strtotime($today.' '.$scheduleDay['entry_start']);$official=$scheduleDay['entry_time']??$scheduleDay['entry_end']??$scheduleDay['entry_start'];if(strtotime($scheduleDay['entry_start'])>strtotime($official))$available=strtotime($today.' '.$scheduleDay['entry_start'].' -1 day');if($available!==false&&time()<$available)json_response(['ok'=>false,'message'=>'Este horario permite marcar entrada desde las '.date('H:i',$available).'.'],409); }
+$recent=db()->prepare("SELECT 1 FROM attendance_marks WHERE worker_id=:worker AND mark_date=:date AND mark_type='entrada' AND location_id=:location AND schedule_id=:schedule AND project_id=:project AND marked_at>=DATE_SUB(NOW(),INTERVAL 2 MINUTE) LIMIT 1");$recent->execute(['worker'=>$workerId,'date'=>$today,'location'=>$locationId,'schedule'=>$scheduleId,'project'=>$projectId]);if($type==='entrada'&&$recent->fetchColumn())json_response(['ok'=>false,'message'=>'Esta llegada ya fue registrada recientemente.'],409);
+$distance=quick_mark_distance($latitude,$longitude,(float)$selected['latitude'],(float)$selected['longitude']);$within=$distance<=(float)$selected['radius_meters'];if(!$within)json_response(['ok'=>false,'title'=>'Marcación no registrada','message'=>'Está fuera del área de '.$selected['location_name'].'. Distancia actual: '.number_format($distance,2).' m; radio permitido: '.(int)$selected['radius_meters'].' m.'],400);
+$status='puntual';if($type==='entrada'){$limit=strtotime($today.' '.($scheduleDay['entry_end']??$scheduleDay['entry_time']));$status=time()<=$limit?'puntual':'tardanza';}else{$limit=strtotime($today.' '.($scheduleDay['exit_time']??$scheduleDay['exit_start']));$status=time()>=$limit?'salida_valida':'salida_anticipada';}
 
-if ($latitude < -90 || $latitude > 90 || $longitude < -180 || $longitude > 180 || $accuracy <= 0) {
-    json_response(['ok' => false, 'message' => 'Ubicacion GPS no valida.'], 400);
-}
-
-function save_base64_image(?string $dataUrl, string $folder): ?string
-{
-    $dataUrl = trim((string) $dataUrl);
-    if ($dataUrl === '') {
-        return null;
-    }
-    if (!preg_match('/^data:image\/(png|jpeg|jpg|webp);base64,/', $dataUrl, $matches)) {
-        throw new RuntimeException('Formato de imagen no permitido.');
-    }
-
-    $extension = $matches[1] === 'jpeg' ? 'jpg' : $matches[1];
-    $base64 = substr($dataUrl, strpos($dataUrl, ',') + 1);
-    $binary = base64_decode($base64, true);
-    if ($binary === false || strlen($binary) > MAX_UPLOAD_SIZE) {
-        throw new RuntimeException('No se pudo procesar la imagen.');
-    }
-
-    $dir = UPLOAD_PATH . DIRECTORY_SEPARATOR . $folder;
-    if (!is_dir($dir)) {
-        mkdir($dir, 0755, true);
-    }
-
-    $fileName = bin2hex(random_bytes(16)) . '.' . $extension;
-    $target = $dir . DIRECTORY_SEPARATOR . $fileName;
-    if (file_put_contents($target, $binary) === false) {
-        throw new RuntimeException('No se pudo guardar la imagen.');
-    }
-
-    return 'archivos/' . $folder . '/' . $fileName;
-}
-
-function meters_between(float $lat1, float $lon1, float $lat2, float $lon2): float
-{
-    $earthRadius = 6371000;
-    $dLat = deg2rad($lat2 - $lat1);
-    $dLon = deg2rad($lon2 - $lon1);
-    $a = sin($dLat / 2) ** 2 + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLon / 2) ** 2;
-    return $earthRadius * 2 * atan2(sqrt($a), sqrt(1 - $a));
-}
-
-$today = date('Y-m-d');
-$openJourneyStmt = db()->prepare("SELECT aa.id AS assignment_id,
-        aa.worker_id, aa.location_id, aa.schedule_id,
-        w.company_id,
-        l.latitude AS location_latitude, l.longitude AS location_longitude, l.radius_meters,
-        s.name AS schedule_name, entrada.program_id AS open_program_id
-    FROM attendance_marks entrada
-    JOIN attendance_assignments aa ON aa.id = entrada.assignment_id
-    JOIN workers w ON w.id = entrada.worker_id
-    JOIN attendance_locations l ON l.id = aa.location_id
-    JOIN attendance_schedules s ON s.id = aa.schedule_id
-    WHERE entrada.worker_id = :worker_id AND entrada.mark_date = :mark_date
-      AND entrada.mark_type = 'entrada'
-      AND NOT EXISTS (
-          SELECT 1 FROM attendance_marks salida
-          WHERE salida.worker_id = entrada.worker_id
-            AND salida.assignment_id = entrada.assignment_id
-            AND salida.mark_date = entrada.mark_date
-            AND salida.mark_type = 'salida'
-            AND (salida.program_id = entrada.program_id OR (salida.program_id IS NULL AND entrada.program_id IS NULL))
-      )
-    ORDER BY entrada.marked_at ASC, entrada.id ASC LIMIT 1");
-$openJourneyStmt->execute(['worker_id' => $workerId, 'mark_date' => $today]);
-$openJourneyAssignment = $openJourneyStmt->fetch() ?: null;
-
-if ($markType === 'entrada' && $openJourneyAssignment) {
-    json_response([
-        'ok' => false,
-        'title' => 'Jornada en curso',
-        'message' => 'Ya registraste tu entrada hoy. Debes marcar la salida para finalizar esta jornada.',
-    ], 409);
-}
-if ($markType === 'salida' && !$openJourneyAssignment) {
-    json_response([
-        'ok' => false,
-        'title' => 'Entrada no registrada',
-        'message' => 'No existe una entrada abierta para finalizar hoy.',
-    ], 409);
-}
-
-$stmt = db()->prepare("SELECT aa.id AS assignment_id,
-        aa.worker_id, aa.location_id, aa.schedule_id,
-        w.company_id,
-        l.latitude AS location_latitude, l.longitude AS location_longitude, l.radius_meters,
-        s.name AS schedule_name
-    FROM attendance_assignments aa
-    JOIN workers w ON w.id = aa.worker_id
-    JOIN attendance_locations l ON l.id = aa.location_id
-    JOIN attendance_schedules s ON s.id = aa.schedule_id
-    WHERE aa.worker_id = :worker_id AND aa.status = 1
-      AND aa.valid_from <= :today_from AND (aa.valid_until IS NULL OR aa.valid_until >= :today_until)
-    ORDER BY aa.id DESC");
-$stmt->execute(['worker_id' => $workerId, 'today_from' => $today, 'today_until' => $today]);
-$assignments = $stmt->fetchAll();
-
-// La salida siempre debe cerrar la entrada original, incluso si la asignación
-// fue reemplazada mientras la jornada estaba en curso.
-if ($markType === 'salida' && $openJourneyAssignment) {
-    $assignments = [$openJourneyAssignment];
-    $requestedProgramId = (int) ($openJourneyAssignment['open_program_id'] ?? 0);
-}
-
-if (!$assignments) {
-    json_response(['ok' => false, 'message' => 'El trabajador no tiene asignacion activa.'], 404);
-}
-
-$nowTime = date('H:i:s');
-$markedAt = date('Y-m-d H:i:s');
-$dayOfWeek = (int) date('N');
-
-$selectedAssignment = null;
-$selectedScheduleDay = null;
-$selectedCalendarEvent = null;
-$selectedProgram = null;
-$programs = attendance_programs_for_worker_date(
-    $workerId,
-    $today,
-    (int) ($openJourneyAssignment['open_program_id'] ?? 0)
-);
-$priorityCalendarEvent = attendance_calendar_event_for_worker(
-    $today,
-    $workerId,
-    (int) ($assignments[0]['company_id'] ?? 0)
-);
-
-if ($programs && !$priorityCalendarEvent) {
-    $selectedProgram = attendance_select_program($programs, $requestedProgramId);
-    if ($selectedProgram) {
-        $selectedAssignment = [
-            'assignment_id'=>(int)$selectedProgram['assignment_id'], 'worker_id'=>$workerId,
-            'location_id'=>(int)$selectedProgram['location_id'], 'schedule_id'=>(int)$selectedProgram['schedule_id'],
-            'company_id'=>(int)$selectedProgram['company_id'], 'location_latitude'=>$selectedProgram['latitude'],
-            'location_longitude'=>$selectedProgram['longitude'], 'radius_meters'=>$selectedProgram['radius_meters'],
-            'schedule_name'=>$selectedProgram['schedule_name'],
-        ];
-        $selectedScheduleDay = attendance_program_schedule_day($selectedProgram);
-    }
-}
-
-foreach ($selectedAssignment ? [] : $assignments as $asg) {
-    $stmt = db()->prepare('SELECT * FROM attendance_schedule_days
-        WHERE schedule_id = :schedule_id AND day_of_week = :day_of_week AND status = 1
-        LIMIT 1');
-    $stmt->execute([
-        'schedule_id' => (int) $asg['schedule_id'],
-        'day_of_week' => $dayOfWeek,
-    ]);
-    $weeklyScheduleDay = $stmt->fetch() ?: null;
-    $calendarEvent = attendance_calendar_event_for_worker(
-        $today,
-        $workerId,
-        (int) ($asg['company_id'] ?? 0)
-    );
-    $scheduleDay = attendance_calendar_effective_schedule($weeklyScheduleDay, $calendarEvent);
-
-    if ($scheduleDay) {
-        $selectedAssignment = $asg;
-        $selectedScheduleDay = $scheduleDay;
-        $selectedCalendarEvent = $calendarEvent;
-        break;
-    }
-}
-
-if (!$selectedAssignment) {
-    $selectedAssignment = $assignments[0];
-    $stmt = db()->prepare('SELECT * FROM attendance_schedule_days
-        WHERE schedule_id = :schedule_id AND day_of_week = :day_of_week AND status = 1
-        LIMIT 1');
-    $stmt->execute([
-        'schedule_id' => (int) $selectedAssignment['schedule_id'],
-        'day_of_week' => $dayOfWeek,
-    ]);
-    $weeklyScheduleDay = $stmt->fetch() ?: null;
-    $selectedCalendarEvent = attendance_calendar_event_for_worker(
-        $today,
-        $workerId,
-        (int) ($selectedAssignment['company_id'] ?? 0)
-    );
-    $selectedScheduleDay = attendance_calendar_effective_schedule($weeklyScheduleDay, $selectedCalendarEvent);
-}
-
-$assignment = $selectedAssignment;
-$scheduleDay = $selectedScheduleDay;
-
-if (!$scheduleDay) {
-    $message = $calendarEvent
-        ? attendance_calendar_event_label((string) $calendarEvent['event_type']) . ': ' . (string) $calendarEvent['name'] . '. No corresponde marcar asistencia.'
-        : 'No hay horario configurado para hoy.';
-    json_response(['ok' => false, 'message' => $message], 400);
-}
-
-if ($markType === 'entrada' && !empty($scheduleDay['entry_start'])) {
-    $entryAvailableAt = strtotime($today . ' ' . $scheduleDay['entry_start']);
-    
-    // Si el inicio de la ventana es mayor que la hora oficial de entrada (o fin de ventana),
-    // significa que la ventana de marcado se abre el día anterior.
-    $officialTime = $scheduleDay['entry_time'] ?? $scheduleDay['entry_end'] ?? $scheduleDay['entry_start'];
-    if (strtotime($scheduleDay['entry_start']) > strtotime($officialTime)) {
-        $entryAvailableAt = strtotime($today . ' ' . $scheduleDay['entry_start'] . ' -1 day');
-    }
-    
-    if ($entryAvailableAt !== false && strtotime($markedAt) < $entryAvailableAt) {
-        json_response([
-            'ok' => false,
-            'title' => 'Marcación aún no disponible',
-            'message' => 'Tu hora de entrada es ' . substr((string) ($scheduleDay['entry_time'] ?? $scheduleDay['entry_start']), 0, 5)
-                . '. Podrás registrar tu entrada desde las ' . date('H:i', $entryAvailableAt) . '.',
-            'available_from' => date('H:i', $entryAvailableAt),
-        ], 400);
-    }
-}
-
-$programId = (int) ($selectedProgram['id'] ?? 0);
-$duplicate = db()->prepare('SELECT id FROM attendance_marks WHERE assignment_id = :assignment_id AND mark_date = :mark_date AND mark_type = :mark_type
-    AND ((:program_selected > 0 AND program_id=:program_match) OR (:program_none=0 AND program_id IS NULL)) LIMIT 1');
-$duplicate->execute([
-    'assignment_id' => (int) $assignment['assignment_id'], 'mark_date' => $today, 'mark_type' => $markType,
-    'program_selected'=>$programId, 'program_match'=>$programId, 'program_none'=>$programId,
-]);
-if ($duplicate->fetch()) {
-    json_response(['ok' => false, 'message' => 'Ya existe una marcacion de ' . $markType . ' para esta asignacion hoy.'], 409);
-}
-
-if ($markType === 'salida') {
-    $baseLocationId = (int)$assignment['location_id'];
-    $hasPlannedRoute = false;
-    if ($programId > 0) {
-        $plannedRouteStmt = db()->prepare('SELECT EXISTS(SELECT 1 FROM attendance_program_stops WHERE program_id=:program_id)');
-        $plannedRouteStmt->execute(['program_id'=>$programId]);
-        $hasPlannedRoute = (bool)$plannedRouteStmt->fetchColumn();
-    }
-    $tripCheck = db()->prepare("SELECT id FROM attendance_trips WHERE worker_id=:worker_id AND trip_date=:trip_date AND status='en_ruta' LIMIT 1");
-    $tripCheck->execute(['worker_id'=>$workerId,'trip_date'=>$today]);
-    if ($tripCheck->fetchColumn()) {
-        json_response(['ok'=>false,'title'=>'Desplazamiento en curso','message'=>'Finaliza el desplazamiento laboral antes de registrar tu salida definitiva.'],409);
-    }
-    $lastLocationStmt = db()->prepare("SELECT l.id,COALESCE(l.name,t.first_destination) AS name,l.latitude,l.longitude,l.radius_meters,t.ended_at,
-            (t.last_location_id IS NULL) AS is_temporary_location
-        FROM attendance_trips t LEFT JOIN attendance_locations l ON l.id=t.last_location_id
-        WHERE t.worker_id=:worker_id AND t.trip_date=:trip_date AND t.status='finalizado'
-        ORDER BY t.ended_at DESC,t.id DESC LIMIT 1");
-    $lastLocationStmt->execute(['worker_id'=>$workerId,'trip_date'=>$today]);
-    if ($lastLocation = $lastLocationStmt->fetch()) {
-        if (!$hasPlannedRoute && (int)$lastLocation['is_temporary_location'] === 1) {
-            json_response([
-                'ok'=>false,
-                'title'=>'Regreso pendiente',
-                'message'=>'Antes de finalizar tu jornada, confirma la llegada a un lugar de marcación registrado.',
-            ],409);
-        }
-        if (!$hasPlannedRoute && $lastLocation['id'] !== null && (int)$lastLocation['id'] !== $baseLocationId) {
-            $completionCheck = db()->prepare("SELECT 1 FROM attendance_work_completions
-                WHERE worker_id=:worker_id AND work_date=:work_date AND location_id=:location_id
-                  AND completed_at>=:arrival_time ORDER BY completed_at DESC LIMIT 1");
-            $completionCheck->execute([
-                'worker_id'=>$workerId,
-                'work_date'=>$today,
-                'location_id'=>(int)$lastLocation['id'],
-                'arrival_time'=>$lastLocation['ended_at'],
-            ]);
-            if (!$completionCheck->fetchColumn()) {
-                json_response([
-                    'ok'=>false,
-                    'title'=>'Trabajo pendiente',
-                    'message'=>'Finaliza el trabajo del lugar actual antes de marcar tu salida.',
-                ],409);
-            }
-        }
-        if ($lastLocation['id'] !== null) {
-            $assignment['location_id'] = (int) $lastLocation['id'];
-            $assignment['location_latitude'] = $lastLocation['latitude'];
-            $assignment['location_longitude'] = $lastLocation['longitude'];
-            $assignment['radius_meters'] = $lastLocation['radius_meters'];
-        }
-    }
-}
-
-$serverDistance = meters_between(
-    $latitude,
-    $longitude,
-    (float) $assignment['location_latitude'],
-    (float) $assignment['location_longitude']
-);
-$distance = $serverDistance;
-$withinRadius = $distance <= (float) $assignment['radius_meters'];
-
-if (!$withinRadius) {
-    $distanceLabel = number_format($distance, 2, '.', '');
-    $radiusLabel = number_format((float) $assignment['radius_meters'], 0, '.', '');
-    json_response([
-        'ok' => false,
-        'title' => 'Marcación no registrada',
-        'message' => 'Tu ubicación está fuera del área autorizada. Acércate al lugar de trabajo e inténtalo nuevamente. '
-            . 'Distancia actual: ' . $distanceLabel . ' m. Radio permitido: ' . $radiusLabel . ' m.',
-        'distance_meters' => (float) $distanceLabel,
-        'radius_meters' => (float) $radiusLabel,
-    ], 400);
-}
-
-$scheduleStatus = 'puntual';
-if ($markType === 'entrada') {
-    $entryLimit = strtotime($today . ' ' . $scheduleDay['entry_end']);
-    $scheduleStatus = strtotime($markedAt) <= $entryLimit ? 'puntual' : 'tardanza';
-} else {
-    $exitTime = strtotime($today . ' ' . ($scheduleDay['exit_time'] ?? $scheduleDay['exit_start']));
-    $scheduleStatus = strtotime($markedAt) >= $exitTime ? 'salida_valida' : 'salida_anticipada';
-}
-
-$locationStatus = $withinRadius ? 'dentro_del_radio' : 'fuera_del_radio';
-$finalStatus = !$withinRadius ? 'fuera_del_radio' : $scheduleStatus;
-
-try {
-    $photoPath = save_base64_image($photoData, 'marcaciones');
-    if (!$photoPath) {
-        json_response(['ok' => false, 'message' => 'Debe capturar una fotografia para marcar asistencia.'], 400);
-    }
-    $evidencePath = save_base64_image($evidenceData, 'marcaciones_evidencias');
-
-    $stmt = db()->prepare('INSERT INTO attendance_marks
-        (assignment_id, program_id, worker_id, location_id, schedule_id, mark_type, mark_date, mark_time, marked_at,
-         latitude, longitude, accuracy_meters, address, distance_meters, within_radius,
-         schedule_status, location_status, final_status, photo_path, evidence_path, observations)
-        VALUES
-        (:assignment_id, :program_id, :worker_id, :location_id, :schedule_id, :mark_type, :mark_date, :mark_time, :marked_at,
-         :latitude, :longitude, :accuracy_meters, :address, :distance_meters, :within_radius,
-         :schedule_status, :location_status, :final_status, :photo_path, :evidence_path, :observations)');
-    $stmt->execute([
-        'assignment_id' => (int) $assignment['assignment_id'],
-        'program_id' => $programId ?: null,
-        'worker_id' => $workerId,
-        'location_id' => (int) $assignment['location_id'],
-        'schedule_id' => (int) $assignment['schedule_id'],
-        'mark_type' => $markType,
-        'mark_date' => $today,
-        'mark_time' => $nowTime,
-        'marked_at' => $markedAt,
-        'latitude' => $latitude,
-        'longitude' => $longitude,
-        'accuracy_meters' => $accuracy,
-        'address' => $address ?: null,
-        'distance_meters' => round($distance, 2),
-        'within_radius' => $withinRadius ? 1 : 0,
-        'schedule_status' => $scheduleStatus,
-        'location_status' => $locationStatus,
-        'final_status' => $finalStatus,
-        'photo_path' => $photoPath,
-        'evidence_path' => $evidencePath,
-        'observations' => $observations ?: null,
-    ]);
-
-    json_response([
-        'ok' => true,
-        'message' => 'Marcacion registrada correctamente.',
-        'status' => $finalStatus,
-        'status_label' => match ($finalStatus) {
-            'puntual' => 'Puntual',
-            'tardanza' => 'Tardanza',
-            'salida_valida' => 'Salida',
-            'salida_anticipada' => 'Salida anticipada',
-            default => ucfirst(str_replace('_', ' ', $finalStatus)),
-        },
-        'distance_meters' => number_format($distance, 2, '.', ''),
-        'marked_at' => $markedAt,
-    ]);
-} catch (PDOException $e) {
-    if ($e->getCode() === '23000') {
-        json_response(['ok' => false, 'message' => 'Ya existe esta marcacion para hoy.'], 409);
-    }
-    json_response(['ok' => false, 'message' => 'No se pudo registrar la marcacion.'], 400);
-} catch (Throwable $e) {
-    json_response(['ok' => false, 'message' => $e->getMessage()], 400);
-}
+$assignment=db()->prepare('SELECT id FROM attendance_assignments WHERE worker_id=:worker AND location_id=:location AND schedule_id=:schedule AND valid_from<=:date AND (valid_until IS NULL OR valid_until>=:date_until) ORDER BY status DESC,id DESC LIMIT 1');$assignment->execute(['worker'=>$workerId,'location'=>$locationId,'schedule'=>$scheduleId,'date'=>$today,'date_until'=>$today]);$assignmentId=(int)$assignment->fetchColumn();
+if(!$assignmentId){$create=db()->prepare('INSERT INTO attendance_assignments(worker_id,location_id,schedule_id,activity,instructions,valid_from,valid_until,status,created_by_user_id) VALUES(:worker,:location,:schedule,:activity,:instructions,:date,:date_until,0,:user)');$create->execute(['worker'=>$workerId,'location'=>$locationId,'schedule'=>$scheduleId,'activity'=>$selected['project_name'],'instructions'=>'Registro generado desde marcación directa.','date'=>$today,'date_until'=>$today,'user'=>(int)(current_user()['id']??0)?:null]);$assignmentId=(int)db()->lastInsertId();}
+try{$photo=quick_mark_photo($photoData);$insert=db()->prepare('INSERT INTO attendance_marks(assignment_id,program_id,worker_id,location_id,schedule_id,project_id,mark_type,mark_date,mark_time,marked_at,latitude,longitude,accuracy_meters,address,distance_meters,within_radius,schedule_status,location_status,final_status,photo_path,observations) VALUES(:assignment,NULL,:worker,:location,:schedule,:project,:type,:date,:time,:marked_at,:latitude,:longitude,:accuracy,:address,:distance,1,:schedule_status,\'dentro_del_radio\',:final_status,:photo,:observations)');$insert->execute(['assignment'=>$assignmentId,'worker'=>$workerId,'location'=>$locationId,'schedule'=>$scheduleId,'project'=>$projectId,'type'=>$type,'date'=>$today,'time'=>$time,'marked_at'=>$now,'latitude'=>$latitude,'longitude'=>$longitude,'accuracy'=>$accuracy,'address'=>$address?:null,'distance'=>round($distance,2),'schedule_status'=>$status,'final_status'=>$status,'photo'=>$photo,'observations'=>$observations?:null]);json_response(['ok'=>true,'message'=>$type==='entrada'?'Entrada registrada en '.$selected['location_name'].'.':'Salida registrada. La jornada ha finalizado.','status'=>$status]);}catch(Throwable $e){json_response(['ok'=>false,'message'=>$e->getMessage()],400);}

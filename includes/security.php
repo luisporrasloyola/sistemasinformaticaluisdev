@@ -82,7 +82,31 @@ function current_user_role(): string
 function current_user_worker_id(): ?int
 {
     $workerId = $_SESSION['user']['worker_id'] ?? null;
-    return $workerId ? (int) $workerId : null;
+    if ($workerId) {
+        return (int) $workerId;
+    }
+
+    // El vínculo puede haberse creado mientras el usuario ya tenía una sesión
+    // abierta. Se recupera desde la base de datos y se sincroniza la sesión.
+    $userId = (int) ($_SESSION['user']['id'] ?? 0);
+    if ($userId <= 0) {
+        return null;
+    }
+
+    try {
+        require_once __DIR__ . '/../config/database.php';
+        $stmt = db()->prepare('SELECT worker_id FROM users WHERE id = :id AND status = 1 LIMIT 1');
+        $stmt->execute(['id' => $userId]);
+        $storedWorkerId = (int) $stmt->fetchColumn();
+        if ($storedWorkerId > 0) {
+            $_SESSION['user']['worker_id'] = $storedWorkerId;
+            return $storedWorkerId;
+        }
+    } catch (Throwable $e) {
+        return null;
+    }
+
+    return null;
 }
 
 function is_admin(): bool

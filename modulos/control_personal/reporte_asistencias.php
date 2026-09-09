@@ -110,7 +110,7 @@ require __DIR__ . '/../../includes/header.php';
     <div class="individual-report-section-title"><h3>Detalle diario</h3><p>Marcaciones y novedades del periodo seleccionado.</p></div>
     <div class="table-responsive">
         <table class="table align-middle individual-report-table">
-            <thead><tr><th>Fecha</th><th>Día</th><th>Horario</th><th>Tolerancia</th><th>Lugar de marcación</th><th>Entrada</th><th>Salida</th><th>Tardanza</th><th>Horas extras</th><th>Estado de asistencia</th><th>Estado de jornada</th><th>Observación</th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Día</th><th>Horario</th><th>Tolerancia</th><th>Lugar de marcación</th><th>Entrada</th><th>Salida</th><th>Tardanza</th><th>Horas extras</th><th>Estado de asistencia</th><th>Estado de jornada</th><th>Proyecto</th></tr></thead>
             <tbody>
             <?php foreach ($rows as $row): ?>
                 <tr>
@@ -120,7 +120,7 @@ require __DIR__ . '/../../includes/header.php';
                     <td><?= $row['overtime_minutes'] > 0 ? e(attendance_report_minutes_label((int) $row['overtime_minutes'])) : '-' ?></td>
                     <td><span class="attendance-report-state <?= e($row['state_class']) ?>"><strong><?= e($row['state_code']) ?></strong><?= e($row['state_label']) ?></span></td>
                     <td><span class="journey-state <?= e($row['journey_class']) ?>"><?= e($row['journey_label']) ?></span></td>
-                    <td class="report-observation-cell"><?= e($row['observation']) ?></td>
+                    <td><?= e($row['project'] ?? '-') ?></td>
                 </tr>
             <?php endforeach; ?>
             <?php if (!$rows): ?><tr><td colspan="12" class="text-center text-muted py-4">No hay jornadas para este trabajador en el periodo seleccionado.</td></tr><?php endif; ?>
@@ -140,7 +140,13 @@ require __DIR__ . '/../../includes/header.php';
                 <td><?= $trip['ended_at'] ? e(date('H:i', strtotime($trip['ended_at']))) : '-' ?></td>
                 <td class="text-nowrap"><?= e($trip['duration_label']) ?></td>
                 <td><?= e($trip['location_name']) ?></td><td><?= e($trip['first_destination']) ?></td><td><?= e($trip['project_name'] ?: (($trip['status'] ?? '') !== 'finalizado' ? 'Pendiente' : '-')) ?><?php if (($trip['completion_type'] ?? '') === 'returned_without_arrival'): ?><small class="d-block text-warning-emphasis mt-1"><strong>Llegada no confirmada:</strong> <?= e($trip['exception_reason'] ?: 'Sin detalle') ?></small><?php endif; ?></td>
-                <?php $tripIncident = ($trip['completion_type'] ?? '') === 'returned_without_arrival'; ?><td><span class="badge <?= $trip['status']!=='finalizado' || $tripIncident ? 'text-bg-warning' : 'text-bg-success' ?>"><?= $trip['status']!=='finalizado' ? 'En curso' : ($tripIncident ? 'Regreso con incidencia' : 'Finalizado') ?></span></td>
+                <?php
+                    $tripIncident = ($trip['completion_type'] ?? '') === 'returned_without_arrival';
+                    $tripRegistered = ($trip['status'] ?? '') === 'registrado';
+                    $tripBadgeClass = $tripRegistered || (($trip['status'] ?? '') === 'finalizado' && !$tripIncident) ? 'text-bg-success' : 'text-bg-warning';
+                    $tripStatusLabel = $tripRegistered ? 'Registrado' : (($trip['status'] ?? '') !== 'finalizado' ? 'En curso' : ($tripIncident ? 'Regreso con incidencia' : 'Finalizado'));
+                ?>
+                <td><span class="badge <?= e($tripBadgeClass) ?>"><?= e($tripStatusLabel) ?></span></td>
             </tr><?php endforeach; ?></tbody>
         </table>
     </div>

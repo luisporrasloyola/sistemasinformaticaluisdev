@@ -566,16 +566,9 @@ body {
 
     .attendance-trips-table th:nth-child(9),
     .attendance-trips-table td:nth-child(9) {
-        position: sticky;
-        right: 0;
-        z-index: 2;
-        background-color: var(--bs-table-bg, #fff);
-        box-shadow: -7px 0 10px -9px rgba(15, 23, 42, .65);
-    }
-
-    .attendance-trips-table th:nth-child(9) {
-        z-index: 3;
-        background-color: #f8fafc;
+        width: 9%;
+        text-align: center;
+        white-space: nowrap;
     }
 }
 
@@ -7004,3 +6997,29 @@ input[type="checkbox"]:active {
 .attendance-next-location-card .select2-container{margin-bottom:12px}.attendance-next-location-card .select2-selection{min-height:43px!important;border-color:#b8c9e5!important;border-radius:10px!important;background:#fff!important}.attendance-next-location-card .select2-selection__rendered{line-height:41px!important}.attendance-next-location-card .select2-selection__arrow{top:0!important;height:43px!important}.attendance-next-location-card .select2-selection__arrow b{top:50%!important;margin-top:0!important;transform:translateY(-50%)}
 .attendance-next-location-btn{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;min-height:43px;border:0;border-radius:10px;background:#2563eb;color:#fff;font-size:.84rem;font-weight:750;box-shadow:0 6px 14px rgba(37,99,235,.2);transition:transform .18s ease,box-shadow .18s ease,background .18s ease}.attendance-next-location-btn:hover{background:#1d4ed8;color:#fff;box-shadow:0 8px 18px rgba(37,99,235,.28);transform:translateY(-1px)}.attendance-next-location-btn:disabled{background:#93aed6;color:#eff6ff;box-shadow:none;transform:none}
 .attendance-primary-mark-action{margin-top:2px;padding-top:16px;border-top:1px solid #dbe4f0}
+.attendance-quick-selection {
+    margin-bottom: 1rem;
+    padding: 1rem;
+    border: 1px solid #bfdbfe;
+    border-radius: 14px;
+    background: linear-gradient(145deg, #eff6ff, #f8fbff);
+}
+.attendance-quick-selection .form-label { color: #1e3a8a; font-weight: 700; }
+.attendance-quick-selection .mb-3:last-child { margin-bottom: 0 !important; }
+.attendance-primary-mark-action .btn { min-height: 48px; border-radius: 10px; font-weight: 700; }
+#markChangeSelectionBtn {
+    background-color: #ede9fe !important;
+    border: 1px solid #a78bfa !important;
+    color: #5b21b6 !important;
+    box-shadow: 0 4px 12px rgba(109, 40, 217, .14) !important;
+}
+#markChangeSelectionBtn:hover,
+#markChangeSelectionBtn:focus {
+    background-color: #ddd6fe !important;
+    border-color: #8b5cf6 !important;
+    color: #4c1d95 !important;
+}
+
+.attendance-movement-photo { display:inline-flex; align-items:center; justify-content:center; }
+.attendance-movement-photo img { width:42px; height:42px; object-fit:cover; border:2px solid #22a06b; border-radius:8px; box-shadow:0 3px 8px rgba(15,23,42,.16); transition:transform .18s ease,box-shadow .18s ease; }
+.attendance-movement-photo:hover img { transform:scale(1.08); box-shadow:0 5px 13px rgba(15,23,42,.24); }

@@ -40,7 +40,7 @@ $summaryRows[] = xlsx_row(13, [xlsx_cell(1, 13, 'Puntualidad', 8), xlsx_cell(2, 
 $summaryRows[] = xlsx_row(14, [xlsx_cell(1, 14, 'Horas extras', 8), xlsx_cell(2, 14, attendance_report_minutes_label((int) $summary['overtime_minutes']), 8)], 28);
 $summaryRows[] = xlsx_row(16, [xlsx_cell(1, 16, 'OBSERVACIÓN GENERAL DEL RESPONSABLE', 1)], 22);
 $summaryRows[] = xlsx_row(17, [xlsx_cell(1, 17, $note['observation'] ?? 'Sin observaciones.', 9)], 45);
-$headers = ['Fecha', 'Día', 'Horario', 'Tolerancia', 'Lugar de marcación', 'Entrada', 'Salida', 'Tardanza', 'Horas extras', 'Estado de asistencia', 'Estado de jornada', 'Observación'];
+$headers = ['Fecha', 'Día', 'Horario', 'Tolerancia', 'Lugar de marcación', 'Entrada', 'Salida', 'Tardanza', 'Horas extras', 'Estado de asistencia', 'Estado de jornada', 'Proyecto'];
 $summaryRows[] = xlsx_row(19, [xlsx_cell(1, 19, 'DETALLE DIARIO DE ASISTENCIA', 1)], 24);
 $headerCells = [];
 foreach ($headers as $index => $header) $headerCells[] = xlsx_cell($index + 1, 20, $header, 1);
@@ -51,7 +51,7 @@ foreach ($rows as $row) {
     $values = [date('d/m/Y', strtotime($row['date'])), $row['weekday'], $row['schedule'], $row['tolerance_minutes'] !== null ? $row['tolerance_minutes'].' min' : '-', $row['location'], $row['entry'], $row['exit'],
         $row['late_minutes'] ? attendance_report_minutes_label((int) $row['late_minutes']) : '-',
         $row['overtime_minutes'] ? attendance_report_minutes_label((int) $row['overtime_minutes']) : '-',
-        $row['state_code'] . ' - ' . $row['state_label'], $row['journey_label'], $row['observation']];
+        $row['state_code'] . ' - ' . $row['state_label'], $row['journey_label'], $row['project'] ?? '-'];
     $cells = [];
     foreach ($values as $index => $value) $cells[] = xlsx_cell($index + 1, $excelRow, $value, $index === 9 ? $stateStyle : 9);
     $detailHeight = (mb_strlen((string) $values[9]) > 28 || mb_strlen((string) $values[11]) > 42) ? 38 : 25;
@@ -70,8 +70,9 @@ if ($trips) {
     $summaryRows[]=xlsx_row($excelRow,$cells,25); $excelRow++;
     foreach($trips as $trip){
         $incident=($trip['completion_type']??'')==='returned_without_arrival';
-        $project=($trip['project_name']?:($trip['status']!=='finalizado'?'Pendiente':'-')).($incident?' | Llegada no confirmada: '.($trip['exception_reason']?:'Sin detalle'):'');
-        $status=$trip['status']!=='finalizado'?'En curso':($incident?'Regreso con incidencia':'Finalizado');
+        $registered=($trip['status']??'')==='registrado';
+        $project=($trip['project_name']?:($registered?'-':(($trip['status']??'')!=='finalizado'?'Pendiente':'-'))).($incident?' | Llegada no confirmada: '.($trip['exception_reason']?:'Sin detalle'):'');
+        $status=$registered?'Registrado':(($trip['status']??'')!=='finalizado'?'En curso':($incident?'Regreso con incidencia':'Finalizado'));
         $values=[date('d/m/Y',strtotime($trip['trip_date'])),$trip['schedule_label'],date('H:i',strtotime($trip['started_at'])),$trip['ended_at']?date('H:i',strtotime($trip['ended_at'])):'-',$trip['duration_label'],
             $trip['location_name'],$trip['first_destination'],$project,$status];
         $cells=[];foreach($values as $index=>$value)$cells[]=xlsx_cell($index+1,$excelRow,$value,9);

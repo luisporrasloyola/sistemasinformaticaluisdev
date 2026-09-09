@@ -145,10 +145,12 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
     }
 
     $marksByWorkerAndDateAndAssignment = [];
+    $quickAssignmentIds = [];
     $markParams = ['date_from' => $dateFrom, 'date_to' => $dateTo];
-    $markSql = 'SELECT am.assignment_id, am.worker_id, am.mark_date, am.mark_type, am.mark_time,
-        am.schedule_status, am.final_status, am.observations, l.name AS mark_location
+    $markSql = 'SELECT am.assignment_id, am.worker_id, am.mark_date, am.mark_type, am.mark_time, am.project_id,
+        am.schedule_status, am.final_status, am.observations, l.name AS mark_location, p.name AS mark_project
         FROM attendance_marks am JOIN attendance_locations l ON l.id=am.location_id
+        LEFT JOIN attendance_projects p ON p.id=am.project_id
         WHERE am.mark_date BETWEEN :date_from AND :date_to';
     if ($workerId > 0) {
         $markSql .= ' AND am.worker_id = :worker_id';
@@ -161,6 +163,13 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
         $reportWorkerId = (int) $mark['worker_id'];
         $reportMarkDate = (string) $mark['mark_date'];
         $reportAssignmentId = (int) $mark['assignment_id'];
+        if ((int) ($mark['project_id'] ?? 0) > 0) {
+            $quickKey = $reportWorkerId . '|' . $reportMarkDate;
+            if (!isset($quickAssignmentIds[$quickKey])) {
+                $quickAssignmentIds[$quickKey] = $reportAssignmentId;
+            }
+            $reportAssignmentId = $quickAssignmentIds[$quickKey];
+        }
         $reportMarkType = (string) $mark['mark_type'];
         $hasExtremeMark = isset($marksByWorkerAndDateAndAssignment[$reportWorkerId][$reportMarkDate][$reportAssignmentId][$reportMarkType]);
         if ($reportMarkType !== 'entrada' || !$hasExtremeMark) {
@@ -168,6 +177,18 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
         }
     }
 
+    if ($quickAssignmentIds) {
+        $canonicalQuickIds = array_fill_keys(array_values($quickAssignmentIds), true);
+        foreach ($assignmentsByWorker as $assignmentWorkerId => $workerAssignments) {
+            $assignmentsByWorker[$assignmentWorkerId] = array_values(array_filter(
+                $workerAssignments,
+                static function (array $assignment) use ($canonicalQuickIds): bool {
+                    $isQuick = trim((string) ($assignment['instructions'] ?? '')) === 'Registro generado desde marcación directa.';
+                    return !$isQuick || isset($canonicalQuickIds[(int) $assignment['id']]);
+                }
+            ));
+        }
+    }
     $latestManualComments = [];
     try {
         $manualParams = ['date_from' => $dateFrom, 'date_to' => $dateTo];
@@ -196,7 +217,19 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
         }
     } catch (Throwable $error) {
         // Mantiene compatible el reporte mientras la tabla de auditoría aún no haya sido migrada.
-        $latestManualComments = [];
+        if ($quickAssignmentIds) {
+        $canonicalQuickIds = array_fill_keys(array_values($quickAssignmentIds), true);
+        foreach ($assignmentsByWorker as $assignmentWorkerId => $workerAssignments) {
+            $assignmentsByWorker[$assignmentWorkerId] = array_values(array_filter(
+                $workerAssignments,
+                static function (array $assignment) use ($canonicalQuickIds): bool {
+                    $isQuick = trim((string) ($assignment['instructions'] ?? '')) === 'Registro generado desde marcación directa.';
+                    return !$isQuick || isset($canonicalQuickIds[(int) $assignment['id']]);
+                }
+            ));
+        }
+    }
+    $latestManualComments = [];
     }
 
     $manualDayOverrides = [];
@@ -405,6 +438,7 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 'journey_key' => $journeyKey, 'journey_label' => $journey['label'], 'journey_class' => $journey['class'],
                 'worked_minutes' => $workedMinutes, 'scheduled_minutes' => $scheduledMinutes,
                 'late_minutes' => $lateMinutes, 'overtime_minutes' => $overtimeMinutes,
+                'project' => $manualOverride ? '-' : (trim((string) ($entry['mark_project'] ?? $exit['mark_project'] ?? $assignment['activity'] ?? '')) ?: '-'),
                 'observation' => $observation,
                 'is_workday' => $hasSchedule && !$isNonWorking,
             ];
@@ -413,7 +447,14 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
         }
     }
 
-    usort($rows, static fn(array $a, array $b): int => strcmp($a['date'], $b['date']) ?: strcasecmp($a['worker'], $b['worker']));
+    usort($rows, static function (array $a, array $b): int {
+        $dateOrder = strcmp((string) $b['date'], (string) $a['date']);
+        if ($dateOrder !== 0) return $dateOrder;
+
+        $timeA = ($a['entry'] ?? '-') !== '-' ? (string) $a['entry'] : (($a['exit'] ?? '-') !== '-' ? (string) $a['exit'] : '00:00');
+        $timeB = ($b['entry'] ?? '-') !== '-' ? (string) $b['entry'] : (($b['exit'] ?? '-') !== '-' ? (string) $b['exit'] : '00:00');
+        return strcmp($timeB, $timeA) ?: strcasecmp((string) $a['worker'], (string) $b['worker']);
+    });
     $selectedWorker = $workerId > 0 ? ($workers[0] ?? null) : null;
     $individualRows = $workerId > 0 ? array_values(array_filter($rows, static fn(array $row): bool => $row['worker_id'] === $workerId)) : [];
     $selectedAssignment = $workerId > 0 ? ($assignmentByWorker[$workerId] ?? null) : null;
@@ -500,6 +541,52 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
             }
             unset($trip);
         } catch (Throwable $error) { $trips=[]; }
+
+        try {
+            $quickMarksStmt = db()->prepare("SELECT am.mark_date, am.marked_at, am.location_id,
+                    l.name AS location_name, p.name AS project_name,
+                    COALESCE(sd.entry_time,sd.entry_start) AS schedule_entry_time,
+                    COALESCE(sd.exit_time,sd.exit_start) AS schedule_exit_time
+                FROM attendance_marks am
+                JOIN attendance_locations l ON l.id=am.location_id
+                LEFT JOIN attendance_projects p ON p.id=am.project_id
+                LEFT JOIN attendance_schedule_days sd ON sd.schedule_id=am.schedule_id
+                    AND sd.day_of_week=WEEKDAY(am.mark_date)+1 AND sd.status=1
+                WHERE am.worker_id=:worker_id
+                  AND am.mark_date BETWEEN :date_from AND :date_to
+                  AND am.mark_type='entrada'
+                  AND am.project_id IS NOT NULL
+                ORDER BY am.mark_date,am.marked_at,am.id");
+            $quickMarksStmt->execute(['worker_id'=>$workerId,'date_from'=>$dateFrom,'date_to'=>$dateTo]);
+            $previousQuickEntry = [];
+            foreach ($quickMarksStmt->fetchAll() as $quickMark) {
+                $quickDate = (string) $quickMark['mark_date'];
+                if (isset($previousQuickEntry[$quickDate])) {
+                    $previous = $previousQuickEntry[$quickDate];
+                    $startTimestamp = strtotime((string) $previous['marked_at']);
+                    $endTimestamp = strtotime((string) $quickMark['marked_at']);
+                    $trips[] = [
+                        'trip_date' => $quickDate,
+                        'started_at' => (string) $previous['marked_at'],
+                        'ended_at' => (string) $quickMark['marked_at'],
+                        'duration_label' => attendance_report_minutes_label(max(0,(int)floor(($endTimestamp-$startTimestamp)/60))),
+                        'location_name' => (string) $previous['location_name'],
+                        'first_destination' => (string) $quickMark['location_name'],
+                        'project_name' => (string) ($quickMark['project_name'] ?? ''),
+                        'schedule_label' => $quickMark['schedule_entry_time'] && $quickMark['schedule_exit_time']
+                            ? substr((string)$quickMark['schedule_entry_time'],0,5).' - '.substr((string)$quickMark['schedule_exit_time'],0,5)
+                            : '-',
+                        'status' => 'registrado',
+                        'completion_type' => null,
+                        'exception_reason' => null,
+                    ];
+                }
+                $previousQuickEntry[$quickDate] = $quickMark;
+            }
+            usort($trips, static fn(array $a,array $b):int => strcmp((string)$b['started_at'],(string)$a['started_at']));
+        } catch (Throwable $error) {
+            // Los desplazamientos históricos permanecen disponibles si aún no se migró project_id.
+        }
     }
 
     return [
