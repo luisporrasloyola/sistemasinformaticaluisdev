@@ -14,7 +14,7 @@ $reference = trim((string) ($_POST['reference'] ?? ''));
 $radius = (int) ($_POST['radius_meters'] ?? 100);
 $currentUserId = (int) ($_SESSION['user']['id'] ?? 0) ?: null;
 
-if ($name === '' || $latitude < -90 || $latitude > 90 || $longitude < -180 || $longitude > 180 || $radius < 50 || $radius > 3000) {
+if ($name === '' || $latitude < -90 || $latitude > 90 || $longitude < -180 || $longitude > 180 || $radius < 50 || $radius > 10000) {
     json_response(['ok' => false, 'message' => 'Complete los datos del punto de marcacion.'], 400);
 }
 

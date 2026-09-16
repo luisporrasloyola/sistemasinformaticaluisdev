@@ -97,7 +97,7 @@ require __DIR__ . '/../../includes/header.php';
                     </div>
                     <div class="col-md-3">
                         <label class="form-label">Radio permitido: <span id="locationRadiusLabel">100 metros</span></label>
-                        <input class="form-range" type="range" name="radius_meters" id="locationRadius" min="50" max="3000" step="10" value="100">
+                        <input class="form-range" type="range" name="radius_meters" id="locationRadius" min="50" max="10000" step="10" value="100">
                     </div>
                     <div class="col-md-12">
                         <div class="attendance-map" id="locationMap"></div>
