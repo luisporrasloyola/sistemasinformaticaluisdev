@@ -3,4 +3,8 @@ ALTER TABLE attendance_locations
 
 ALTER TABLE attendance_locations
     ADD CONSTRAINT chk_attendance_location_radius
-    CHECK (radius_meters BETWEEN 50 AND 10000);
+    CHECK (radius_meters BETWEEN 50 AND 30000);
+
+UPDATE attendance_locations
+SET radius_meters = 30000
+WHERE name = 'Central ventanillaaa';

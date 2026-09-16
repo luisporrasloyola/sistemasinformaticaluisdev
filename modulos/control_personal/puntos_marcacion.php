@@ -80,12 +80,10 @@ require __DIR__ . '/../../includes/header.php';
                     <div class="col-md-3">
                         <label class="form-label">Latitud</label>
                         <input class="form-control" type="number" step="0.00000001" name="latitude" id="locationLatitude" required>
-                        <div class="form-text">Puede copiarla directamente desde Google Maps.</div>
                     </div>
                     <div class="col-md-3">
                         <label class="form-label">Longitud</label>
                         <input class="form-control" type="number" step="0.00000001" name="longitude" id="locationLongitude" required>
-                        <div class="form-text">Se ajustará automáticamente a 8 decimales.</div>
                     </div>
                     <div class="col-md-5">
                         <label class="form-label">Dirección</label>
@@ -97,11 +95,10 @@ require __DIR__ . '/../../includes/header.php';
                     </div>
                     <div class="col-md-3">
                         <label class="form-label">Radio permitido: <span id="locationRadiusLabel">100 metros</span></label>
-                        <input class="form-range" type="range" name="radius_meters" id="locationRadius" min="50" max="10000" step="10" value="100">
+                        <input class="form-range" type="range" name="radius_meters" id="locationRadius" min="50" max="30000" step="10" value="100">
                     </div>
                     <div class="col-md-12">
                         <div class="attendance-map" id="locationMap"></div>
-                        <div class="form-text">Puede hacer clic en el mapa para tomar coordenadas. La dirección se intentará completar automáticamente.</div>
                     </div>
                 </div>
             </div>

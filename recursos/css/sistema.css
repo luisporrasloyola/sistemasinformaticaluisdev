@@ -306,12 +306,67 @@ body {
 }
 
 #locationModal .modal-content {
+    position: relative;
     max-height: 94vh;
 }
 
+#locationModal .modal-header {
+    min-height: 40px;
+    padding: 6px 14px;
+}
+
+#locationModal .modal-title {
+    font-size: .95rem;
+}
+
+#locationModal .modal-body {
+    padding: 6px 12px 10px;
+}
+
+#locationModal .modal-body .row {
+    --bs-gutter-x: 10px;
+    --bs-gutter-y: 4px;
+}
+
+#locationModal .form-label {
+    margin-bottom: 1px;
+    font-size: .7rem;
+    line-height: 1.1;
+}
+
+#locationModal .form-control {
+    min-height: 30px;
+    padding: 3px 8px;
+    font-size: .78rem;
+}
+
+#locationModal .form-range {
+    height: 16px;
+    margin: 0;
+}
+
+#locationModal .modal-footer {
+    position: absolute;
+    right: 18px;
+    bottom: 14px;
+    z-index: 1000;
+    width: auto;
+    padding: 5px;
+    border: 1px solid rgba(203, 213, 225, .9);
+    border-radius: 9px;
+    background: rgba(255, 255, 255, .94);
+    box-shadow: 0 5px 16px rgba(15, 23, 42, .18);
+    backdrop-filter: blur(4px);
+}
+
+#locationModal .modal-footer .btn {
+    padding: 5px 10px;
+    font-size: .78rem;
+}
+
 #locationModal #locationMap {
-    height: clamp(430px, 58vh, 650px);
-    min-height: 430px;
+    height: clamp(510px, 72vh, 780px);
+    min-height: 470px;
 }
 
 @media (max-width: 991.98px) {
@@ -328,6 +383,16 @@ body {
 }
 
 @media (max-width: 575.98px) {
+    #locationModal .modal-footer {
+        position: static;
+        width: 100%;
+        padding: 6px 10px;
+        border-width: 1px 0 0;
+        border-radius: 0;
+        box-shadow: none;
+        backdrop-filter: none;
+    }
+
     #locationModal #locationMap {
         height: 340px;
         min-height: 340px;

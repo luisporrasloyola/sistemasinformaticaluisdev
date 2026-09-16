@@ -5908,7 +5908,7 @@ function initControlPersonalLocations() {
         if (radiusLabel && radius) radiusLabel.textContent = `${radius.value} metros`;
     }
 
-    function setMapPoint(lat, lng) {
+    function setMapPoint(lat, lng, focusPoint = false) {
         if (!window.L || !map || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
         const point = [lat, lng];
         if (!marker) marker = L.marker(point).addTo(map);
@@ -5916,7 +5916,8 @@ function initControlPersonalLocations() {
         if (!circle) circle = L.circle(point, { radius: Number(radius?.value || 100), color: '#1457d9', fillColor: '#1457d9', fillOpacity: 0.12 }).addTo(map);
         circle.setLatLng(point);
         circle.setRadius(Number(radius?.value || 100));
-        map.fitBounds(circle.getBounds(), { padding: [30, 30], maxZoom: 16 });
+        if (focusPoint) map.setView(point, 14);
+        else map.panTo(point, { animate: false });
     }
 
     function normalizeCoordinate(input) {
@@ -5970,7 +5971,13 @@ function initControlPersonalLocations() {
     function initMap() {
         if (!window.L) return;
         if (!map) {
-            map = L.map('locationMap').setView([-12.0464, -77.0428], 13);
+            map = L.map('locationMap', {
+                minZoom: 8,
+                maxZoom: 19,
+                zoomDelta: 0.5,
+                zoomSnap: 0.5,
+                wheelPxPerZoomLevel: 100
+            }).setView([-12.0464, -77.0428], 14);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 19,
                 attribution: '&copy; OpenStreetMap'
@@ -5989,7 +5996,7 @@ function initControlPersonalLocations() {
             map.invalidateSize();
             const lat = Number(latInput.value || -12.0464);
             const lng = Number(lngInput.value || -77.0428);
-            setMapPoint(lat, lng);
+            setMapPoint(lat, lng, true);
         }, 250);
     }
 
