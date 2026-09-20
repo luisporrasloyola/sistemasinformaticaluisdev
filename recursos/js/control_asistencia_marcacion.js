@@ -26,6 +26,9 @@ function initQuickAttendanceMarking() {
     if (!worker || !location || !schedule || !project || !entryButton || !exitButton || !changeSelectionButton || !camera || !canvas || !mapElement) return;
 
     let state = null;
+    let allowedLocationCount = 0;
+    let locationsLoading = false;
+    let locationRequestSequence = 0;
     let activeWorkerId = String(worker.value || '').trim();
     let stream = null;
     let map = null;
@@ -133,6 +136,50 @@ function initQuickAttendanceMarking() {
         const searchable = searchableSelects.get(select);
         if (searchable) searchable.val(normalizedValue).trigger('change.select2');
     }
+    function replaceLocationOptions(rows) {
+        const previousValue = selectValue(location);
+        location.replaceChildren(new Option('', ''));
+        (Array.isArray(rows) ? rows : []).forEach((place) => {
+            const option = new Option(String(place.name || ''), String(place.id || ''));
+            option.dataset.latitude = String(place.latitude ?? '');
+            option.dataset.longitude = String(place.longitude ?? '');
+            option.dataset.radius = String(place.radius_meters || 100);
+            location.add(option);
+        });
+        allowedLocationCount = Math.max(0, location.options.length - 1);
+        const canPreserve = previousValue && Array.from(location.options).some((option) => option.value === previousValue);
+        setSelect(location, canPreserve ? previousValue : '');
+        updateMap();
+    }
+    async function loadAllowedLocations(workerId) {
+        const requestId = ++locationRequestSequence;
+        locationsLoading = true;
+        renderStatus();
+        try {
+            const response = await fetch(`${quickBaseUrl}/servicios/control_personal/listar_lugares_marcacion_trabajador.php?worker_id=${encodeURIComponent(workerId)}&_=${Date.now()}`, {
+                cache: 'no-store',
+                headers: { Accept: 'application/json' }
+            });
+            const raw = await response.text();
+            let data;
+            try {
+                data = JSON.parse(raw);
+            } catch (_) {
+                throw new Error(response.redirected || /<!doctype|<html/i.test(raw)
+                    ? 'La sesión venció o el servidor devolvió una página de error. Actualice la página e inténtelo nuevamente.'
+                    : `El servidor devolvió una respuesta inválida (HTTP ${response.status}).`);
+            }
+            if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudieron cargar los lugares autorizados.');
+            if (requestId !== locationRequestSequence || selectedWorkerValue() !== String(workerId)) return false;
+            replaceLocationOptions(data.locations || []);
+            return true;
+        } finally {
+            if (requestId === locationRequestSequence) {
+                locationsLoading = false;
+                renderStatus();
+            }
+        }
+    }
     function selectedLocation() {
         const locationId = selectValue(location);
         const option = Array.from(location.options).find((item) => item.value === locationId);
@@ -158,24 +205,35 @@ function initQuickAttendanceMarking() {
         const projectValue = selectValue(project);
         const workerValue = selectedWorkerValue();
         const complete = !!locationValue && !!scheduleValue && !!projectValue && (!requiresWorkerSelection || !!workerValue);
+        const noAuthorizedLocations = !!workerValue && !locationsLoading && allowedLocationCount === 0;
         const closed = state?.has_exit === true;
         const started = state?.has_entry === true;
         const selectionLocked = started && !editingSelection && !closed;
 
-        selectElements.forEach((select) => { select.disabled = selectionLocked || closed; });
-        searchableSelects.forEach((searchable) => searchable.prop('disabled', selectionLocked || closed).trigger('change.select2'));
+        selectElements.forEach((select) => {
+            select.disabled = selectionLocked || closed || (select === location && (locationsLoading || noAuthorizedLocations));
+        });
+        searchableSelects.forEach((searchable, select) => {
+            searchable.prop('disabled', selectionLocked || closed || (select === location && (locationsLoading || noAuthorizedLocations))).trigger('change.select2');
+        });
         entryButton.classList.toggle('d-none', selectionLocked || closed);
         changeSelectionButton.classList.toggle('d-none', !selectionLocked);
         entryButton.disabled = !complete || closed || selectionLocked;
         changeSelectionButton.disabled = closed;
         exitButton.disabled = !complete || !started || closed;
 
-        statusPanel.innerHTML = [
-            `<span class="badge ${started ? 'text-bg-primary' : 'text-bg-secondary'}">${started ? 'Marcación registrada' : 'Sin marcación de entrada'}</span>`,
-            `<span class="badge ${closed ? 'text-bg-primary' : 'text-bg-secondary'}">${closed ? 'Salida registrada' : 'Salida no registrada'}</span>`
-        ].join('');
+        statusPanel.innerHTML = noAuthorizedLocations
+            ? '<span class="badge text-bg-warning text-dark">Sin lugares autorizados</span>'
+            : [
+                `<span class="badge ${started ? 'text-bg-primary' : 'text-bg-secondary'}">${started ? 'Marcación registrada' : 'Sin marcación de entrada'}</span>`,
+                `<span class="badge ${closed ? 'text-bg-primary' : 'text-bg-secondary'}">${closed ? 'Salida registrada' : 'Salida no registrada'}</span>`
+            ].join('');
 
-        if (closed) {
+        if (locationsLoading) {
+            help.textContent = 'Cargando lugares autorizados...';
+        } else if (noAuthorizedLocations) {
+            help.textContent = 'No tiene lugares de marcación habilitados. Comuníquese con el administrador.';
+        } else if (closed) {
             help.textContent = 'Jornada finalizada. La salida ya fue registrada.';
         } else if (selectionLocked) {
             help.textContent = 'Puede finalizar su jornada o cambiar de lugar y proyecto para registrar otra marcación.';
@@ -298,9 +356,25 @@ function initQuickAttendanceMarking() {
             renderStatus();
             updateMap();
         }
-        if (!selectedWorkerValue()) { state = null; renderStatus(); return; }
+        if (!selectedWorkerValue()) {
+            state = null;
+            replaceLocationOptions([]);
+            renderStatus();
+            return;
+        }
 
         const requestedWorkerId = selectedWorkerValue();
+        try {
+            const locationsLoaded = await loadAllowedLocations(requestedWorkerId);
+            if (!locationsLoaded) return;
+        } catch (error) {
+            if (selectedWorkerValue() !== requestedWorkerId) return;
+            replaceLocationOptions([]);
+            state = null;
+            renderStatus();
+            return Swal.fire('No se pudieron cargar los lugares', error.message || 'Actualice la página e inténtelo nuevamente.', 'warning');
+        }
+        if (selectedWorkerValue() !== requestedWorkerId) return;
         const response = await fetch(`${quickBaseUrl}/servicios/control_personal/contexto_marcacion.php?worker_id=${encodeURIComponent(requestedWorkerId)}&_=${Date.now()}`, { cache: 'no-store' });
         const data = await response.json();
         if (selectedWorkerValue() !== requestedWorkerId) return;
@@ -313,7 +387,7 @@ function initQuickAttendanceMarking() {
         state = data;
         editingSelection = !data.has_entry && !data.has_exit;
         const defaults = data.defaults || {};
-        if (!selectValue(location) && Number(defaults.location_id) > 0) setSelect(location, defaults.location_id);
+        if (!selectValue(location) && Number(defaults.location_id) > 0 && Array.from(location.options).some((option) => Number(option.value) === Number(defaults.location_id))) setSelect(location, defaults.location_id);
         if (!selectValue(schedule) && Number(defaults.schedule_id) > 0) setSelect(schedule, defaults.schedule_id);
         if (!selectValue(project) && Number(defaults.project_id) > 0) setSelect(project, defaults.project_id);
         syncCurrentLocationOption();

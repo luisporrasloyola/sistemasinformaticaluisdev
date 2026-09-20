@@ -5888,7 +5888,8 @@ function initControlPersonalProjects() {
 }
 function initControlPersonalLocations() {
     const form = document.getElementById('locationForm');
-    if (!form) return;
+    if (!form || !window.bootstrap || form.dataset.locationActionsBound === '1') return;
+    form.dataset.locationActionsBound = '1';
 
     const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('locationModal'));
     const radius = document.getElementById('locationRadius');
@@ -6047,16 +6048,116 @@ function initControlPersonalLocations() {
         window.location.reload();
     });
 
+    async function changeLocationVisibility(button, action) {
+        const restoring = action === 'restore';
+        const name = button.dataset.name || 'este lugar';
+        const confirmation = await Swal.fire({
+            icon: restoring ? 'question' : 'warning',
+            title: restoring ? '¿Restaurar lugar?' : '¿Ocultar lugar?',
+            text: restoring
+                ? `${name} volverá a estar disponible en Control de asistencia.`
+                : `${name} dejará de aparecer para marcar asistencia. Sus asignaciones, marcaciones, programaciones, fotos e historial no se eliminarán.`,
+            showCancelButton: true,
+            confirmButtonText: restoring ? 'Sí, restaurar' : 'Sí, ocultar',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: restoring ? '#198754' : '#d99a00'
+        });
+        if (!confirmation.isConfirmed) return;
+
+        const body = new FormData();
+        body.append('csrf_token', csrf);
+        body.append('id', button.dataset.id || '');
+        body.append('action', action);
+        button.disabled = true;
+        try {
+            const response = await fetch(`${BASE_URL}/servicios/control_personal/cambiar_visibilidad_punto_marcacion.php`, {
+                method: 'POST', body, headers: { Accept: 'application/json' }
+            });
+            const raw = await response.text();
+            let data;
+            try { data = JSON.parse(raw); }
+            catch (_) { throw new Error('El servidor devolvió una respuesta inválida.'); }
+            if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo actualizar el lugar.');
+            await Swal.fire(restoring ? 'Lugar restaurado' : 'Lugar ocultado', data.message, 'success');
+            window.location.reload();
+        } catch (error) {
+            await Swal.fire('No se pudo completar', error.message || 'Inténtelo nuevamente.', 'warning');
+            button.disabled = false;
+        }
+    }
+
+    document.querySelectorAll('.js-hide-location').forEach((button) => {
+        button.addEventListener('click', () => changeLocationVisibility(button, 'hide'));
+    });
+    document.querySelectorAll('.js-restore-location').forEach((button) => {
+        button.addEventListener('click', () => changeLocationVisibility(button, 'restore'));
+    });
     document.querySelectorAll('.js-delete-location').forEach((button) => {
         button.addEventListener('click', async () => {
-            if (!await confirmAction('¿Eliminar lugar de marcación?')) return;
-            const body = new FormData();
-            body.append('csrf_token', csrf);
-            body.append('id', button.dataset.id || '');
-            const response = await fetch(`${BASE_URL}/servicios/control_personal/eliminar_punto_marcacion.php`, { method: 'POST', body });
-            const data = await response.json();
-            if (data.ok) window.location.reload();
-            else Swal.fire('Atención', data.message || 'No se pudo eliminar el punto.', 'warning');
+            button.disabled = true;
+            try {
+                const impactResponse = await fetch(`${BASE_URL}/servicios/control_personal/impacto_eliminar_punto_marcacion.php?id=${encodeURIComponent(button.dataset.id || '')}&_=${Date.now()}`, {
+                    cache: 'no-store', headers: { Accept: 'application/json' }
+                });
+                const impactRaw = await impactResponse.text();
+                let impact;
+                try { impact = JSON.parse(impactRaw); }
+                catch (_) { throw new Error('No se pudo obtener el impacto de la eliminación.'); }
+                if (!impactResponse.ok || !impact.ok) throw new Error(impact.message || 'No se pudo obtener el impacto.');
+
+                const counts = impact.counts || {};
+                const rows = [
+                    ['Asignaciones', counts.assignments], ['Marcaciones', counts.marks],
+                    ['Fotos de marcación y evidencias', counts.photos], ['Programaciones especiales o recorridos de trabajo', counts.programs],
+                    ['Lugares adicionales programados', counts.program_stops], ['Desplazamientos laborales', counts.trips],
+                    ['Lugares registrados durante desplazamientos', counts.trip_stops], ['Trabajos finalizados', counts.completions],
+                    ['Correcciones manuales de asistencia', counts.adjustments], ['Configuraciones realizadas desde Calendario laboral', counts.overrides],
+                    ['Trabajadores autorizados', counts.personnel]
+                ].filter(([, count]) => Number(count || 0) > 0);
+                const impactHtml = rows.length
+                    ? `<div class="text-start"><p class="mb-2">Se eliminarán definitivamente:</p><ul class="mb-3">${rows.map(([label,count]) => `<li><strong>${Number(count)}</strong> ${escapeHtml(label)}</li>`).join('')}</ul><div class="alert alert-danger mb-0"><strong>Esta acción no se puede deshacer.</strong> Los reportes e historiales perderán estos registros.</div></div>`
+                    : '<div class="alert alert-warning mb-0">El lugar no tiene registros relacionados, pero su eliminación será definitiva.</div>';
+
+                const confirmation = await Swal.fire({
+                    icon: 'error',
+                    title: `Eliminar ${escapeHtml(impact.location?.name || 'lugar')}`,
+                    html: impactHtml,
+                    input: 'text',
+                    inputLabel: 'Escriba ELIMINAR para confirmar',
+                    inputPlaceholder: 'ELIMINAR',
+                    showCancelButton: true,
+                    confirmButtonText: 'Eliminar definitivamente',
+                    cancelButtonText: 'Cancelar',
+                    confirmButtonColor: '#dc3545',
+                    preConfirm: (value) => {
+                        if (String(value || '').trim().toUpperCase() !== 'ELIMINAR') {
+                            Swal.showValidationMessage('Debe escribir ELIMINAR exactamente.');
+                            return false;
+                        }
+                        return value;
+                    }
+                });
+                if (!confirmation.isConfirmed) return;
+
+                const body = new FormData();
+                body.append('csrf_token', csrf);
+                body.append('id', button.dataset.id || '');
+                body.append('confirmation', 'ELIMINAR');
+                const response = await fetch(`${BASE_URL}/servicios/control_personal/eliminar_punto_marcacion.php`, {
+                    method: 'POST', body, headers: { Accept: 'application/json' }
+                });
+                const raw = await response.text();
+                let data;
+                try { data = JSON.parse(raw); }
+                catch (_) { throw new Error('El servidor devolvió una respuesta inválida.'); }
+                if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo eliminar el lugar.');
+                await Swal.fire('Eliminación completada', data.message, 'success');
+                window.location.reload();
+            } catch (error) {
+                await Swal.fire('No se pudo eliminar', error.message || 'Inténtelo nuevamente.', 'warning');
+            } finally {
+                button.disabled = false;
+            }
         });
     });
 }

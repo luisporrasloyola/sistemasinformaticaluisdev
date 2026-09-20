@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/attendance_projects.php';
+require_once __DIR__ . '/../../includes/attendance_location_access.php';
 require_module_access('control_personal.control_asistencia');
 verify_csrf($_POST['csrf_token'] ?? null);
 ensure_quick_attendance_marking_schema();
@@ -26,6 +27,7 @@ $catalog=db()->prepare("SELECT l.name location_name,l.latitude,l.longitude,l.rad
  JOIN attendance_projects p ON p.id=:project_id AND p.status=1 WHERE l.id=:location_id AND l.status=1 LIMIT 1");
 $catalog->execute(['schedule_id'=>$scheduleId,'project_id'=>$projectId,'location_id'=>$locationId]); $selected=$catalog->fetch();
 if(!$selected) json_response(['ok'=>false,'message'=>'Alguna de las opciones seleccionadas ya no está disponible.'],409);
+if(!attendance_worker_can_use_location(db(),$workerId,$locationId)) json_response(['ok'=>false,'title'=>'Lugar no autorizado','message'=>'Este lugar de marcación no está habilitado para el trabajador seleccionado. Actualice la página o comuníquese con el administrador.'],403);
 $day=(int)date('N');$dayStmt=db()->prepare('SELECT * FROM attendance_schedule_days WHERE schedule_id=:schedule_id AND day_of_week=:day AND status=1 LIMIT 1');$dayStmt->execute(['schedule_id'=>$scheduleId,'day'=>$day]);$scheduleDay=$dayStmt->fetch();
 if(!$scheduleDay) json_response(['ok'=>false,'message'=>'El horario seleccionado no tiene una jornada configurada para hoy.'],409);
 $today=date('Y-m-d');$now=date('Y-m-d H:i:s');$time=date('H:i:s');

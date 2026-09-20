@@ -9,7 +9,6 @@ $isAdmin = is_admin();
 $currentWorkerId = current_user_worker_id();
 $requestedWorkerId = $isAdmin ? (int) ($_GET['worker_id'] ?? ($currentWorkerId ?: 0)) : 0;
 $workers = [];
-$markingLocations = db()->query("SELECT id, name, latitude, longitude, radius_meters FROM attendance_locations WHERE status=1 ORDER BY name")->fetchAll();
 $markingSchedules = db()->query("SELECT id, name FROM attendance_schedules WHERE status=1 ORDER BY name")->fetchAll();
 $markingProjects = db()->query("SELECT id, name FROM attendance_projects WHERE status=1 ORDER BY name")->fetchAll();
 
@@ -51,7 +50,7 @@ require __DIR__ . '/../../includes/header.php';
 
             <div class="attendance-quick-selection">
                 <div class="mb-3"><label class="form-label" for="markScheduleSelect">Horario</label><select class="form-select marking-selector" id="markScheduleSelect" data-placeholder="Seleccione un horario"><option value=""></option><?php foreach ($markingSchedules as $schedule): ?><option value="<?= (int)$schedule['id'] ?>"><?= e($schedule['name']) ?></option><?php endforeach; ?></select></div>
-                <div class="mb-3"><label class="form-label" for="markLocationSelect">Lugar de marcación</label><select class="form-select marking-selector" id="markLocationSelect" data-placeholder="Seleccione un lugar"><option value=""></option><?php foreach ($markingLocations as $location): ?><option value="<?= (int)$location['id'] ?>" data-latitude="<?= e((string)$location['latitude']) ?>" data-longitude="<?= e((string)$location['longitude']) ?>" data-radius="<?= (int)$location['radius_meters'] ?>"><?= e($location['name']) ?></option><?php endforeach; ?></select></div>
+                <div class="mb-3"><label class="form-label" for="markLocationSelect">Lugar de marcación</label><select class="form-select marking-selector" id="markLocationSelect" data-placeholder="Seleccione un lugar"><option value=""></option></select></div>
                 <div class="mb-3"><label class="form-label" for="markProjectSelect">Proyecto</label><select class="form-select marking-selector" id="markProjectSelect" data-placeholder="Seleccione un proyecto"><option value=""></option><?php foreach ($markingProjects as $project): ?><option value="<?= (int)$project['id'] ?>"><?= e($project['name']) ?></option><?php endforeach; ?></select></div>
             </div>
             <div class="attendance-status-stack mb-3" id="markStatusPanel"><span class="badge text-bg-secondary">Cargando jornada</span></div>
