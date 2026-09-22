@@ -5909,15 +5909,16 @@ function initControlPersonalLocations() {
         if (radiusLabel && radius) radiusLabel.textContent = `${radius.value} metros`;
     }
 
-    function setMapPoint(lat, lng, focusPoint = false) {
+    function setMapPoint(lat, lng, focusPoint = false, fitRadius = false) {
         if (!window.L || !map || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
         const point = [lat, lng];
         if (!marker) marker = L.marker(point).addTo(map);
         marker.setLatLng(point);
-        if (!circle) circle = L.circle(point, { radius: Number(radius?.value || 100), color: '#1457d9', fillColor: '#1457d9', fillOpacity: 0.12 }).addTo(map);
+        if (!circle) circle = L.circle(point, { radius: Number(radius?.value || 100), color: '#1457d9', weight: 2, opacity: 0.9, fill: false, interactive: false }).addTo(map);
         circle.setLatLng(point);
         circle.setRadius(Number(radius?.value || 100));
-        if (focusPoint) map.setView(point, 14);
+        if (fitRadius) map.fitBounds(circle.getBounds(), { padding: [24, 24], maxZoom: 16, animate: false });
+        else if (focusPoint) map.setView(point, 14);
         else map.panTo(point, { animate: false });
     }
 
@@ -6024,7 +6025,10 @@ function initControlPersonalLocations() {
 
     radius?.addEventListener('input', () => {
         updateRadiusLabel();
-        setMapPoint(Number(latInput.value), Number(lngInput.value));
+        const lat = normalizeCoordinate(latInput);
+        const lng = normalizeCoordinate(lngInput);
+        const center = lat !== null && lng !== null ? { lat, lng } : (map?.getCenter() || { lat: -12.0464, lng: -77.0428 });
+        setMapPoint(center.lat, center.lng, false, true);
     });
     [latInput, lngInput].forEach((input) => {
         input?.addEventListener('input', () => syncCoordinatesAndAddress(650));
