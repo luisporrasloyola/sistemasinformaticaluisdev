@@ -101,8 +101,13 @@
             setTimeout(() => search?.focus(), 250);
         }
 
-        document.querySelectorAll('.js-location-personnel').forEach((button) => {
-            button.addEventListener('click', () => openPersonnelModal(button));
+        const locationsTable = document.getElementById('locationsTable');
+        locationsTable?.addEventListener('click', (event) => {
+            const button = event.target.closest('.js-location-personnel');
+            if (!button || !locationsTable.contains(button)) return;
+
+            event.preventDefault();
+            openPersonnelModal(button);
         });
         search?.addEventListener('input', filterWorkers);
         checks.forEach((check) => check.addEventListener('change', updateSelection));

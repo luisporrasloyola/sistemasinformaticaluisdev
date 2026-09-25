@@ -5888,6 +5888,7 @@ function initControlPersonalProjects() {
 }
 function initControlPersonalLocations() {
     const form = document.getElementById('locationForm');
+    const locationsTable = document.getElementById('locationsTable');
     if (!form || !window.bootstrap || form.dataset.locationActionsBound === '1') return;
     form.dataset.locationActionsBound = '1';
 
@@ -6019,8 +6020,11 @@ function initControlPersonalLocations() {
     }
 
     document.getElementById('newLocationBtn')?.addEventListener('click', () => openLocationModal());
-    document.querySelectorAll('.js-edit-location').forEach((button) => {
-        button.addEventListener('click', () => openLocationModal(button.dataset));
+    locationsTable?.addEventListener('click', (event) => {
+        const button = event.target.closest('.js-edit-location');
+        if (!button || !locationsTable.contains(button)) return;
+        event.preventDefault();
+        openLocationModal(button.dataset);
     });
 
     radius?.addEventListener('input', () => {
@@ -6090,14 +6094,18 @@ function initControlPersonalLocations() {
         }
     }
 
-    document.querySelectorAll('.js-hide-location').forEach((button) => {
-        button.addEventListener('click', () => changeLocationVisibility(button, 'hide'));
+    locationsTable?.addEventListener('click', (event) => {
+        const hideButton = event.target.closest('.js-hide-location');
+        const restoreButton = event.target.closest('.js-restore-location');
+        const button = hideButton || restoreButton;
+        if (!button || !locationsTable.contains(button)) return;
+        event.preventDefault();
+        changeLocationVisibility(button, hideButton ? 'hide' : 'restore');
     });
-    document.querySelectorAll('.js-restore-location').forEach((button) => {
-        button.addEventListener('click', () => changeLocationVisibility(button, 'restore'));
-    });
-    document.querySelectorAll('.js-delete-location').forEach((button) => {
-        button.addEventListener('click', async () => {
+    locationsTable?.addEventListener('click', async (event) => {
+        const button = event.target.closest('.js-delete-location');
+        if (!button || !locationsTable.contains(button)) return;
+        event.preventDefault();
             button.disabled = true;
             try {
                 const impactResponse = await fetch(`${BASE_URL}/servicios/control_personal/impacto_eliminar_punto_marcacion.php?id=${encodeURIComponent(button.dataset.id || '')}&_=${Date.now()}`, {
@@ -6162,7 +6170,6 @@ function initControlPersonalLocations() {
             } finally {
                 button.disabled = false;
             }
-        });
     });
 }
 
