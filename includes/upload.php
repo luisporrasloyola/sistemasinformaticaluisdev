@@ -41,6 +41,11 @@ function upload_file(array $file, string $folder, array $allowedMime): array
         'image/png' => 'png',
         'image/webp' => 'webp',
         'application/pdf' => 'pdf',
+        'audio/mpeg' => 'mp3',
+        'audio/mp4' => 'm4a',
+        'audio/ogg' => 'ogg',
+        'audio/wav', 'audio/x-wav', 'audio/wave' => 'wav',
+        'audio/webm' => 'webm',
         default => 'bin',
     };
 
@@ -65,6 +70,11 @@ function upload_file(array $file, string $folder, array $allowedMime): array
 function document_attachment_mimes(): array
 {
     return ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+}
+
+function audio_attachment_mimes(): array
+{
+    return ['audio/mpeg', 'audio/mp4', 'audio/ogg', 'audio/wav', 'audio/x-wav', 'audio/wave', 'audio/webm'];
 }
 
 function delete_uploaded_file(?string $relativePath): void

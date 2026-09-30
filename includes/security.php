@@ -322,8 +322,12 @@ function default_user_landing_path(): string
         'empresa_maquirenta.formatos' => 'modulos/empresa_maquirenta/formatos.php',
         'empresa_maquirenta.pms' => 'modulos/empresa_maquirenta/pms.php',
         'empresa_maquirenta.permiso_trabajo' => 'modulos/empresa_maquirenta/permiso_trabajo.php',
+        'empresa_maquirenta.parada_planta' => 'modulos/empresa_maquirenta/parada_planta.php',
+        'empresa_maquirenta.audios_charla' => 'modulos/empresa_maquirenta/audios_charla.php',
         'empresa_maquirenta.pms_santa_rosa' => 'modulos/empresa_maquirenta/pms_santa_rosa.php',
         'empresa_maquirenta.permiso_trabajo_santa_rosa' => 'modulos/empresa_maquirenta/permiso_trabajo_santa_rosa.php',
+        'empresa_maquirenta.parada_planta_santa_rosa' => 'modulos/empresa_maquirenta/parada_planta_santa_rosa.php',
+        'empresa_maquirenta.audios_charla_santa_rosa' => 'modulos/empresa_maquirenta/audios_charla_santa_rosa.php',
         'usuarios' => 'modulos/usuario/usuarios.php',
     ];
 

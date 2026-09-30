@@ -7368,3 +7368,35 @@ input[type="checkbox"]:active {
 .attendance-movement-photo { display:inline-flex; align-items:center; justify-content:center; }
 .attendance-movement-photo img { width:42px; height:42px; object-fit:cover; border:2px solid #22a06b; border-radius:8px; box-shadow:0 3px 8px rgba(15,23,42,.16); transition:transform .18s ease,box-shadow .18s ease; }
 .attendance-movement-photo:hover img { transform:scale(1.08); box-shadow:0 5px 13px rgba(15,23,42,.24); }
+/* Parada de Planta: mismos tamaños y composición que Formatos. */
+#paradaPlantaTable{table-layout:auto;min-width:860px;font-size:.86rem}
+#paradaPlantaTable th,#paradaPlantaTable td{padding:.48rem .42rem;vertical-align:middle}
+#paradaPlantaTable th:nth-child(1),#paradaPlantaTable td:nth-child(1){width:72px;text-align:center}
+#paradaPlantaTable th:nth-child(2),#paradaPlantaTable td:nth-child(2){min-width:170px;max-width:260px;white-space:normal;overflow-wrap:anywhere;line-height:1.25}
+#paradaPlantaTable th:nth-child(3),#paradaPlantaTable td:nth-child(3),#paradaPlantaTable th:nth-child(4),#paradaPlantaTable td:nth-child(4),#paradaPlantaTable th:nth-child(5),#paradaPlantaTable td:nth-child(5),#paradaPlantaTable th:nth-child(6),#paradaPlantaTable td:nth-child(6){min-width:92px;white-space:nowrap}
+#paradaPlantaTable th:nth-child(7),#paradaPlantaTable td:nth-child(7){min-width:142px;white-space:nowrap}
+#paradaPlantaTable .badge{font-size:.68rem;line-height:1;padding:.32rem .45rem;white-space:nowrap}
+#paradaPlantaTable td.text-nowrap{display:flex;align-items:center;gap:4px}
+#paradaPlantaTable .btn-sm{width:30px;height:30px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:7px;font-size:.78rem;flex:0 0 auto}
+#paradaPlantaTable .form-check-input{width:1.12rem;height:1.12rem;min-width:1.12rem}
+#paradaPlantaWorkspace .work-panel>.d-flex:first-child{align-items:center!important}
+#paradaPlantaWorkspace .work-panel>.d-flex:first-child>.d-flex{flex-wrap:nowrap!important;gap:7px!important;align-items:center}
+#downloadSelectedParadaPlantaBtn,#downloadParadaPlantaBtn,#addParadaPlantaBtn{min-height:38px;padding:.48rem .72rem;font-size:.84rem;line-height:1;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;gap:.28rem}
+@media(min-width:992px){#paradaPlantaWorkspace .machine-profile-col{flex:0 0 29%!important;width:29%!important;max-width:29%!important}#paradaPlantaWorkspace .machine-table-col{flex:0 0 71%!important;width:71%!important;max-width:71%!important}#paradaPlantaWorkspace .machine-profile-col .work-panel{padding:18px!important}#paradaPlantaWorkspace .worker-card img{width:188px!important;height:188px!important;max-width:100%!important;object-fit:contain!important;object-position:center!important;background:#eef2f7!important;border:1px solid #cbd5e1!important;border-radius:8px!important}#paradaPlantaWorkspace .worker-card .btn{max-width:100%;padding:.42rem .62rem;font-size:.82rem;white-space:normal}#paradaPlantaWorkspace .info-list{grid-template-columns:96px minmax(0,1fr);gap:8px 10px;font-size:.84rem}#paradaPlantaWorkspace .info-list dt,#paradaPlantaWorkspace .info-list dd{min-width:0;line-height:1.35;overflow-wrap:anywhere}}
+@media(min-width:1200px){#paradaPlantaWorkspace .machine-profile-col{flex-basis:28%!important;width:28%!important;max-width:28%!important}#paradaPlantaWorkspace .machine-table-col{flex-basis:72%!important;width:72%!important;max-width:72%!important}}
+@media(max-width:991px){#paradaPlantaWorkspace .machine-profile-col,#paradaPlantaWorkspace .machine-table-col{width:100%!important;max-width:100%!important}}
+/* Parada de Planta Santa Rosa mantiene el tamaño de Formatos y Ventanilla. */
+#santaRosaParadaTable{table-layout:auto;min-width:860px;font-size:.86rem}
+#santaRosaParadaTable th,#santaRosaParadaTable td{padding:.48rem .42rem;vertical-align:middle}
+#santaRosaParadaTable th:nth-child(1),#santaRosaParadaTable td:nth-child(1){width:72px;text-align:center}
+#santaRosaParadaTable th:nth-child(2),#santaRosaParadaTable td:nth-child(2){min-width:170px;max-width:260px;white-space:normal;overflow-wrap:anywhere;line-height:1.25}
+#santaRosaParadaTable th:nth-child(3),#santaRosaParadaTable td:nth-child(3),#santaRosaParadaTable th:nth-child(4),#santaRosaParadaTable td:nth-child(4),#santaRosaParadaTable th:nth-child(5),#santaRosaParadaTable td:nth-child(5),#santaRosaParadaTable th:nth-child(6),#santaRosaParadaTable td:nth-child(6){min-width:92px;white-space:nowrap}
+#santaRosaParadaTable th:nth-child(7),#santaRosaParadaTable td:nth-child(7){min-width:142px;white-space:nowrap}
+#santaRosaParadaTable .badge{font-size:.68rem;line-height:1;padding:.32rem .45rem;white-space:nowrap}
+#santaRosaParadaTable .form-check-input{width:1.12rem;height:1.12rem;min-width:1.12rem}
+#santaRosaParadaWorkspace .work-panel>.d-flex:first-child{align-items:center!important}
+#santaRosaParadaWorkspace .work-panel>.d-flex:first-child>.d-flex{flex-wrap:nowrap!important;gap:7px!important;align-items:center}
+#santaRosaParadaWorkspace .work-panel>.d-flex:first-child>.d-flex .btn{min-height:38px;padding:.48rem .72rem;font-size:.84rem;line-height:1;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;gap:.28rem}
+@media(min-width:992px){#santaRosaParadaWorkspace .machine-profile-col{flex:0 0 29%!important;width:29%!important;max-width:29%!important}#santaRosaParadaWorkspace .machine-table-col{flex:0 0 71%!important;width:71%!important;max-width:71%!important}#santaRosaParadaWorkspace .machine-profile-col .work-panel{padding:18px!important}#santaRosaParadaWorkspace .worker-card img{width:188px!important;height:188px!important;max-width:100%!important;object-fit:contain!important;object-position:center!important;background:#eef2f7!important;border:1px solid #cbd5e1!important;border-radius:8px!important}#santaRosaParadaWorkspace .worker-card .btn{max-width:100%;padding:.42rem .62rem;font-size:.82rem;white-space:normal}#santaRosaParadaWorkspace .info-list{grid-template-columns:96px minmax(0,1fr);gap:8px 10px;font-size:.84rem}#santaRosaParadaWorkspace .info-list dt,#santaRosaParadaWorkspace .info-list dd{min-width:0;line-height:1.35;overflow-wrap:anywhere}}
+@media(min-width:1200px){#santaRosaParadaWorkspace .machine-profile-col{flex-basis:28%!important;width:28%!important;max-width:28%!important}#santaRosaParadaWorkspace .machine-table-col{flex-basis:72%!important;width:72%!important;max-width:72%!important}}
+@media(max-width:991px){#santaRosaParadaWorkspace .machine-profile-col,#santaRosaParadaWorkspace .machine-table-col{width:100%!important;max-width:100%!important}}

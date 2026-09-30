@@ -56,6 +56,18 @@ function status_alert_scopes(): array
             'name_column' => 'nombre',
             'active_column' => 'estado',
         ],
+        'empresa_maquirenta.parada_planta' => [
+            'label' => 'Empresa Maquirenta - Parada de Planta',
+            'table' => 'empresa_maquirenta_parada_planta_catalogo',
+            'name_column' => 'nombre',
+            'active_column' => 'estado',
+        ],
+        'empresa_maquirenta.parada_planta_santa_rosa' => [
+            'label' => 'Empresa Maquirenta - Santa Rosa - Parada de Planta',
+            'table' => 'empresa_maquirenta_santa_rosa_parada_planta_catalogo',
+            'name_column' => 'nombre',
+            'active_column' => 'estado',
+        ],
     ];
 }
 
