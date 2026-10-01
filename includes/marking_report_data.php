@@ -44,7 +44,7 @@ function marking_report_allowed_statuses(): array
     return ['puntual', 'salida_valida', 'tardanza', 'tardanza_salida_anticipada', 'salida_anticipada'];
 }
 
-function marking_report_build(string $dateFrom, string $dateTo, int $workerId = 0, int $companyId = 0, int $locationId = 0, string $status = ''): array
+function marking_report_build(string $dateFrom, string $dateTo, int $workerId = 0, int $companyId = 0, int $locationId = 0, string $status = '', int $limit = 0, int $offset = 0): array
 {
     if (!in_array($status, marking_report_allowed_statuses(), true)) $status = '';
     $conditions = ['am.mark_date BETWEEN :desde AND :hasta'];
@@ -72,9 +72,33 @@ function marking_report_build(string $dateFrom, string $dateTo, int $workerId = 
         ) AND am.location_status = 'registro_administrativo'
         LEFT JOIN users actor ON actor.id = audit.adjusted_by_user_id
         WHERE " . implode(' AND ', $conditions)
-        . ($status !== '' ? ' HAVING display_status = :status' : '') . ' ORDER BY am.marked_at DESC';
+        . ($status !== '' ? ' HAVING display_status = :status' : '') . ' ORDER BY am.marked_at DESC, am.id DESC'
+        . ($limit > 0 ? ' LIMIT ' . $limit . ' OFFSET ' . max(0, $offset) : '');
     $stmt = db()->prepare($sql); $stmt->execute($params);
     return $stmt->fetchAll();
+}
+
+function marking_report_count(string $dateFrom, string $dateTo, int $workerId = 0, int $companyId = 0, int $locationId = 0, string $status = ''): int
+{
+    if (!in_array($status, marking_report_allowed_statuses(), true)) $status = '';
+    $conditions = ['am.mark_date BETWEEN :desde AND :hasta'];
+    $params = ['desde' => $dateFrom, 'hasta' => $dateTo];
+    if ($workerId > 0) { $conditions[] = 'am.worker_id = :worker_id'; $params['worker_id'] = $workerId; }
+    if ($companyId > 0) { $conditions[] = 'w.company_id = :company_id'; $params['company_id'] = $companyId; }
+    if ($locationId > 0) { $conditions[] = 'am.location_id = :location_id'; $params['location_id'] = $locationId; }
+    $statusCondition = '';
+    if ($status !== '') {
+        $params['status'] = $status;
+        $statusCondition = " AND (CASE WHEN am.mark_type = 'salida' AND am.final_status = 'salida_anticipada'
+            AND EXISTS (SELECT 1 FROM attendance_marks entry_mark
+                WHERE entry_mark.assignment_id = am.assignment_id AND entry_mark.mark_date = am.mark_date
+                AND entry_mark.mark_type = 'entrada' AND entry_mark.final_status = 'tardanza')
+            THEN 'tardanza_salida_anticipada' ELSE am.final_status END) = :status";
+    }
+    $stmt = db()->prepare('SELECT COUNT(*) FROM attendance_marks am JOIN workers w ON w.id = am.worker_id WHERE '
+        . implode(' AND ', $conditions) . $statusCondition);
+    $stmt->execute($params);
+    return (int) $stmt->fetchColumn();
 }
 
 function marking_report_catalogs(): array

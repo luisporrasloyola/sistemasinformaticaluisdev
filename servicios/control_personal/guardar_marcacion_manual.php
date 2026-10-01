@@ -34,6 +34,7 @@ $reason = trim((string) ($_POST['reason'] ?? ''));
 $entryLocationId = max(0, (int) ($_POST['entry_location_id'] ?? 0));
 $exitLocationId = max(0, (int) ($_POST['exit_location_id'] ?? 0));
 $attendanceResult = trim((string) ($_POST['attendance_result'] ?? ''));
+$allowTodayExit = ($_POST['allow_today_exit'] ?? '') === '1';
 
 if (!$workerId || !manual_valid_date($markDate)) manual_response(['ok' => false, 'message' => 'El trabajador o la fecha no son válidos.'], 422);
 if ($markDate > date('Y-m-d')) manual_response(['ok' => false, 'message' => 'No se pueden corregir jornadas futuras.'], 409);
@@ -77,6 +78,7 @@ if ($attendanceResult === 'falta') {
 }
 
 if ($entryTime === '' && $exitTime === '') manual_response(['ok' => false, 'message' => 'Ingrese al menos la hora de entrada o de salida.'], 422);
+if ($sameDay && $exitTime !== '' && !$allowTodayExit) manual_response(['ok' => false, 'message' => 'Pulse «Permitir editar» antes de guardar la salida de hoy.'], 422);
 if (($entryTime !== '' && !manual_valid_time($entryTime)) || ($exitTime !== '' && !manual_valid_time($exitTime))) manual_response(['ok' => false, 'message' => 'Ingrese horas válidas.'], 422);
 if ($entryTime !== '' && $exitTime !== '' && $exitTime < $entryTime) manual_response(['ok' => false, 'message' => 'La hora de salida no puede ser anterior a la entrada.'], 422);
 if ($sameDay && (($entryTime !== '' && $entryTime > date('H:i')) || ($exitTime !== '' && $exitTime > date('H:i')))) {
@@ -116,7 +118,7 @@ if (!$program) {
 }
 $officialExit = substr((string) ($program['exit_time'] ?? $scheduleDay['exit_time'] ?? $scheduleDay['exit_start'] ?? '00:00:00'), 0, 8);
 
-$saveMark = static function (string $type, string $time, int $locationId) use ($pdo, $workerId, $markDate, $assignment, $program, $scheduleId, $officialExit, $reason, $actorId, $actorName, $attendanceResult, $sameDay): void {
+$saveMark = static function (string $type, string $time, int $locationId) use ($pdo, $workerId, $markDate, $assignment, $program, $scheduleId, $officialExit, $reason, $actorId, $actorName, $attendanceResult, $sameDay, $allowTodayExit): void {
     $normalized = $time . ':00';
     $status = $type === 'entrada' ? $attendanceResult : ($normalized >= $officialExit ? 'salida_valida' : 'salida_anticipada');
     $markedAt = $markDate . ' ' . $normalized;
@@ -124,9 +126,18 @@ $saveMark = static function (string $type, string $time, int $locationId) use ($
     $find = $pdo->prepare("SELECT * FROM attendance_marks WHERE worker_id=:worker AND mark_date=:date AND mark_type=:type ORDER BY {$markOrder} LIMIT 1 FOR UPDATE");
     $find->execute(['worker' => $workerId, 'date' => $markDate, 'type' => $type]);
     $existing = $find->fetch() ?: null;
-    if ($sameDay && !$existing) {
+    if ($sameDay && !$existing && !($type === 'salida' && $allowTodayExit)) {
         throw new DomainException('La marcación de ' . $type . ' aún no existe. Para registrarla, use Marcación administrativa de hoy.');
     }
+    if ($sameDay && $type === 'salida') {
+        $entryCheck = $pdo->prepare("SELECT mark_time FROM attendance_marks WHERE worker_id=:worker AND mark_date=:date AND mark_type='entrada' ORDER BY mark_time,id LIMIT 1 FOR UPDATE");
+        $entryCheck->execute(['worker' => $workerId, 'date' => $markDate]);
+        $firstEntryTime = $entryCheck->fetchColumn();
+        if (!$firstEntryTime) throw new DomainException('Primero debe existir una entrada registrada para completar la salida de hoy.');
+        if ($normalized < (string) $firstEntryTime) throw new DomainException('La salida no puede ser anterior a la entrada.');
+    }
+    if ($existing && $type === 'entrada' && $sameDay && $normalized === (string) $existing['mark_time']
+        && $locationId === (int) $existing['location_id'] && $status === (string) $existing['final_status']) return;
     $note = 'Corrección manual por ' . $actorName . ': ' . $reason;
     if ($existing) {
         $markId = (int) $existing['id'];

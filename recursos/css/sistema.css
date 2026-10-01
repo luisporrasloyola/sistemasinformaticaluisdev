@@ -6677,6 +6677,14 @@ input[type="checkbox"]:active {
     text-align: center;
 }
 
+.individual-report-table .report-state-code-only {
+    padding: 3px;
+}
+
+.report-pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:12px;color:#64748b;font-size:.83rem}
+.report-pagination-actions{display:flex;align-items:center;gap:10px}
+@media(max-width:575.98px){.report-pagination-actions{width:100%;justify-content:space-between}}
+
 .dashboard-table tbody td .attendance-report-state > strong {
     color: #fff !important;
 }
@@ -7364,7 +7372,8 @@ input[type="checkbox"]:active {
 #attendanceAdminMarkModal .select2-container{width:100%!important}
 #attendanceAdminMarkModal .select2-container--bootstrap4 .select2-selection--single{min-height:43px;border-color:#cbd5e1;border-radius:9px}
 #attendanceAdminMarkModal .select2-container--bootstrap4 .select2-selection--single .select2-selection__rendered{line-height:41px;padding-left:12px;color:#1e293b}
-#attendanceAdminMarkModal .select2-container--bootstrap4 .select2-selection--single .select2-selection__arrow{height:41px}
+#attendanceAdminMarkModal .select2-container--bootstrap4 .select2-selection--single .select2-selection__arrow{top:0!important;right:8px!important;height:100%!important;width:28px!important;display:flex!important;align-items:center!important;justify-content:center!important}
+#attendanceAdminMarkModal .select2-container--bootstrap4 .select2-selection--single .select2-selection__arrow b{position:static!important;top:auto!important;left:auto!important;margin:0!important;transform:none!important}
 #attendanceAdminMarkModal textarea.form-control{min-height:80px;resize:vertical}
 #attendanceAdminMarkModal .form-control:focus,#attendanceAdminMarkModal .form-select:focus{border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.14)}
 #attendanceAdminMarkModal .modal-footer{flex-shrink:0;gap:8px;padding:13px 24px;border-top:1px solid #dbe4f0;background:#fff;box-shadow:0 -8px 20px rgba(15,23,42,.035)}
@@ -7441,3 +7450,24 @@ input[type="checkbox"]:active {
 @media(min-width:1200px){#santaRosaParadaWorkspace .machine-profile-col{flex-basis:28%!important;width:28%!important;max-width:28%!important}#santaRosaParadaWorkspace .machine-table-col{flex-basis:72%!important;width:72%!important;max-width:72%!important}}
 @media(max-width:991px){#santaRosaParadaWorkspace .machine-profile-col,#santaRosaParadaWorkspace .machine-table-col{width:100%!important;max-width:100%!important}}
 .report-route-inline,.report-route-step{display:block}.report-route-step{margin-top:3px}.report-route-arrow{display:inline-block;margin-right:6px;color:#2563eb;font-weight:800}
+.report-early-overtime-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:12px 0;padding:14px 16px;border:1px solid #cbdaf3;border-radius:12px;background:#f3f7ff}
+.report-early-overtime-toolbar strong,.report-early-overtime-toolbar small{display:block}
+.report-early-overtime-toolbar strong{color:#193969;font-size:14px}
+.report-early-overtime-toolbar small{color:#52657f;font-size:12px;margin-top:3px}
+.report-early-overtime-toolbar .report-early-overtime-status{color:#174fae;font-weight:700;margin-top:7px}
+.report-early-overtime-toolbar .btn{flex:none}
+.report-early-overtime-select{text-align:center;min-width:54px}
+.report-early-overtime-select .form-check-input{float:none;margin:0;cursor:pointer}
+.report-early-overtime-check{display:flex;align-items:center;justify-content:center;gap:5px;cursor:pointer}
+.report-early-overtime-badge{display:block;width:max-content;max-width:130px;margin-top:3px;padding:2px 5px;border-radius:5px;background:#e7f8ee;color:#087440;font-size:10px;font-weight:700;line-height:1.2}
+.report-early-overtime-confirmation .swal2-html-container{white-space:pre-line;text-align:left;line-height:1.55}
+.individual-report-indicators{grid-template-columns:repeat(3,minmax(0,1fr))}
+.report-overtime-cell{min-width:130px;font-weight:700;white-space:nowrap}
+.report-overtime-cell small{display:block;margin-top:3px;font-size:11px;line-height:1.35;font-weight:400;color:#607089;white-space:normal}
+@media(max-width:767px){.individual-report-indicators{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:520px){.individual-report-indicators{grid-template-columns:1fr}}
+@media(max-width:640px){.report-early-overtime-toolbar{align-items:stretch;flex-direction:column}.report-early-overtime-toolbar .btn{width:100%}}
+.attendance-exit-label{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px}
+.attendance-exit-label .form-label{margin:0}
+.attendance-exit-label .btn{white-space:nowrap;font-size:11px;padding:4px 7px}
+@media(max-width:640px){.attendance-exit-label{align-items:flex-start;flex-direction:column}}

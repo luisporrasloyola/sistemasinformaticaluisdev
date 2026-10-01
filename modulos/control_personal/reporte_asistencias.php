@@ -15,12 +15,31 @@ if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom)) $dateFrom = $defaultFrom;
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateTo)) $dateTo = $today;
 if ($dateFrom > $dateTo) [$dateFrom, $dateTo] = [$dateTo, $dateFrom];
 
-$catalog = attendance_report_build($dateFrom, $dateTo, $personalView ? $workerId : 0)['workers'];
+$catalogStmt = db()->prepare('SELECT id, full_name, document_number FROM workers' . ($personalView ? ' WHERE id = :worker_id' : '') . ' ORDER BY full_name');
+$catalogStmt->execute($personalView ? ['worker_id' => $workerId] : []);
+$catalog = $catalogStmt->fetchAll();
 $report = $workerId > 0 ? attendance_report_build($dateFrom, $dateTo, $workerId) : null;
 $worker = $report['worker'] ?? null;
 $assignment = $report['assignment'] ?? null;
 $summary = $report['summary'] ?? [];
 $rows = $report['individual_rows'] ?? [];
+$rowsPerPage = 20;
+$totalRows = count($rows);
+$totalPages = max(1, (int) ceil($totalRows / $rowsPerPage));
+$currentPage = min($totalPages, max(1, (int) ($_GET['pagina'] ?? 1)));
+$visibleRows = array_slice($rows, ($currentPage - 1) * $rowsPerPage, $rowsPerPage);
+$earlyOvertimeAuthorizations = [];
+if ($worker && !$personalView) {
+    try {
+        $authorizationQuery = db()->prepare('SELECT work_date, authorized_by_name, authorized_at FROM attendance_early_overtime_authorizations WHERE worker_id = :worker_id AND work_date BETWEEN :date_from AND :date_to AND is_authorized = 1');
+        $authorizationQuery->execute(['worker_id' => $workerId, 'date_from' => $dateFrom, 'date_to' => $dateTo]);
+        foreach ($authorizationQuery->fetchAll() as $authorization) {
+            $earlyOvertimeAuthorizations[(string) $authorization['work_date']] = $authorization;
+        }
+    } catch (Throwable $error) {
+        $earlyOvertimeAuthorizations = [];
+    }
+}
 $note = $report['note'] ?? null;
 $trips = $report['trips'] ?? [];
 $tripsByDate = attendance_report_trips_by_date($trips);
@@ -105,29 +124,49 @@ require __DIR__ . '/../../includes/header.php';
         <div><span>Puntualidad</span><strong><?= e((string) $summary['punctuality']) ?>%</strong></div>
         <div><span>Jornadas finalizadas</span><strong><?= e((string) $summary['compliance']) ?>%</strong></div>
         <div><span>Minutos de tardanza</span><strong><?= (int) $summary['late_minutes'] ?> min</strong></div>
-        <div><span>Horas extras</span><strong><?= e(attendance_report_minutes_label((int) $summary['overtime_minutes'])) ?></strong></div>
+        <div><span>Extra por entrada autorizada</span><strong><?= e(attendance_report_minutes_label((int) $summary['early_overtime_minutes'])) ?></strong></div>
+        <div><span>Extra por salida (+15 min)</span><strong><?= e(attendance_report_minutes_label((int) $summary['exit_overtime_minutes'])) ?></strong></div>
+        <div><span>Horas extras totales</span><strong><?= e(attendance_report_minutes_label((int) $summary['overtime_minutes'])) ?></strong></div>
     </div>
 
-    <div class="individual-report-section-title"><h3>Detalle diario</h3><p>Marcaciones y novedades del periodo seleccionado.</p></div>
+    <div class="individual-report-section-title" id="detalle-diario"><h3>Detalle diario</h3><p>Marcaciones y novedades del periodo seleccionado.</p></div>
+    <?php if (!$personalView): ?>
+    <div class="report-early-overtime-toolbar" id="reportEarlyOvertimeToolbar" data-worker-id="<?= (int) $workerId ?>" data-date-from="<?= e($dateFrom) ?>" data-date-to="<?= e($dateTo) ?>">
+        <div><strong>Entrada anticipada autorizada</strong><small>Marque las fechas que desea autorizar o cuya autorización desea retirar. Las casillas se limpian al guardar; el estado aparece junto a cada fecha. La selección no afecta las horas extra de salida. En la salida, se cuentan como horas extra los minutos posteriores a los 15 minutos de tolerancia.</small><small class="report-early-overtime-status" id="earlyOvertimeSelectionStatus" role="status"></small></div>
+        <button class="btn btn-primary" type="button" id="saveEarlyOvertimeSelection"><i class="fa-solid fa-floppy-disk me-2"></i>Guardar selección</button>
+    </div>
+    <?php endif; ?>
     <div class="table-responsive">
         <table class="table align-middle individual-report-table">
-            <thead><tr><th>Fecha</th><th>Día</th><th>Horario</th><th>Tolerancia</th><th>Lugar de entrada</th><th>Lugar de salida</th><th>Entrada</th><th>Salida</th><th>Tardanza</th><th>Horas extras</th><th>Estado de asistencia</th><th>Estado de jornada</th><th>Proyecto</th></tr></thead>
+            <thead><tr><?php if (!$personalView): ?><th class="report-early-overtime-select"><label class="report-early-overtime-check"><input type="checkbox" id="selectAllEarlyOvertime" aria-label="Seleccionar todas las jornadas elegibles"><span>Sel.</span></label></th><?php endif; ?><th>Fecha</th><th>Día</th><th>Horario</th><th>Tolerancia</th><th>Lugar de entrada</th><th>Lugar de salida</th><th>Entrada</th><th>Salida</th><th>Tardanza</th><th>Horas extras</th><th>Horas trabajadas</th><th>Estado de asistencia</th><th>Estado de jornada</th><th>Proyecto</th></tr></thead>
             <tbody>
-            <?php foreach ($rows as $row): $dayTrips = $tripsByDate[(string) $row['date']] ?? []; ?>
+            <?php $selectionShown = []; foreach ($visibleRows as $row): $dayTrips = $tripsByDate[(string) $row['date']] ?? []; $earlyEligible = (bool) ($row['early_overtime_eligible'] ?? false) && !isset($selectionShown[(string) $row['date']]); if ($earlyEligible) $selectionShown[(string) $row['date']] = true; $earlyAuthorized = isset($earlyOvertimeAuthorizations[(string) $row['date']]); ?>
                 <tr>
-                    <td><?= e(date('d/m/Y', strtotime($row['date']))) ?></td><td><?= e($row['weekday']) ?></td><td class="attendance-time-cell text-nowrap"><?= e($row['schedule']) ?></td><td class="text-nowrap"><?= $row['tolerance_minutes'] !== null ? (int)$row['tolerance_minutes'].' min' : '-' ?></td><td><span class="report-route-inline"><span><?= e($row['entry_location']) ?></span><?php foreach ($dayTrips as $trip): ?><span class="report-route-step"><span class="report-route-arrow" aria-hidden="true">→</span><?= e($trip['first_destination']) ?></span><?php endforeach; ?></span></td><td><?= e($row['exit_location']) ?></td>
+                    <?php if (!$personalView): ?><td class="report-early-overtime-select"><?php if ($earlyEligible): ?><input class="form-check-input early-overtime-day" type="checkbox" value="<?= e($row['date']) ?>" data-authorized="<?= $earlyAuthorized ? '1' : '0' ?>" aria-label="<?= $earlyAuthorized ? 'Retirar' : 'Autorizar' ?> entrada anticipada del <?= e(date('d/m/Y', strtotime($row['date']))) ?>" title="<?= $earlyAuthorized ? e('Autorizado por ' . $earlyOvertimeAuthorizations[(string) $row['date']]['authorized_by_name'] . ' el ' . $earlyOvertimeAuthorizations[(string) $row['date']]['authorized_at'] . '. Marque para retirar.') : 'Marque para autorizar la entrada anticipada' ?>"><?php else: ?><span class="text-muted" title="No hay entrada anticipada elegible">—</span><?php endif; ?></td><?php endif; ?><td><?= e(date('d/m/Y', strtotime($row['date']))) ?><?php if ($earlyAuthorized): ?><small class="report-early-overtime-badge">Entrada autorizada</small><?php endif; ?></td><td><?= e($row['weekday']) ?></td><td class="attendance-time-cell text-nowrap"><?= e($row['schedule']) ?></td><td class="text-nowrap"><?= $row['tolerance_minutes'] !== null ? (int)$row['tolerance_minutes'].' min' : '-' ?></td><td><span class="report-route-inline"><span><?= e($row['entry_location']) ?></span><?php foreach ($dayTrips as $trip): ?><span class="report-route-step"><span class="report-route-arrow" aria-hidden="true">→</span><?= e($trip['first_destination']) ?></span><?php endforeach; ?></span></td><td><?= e($row['exit_location']) ?></td>
                     <td class="attendance-time-cell"><?= e($row['entry']) ?><?php if ($row['entry_administrative']): ?><small class="d-block text-primary">Administrativa</small><?php endif; ?></td><td class="attendance-time-cell"><?= e($row['exit']) ?><?php if ($row['exit_administrative']): ?><small class="d-block text-primary">Administrativa</small><?php endif; ?></td>
                     <td><?= $row['late_minutes'] > 0 ? e(attendance_report_minutes_label((int) $row['late_minutes'])) : '-' ?></td>
-                    <td><?= $row['overtime_minutes'] > 0 ? e(attendance_report_minutes_label((int) $row['overtime_minutes'])) : '-' ?></td>
-                    <td><span class="attendance-report-state <?= e($row['state_class']) ?>"><strong><?= e($row['state_code']) ?></strong><?= e($row['state_label']) ?></span></td>
+                    <td class="report-overtime-cell"><?= $row['overtime_minutes'] > 0 ? e(attendance_report_minutes_label((int) $row['overtime_minutes'])) : '-' ?><?php if ($row['overtime_minutes'] > 0): ?><small>Entrada: <?= e(attendance_report_minutes_label((int) $row['early_overtime_minutes'])) ?><br>Salida: <?= e(attendance_report_minutes_label((int) $row['exit_overtime_minutes'])) ?></small><?php endif; ?></td>
+                    <td class="attendance-time-cell text-nowrap"><?= $row['entry'] !== '-' && $row['exit'] !== '-' ? e(attendance_report_minutes_label((int) $row['worked_minutes'])) : '-' ?></td>
+                    <td><span class="attendance-report-state report-state-code-only <?= e($row['state_class']) ?>" title="<?= e($row['state_label']) ?>" aria-label="<?= e($row['state_label']) ?>"><strong><?= e($row['state_code']) ?></strong></span></td>
                     <td><span class="journey-state <?= e($row['journey_class']) ?>"><?= e($row['journey_label']) ?></span></td>
                     <td><?= e($row['project'] ?? '-') ?></td>
                 </tr>
             <?php endforeach; ?>
-            <?php if (!$rows): ?><tr><td colspan="13" class="text-center text-muted py-4">No hay jornadas para este trabajador en el periodo seleccionado.</td></tr><?php endif; ?>
+            <?php if (!$rows): ?><tr><td colspan="<?= $personalView ? 14 : 15 ?>" class="text-center text-muted py-4">No hay jornadas para este trabajador en el periodo seleccionado.</td></tr><?php endif; ?>
             </tbody>
         </table>
     </div>
+
+    <?php if ($totalPages > 1): ?>
+    <nav class="report-pagination" aria-label="Páginas del detalle diario">
+        <span>Mostrando <?= (($currentPage - 1) * $rowsPerPage) + 1 ?>–<?= min($currentPage * $rowsPerPage, $totalRows) ?> de <?= $totalRows ?> registros</span>
+        <div class="report-pagination-actions">
+            <?php if ($currentPage > 1): ?><a class="btn btn-outline-secondary btn-sm" href="?<?= e($query) ?>&amp;pagina=<?= $currentPage - 1 ?>#detalle-diario">Anterior</a><?php endif; ?>
+            <span>Página <?= $currentPage ?> de <?= $totalPages ?></span>
+            <?php if ($currentPage < $totalPages): ?><a class="btn btn-outline-secondary btn-sm" href="?<?= e($query) ?>&amp;pagina=<?= $currentPage + 1 ?>#detalle-diario">Siguiente</a><?php endif; ?>
+        </div>
+    </nav>
+    <?php endif; ?>
 
     <?php if ($trips): ?>
     <div class="individual-report-section-title mt-4"><h3>Desplazamientos laborales</h3><p>Recorridos realizados entre lugares durante la jornada laboral.</p></div>

@@ -2,6 +2,75 @@ const BASE_URL = window.APP_URL || window.location.origin;
 const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
 const personalServiceUrl = (file) => `${window.personalServiceBase || BASE_URL + "/servicios"}/${file}`;
 
+const earlyOvertimeToolbar = document.getElementById('reportEarlyOvertimeToolbar');
+if (earlyOvertimeToolbar) {
+    const checkboxes = [...document.querySelectorAll('.early-overtime-day')];
+    const selectAll = document.getElementById('selectAllEarlyOvertime');
+    const saveButton = document.getElementById('saveEarlyOvertimeSelection');
+    const selectionStatus = document.getElementById('earlyOvertimeSelectionStatus');
+    const selectedDays = () => checkboxes.filter((checkbox) => checkbox.checked);
+    const dateLabel = (date) => `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}`;
+    const refreshSelectAll = () => {
+        const pendingChanges = selectedDays().length;
+        selectAll.checked = checkboxes.length > 0 && checkboxes.every((checkbox) => checkbox.checked);
+        selectAll.indeterminate = checkboxes.some((checkbox) => checkbox.checked) && !selectAll.checked;
+        selectAll.disabled = checkboxes.length === 0;
+        saveButton.disabled = pendingChanges === 0;
+        if (selectionStatus) {
+            selectionStatus.textContent = checkboxes.length === 0
+                ? 'No hay entradas anteriores al horario en este período; por eso no hay jornadas para seleccionar.'
+                : pendingChanges === 0
+                    ? `${checkboxes.length} jornada${checkboxes.length === 1 ? '' : 's'} elegible${checkboxes.length === 1 ? '' : 's'}. Marque las fechas que desea autorizar o retirar.`
+                    : `${pendingChanges} cambio${pendingChanges === 1 ? '' : 's'} pendiente${pendingChanges === 1 ? '' : 's'} de guardar.`;
+        }
+    };
+    selectAll.addEventListener('change', () => {
+        checkboxes.forEach((checkbox) => { checkbox.checked = selectAll.checked; });
+        refreshSelectAll();
+    });
+    checkboxes.forEach((checkbox) => checkbox.addEventListener('change', refreshSelectAll));
+    refreshSelectAll();
+    saveButton.addEventListener('click', async () => {
+        const changed = selectedDays();
+        if (!changed.length) return;
+        const toAuthorize = changed.filter((checkbox) => checkbox.dataset.authorized !== '1').map((checkbox) => checkbox.value);
+        const toRevoke = changed.filter((checkbox) => checkbox.dataset.authorized === '1').map((checkbox) => checkbox.value);
+        const lines = [];
+        if (toAuthorize.length) lines.push(`Autorizar entrada anticipada: ${toAuthorize.map(dateLabel).join(', ')}.`);
+        if (toRevoke.length) lines.push(`Retirar autorización: ${toRevoke.map(dateLabel).join(', ')}.`);
+        lines.push('Solo las jornadas autorizadas contabilizarán el tiempo anterior a su horario de entrada. Las horas extra posteriores a la salida se calculan para todos.');
+        const confirmation = await Swal.fire({
+            icon: 'question',
+            title: 'Confirmar horas extra de entrada',
+            text: lines.join('\n\n'),
+            showCancelButton: true,
+            confirmButtonText: 'Guardar cambios',
+            cancelButtonText: 'Revisar selección',
+            confirmButtonColor: '#2563eb',
+            customClass: { popup: 'report-early-overtime-confirmation' },
+        });
+        if (!confirmation.isConfirmed) return;
+        const body = new FormData();
+        body.append('csrf_token', csrf);
+        body.append('worker_id', earlyOvertimeToolbar.dataset.workerId);
+        body.append('date_from', earlyOvertimeToolbar.dataset.dateFrom);
+        body.append('date_to', earlyOvertimeToolbar.dataset.dateTo);
+        body.append('selected_dates', JSON.stringify(checkboxes.filter((checkbox) => (checkbox.dataset.authorized === '1') !== checkbox.checked).map((checkbox) => checkbox.value)));
+        body.append('changed_dates', JSON.stringify(changed.map((checkbox) => checkbox.value)));
+        saveButton.disabled = true;
+        try {
+            const response = await fetch(`${BASE_URL}/servicios/control_personal/guardar_autorizaciones_horas_extra_entrada.php`, { method: 'POST', body });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo guardar la selección.');
+            await Swal.fire({ icon: 'success', title: 'Selección guardada', text: 'Las jornadas autorizadas quedaron registradas.', timer: 1800, showConfirmButton: false });
+            window.location.reload();
+        } catch (error) {
+            Swal.fire('Atención', error.message || 'No se pudo guardar la selección.', 'warning');
+            refreshSelectAll();
+        }
+    });
+}
+
 const attendanceReportNoteForm = document.getElementById('attendanceReportNoteForm');
 if (attendanceReportNoteForm) {
     attendanceReportNoteForm.addEventListener('submit', async (event) => {
@@ -82,7 +151,9 @@ function initAttendanceMatrixDetail() {
         manualAuditReason: document.getElementById('matrixManualAuditReason'),
         manualLocked: document.getElementById('matrixManualLocked'),
         manualLockedMessage: document.getElementById('matrixManualLockedMessage'),
-        adminMarkOpen: document.getElementById('matrixAdminMarkOpen')
+        adminMarkOpen: document.getElementById('matrixAdminMarkOpen'),
+        permitExitEdit: document.getElementById('matrixPermitExitEdit'),
+        allowTodayExit: document.getElementById('matrixAllowTodayExit')
     };
     const adminMarkModalElement = document.getElementById('attendanceAdminMarkModal');
     const adminMarkForm = document.getElementById('attendanceAdminMarkForm');
@@ -128,12 +199,20 @@ function initAttendanceMatrixDetail() {
                 typeField.querySelector('[value="salida"]').disabled = !hasEntry || hasExit;
                 typeField.value = hasEntry ? 'salida' : 'entrada';
                 document.getElementById('adminMarkWorkerId').value = cell.dataset.workerId || '';
+                const locationsResponse = await fetch(`${window.APP_URL}/servicios/control_personal/listar_lugares_marcacion_trabajador.php?worker_id=${encodeURIComponent(cell.dataset.workerId || '')}`);
+                const locationsData = await locationsResponse.json();
+                if (!locationsResponse.ok || !locationsData.ok) throw new Error(locationsData.message || 'No se pudieron cargar los lugares autorizados.');
+                const allowedLocationIds = new Set(locationsData.locations.map((location) => String(location.id)));
+                Array.from(locationField.options).forEach((option) => {
+                    option.disabled = option.value !== '' && !allowedLocationIds.has(option.value);
+                    option.hidden = option.disabled;
+                });
                 document.getElementById('adminMarkDate').value = cell.dataset.dateIso || '';
                 document.getElementById('adminMarkWorkerLabel').textContent = `${cell.dataset.worker || ''} · ${cell.dataset.date || ''}`;
                 document.getElementById('adminMarkTime').value = new Date().toTimeString().slice(0, 5);
                 document.getElementById('adminMarkSchedule').value = hasEntry ? (cell.dataset.entryScheduleId || cell.dataset.scheduleId || '') : (cell.dataset.scheduleId || '');
                 const suggestedLocationId = hasEntry ? (cell.dataset.exitLocationId || '') : (cell.dataset.entryLocationId || '');
-                locationField.value = locationField.querySelector(`option[value="${suggestedLocationId}"]`) ? suggestedLocationId : '';
+                locationField.value = allowedLocationIds.has(suggestedLocationId) ? suggestedLocationId : '';
                 document.getElementById('adminMarkProject').value = hasEntry ? (cell.dataset.entryProjectId || '') : '';
                 document.getElementById('adminMarkReason').value = '';
                 adminMarkForm.querySelector('[name="attendance_result"][value="puntual"]').checked = true;
@@ -188,7 +267,8 @@ function initAttendanceMatrixDetail() {
     const syncTodayEditFields = (cell) => {
         const sameDayEdit = cell?.dataset.manualLock === 'today' && cell.dataset.manualEnabled === '1';
         [[fields.manualEntry, fields.manualEntryLocation, cell?.dataset.entry], [fields.manualExit, fields.manualExitLocation, cell?.dataset.exit]].forEach(([timeField, locationField, existingTime]) => {
-            const unavailable = fields.manualResultAbsent?.checked || (sameDayEdit && (!existingTime || existingTime === '-'));
+            const isExit = timeField === fields.manualExit;
+            const unavailable = fields.manualResultAbsent?.checked || (sameDayEdit && (isExit ? fields.allowTodayExit?.value !== '1' : (!existingTime || existingTime === '-')));
             timeField.disabled = unavailable;
             locationField.disabled = unavailable;
             timeField.closest('.attendance-mark-input').classList.toggle('attendance-mark-input-disabled', unavailable);
@@ -196,6 +276,26 @@ function initAttendanceMatrixDetail() {
         });
         syncManualLocationRequirements();
     };
+    fields.permitExitEdit?.addEventListener('click', () => {
+        const cell = fields.adminMarkOpen?._selectedCell;
+        if (!cell || cell.dataset.manualLock !== 'today' || cell.dataset.entry === '-') return;
+        const editing = fields.allowTodayExit.value === '1';
+        fields.allowTodayExit.value = editing ? '0' : '1';
+        if (editing) {
+            fields.manualExit.value = cell.dataset.exit && cell.dataset.exit !== '-' ? cell.dataset.exit : '';
+            fields.manualExitLocation.value = cell.dataset.exitLocationId || '';
+            if (window.jQuery && jQuery.fn.select2 && jQuery(fields.manualExitLocation).hasClass('select2-hidden-accessible')) {
+                jQuery(fields.manualExitLocation).trigger('change.select2');
+            }
+        }
+        fields.permitExitEdit.classList.toggle('btn-outline-danger', !editing);
+        fields.permitExitEdit.classList.toggle('btn-outline-primary', editing);
+        fields.permitExitEdit.innerHTML = editing
+            ? '<i class="fa-solid fa-pen me-1"></i>Permitir editar'
+            : '<i class="fa-solid fa-xmark me-1"></i>Cancelar edición';
+        syncTodayEditFields(cell);
+        if (!editing) fields.manualExit.focus();
+    });
     const openDetail = (cell) => {
         if (fields.adminMarkOpen) fields.adminMarkOpen._selectedCell = cell;
         fields.date.textContent = cell.dataset.date || '';
@@ -216,6 +316,10 @@ function initAttendanceMatrixDetail() {
             fields.manualDate.value = cell.dataset.dateIso || '';
             fields.manualEntry.value = cell.dataset.entry && cell.dataset.entry !== '-' ? cell.dataset.entry : '';
             fields.manualExit.value = cell.dataset.exit && cell.dataset.exit !== '-' ? cell.dataset.exit : '';
+            fields.allowTodayExit.value = '0';
+            fields.permitExitEdit.classList.remove('btn-outline-danger');
+            fields.permitExitEdit.classList.add('btn-outline-primary');
+            fields.permitExitEdit.innerHTML = '<i class="fa-solid fa-pen me-1"></i>Permitir editar';
             const isAbsentResult = cell.dataset.code === 'F';
             const isLateResult = cell.dataset.code === 'T' || cell.dataset.code === 'ATSA';
             fields.manualResultPunctual.checked = !isLateResult && !isAbsentResult;
@@ -246,6 +350,7 @@ function initAttendanceMatrixDetail() {
 
         const manualAllowed = cell.dataset.manualEnabled === '1';
         if (manualForm) manualForm.classList.toggle('d-none', !manualAllowed);
+        fields.permitExitEdit?.classList.toggle('d-none', !(manualAllowed && cell.dataset.manualLock === 'today' && cell.dataset.entry !== '-'));
         if (fields.manualLocked) {
             fields.manualLocked.classList.toggle('d-none', manualAllowed);
             fields.adminMarkOpen?.classList.toggle('d-none', cell.dataset.manualLock !== 'today' || cell.dataset.exit !== '-');

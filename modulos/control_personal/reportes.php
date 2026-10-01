@@ -14,7 +14,12 @@ if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom)) $dateFrom = $defaultFrom;
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateTo)) $dateTo = $today;
 if ($dateFrom > $dateTo) [$dateFrom, $dateTo] = [$dateTo, $dateFrom];
 if (!in_array($status, marking_report_allowed_statuses(), true)) $status = '';
-$rows = marking_report_build($dateFrom, $dateTo, $workerId, $companyId, $locationId, $status);
+$rowsPerPage = 20;
+$totalRows = marking_report_count($dateFrom, $dateTo, $workerId, $companyId, $locationId, $status);
+$totalPages = max(1, (int) ceil($totalRows / $rowsPerPage));
+$currentPage = min($totalPages, max(1, (int) ($_GET['pagina'] ?? 1)));
+$rows = marking_report_build($dateFrom, $dateTo, $workerId, $companyId, $locationId, $status,
+    $rowsPerPage, ($currentPage - 1) * $rowsPerPage);
 $catalogs = marking_report_catalogs();
 $exportQuery = http_build_query(['desde' => $dateFrom, 'hasta' => $dateTo, 'trabajador_id' => $workerId,
     'empresa_id' => $companyId, 'punto_id' => $locationId, 'estado' => $status]);
@@ -41,10 +46,10 @@ require __DIR__ . '/../../includes/header.php';
     </div>
 </form>
 
-<div class="work-panel marking-report-panel">
+<div class="work-panel marking-report-panel" id="detalle-marcaciones">
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
         <div><h2 class="mb-1">Detalle de marcaciones</h2><p class="text-muted mb-0">Resultados del <?= e(date('d/m/Y', strtotime($dateFrom))) ?> al <?= e(date('d/m/Y', strtotime($dateTo))) ?>.</p></div>
-        <span class="attendance-summary-count"><?= count($rows) ?> <?= count($rows) === 1 ? 'marcación' : 'marcaciones' ?></span>
+        <span class="attendance-summary-count"><?= $totalRows ?> <?= $totalRows === 1 ? 'marcación' : 'marcaciones' ?></span>
     </div>
     <div class="table-responsive marking-report-table-wrap">
         <table class="table table-hover align-middle dashboard-table marking-report-table">
@@ -60,5 +65,15 @@ require __DIR__ . '/../../includes/header.php';
             </tbody>
         </table>
     </div>
+    <?php if ($totalPages > 1): ?>
+    <nav class="report-pagination" aria-label="Páginas del reporte de marcaciones">
+        <span>Mostrando <?= (($currentPage - 1) * $rowsPerPage) + 1 ?>–<?= min($currentPage * $rowsPerPage, $totalRows) ?> de <?= $totalRows ?> marcaciones</span>
+        <div class="report-pagination-actions">
+            <?php if ($currentPage > 1): ?><a class="btn btn-outline-secondary btn-sm" href="?<?= e($exportQuery) ?>&amp;pagina=<?= $currentPage - 1 ?>#detalle-marcaciones">Anterior</a><?php endif; ?>
+            <span>Página <?= $currentPage ?> de <?= $totalPages ?></span>
+            <?php if ($currentPage < $totalPages): ?><a class="btn btn-outline-secondary btn-sm" href="?<?= e($exportQuery) ?>&amp;pagina=<?= $currentPage + 1 ?>#detalle-marcaciones">Siguiente</a><?php endif; ?>
+        </div>
+    </nav>
+    <?php endif; ?>
 </div>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>

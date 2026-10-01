@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../includes/attendance_location_access.php';
 require_role('Administrador');
 verify_csrf($_POST['csrf_token'] ?? null);
 
@@ -56,11 +57,25 @@ try {
         WHERE s.id=:schedule_id AND s.status=1 LIMIT 1");
     $catalogStmt->execute(['schedule_id'=>$scheduleId,'location_id'=>$locationId,'project_id'=>$projectId]);
     $catalog = $catalogStmt->fetch();
+    if (!attendance_worker_can_use_location($pdo, $workerId, $locationId, $today)) {
+        throw new DomainException('El trabajador no está autorizado en este lugar de marcación. Configure su personal en Lugares de marcación.');
+    }
     if (!$catalog) throw new DomainException('El horario, lugar o proyecto ya no está disponible.');
-    $dayStmt = $pdo->prepare('SELECT entry_time,entry_end,exit_time,exit_start FROM attendance_schedule_days WHERE schedule_id=:schedule AND day_of_week=:day AND status=1 LIMIT 1');
+    $dayStmt = $pdo->prepare('SELECT entry_time,entry_start,entry_end,exit_time,exit_start FROM attendance_schedule_days WHERE schedule_id=:schedule AND day_of_week=:day AND status=1 LIMIT 1');
     $dayStmt->execute(['schedule'=>$scheduleId,'day'=>(int)date('N')]);
     $scheduleDay = $dayStmt->fetch();
     if (!$scheduleDay) throw new DomainException('El horario no tiene una jornada configurada para hoy.');
+    if ($type === 'entrada') {
+        $officialEntry = substr((string) ($scheduleDay['entry_time'] ?: $scheduleDay['entry_start']), 0, 5);
+        $earliestEntry = substr((string) ($scheduleDay['entry_start'] ?: $scheduleDay['entry_time']), 0, 5);
+        $earliestTimestamp = strtotime($today . ' ' . $earliestEntry);
+        $markTimestamp = strtotime($today . ' ' . $time);
+        if ($earliestTimestamp === false || $markTimestamp === false) throw new DomainException('La ventana de entrada del horario no es válida.');
+        if ($earliestEntry > $officialEntry) $earliestTimestamp -= 86400;
+        if ($markTimestamp < $earliestTimestamp) {
+            throw new DomainException('Este horario permite marcar entrada desde las ' . $earliestEntry . '. Ajuste «Puede marcar antes» en la plantilla si necesita una entrada más temprana.');
+        }
+    }
 
     $marksStmt = $pdo->prepare('SELECT id,mark_type,mark_time,assignment_id,schedule_id FROM attendance_marks WHERE worker_id=:worker AND mark_date=:date ORDER BY marked_at,id FOR UPDATE');
     $marksStmt->execute(['worker'=>$workerId,'date'=>$today]);

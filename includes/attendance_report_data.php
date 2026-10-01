@@ -78,6 +78,38 @@ function attendance_report_signed_minutes(string $start, string $end): int
     return (int) floor(($endTimestamp - $startTimestamp) / 60);
 }
 
+/** @return array{early_eligible: bool, early_minutes: int, exit_minutes: int} */
+function attendance_report_overtime_components(string $scheduledEntry, string $scheduledExit, ?string $actualEntry, ?string $actualExit, bool $earlyAuthorized): array
+{
+    $result = ['early_eligible' => false, 'early_minutes' => 0, 'exit_minutes' => 0];
+    if ($scheduledEntry === '' || $scheduledExit === '') return $result;
+
+    $day = strtotime('2000-01-01 00:00:00');
+    $entryStart = strtotime('2000-01-01 ' . $scheduledEntry);
+    $exitStart = strtotime('2000-01-01 ' . $scheduledExit);
+    $entryMark = $actualEntry ? strtotime('2000-01-01 ' . $actualEntry) : false;
+    $exitMark = $actualExit ? strtotime('2000-01-01 ' . $actualExit) : false;
+    if ($day === false || $entryStart === false || $exitStart === false) return $result;
+
+    $overnight = $exitStart <= $entryStart;
+    if ($overnight) {
+        $exitStart += 86400;
+        // En una jornada nocturna, las marcaciones de madrugada pertenecen al día siguiente.
+        if ($entryMark !== false && $entryMark < $entryStart && $entryMark - $day < 43200) $entryMark += 86400;
+        if ($exitMark !== false && $exitMark < $entryStart && $exitMark - $day < 43200) $exitMark += 86400;
+    }
+    if ($exitMark !== false && $entryMark !== false && $exitMark < $entryMark) $exitMark += 86400;
+
+    $result['early_eligible'] = $entryMark !== false && $entryMark < $entryStart;
+    if ($earlyAuthorized && $result['early_eligible']) {
+        $result['early_minutes'] = (int) floor(($entryStart - $entryMark) / 60);
+    }
+    if ($exitMark !== false) {
+        $result['exit_minutes'] = max(0, (int) floor(($exitMark - ($exitStart + 15 * 60)) / 60));
+    }
+    return $result;
+}
+
 function attendance_report_note(int $workerId, string $dateFrom, string $dateTo): ?array
 {
     try {
@@ -269,6 +301,18 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
     } catch (Throwable $error) {
         $manualDayOverrides = [];
     }
+    $earlyOvertimeAuthorized = [];
+    if ($workerId > 0) {
+        try {
+            $authorizationStmt = db()->prepare('SELECT work_date FROM attendance_early_overtime_authorizations WHERE worker_id = :worker_id AND work_date BETWEEN :date_from AND :date_to AND is_authorized = 1');
+            $authorizationStmt->execute(['worker_id' => $workerId, 'date_from' => $dateFrom, 'date_to' => $dateTo]);
+            foreach ($authorizationStmt->fetchAll() as $authorization) {
+                $earlyOvertimeAuthorized[(string) $authorization['work_date']] = true;
+            }
+        } catch (Throwable $error) {
+            // El reporte sigue disponible mientras se instala la migración de autorizaciones.
+        }
+    }
     $calendarEvents = attendance_calendar_events_between($dateFrom, $dateTo);
     $rows = [];
     $periodStart = new DateTimeImmutable($dateFrom);
@@ -376,6 +420,9 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
             $entryToleranceMinutes = 0;
             $toleranceObservation = '';
             $overtimeMinutes = 0;
+            $earlyOvertimeMinutes = 0;
+            $exitOvertimeMinutes = 0;
+            $earlyOvertimeEligible = false;
             $scheduleLabel = '-';
             if ($scheduleDay) {
                 $officialEntry = (string) ($scheduleDay['entry_time'] ?? $scheduleDay['entry_start'] ?? '');
@@ -406,21 +453,19 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 if ($scheduleDay && !empty($scheduleDay['break_start']) && !empty($scheduleDay['break_end'])) {
                     $workedMinutes = max(0, $workedMinutes - attendance_report_diff_minutes((string) $scheduleDay['break_start'], (string) $scheduleDay['break_end']));
                 }
-                if ($scheduleDay) {
-                    $officialEntry = (string) ($scheduleDay['entry_time'] ?? $scheduleDay['entry_start'] ?? '');
-                    $officialExit = (string) ($scheduleDay['exit_time'] ?? $scheduleDay['exit_start'] ?? '');
-                    $actualEntry = (string) $entry['mark_time'];
-                    $actualExit = (string) $exit['mark_time'];
-                    $officialEntryTs = strtotime('2000-01-01 ' . $officialEntry);
-                    $officialExitTs = strtotime('2000-01-01 ' . $officialExit);
-                    $actualEntryTs = strtotime('2000-01-01 ' . $actualEntry);
-                    $actualExitTs = strtotime('2000-01-01 ' . $actualExit);
-                    if ($officialEntryTs !== false && $officialExitTs !== false && $actualEntryTs !== false && $actualExitTs !== false) {
-                        if ($officialExitTs < $officialEntryTs) $officialExitTs += 86400;
-                        if ($actualExitTs < $actualEntryTs) $actualExitTs += 86400;
-                        $overtimeMinutes = max(0, (int) floor(($actualExitTs - $officialExitTs) / 60));
-                    }
-                }
+            }
+            if ($scheduleDay && ($entry || $exit)) {
+                $components = attendance_report_overtime_components(
+                    (string) ($scheduleDay['entry_time'] ?? $scheduleDay['entry_start'] ?? ''),
+                    (string) ($scheduleDay['exit_time'] ?? $scheduleDay['exit_start'] ?? ''),
+                    $entry ? (string) $entry['mark_time'] : null,
+                    $exit ? (string) $exit['mark_time'] : null,
+                    isset($earlyOvertimeAuthorized[$date])
+                );
+                $earlyOvertimeEligible = $components['early_eligible'];
+                $earlyOvertimeMinutes = $components['early_minutes'];
+                $exitOvertimeMinutes = $components['exit_minutes'];
+                $overtimeMinutes = $earlyOvertimeMinutes + $exitOvertimeMinutes;
             }
 
             $latestManualComment = $latestManualComments[$id][$date][$aid] ?? null;
@@ -459,6 +504,7 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 'entry_administrative_reason' => (string) ($entry['administrative_reason'] ?? ''),
                 'exit_administrative_reason' => (string) ($exit['administrative_reason'] ?? ''),
                 'schedule' => $scheduleLabel,
+                'scheduled_entry' => $hasSchedule ? attendance_report_time($scheduleDay['entry_time'] ?? $scheduleDay['entry_start'] ?? null) : '-',
                 'tolerance_minutes' => $hasSchedule ? max(0,(int)($scheduleDay['tolerance_minutes'] ?? 0)) : null,
                 'location' => $journeyLocations,
                 'entry_location' => $entryLocation, 'exit_location' => $exitLocation,
@@ -466,6 +512,10 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 'journey_key' => $journeyKey, 'journey_label' => $journey['label'], 'journey_class' => $journey['class'],
                 'worked_minutes' => $workedMinutes, 'scheduled_minutes' => $scheduledMinutes,
                 'late_minutes' => $lateMinutes, 'overtime_minutes' => $overtimeMinutes,
+                'early_overtime_eligible' => $earlyOvertimeEligible,
+                'early_overtime_authorized' => isset($earlyOvertimeAuthorized[$date]),
+                'early_overtime_minutes' => $earlyOvertimeMinutes,
+                'exit_overtime_minutes' => $exitOvertimeMinutes,
                 'project' => $manualOverride ? '-' : (trim((string) ($entry['mark_project'] ?? $exit['mark_project'] ?? $assignment['activity'] ?? '')) ?: '-'),
                 'observation' => $observation,
                 'is_workday' => $hasSchedule && !$isNonWorking,
@@ -490,16 +540,39 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 'entry'=>'-', 'exit'=>'-', 'entry_administrative'=>false, 'exit_administrative'=>false,
                 'entry_administrative_actor'=>'', 'exit_administrative_actor'=>'',
                 'entry_administrative_reason'=>'', 'exit_administrative_reason'=>'',
-                'schedule'=>'-', 'tolerance_minutes'=>null, 'location'=>'-',
+                'schedule'=>'-', 'scheduled_entry'=>'-', 'tolerance_minutes'=>null, 'location'=>'-',
                 'entry_location'=>'-', 'exit_location'=>'-',
                 'state_key'=>'absent', 'state_code'=>$state['code'],
                 'state_label'=>$state['label'], 'state_class'=>$state['class'],
                 'journey_key'=>null, 'journey_label'=>'-', 'journey_class'=>'',
                 'worked_minutes'=>0, 'scheduled_minutes'=>0, 'late_minutes'=>0, 'overtime_minutes'=>0,
+                'early_overtime_eligible'=>false, 'early_overtime_authorized'=>isset($earlyOvertimeAuthorized[$date]),
+                'early_overtime_minutes'=>0, 'exit_overtime_minutes'=>0,
                 'project'=>'-', 'observation'=>(string) ($override['reason'] ?? '-'), 'is_workday'=>true,
             ];
         }
     }
+
+    // La autorización se concede por trabajador y fecha: una entrada anticipada no debe duplicarse
+    // cuando el reporte contiene varias asignaciones para la misma jornada.
+    $bestEarlyRowByDay = [];
+    foreach ($rows as $index => &$row) {
+        $minutes = (int) ($row['early_overtime_minutes'] ?? 0);
+        if ($minutes <= 0) continue;
+        $key = (int) $row['worker_id'] . '|' . (string) $row['date'];
+        if (isset($bestEarlyRowByDay[$key])) {
+            $previousIndex = $bestEarlyRowByDay[$key];
+            if ($minutes <= (int) $rows[$previousIndex]['early_overtime_minutes']) {
+                $row['early_overtime_minutes'] = 0;
+                $row['overtime_minutes'] = (int) $row['exit_overtime_minutes'];
+                continue;
+            }
+            $rows[$previousIndex]['early_overtime_minutes'] = 0;
+            $rows[$previousIndex]['overtime_minutes'] = (int) $rows[$previousIndex]['exit_overtime_minutes'];
+        }
+        $bestEarlyRowByDay[$key] = $index;
+    }
+    unset($row);
 
     usort($rows, static function (array $a, array $b): int {
         $dateOrder = strcmp((string) $b['date'], (string) $a['date']);
@@ -523,7 +596,7 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
             ];
         }
     }
-    $summary = ['workdays' => 0, 'attendances' => 0, 'late' => 0, 'absent' => 0, 'leaves' => 0, 'vacations' => 0, 'worked_minutes' => 0, 'late_minutes' => 0, 'overtime_minutes' => 0, 'completed' => 0];
+    $summary = ['workdays' => 0, 'attendances' => 0, 'late' => 0, 'absent' => 0, 'leaves' => 0, 'vacations' => 0, 'worked_minutes' => 0, 'late_minutes' => 0, 'early_overtime_minutes' => 0, 'exit_overtime_minutes' => 0, 'overtime_minutes' => 0, 'completed' => 0];
     foreach ($individualRows as $row) {
         if ($row['is_workday']) $summary['workdays']++;
         if (in_array($row['state_key'], ['attended', 'late', 'early_exit', 'late_early_exit', 'incomplete'], true)) $summary['attendances']++;
@@ -534,6 +607,8 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
         if ($row['journey_key'] === 'completed') $summary['completed']++;
         $summary['worked_minutes'] += $row['worked_minutes'];
         $summary['late_minutes'] += $row['late_minutes'];
+        $summary['early_overtime_minutes'] += $row['early_overtime_minutes'];
+        $summary['exit_overtime_minutes'] += $row['exit_overtime_minutes'];
         $summary['overtime_minutes'] += $row['overtime_minutes'];
     }
     $summary['punctuality'] = $summary['attendances'] > 0 ? round((($summary['attendances'] - $summary['late']) / $summary['attendances']) * 100, 1) : 0;

@@ -5,37 +5,6 @@ function attendance_location_access_condition(string $locationAlias = 'l'): stri
 {
     return "(
         (
-            {$locationAlias}.personnel_access_configured=0
-            AND (
-                EXISTS (
-                    SELECT 1 FROM attendance_assignments automatic_assignment
-                    WHERE automatic_assignment.location_id={$locationAlias}.id
-                      AND automatic_assignment.worker_id=:automatic_assignment_worker
-                      AND automatic_assignment.status=1
-                      AND automatic_assignment.valid_from<=:automatic_date
-                      AND (automatic_assignment.valid_until IS NULL OR automatic_assignment.valid_until>=:automatic_date_until)
-                )
-                OR EXISTS (
-                    SELECT 1 FROM attendance_marks automatic_mark
-                    WHERE automatic_mark.location_id={$locationAlias}.id
-                      AND automatic_mark.worker_id=:automatic_mark_worker
-                )
-                OR (
-                    NOT EXISTS (
-                        SELECT 1 FROM attendance_assignments any_assignment
-                        WHERE any_assignment.location_id={$locationAlias}.id
-                          AND any_assignment.status=1
-                          AND any_assignment.valid_from<=:automatic_any_date
-                          AND (any_assignment.valid_until IS NULL OR any_assignment.valid_until>=:automatic_any_date_until)
-                    )
-                    AND NOT EXISTS (
-                        SELECT 1 FROM attendance_marks any_mark
-                        WHERE any_mark.location_id={$locationAlias}.id
-                    )
-                )
-            )
-        )
-        OR (
             {$locationAlias}.personnel_access_configured=1
             AND {$locationAlias}.personnel_access_mode='all'
         )
@@ -61,12 +30,6 @@ function attendance_location_access_params(int $workerId, ?string $date = null):
     $date ??= date('Y-m-d');
 
     return [
-        'automatic_assignment_worker' => $workerId,
-        'automatic_date' => $date,
-        'automatic_date_until' => $date,
-        'automatic_mark_worker' => $workerId,
-        'automatic_any_date' => $date,
-        'automatic_any_date_until' => $date,
         'access_worker' => $workerId,
         'open_worker' => $workerId,
         'open_date' => $date,
