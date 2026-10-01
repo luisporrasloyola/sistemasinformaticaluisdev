@@ -101,6 +101,12 @@ function initAttendanceMatrixDetail() {
             control.closest('.col-sm-6').classList.toggle('d-none', absent);
             control.disabled = absent;
         });
+        ['adminMarkSchedule', 'adminMarkLocation', 'adminMarkProject'].forEach((id) => {
+            const control = document.getElementById(id);
+            if (window.jQuery && jQuery.fn.select2 && jQuery(control).hasClass('select2-hidden-accessible')) {
+                jQuery(control).trigger('change.select2');
+            }
+        });
         document.getElementById('adminMarkResultHelp').classList.toggle('d-none', !absent);
         adminMarkForm.querySelector('button[type="submit"]').textContent = absent ? 'Registrar falta' : 'Guardar marcación';
     };
@@ -111,7 +117,7 @@ function initAttendanceMatrixDetail() {
         fields.adminMarkOpen.dataset.bound = '1';
         fields.adminMarkOpen.addEventListener('click', async () => {
             const cell = fields.adminMarkOpen._selectedCell;
-            if (!cell || cell.dataset.manualLock !== 'today' || cell.dataset.assigned !== '1') return;
+            if (!cell || cell.dataset.manualLock !== 'today') return;
             fields.adminMarkOpen.disabled = true;
             try {
                 const locationField = document.getElementById('adminMarkLocation');
@@ -242,7 +248,7 @@ function initAttendanceMatrixDetail() {
         if (manualForm) manualForm.classList.toggle('d-none', !manualAllowed);
         if (fields.manualLocked) {
             fields.manualLocked.classList.toggle('d-none', manualAllowed);
-            fields.adminMarkOpen?.classList.toggle('d-none', cell.dataset.manualLock !== 'today' || cell.dataset.assigned !== '1' || cell.dataset.exit !== '-');
+            fields.adminMarkOpen?.classList.toggle('d-none', cell.dataset.manualLock !== 'today' || cell.dataset.exit !== '-');
             if (!manualAllowed && fields.manualLockedMessage) {
                 fields.manualLockedMessage.textContent = cell.dataset.manualLock === 'future'
                     ? 'No se pueden registrar correcciones en fechas futuras.'

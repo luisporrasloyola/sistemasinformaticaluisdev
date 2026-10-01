@@ -7361,6 +7361,10 @@ input[type="checkbox"]:active {
 #attendanceAdminMarkModal #adminMarkResultHelp{line-height:1.4}
 #attendanceAdminMarkModal .form-label{margin-bottom:6px;color:#334155;font-size:.82rem;font-weight:700}
 #attendanceAdminMarkModal .form-control,#attendanceAdminMarkModal .form-select{min-height:43px;border-color:#cbd5e1;border-radius:9px;color:#1e293b}
+#attendanceAdminMarkModal .select2-container{width:100%!important}
+#attendanceAdminMarkModal .select2-container--bootstrap4 .select2-selection--single{min-height:43px;border-color:#cbd5e1;border-radius:9px}
+#attendanceAdminMarkModal .select2-container--bootstrap4 .select2-selection--single .select2-selection__rendered{line-height:41px;padding-left:12px;color:#1e293b}
+#attendanceAdminMarkModal .select2-container--bootstrap4 .select2-selection--single .select2-selection__arrow{height:41px}
 #attendanceAdminMarkModal textarea.form-control{min-height:80px;resize:vertical}
 #attendanceAdminMarkModal .form-control:focus,#attendanceAdminMarkModal .form-select:focus{border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.14)}
 #attendanceAdminMarkModal .modal-footer{flex-shrink:0;gap:8px;padding:13px 24px;border-top:1px solid #dbe4f0;background:#fff;box-shadow:0 -8px 20px rgba(15,23,42,.035)}

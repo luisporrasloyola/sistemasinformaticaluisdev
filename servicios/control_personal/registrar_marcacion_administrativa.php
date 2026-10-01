@@ -38,12 +38,6 @@ try {
     if (!$workerStmt->fetchColumn()) throw new DomainException('El trabajador ya no existe.');
 
     if ($attendanceResult === 'falta') {
-        $assignmentStmt = $pdo->prepare('SELECT id FROM attendance_assignments
-            WHERE worker_id=:worker AND status=1 AND valid_from<=:date_from
-              AND (valid_until IS NULL OR valid_until>=:date_until)
-            ORDER BY id DESC LIMIT 1');
-        $assignmentStmt->execute(['worker'=>$workerId,'date_from'=>$today,'date_until'=>$today]);
-        if (!$assignmentStmt->fetchColumn()) throw new DomainException('El trabajador no tiene una asignación activa para hoy.');
         $actorId = (int)(current_user()['id'] ?? 0) ?: null;
         $override = $pdo->prepare("INSERT INTO attendance_manual_day_overrides
             (worker_id, mark_date, attendance_status, reason, adjusted_by_user_id)
@@ -83,12 +77,24 @@ try {
         $assignmentId = (int)$firstEntry['assignment_id'];
     } else {
         $assignmentStmt = $pdo->prepare("SELECT id FROM attendance_assignments
-            WHERE worker_id=:worker AND schedule_id=:schedule AND status=1
+            WHERE worker_id=:worker AND location_id=:location AND schedule_id=:schedule
               AND valid_from<=:date_from AND (valid_until IS NULL OR valid_until>=:date_until)
-            ORDER BY id DESC LIMIT 1");
-        $assignmentStmt->execute(['worker'=>$workerId,'schedule'=>$scheduleId,'date_from'=>$today,'date_until'=>$today]);
+            ORDER BY status DESC,id DESC LIMIT 1");
+        $assignmentStmt->execute(['worker'=>$workerId,'location'=>$locationId,'schedule'=>$scheduleId,'date_from'=>$today,'date_until'=>$today]);
         $assignmentId = (int)$assignmentStmt->fetchColumn();
-        if (!$assignmentId) throw new DomainException('El trabajador no tiene una asignación activa para el horario seleccionado.');
+        if (!$assignmentId) {
+            $createAssignment = $pdo->prepare('INSERT INTO attendance_assignments
+                (worker_id,location_id,schedule_id,activity,instructions,valid_from,valid_until,status,created_by_user_id)
+                VALUES (:worker,:location,:schedule,:activity,:instructions,:date_from,:date_until,0,:user)');
+            $createAssignment->execute([
+                'worker'=>$workerId,'location'=>$locationId,'schedule'=>$scheduleId,
+                'activity'=>$catalog['project_name'],
+                'instructions'=>'Registro generado desde marcación administrativa.',
+                'date_from'=>$today,'date_until'=>$today,
+                'user'=>(int)(current_user()['id'] ?? 0) ?: null,
+            ]);
+            $assignmentId = (int)$pdo->lastInsertId();
+        }
     }
 
     $limit = $type === 'entrada'

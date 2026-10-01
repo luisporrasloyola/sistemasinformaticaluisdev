@@ -475,6 +475,32 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
         }
     }
 
+    $reportedDays = [];
+    foreach ($rows as $row) $reportedDays[(int) $row['worker_id']][(string) $row['date']] = true;
+    foreach ($workers as $worker) {
+        $id = (int) $worker['id'];
+        foreach ($manualDayOverrides[$id] ?? [] as $date => $override) {
+            if (isset($reportedDays[$id][$date])) continue;
+            $weekday = (int) (new DateTimeImmutable($date))->format('N');
+            $state = attendance_report_state('absent');
+            $rows[] = [
+                'worker_id'=>$id, 'date'=>$date, 'weekday'=>$weekdayLabels[$weekday],
+                'assignment_id'=>0, 'worker'=>(string) $worker['full_name'],
+                'document'=>(string) $worker['document_number'], 'company'=>(string) ($worker['company'] ?? ''),
+                'entry'=>'-', 'exit'=>'-', 'entry_administrative'=>false, 'exit_administrative'=>false,
+                'entry_administrative_actor'=>'', 'exit_administrative_actor'=>'',
+                'entry_administrative_reason'=>'', 'exit_administrative_reason'=>'',
+                'schedule'=>'-', 'tolerance_minutes'=>null, 'location'=>'-',
+                'entry_location'=>'-', 'exit_location'=>'-',
+                'state_key'=>'absent', 'state_code'=>$state['code'],
+                'state_label'=>$state['label'], 'state_class'=>$state['class'],
+                'journey_key'=>null, 'journey_label'=>'-', 'journey_class'=>'',
+                'worked_minutes'=>0, 'scheduled_minutes'=>0, 'late_minutes'=>0, 'overtime_minutes'=>0,
+                'project'=>'-', 'observation'=>(string) ($override['reason'] ?? '-'), 'is_workday'=>true,
+            ];
+        }
+    }
+
     usort($rows, static function (array $a, array $b): int {
         $dateOrder = strcmp((string) $b['date'], (string) $a['date']);
         if ($dateOrder !== 0) return $dateOrder;

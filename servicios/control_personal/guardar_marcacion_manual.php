@@ -90,9 +90,16 @@ foreach (['entrada' => [$entryTime, $entryLocationId], 'salida' => [$exitTime, $
     if (!$locationStmt->fetchColumn()) manual_response(['ok' => false, 'message' => 'Seleccione un lugar de marcación de ' . $type . ' válido.'], 422);
 }
 
-$stmt = $pdo->prepare("SELECT * FROM attendance_assignments WHERE worker_id=:worker AND valid_from<=:date1
-    AND (valid_until IS NULL OR valid_until>=:date2) ORDER BY status DESC,valid_from DESC,id DESC LIMIT 1");
-$stmt->execute(['worker' => $workerId, 'date1' => $markDate, 'date2' => $markDate]);
+$stmt = $sameDay
+    ? $pdo->prepare("SELECT aa.* FROM attendance_marks am
+        JOIN attendance_assignments aa ON aa.id=am.assignment_id
+        WHERE am.worker_id=:worker AND am.mark_date=:date1
+        ORDER BY (am.mark_type='entrada') DESC,am.mark_time,am.id LIMIT 1")
+    : $pdo->prepare("SELECT * FROM attendance_assignments WHERE worker_id=:worker AND valid_from<=:date1
+        AND (valid_until IS NULL OR valid_until>=:date2) ORDER BY status DESC,valid_from DESC,id DESC LIMIT 1");
+$assignmentParams = ['worker' => $workerId, 'date1' => $markDate];
+if (!$sameDay) $assignmentParams['date2'] = $markDate;
+$stmt->execute($assignmentParams);
 $assignment = $stmt->fetch();
 if (!$assignment) manual_response(['ok' => false, 'message' => 'El trabajador no tiene una asignación aplicable para esa fecha.'], 409);
 
