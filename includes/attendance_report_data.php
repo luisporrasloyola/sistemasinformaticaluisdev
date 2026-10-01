@@ -150,7 +150,9 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
         $ids = array_map(static fn(array $worker): int => (int) $worker['id'], $workers);
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
         $stmt = db()->prepare("SELECT aa.*, aa.valid_from AS assignment_start_date,
-                COALESCE(aa.valid_until, DATE(aa.deactivated_at)) AS assignment_end_date,
+                CASE WHEN aa.deactivated_at IS NOT NULL
+                    THEN LEAST(COALESCE(aa.valid_until, DATE(aa.deactivated_at)), DATE(aa.deactivated_at))
+                    ELSE aa.valid_until END AS assignment_end_date,
                 s.name AS schedule_name, l.name AS location_name, l.address AS location_address
             FROM attendance_assignments aa
             JOIN attendance_schedules s ON s.id = aa.schedule_id
@@ -323,45 +325,67 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
         $id = (int) $worker['id'];
         $workerAssignments = $assignmentsByWorker[$id] ?? [];
         if (!$workerAssignments) continue;
-        $assignmentStart = new DateTimeImmutable((string) $workerAssignments[0]['assignment_start_date']);
+        $assignmentStart = new DateTimeImmutable((string) min(array_column($workerAssignments, 'assignment_start_date')));
         $cursor = $assignmentStart > $periodStart ? $assignmentStart : $periodStart;
 
         while ($cursor <= $periodEnd) {
             $date = $cursor->format('Y-m-d');
             $weekday = (int) $cursor->format('N');
 
-            $dateAssignments = [];
             $markedAssignmentsMap = $marksByWorkerAndDateAndAssignment[$id][$date] ?? [];
             $dateProgramsMap = $programsByWorkerDateAssignment[$id][$date] ?? [];
-            if ($dateProgramsMap) {
-                foreach (array_keys($dateProgramsMap) as $aid) if (isset($assignmentsById[$aid])) $dateAssignments[] = $assignmentsById[$aid];
+            $chosenAssignment = null;
+            $dailyMarks = [];
+            $entryAssignmentId = null;
+            $exitAssignmentId = null;
+            foreach ($markedAssignmentsMap as $markedAssignmentId => $assignmentMarks) {
+                if (!isset($assignmentsById[$markedAssignmentId])) continue;
+                if (isset($assignmentMarks['entrada']) &&
+                    (!isset($dailyMarks['entrada']) || $assignmentMarks['entrada']['mark_time'] < $dailyMarks['entrada']['mark_time'])) {
+                    $dailyMarks['entrada'] = $assignmentMarks['entrada'];
+                    $entryAssignmentId = $markedAssignmentId;
+                }
+                if (isset($assignmentMarks['salida']) &&
+                    (!isset($dailyMarks['salida']) || $assignmentMarks['salida']['mark_time'] > $dailyMarks['salida']['mark_time'])) {
+                    $dailyMarks['salida'] = $assignmentMarks['salida'];
+                    $exitAssignmentId = $markedAssignmentId;
+                }
             }
-            if ($markedAssignmentsMap) {
-                foreach (array_keys($markedAssignmentsMap) as $aid) {
-                    if (isset($assignmentsById[$aid]) && !in_array($assignmentsById[$aid], $dateAssignments, true)) {
-                        $dateAssignments[] = $assignmentsById[$aid];
+            $markedAssignmentId = $entryAssignmentId ?? $exitAssignmentId;
+            if ($markedAssignmentId !== null) {
+                $chosenAssignment = $assignmentsById[$markedAssignmentId];
+            } elseif ($dateProgramsMap) {
+                foreach ($dateProgramsMap as $programAssignmentId => $programCandidate) {
+                    if (!isset($assignmentsById[$programAssignmentId])) continue;
+                    if ($chosenAssignment === null || (int) $programCandidate['id'] > (int) ($dateProgramsMap[(int) $chosenAssignment['id']]['id'] ?? 0)) {
+                        $chosenAssignment = $assignmentsById[$programAssignmentId];
                     }
                 }
             }
 
-            if (empty($dateAssignments)) {
+            if ($chosenAssignment === null) {
                 foreach ($workerAssignments as $candidate) {
-                    if ((string) $candidate['assignment_start_date'] > $date) break;
+                    if ((int) $candidate['status'] !== 1 || (string) $candidate['assignment_start_date'] > $date) continue;
                     $candidateEnd = (string) ($candidate['assignment_end_date'] ?? '');
                     if ($candidateEnd === '' || $date <= $candidateEnd) {
-                        $dateAssignments[] = $candidate;
+                        if ($chosenAssignment === null
+                            || (string) $candidate['assignment_start_date'] > (string) $chosenAssignment['assignment_start_date']
+                            || ((string) $candidate['assignment_start_date'] === (string) $chosenAssignment['assignment_start_date']
+                                && (int) $candidate['id'] > (int) $chosenAssignment['id'])) {
+                            $chosenAssignment = $candidate;
+                        }
                     }
                 }
             }
 
-            if (empty($dateAssignments)) {
+            if ($chosenAssignment === null) {
                 $cursor = $cursor->modify('+1 day');
                 continue;
             }
 
-            foreach ($dateAssignments as $assignment) {
+            foreach ([$chosenAssignment] as $assignment) {
                 $aid = (int) $assignment['id'];
-                $marks = $markedAssignmentsMap[$aid] ?? [];
+                $marks = $dailyMarks;
                 $entry = $marks['entrada'] ?? null;
                 $exit = $marks['salida'] ?? null;
                 $manualOverride = $manualDayOverrides[$id][$date] ?? null;

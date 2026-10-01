@@ -41,7 +41,7 @@ $summaryRows[] = xlsx_row(13, [xlsx_cell(1, 13, 'Puntualidad', 8), xlsx_cell(2, 
 $summaryRows[] = xlsx_row(14, [xlsx_cell(1, 14, 'Horas extras totales', 8), xlsx_cell(2, 14, attendance_report_minutes_label((int) $summary['overtime_minutes']), 8), xlsx_cell(3, 14, 'Entrada autorizada', 8), xlsx_cell(4, 14, attendance_report_minutes_label((int) $summary['early_overtime_minutes']), 8), xlsx_cell(5, 14, 'Extra por salida (+15 min)', 8), xlsx_cell(6, 14, attendance_report_minutes_label((int) $summary['exit_overtime_minutes']), 8)], 28);
 $summaryRows[] = xlsx_row(16, [xlsx_cell(1, 16, 'OBSERVACIÓN GENERAL DEL RESPONSABLE', 1)], 22);
 $summaryRows[] = xlsx_row(17, [xlsx_cell(1, 17, $note['observation'] ?? 'Sin observaciones.', 9)], 45);
-$headers = ['Fecha', 'Día', 'Horario', 'Tolerancia', 'Lugar de entrada', 'Lugar de salida', 'Entrada', 'Salida', 'Tardanza', 'Horas extras (total / entrada / salida)', 'Horas trabajadas', 'Estado de asistencia', 'Estado de jornada', 'Proyecto'];
+$headers = ['Fecha', 'Día', 'Horario', 'Tolerancia', 'Proyecto', 'Lugar de entrada', 'Lugar de salida', 'Entrada', 'Salida', 'Tardanza', 'Horas extras (total / entrada / salida)', 'Horas trabajadas', 'Estado de asistencia', 'Estado de jornada'];
 $summaryRows[] = xlsx_row(19, [xlsx_cell(1, 19, 'DETALLE DIARIO DE ASISTENCIA', 1)], 24);
 $headerCells = [];
 foreach ($headers as $index => $header) $headerCells[] = xlsx_cell($index + 1, 20, $header, 1);
@@ -54,14 +54,14 @@ foreach ($rows as $row) {
     foreach ($dayTrips as $trip) $entryRoute .= "\n→ " . (string) $trip['first_destination'];
     $entryLabel = $row['entry'] . ($row['entry_administrative'] ? ' | Administrativa; por ' . ($row['entry_administrative_actor'] ?: 'Administrador') . '; motivo: ' . ($row['entry_administrative_reason'] ?: '-') : '');
     $exitLabel = $row['exit'] . ($row['exit_administrative'] ? ' | Administrativa; por ' . ($row['exit_administrative_actor'] ?: 'Administrador') . '; motivo: ' . ($row['exit_administrative_reason'] ?: '-') : '');
-    $values = [date('d/m/Y', strtotime($row['date'])), $row['weekday'], $row['schedule'], $row['tolerance_minutes'] !== null ? $row['tolerance_minutes'].' min' : '-', $entryRoute, $row['exit_location'], $entryLabel, $exitLabel,
+    $values = [date('d/m/Y', strtotime($row['date'])), $row['weekday'], $row['schedule'], $row['tolerance_minutes'] !== null ? $row['tolerance_minutes'].' min' : '-', $row['project'] ?? '-', $entryRoute, $row['exit_location'], $entryLabel, $exitLabel,
         $row['late_minutes'] ? attendance_report_minutes_label((int) $row['late_minutes']) : '-',
         $row['overtime_minutes'] ? 'Total: ' . attendance_report_minutes_label((int) $row['overtime_minutes']) . "\nEntrada: " . attendance_report_minutes_label((int) $row['early_overtime_minutes']) . "\nSalida: " . attendance_report_minutes_label((int) $row['exit_overtime_minutes']) : '-',
         $row['entry'] !== '-' && $row['exit'] !== '-' ? attendance_report_minutes_label((int) $row['worked_minutes']) : '-',
-        $row['state_code'], $row['journey_label'], $row['project'] ?? '-'];
+        $row['state_code'], $row['journey_label']];
     $cells = [];
-    foreach ($values as $index => $value) $cells[] = xlsx_cell($index + 1, $excelRow, $value, $index === 11 ? $stateStyle : 9);
-    $detailHeight = max((mb_strlen((string) $values[13]) > 42 || $row['entry_administrative'] || $row['exit_administrative']) ? 38 : 25, $row['overtime_minutes'] > 0 ? 54 : 25, 17 * (count($dayTrips) + 1));
+    foreach ($values as $index => $value) $cells[] = xlsx_cell($index + 1, $excelRow, $value, $index === 12 ? $stateStyle : 9);
+    $detailHeight = max((mb_strlen((string) $values[4]) > 42 || $row['entry_administrative'] || $row['exit_administrative']) ? 38 : 25, $row['overtime_minutes'] > 0 ? 54 : 25, 17 * (count($dayTrips) + 1));
     $summaryRows[] = xlsx_row($excelRow, $cells, $detailHeight);
     $excelRow++;
 }
@@ -88,7 +88,7 @@ if ($trips) {
 }
 $lastRow = max(21, $excelRow - 1);
 $mergeCount = $trips ? 8 : 7;
-$sheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:N' . $lastRow . '"/><sheetViews><sheetView workbookViewId="0" showGridLines="0" zoomScale="90"/></sheetViews><cols><col min="1" max="1" width="21" customWidth="1"/><col min="2" max="2" width="16" customWidth="1"/><col min="3" max="3" width="24" customWidth="1"/><col min="4" max="4" width="14" customWidth="1"/><col min="5" max="6" width="25" customWidth="1"/><col min="7" max="8" width="46" customWidth="1"/><col min="9" max="9" width="18" customWidth="1"/><col min="10" max="10" width="30" customWidth="1"/><col min="11" max="11" width="19" customWidth="1"/><col min="12" max="12" width="36" customWidth="1"/><col min="13" max="13" width="25" customWidth="1"/><col min="14" max="14" width="42" customWidth="1"/></cols><sheetData>' . implode('', $summaryRows) . '</sheetData><mergeCells count="'.$mergeCount.'"><mergeCell ref="A1:F1"/><mergeCell ref="A4:F4"/><mergeCell ref="A8:F8"/><mergeCell ref="A12:F12"/><mergeCell ref="A16:F16"/><mergeCell ref="A17:F17"/><mergeCell ref="A19:N19"/>'.$extraMerge.'</mergeCells></worksheet>';
+$sheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:N' . $lastRow . '"/><sheetViews><sheetView workbookViewId="0" showGridLines="0" zoomScale="90"/></sheetViews><cols><col min="1" max="1" width="21" customWidth="1"/><col min="2" max="2" width="16" customWidth="1"/><col min="3" max="3" width="24" customWidth="1"/><col min="4" max="4" width="14" customWidth="1"/><col min="5" max="5" width="42" customWidth="1"/><col min="6" max="7" width="25" customWidth="1"/><col min="8" max="9" width="46" customWidth="1"/><col min="10" max="10" width="18" customWidth="1"/><col min="11" max="11" width="30" customWidth="1"/><col min="12" max="12" width="19" customWidth="1"/><col min="13" max="13" width="25" customWidth="1"/><col min="14" max="14" width="25" customWidth="1"/></cols><sheetData>' . implode('', $summaryRows) . '</sheetData><mergeCells count="'.$mergeCount.'"><mergeCell ref="A1:F1"/><mergeCell ref="A4:F4"/><mergeCell ref="A8:F8"/><mergeCell ref="A12:F12"/><mergeCell ref="A16:F16"/><mergeCell ref="A17:F17"/><mergeCell ref="A19:N19"/>'.$extraMerge.'</mergeCells></worksheet>';
 
 $content = xlsx_package($sheet);
 $safeName = trim((string) preg_replace('/[^a-z0-9_-]+/i', '_', (string) $worker['full_name']), '_');
