@@ -17,11 +17,16 @@ if ($workerId <= 0) {
 }
 
 $stmt = db()->prepare("SELECT am.id, am.assignment_id, am.mark_date, am.marked_at, am.mark_type, am.distance_meters,
-        am.final_status, am.photo_path, w.full_name, l.name AS location_name, p.name AS project_name
+        am.final_status, am.photo_path, am.location_status, audit.reason AS administrative_reason,
+        actor.name AS administrative_actor, w.full_name, l.name AS location_name, p.name AS project_name
     FROM attendance_marks am
     JOIN workers w ON w.id = am.worker_id
     JOIN attendance_locations l ON l.id = am.location_id
     LEFT JOIN attendance_projects p ON p.id = am.project_id
+    LEFT JOIN attendance_manual_adjustments audit ON audit.id = (
+        SELECT MIN(a.id) FROM attendance_manual_adjustments a WHERE a.attendance_mark_id = am.id
+    ) AND am.location_status = 'registro_administrativo'
+    LEFT JOIN users actor ON actor.id = audit.adjusted_by_user_id
     WHERE am.worker_id = :worker_id
       AND NOT EXISTS (
           SELECT 1
@@ -56,6 +61,9 @@ foreach ($rawMarks as $row) {
         'photo_path' => $row['photo_path'] ? (string) $row['photo_path'] : null,
         'location' => (string) $row['location_name'],
         'project' => (string) ($row['project_name'] ?? ''),
+        'administrative' => $row['location_status'] === 'registro_administrativo',
+        'administrative_actor' => (string) ($row['administrative_actor'] ?? ''),
+        'administrative_reason' => (string) ($row['administrative_reason'] ?? ''),
     ];
     if ((string) $row['mark_type'] === 'entrada') {
         $grouped[$dateKey]['entry'] = $mark;

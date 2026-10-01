@@ -9,6 +9,19 @@ function attendance_report_time(?string $time): string
     return $time ? substr($time, 0, 5) : '-';
 }
 
+function attendance_report_trips_by_date(array $trips): array
+{
+    $byDate = [];
+    foreach ($trips as $trip) {
+        $byDate[(string) $trip['trip_date']][] = $trip;
+    }
+    foreach ($byDate as &$dayTrips) {
+        usort($dayTrips, static fn (array $a, array $b): int => strcmp((string) $a['started_at'], (string) $b['started_at']));
+    }
+    unset($dayTrips);
+    return $byDate;
+}
+
 function attendance_report_minutes_label(int $minutes): string
 {
     $minutes = max(0, $minutes);
@@ -148,9 +161,15 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
     $quickAssignmentIds = [];
     $markParams = ['date_from' => $dateFrom, 'date_to' => $dateTo];
     $markSql = 'SELECT am.assignment_id, am.worker_id, am.mark_date, am.mark_type, am.mark_time, am.project_id,
-        am.schedule_status, am.final_status, am.observations, l.name AS mark_location, p.name AS mark_project
+        am.schedule_status, am.final_status, am.observations, am.location_status,
+        audit.reason AS administrative_reason, actor.name AS administrative_actor,
+        l.name AS mark_location, p.name AS mark_project
         FROM attendance_marks am JOIN attendance_locations l ON l.id=am.location_id
         LEFT JOIN attendance_projects p ON p.id=am.project_id
+        LEFT JOIN attendance_manual_adjustments audit ON audit.id = (
+            SELECT MIN(a.id) FROM attendance_manual_adjustments a WHERE a.attendance_mark_id = am.id
+        ) AND am.location_status = \'registro_administrativo\'
+        LEFT JOIN users actor ON actor.id = audit.adjusted_by_user_id
         WHERE am.mark_date BETWEEN :date_from AND :date_to';
     if ($workerId > 0) {
         $markSql .= ' AND am.worker_id = :worker_id';
@@ -374,7 +393,10 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                     $entryDelayMinutes = max(0, attendance_report_signed_minutes($officialEntry, (string) $entry['mark_time']));
                     $entryToleranceMinutes = max(0,(int)($scheduleDay['tolerance_minutes'] ?? 0));
                     $lateMinutes = $entryDelayMinutes > $entryToleranceMinutes ? $entryDelayMinutes : 0;
-                    if ($entryDelayMinutes > 0 && $lateMinutes === 0) {
+                    if (($entry['location_status'] ?? '') === 'registro_administrativo' && ($entry['final_status'] ?? '') === 'puntual') {
+                        $lateMinutes = 0;
+                    }
+                    if ($entryDelayMinutes > 0 && $entryDelayMinutes <= $entryToleranceMinutes && $lateMinutes === 0) {
                         $toleranceObservation = 'Puntual: llegó dentro de los '.$entryToleranceMinutes.' min de tolerancia (utilizó '.$entryDelayMinutes.' min)';
                     }
                 }
@@ -420,8 +442,8 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
             }
             $state = attendance_report_state($stateKey);
             $journey = attendance_report_journey_state($journeyKey);
-            $entryLocation = $manualOverride ? '-' : (string) ($entry['mark_location'] ?? $assignment['location_name'] ?? '-');
-            $exitLocation = $manualOverride ? '-' : (string) ($exit['mark_location'] ?? $entryLocation);
+            $entryLocation = $manualOverride ? '-' : (string) ($entry['mark_location'] ?? '-');
+            $exitLocation = $manualOverride ? '-' : (string) ($exit['mark_location'] ?? '-');
             $journeyLocations = $entryLocation === $exitLocation ? $entryLocation : $entryLocation . ' → ' . $exitLocation;
             $rows[] = [
                 'worker_id' => $id, 'date' => $date, 'weekday' => $weekdayLabels[$weekday],
@@ -430,6 +452,12 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 'company' => (string) ($worker['company'] ?? ''),
                 'entry' => attendance_report_time($entry['mark_time'] ?? null),
                 'exit' => attendance_report_time($exit['mark_time'] ?? null),
+                'entry_administrative' => ($entry['location_status'] ?? '') === 'registro_administrativo',
+                'exit_administrative' => ($exit['location_status'] ?? '') === 'registro_administrativo',
+                'entry_administrative_actor' => (string) ($entry['administrative_actor'] ?? ''),
+                'exit_administrative_actor' => (string) ($exit['administrative_actor'] ?? ''),
+                'entry_administrative_reason' => (string) ($entry['administrative_reason'] ?? ''),
+                'exit_administrative_reason' => (string) ($exit['administrative_reason'] ?? ''),
                 'schedule' => $scheduleLabel,
                 'tolerance_minutes' => $hasSchedule ? max(0,(int)($scheduleDay['tolerance_minutes'] ?? 0)) : null,
                 'location' => $journeyLocations,

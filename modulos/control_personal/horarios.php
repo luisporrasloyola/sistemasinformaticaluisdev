@@ -3,14 +3,17 @@ require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
 require_module_access('control_personal.horarios');
 
-$schedules = db()->query('SELECT * FROM attendance_schedules WHERE status = 1 ORDER BY name')->fetchAll();
+$showHidden = ($_GET['view'] ?? 'active') === 'hidden';
+$scheduleStatus = $showHidden ? 0 : 1;
+$hiddenScheduleCount = (int) db()->query('SELECT COUNT(*) FROM attendance_schedules WHERE status=0')->fetchColumn();
+$schedules = db()->query("SELECT * FROM attendance_schedules WHERE status = {$scheduleStatus} ORDER BY name")->fetchAll();
 $selectedScheduleId = (int) ($_GET['id'] ?? ($schedules[0]['id'] ?? 0));
 $selectedSchedule = null;
 $scheduleDays = [];
 
 if ($selectedScheduleId > 0) {
-    $stmt = db()->prepare('SELECT * FROM attendance_schedules WHERE id = :id AND status = 1');
-    $stmt->execute(['id' => $selectedScheduleId]);
+    $stmt = db()->prepare('SELECT * FROM attendance_schedules WHERE id = :id AND status = :status');
+    $stmt->execute(['id' => $selectedScheduleId, 'status' => $scheduleStatus]);
     $selectedSchedule = $stmt->fetch();
 
     if ($selectedSchedule) {
@@ -76,7 +79,14 @@ require __DIR__ . '/../../includes/header.php';
         <h1>Plantillas de horarios</h1>
         <p>Define reglas semanales reutilizables para programar al personal por fechas.</p>
     </div>
-    <button class="btn btn-primary" type="button" id="newScheduleBtn"><i class="fa-solid fa-plus me-2"></i>Nuevo horario</button>
+    <div class="d-flex flex-wrap gap-2">
+        <?php if ($showHidden): ?>
+            <a class="btn btn-outline-secondary" href="<?= e(APP_URL) ?>/modulos/control_personal/horarios.php"><i class="fa-solid fa-calendar me-2"></i>Ver activos</a>
+        <?php else: ?>
+            <a class="btn btn-outline-secondary" href="<?= e(APP_URL) ?>/modulos/control_personal/horarios.php?view=hidden"><i class="fa-solid fa-eye-slash me-2"></i>Ocultos (<?= $hiddenScheduleCount ?>)</a>
+            <button class="btn btn-primary" type="button" id="newScheduleBtn"><i class="fa-solid fa-plus me-2"></i>Nuevo horario</button>
+        <?php endif; ?>
+    </div>
 </div>
 
 <div class="row g-3" id="weeklyScheduleView">
@@ -86,6 +96,7 @@ require __DIR__ . '/../../includes/header.php';
                 <div class="schedule-picker">
                     <label class="form-label" for="scheduleSelector">Horario seleccionado</label>
                     <form method="get">
+                        <?php if ($showHidden): ?><input type="hidden" name="view" value="hidden"><?php endif; ?>
                         <select class="form-select" id="scheduleSelector" name="id" data-placeholder="Buscar horario" <?= !$schedules ? 'disabled' : '' ?>>
                             <?php if (!$schedules): ?><option>No hay horarios registrados</option><?php endif; ?>
                             <?php foreach ($schedules as $schedule): ?>
@@ -96,7 +107,12 @@ require __DIR__ . '/../../includes/header.php';
                 </div>
                 <?php if ($selectedSchedule): ?>
                     <div class="schedule-selected-actions">
-                        <button class="btn btn-outline-primary js-edit-schedule" type="button" data-id="<?= (int) $selectedSchedule['id'] ?>" data-name="<?= e($selectedSchedule['name']) ?>"><i class="fa-solid fa-pen me-2"></i>Editar nombre</button>
+                        <?php if ($showHidden): ?>
+                            <button class="btn btn-outline-success js-visibility-schedule" type="button" data-action="restore" data-id="<?= (int) $selectedSchedule['id'] ?>"><i class="fa-solid fa-eye me-2"></i>Restaurar</button>
+                        <?php else: ?>
+                            <button class="btn btn-outline-primary js-edit-schedule" type="button" data-id="<?= (int) $selectedSchedule['id'] ?>" data-name="<?= e($selectedSchedule['name']) ?>"><i class="fa-solid fa-pen me-2"></i>Editar nombre</button>
+                            <button class="btn btn-outline-warning js-visibility-schedule" type="button" data-action="hide" data-id="<?= (int) $selectedSchedule['id'] ?>"><i class="fa-solid fa-eye-slash me-2"></i>Ocultar</button>
+                        <?php endif; ?>
                         <button class="btn btn-outline-danger js-delete-schedule" type="button" data-id="<?= (int) $selectedSchedule['id'] ?>"><i class="fa-solid fa-trash me-2"></i>Eliminar</button>
                     </div>
                 <?php endif; ?>
@@ -125,7 +141,7 @@ require __DIR__ . '/../../includes/header.php';
                         <div class="weekly-day <?= $day ? 'weekly-day-configured' : 'weekly-day-empty' ?>">
                             <div class="weekly-day-head">
                                 <strong><?= e($label) ?></strong>
-                                <button class="btn btn-sm btn-outline-primary js-config-schedule-day" type="button"
+                                <?php if (!$showHidden): ?><button class="btn btn-sm btn-outline-primary js-config-schedule-day" type="button"
                                     data-schedule-id="<?= (int) $selectedScheduleId ?>"
                                     data-day="<?= (int) $number ?>"
                                     data-day-label="<?= e($label) ?>"
@@ -133,7 +149,7 @@ require __DIR__ . '/../../includes/header.php';
                                     data-entry-advance="<?= schedule_advance_minutes($day['entry_time'] ?? $day['entry_start'] ?? null, $day['entry_start'] ?? null) ?>"
                                     data-exit-time="<?= e(short_time($day['exit_time'] ?? $day['exit_start'] ?? null)) ?>"
                                     data-tolerance="<?= (int) ($day['tolerance_minutes'] ?? 0) ?>"
-                                    title="Configurar"><i class="fa-solid fa-gear"></i></button>
+                                    title="Configurar"><i class="fa-solid fa-gear"></i></button><?php endif; ?>
                             </div>
                             <?php if ($day): ?>
                                 <div class="schedule-time-block schedule-time-entry"><span>Entrada</span><strong><?= e(short_time($day['entry_time'] ?? $day['entry_start'])) ?></strong><small>Puede marcar desde <?= e(short_time($day['entry_start'])) ?> · Puntual hasta <?= e(short_time($day['entry_end'])) ?></small></div>

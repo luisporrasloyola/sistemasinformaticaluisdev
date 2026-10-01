@@ -61,7 +61,10 @@ function initAttendanceMatrixDetail() {
         status: document.getElementById('matrixDetailStatus'),
         entry: document.getElementById('matrixDetailEntry'),
         exit: document.getElementById('matrixDetailExit'),
-        location: document.getElementById('matrixDetailLocation'),
+        entryLocation: document.getElementById('matrixDetailEntryLocation'),
+        exitLocation: document.getElementById('matrixDetailExitLocation'),
+        entrySource: document.getElementById('matrixDetailEntrySource'),
+        exitSource: document.getElementById('matrixDetailExitSource'),
         incidents: document.getElementById('matrixDetailIncidents'),
         manualWorkerId: document.getElementById('matrixManualWorkerId'),
         manualDate: document.getElementById('matrixManualDate'),
@@ -70,32 +73,137 @@ function initAttendanceMatrixDetail() {
         manualResultPunctual: document.getElementById('matrixManualResultPunctual'),
         manualResultLate: document.getElementById('matrixManualResultLate'),
         manualResultAbsent: document.getElementById('matrixManualResultAbsent'),
-        manualLocation: document.getElementById('matrixManualLocation'),
+        manualEntryLocation: document.getElementById('matrixManualEntryLocation'),
+        manualExitLocation: document.getElementById('matrixManualExitLocation'),
         manualReason: document.getElementById('matrixManualReason'),
         manualAudit: document.getElementById('matrixManualAudit'),
         manualAuditUser: document.getElementById('matrixManualAuditUser'),
         manualAuditDate: document.getElementById('matrixManualAuditDate'),
+        manualAuditReason: document.getElementById('matrixManualAuditReason'),
         manualLocked: document.getElementById('matrixManualLocked'),
-        manualLockedMessage: document.getElementById('matrixManualLockedMessage')
+        manualLockedMessage: document.getElementById('matrixManualLockedMessage'),
+        adminMarkOpen: document.getElementById('matrixAdminMarkOpen')
     };
+    const adminMarkModalElement = document.getElementById('attendanceAdminMarkModal');
+    const adminMarkForm = document.getElementById('attendanceAdminMarkForm');
+    const syncAdminMarkResult = () => {
+        if (!adminMarkForm) return;
+        const typeField = document.getElementById('adminMarkType');
+        const isExit = typeField.value === 'salida';
+        const absent = !isExit && adminMarkForm.querySelector('[name="attendance_result"]:checked')?.value === 'falta';
+        const resultGroup = document.getElementById('adminMarkResultGroup');
+        resultGroup.classList.toggle('d-none', isExit);
+        resultGroup.querySelectorAll('input').forEach((input) => { input.disabled = isExit; });
+        typeField.closest('.mb-3').classList.toggle('d-none', absent);
+        typeField.disabled = absent;
+        ['adminMarkTime', 'adminMarkSchedule', 'adminMarkLocation', 'adminMarkProject'].forEach((id) => {
+            const control = document.getElementById(id);
+            control.closest('.col-sm-6').classList.toggle('d-none', absent);
+            control.disabled = absent;
+        });
+        document.getElementById('adminMarkResultHelp').classList.toggle('d-none', !absent);
+        adminMarkForm.querySelector('button[type="submit"]').textContent = absent ? 'Registrar falta' : 'Guardar marcación';
+    };
+    adminMarkForm?.addEventListener('change', (event) => {
+        if (event.target.matches('[name="attendance_result"], #adminMarkType')) syncAdminMarkResult();
+    });
+    if (fields.adminMarkOpen && adminMarkModalElement && fields.adminMarkOpen.dataset.bound !== '1') {
+        fields.adminMarkOpen.dataset.bound = '1';
+        fields.adminMarkOpen.addEventListener('click', async () => {
+            const cell = fields.adminMarkOpen._selectedCell;
+            if (!cell || cell.dataset.manualLock !== 'today' || cell.dataset.assigned !== '1') return;
+            fields.adminMarkOpen.disabled = true;
+            try {
+                const locationField = document.getElementById('adminMarkLocation');
+                const hasEntry = cell.dataset.entry && cell.dataset.entry !== '-';
+                const hasExit = cell.dataset.exit && cell.dataset.exit !== '-';
+                const typeField = document.getElementById('adminMarkType');
+                typeField.querySelector('[value="entrada"]').disabled = hasEntry;
+                typeField.querySelector('[value="salida"]').disabled = !hasEntry || hasExit;
+                typeField.value = hasEntry ? 'salida' : 'entrada';
+                document.getElementById('adminMarkWorkerId').value = cell.dataset.workerId || '';
+                document.getElementById('adminMarkDate').value = cell.dataset.dateIso || '';
+                document.getElementById('adminMarkWorkerLabel').textContent = `${cell.dataset.worker || ''} · ${cell.dataset.date || ''}`;
+                document.getElementById('adminMarkTime').value = new Date().toTimeString().slice(0, 5);
+                document.getElementById('adminMarkSchedule').value = hasEntry ? (cell.dataset.entryScheduleId || cell.dataset.scheduleId || '') : (cell.dataset.scheduleId || '');
+                const suggestedLocationId = hasEntry ? (cell.dataset.exitLocationId || '') : (cell.dataset.entryLocationId || '');
+                locationField.value = locationField.querySelector(`option[value="${suggestedLocationId}"]`) ? suggestedLocationId : '';
+                document.getElementById('adminMarkProject').value = hasEntry ? (cell.dataset.entryProjectId || '') : '';
+                document.getElementById('adminMarkReason').value = '';
+                adminMarkForm.querySelector('[name="attendance_result"][value="puntual"]').checked = true;
+                syncAdminMarkResult();
+                document.getElementById('adminMarkStatus').innerHTML = `<span class="badge ${hasEntry ? 'text-bg-success' : 'text-bg-secondary'}">${hasEntry ? 'Entrada registrada' : 'Sin marcación de entrada'}</span><span class="badge ${hasExit ? 'text-bg-success' : 'text-bg-secondary'}">${hasExit ? 'Salida registrada' : 'Salida no registrada'}</span>`;
+                modalElement.addEventListener('hidden.bs.modal', () => bootstrap.Modal.getOrCreateInstance(adminMarkModalElement).show(), { once: true });
+                modal.hide();
+            } catch (error) {
+                Swal.fire('No se pudo abrir', error.message || 'Inténtelo nuevamente.', 'warning');
+            } finally {
+                fields.adminMarkOpen.disabled = false;
+            }
+        });
+    }
+    if (adminMarkForm && adminMarkForm.dataset.bound !== '1') {
+        adminMarkForm.dataset.bound = '1';
+        adminMarkForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            if (!adminMarkForm.reportValidity()) return;
+            const button = adminMarkForm.querySelector('button[type="submit"]');
+            const body = new FormData(adminMarkForm);
+            body.append('csrf_token', csrf);
+            button.disabled = true;
+            try {
+                const response = await fetch(`${window.APP_URL}/servicios/control_personal/registrar_marcacion_administrativa.php`, { method: 'POST', body });
+                const data = await response.json();
+                if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo registrar la marcación.');
+                await Swal.fire(data.status === 'falta' ? 'Falta registrada' : 'Marcación registrada', data.message, 'success');
+                window.location.reload();
+            } catch (error) {
+                Swal.fire('No se pudo registrar', error.message || 'Inténtelo nuevamente.', 'warning');
+                button.disabled = false;
+            }
+        });
+    }
 
+    const syncManualLocationRequirements = () => {
+        const absent = fields.manualResultAbsent?.checked;
+        if (fields.manualEntryLocation) fields.manualEntryLocation.setAttribute('aria-required', String(!absent && !!fields.manualEntry?.value));
+        if (fields.manualExitLocation) fields.manualExitLocation.setAttribute('aria-required', String(!absent && !!fields.manualExit?.value));
+    };
     const setManualAbsenceMode = (isAbsent) => {
         modalElement.querySelectorAll('.attendance-mark-input').forEach((container) => {
             container.classList.toggle('attendance-mark-input-disabled', isAbsent);
             container.querySelectorAll('input, select').forEach((control) => { control.disabled = isAbsent; });
         });
-        if (fields.manualLocation && window.jQuery && jQuery.fn.select2 && jQuery(fields.manualLocation).hasClass('select2-hidden-accessible')) {
-            jQuery(fields.manualLocation).trigger('change.select2');
-        }
+        syncManualLocationRequirements();
+        [fields.manualEntryLocation, fields.manualExitLocation].forEach((select) => {
+            if (select && window.jQuery && jQuery.fn.select2 && jQuery(select).hasClass('select2-hidden-accessible')) jQuery(select).trigger('change.select2');
+        });
+    };
+    const syncTodayEditFields = (cell) => {
+        const sameDayEdit = cell?.dataset.manualLock === 'today' && cell.dataset.manualEnabled === '1';
+        [[fields.manualEntry, fields.manualEntryLocation, cell?.dataset.entry], [fields.manualExit, fields.manualExitLocation, cell?.dataset.exit]].forEach(([timeField, locationField, existingTime]) => {
+            const unavailable = fields.manualResultAbsent?.checked || (sameDayEdit && (!existingTime || existingTime === '-'));
+            timeField.disabled = unavailable;
+            locationField.disabled = unavailable;
+            timeField.closest('.attendance-mark-input').classList.toggle('attendance-mark-input-disabled', unavailable);
+            locationField.closest('.attendance-mark-input').classList.toggle('attendance-mark-input-disabled', unavailable);
+        });
+        syncManualLocationRequirements();
     };
     const openDetail = (cell) => {
+        if (fields.adminMarkOpen) fields.adminMarkOpen._selectedCell = cell;
         fields.date.textContent = cell.dataset.date || '';
         fields.worker.textContent = cell.dataset.worker || '';
         fields.company.textContent = cell.dataset.company || 'Sin empresa';
-        fields.status.textContent = cell.dataset.status || 'Sin marcaciones';
+        const code = cell.dataset.code || '-';
+        const summaryCode = code === 'ASA' ? 'A' : (code === 'ATSA' ? 'T' : code);
+        fields.status.textContent = ({ A: 'Asistió', T: 'Tarde', F: 'Faltó' })[summaryCode] || cell.dataset.status || 'Sin marcaciones';
         fields.entry.textContent = cell.dataset.entry || '-';
         fields.exit.textContent = cell.dataset.exit || '-';
-        fields.location.textContent = cell.dataset.location || '-';
+        fields.entryLocation.textContent = cell.dataset.entryLocation || '-';
+        fields.exitLocation.textContent = cell.dataset.exitLocation || '-';
+        fields.entrySource?.classList.toggle('d-none', cell.dataset.entryAdministrative !== '1');
+        fields.exitSource?.classList.toggle('d-none', cell.dataset.exitAdministrative !== '1');
         fields.incidents.textContent = cell.dataset.incidents || 'Sin incidencias';
         if (fields.manualWorkerId) {
             fields.manualWorkerId.value = cell.dataset.workerId || '';
@@ -106,19 +214,27 @@ function initAttendanceMatrixDetail() {
             const isLateResult = cell.dataset.code === 'T' || cell.dataset.code === 'ATSA';
             fields.manualResultPunctual.checked = !isLateResult && !isAbsentResult;
             fields.manualResultLate.checked = isLateResult;
+            const sameDayEdit = cell.dataset.manualLock === 'today' && cell.dataset.manualEnabled === '1';
             fields.manualResultAbsent.checked = isAbsentResult;
             setManualAbsenceMode(isAbsentResult);
-            fields.manualLocation.value = cell.dataset.locationId || '';
-            if (window.jQuery && jQuery.fn.select2 && jQuery(fields.manualLocation).hasClass('select2-hidden-accessible')) {
-                jQuery(fields.manualLocation).trigger('change.select2');
-            }
-            fields.manualReason.value = cell.dataset.manualReason || '';
+            syncTodayEditFields(cell);
+            fields.manualEntryLocation.value = cell.dataset.entryLocationId || '';
+            fields.manualExitLocation.value = cell.dataset.exitLocationId || '';
+            [fields.manualEntryLocation, fields.manualExitLocation].forEach((select) => {
+                if (window.jQuery && jQuery.fn.select2 && jQuery(select).hasClass('select2-hidden-accessible')) jQuery(select).trigger('change.select2');
+            });
+            fields.manualReason.value = '';
             const adjustedBy = (cell.dataset.adjustedBy || '').trim();
             const adjustedAt = (cell.dataset.adjustedAt || '').trim();
             if (fields.manualAudit) {
                 fields.manualAudit.classList.toggle('d-none', adjustedBy === '');
                 fields.manualAuditUser.textContent = adjustedBy;
                 fields.manualAuditDate.textContent = adjustedAt ? 'Actualizado el ' + adjustedAt : '';
+                if (fields.manualAuditReason) {
+                    const reason = (cell.dataset.manualReason || '').trim();
+                    fields.manualAuditReason.textContent = reason ? 'Observación: ' + reason : '';
+                    fields.manualAuditReason.classList.toggle('d-none', reason === '');
+                }
             }
         }
 
@@ -126,32 +242,43 @@ function initAttendanceMatrixDetail() {
         if (manualForm) manualForm.classList.toggle('d-none', !manualAllowed);
         if (fields.manualLocked) {
             fields.manualLocked.classList.toggle('d-none', manualAllowed);
+            fields.adminMarkOpen?.classList.toggle('d-none', cell.dataset.manualLock !== 'today' || cell.dataset.assigned !== '1' || cell.dataset.exit !== '-');
             if (!manualAllowed && fields.manualLockedMessage) {
                 fields.manualLockedMessage.textContent = cell.dataset.manualLock === 'future'
                     ? 'No se pueden registrar correcciones en fechas futuras.'
                     : 'La jornada actual todavía está en curso.';
             }
         }
-        const code = cell.dataset.code || '-';
-        fields.badge.textContent = code;
+        fields.badge.textContent = summaryCode;
         fields.badge.className = 'badge attendance-detail-badge';
-        if (code === 'A') fields.badge.classList.add('detail-badge-ok');
-        else if (code === 'T') fields.badge.classList.add('detail-badge-warning');
-        else if (code === 'ASA') fields.badge.classList.add('detail-badge-early-exit');
-        else if (code === 'ATSA' || code === 'F') fields.badge.classList.add('detail-badge-danger');
+        if (summaryCode === 'A') fields.badge.classList.add('detail-badge-ok');
+        else if (summaryCode === 'T') fields.badge.classList.add('detail-badge-warning');
+        else if (summaryCode === 'F') fields.badge.classList.add('detail-badge-danger');
         else fields.badge.classList.add('detail-badge-neutral');
 
         modal.show();
     };
 
-    fields.manualResultPunctual?.addEventListener('change', () => setManualAbsenceMode(false));
-    fields.manualResultLate?.addEventListener('change', () => setManualAbsenceMode(false));
-    fields.manualResultAbsent?.addEventListener('change', () => setManualAbsenceMode(true));
+    fields.manualResultPunctual?.addEventListener('change', () => { setManualAbsenceMode(false); syncTodayEditFields(fields.adminMarkOpen?._selectedCell); });
+    fields.manualResultLate?.addEventListener('change', () => { setManualAbsenceMode(false); syncTodayEditFields(fields.adminMarkOpen?._selectedCell); });
+    fields.manualResultAbsent?.addEventListener('change', () => { setManualAbsenceMode(true); syncTodayEditFields(fields.adminMarkOpen?._selectedCell); });
+    fields.manualEntry?.addEventListener('change', syncManualLocationRequirements);
+    fields.manualExit?.addEventListener('change', syncManualLocationRequirements);
     const manualForm = document.getElementById('attendanceManualCorrectionForm');
     if (manualForm && manualForm.dataset.bound !== '1') {
         manualForm.dataset.bound = '1';
         manualForm.addEventListener('submit', async (event) => {
             event.preventDefault();
+            syncManualLocationRequirements();
+            if (!manualForm.reportValidity()) return;
+            if (!fields.manualResultAbsent?.checked && fields.manualEntry?.value && !fields.manualEntryLocation?.value) {
+                Swal.fire('Falta el lugar de entrada', 'Seleccione el lugar de marcación de entrada.', 'warning');
+                return;
+            }
+            if (!fields.manualResultAbsent?.checked && fields.manualExit?.value && !fields.manualExitLocation?.value) {
+                Swal.fire('Falta el lugar de salida', 'Seleccione el lugar de marcación de salida.', 'warning');
+                return;
+            }
             const button = manualForm.querySelector('button[type="submit"]');
             const body = new FormData(manualForm);
             body.append('csrf_token', csrf);
@@ -349,9 +476,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const $field = $(this);
             if ($field.hasClass('select2-hidden-accessible')) return;
             const $modal = $field.closest('.modal');
-            const $manualLocation = $field.attr('id') === 'matrixManualLocation'
-                ? $field.closest('.attendance-manual-location')
-                : $();
+            const $manualLocation = $field.closest('#attendanceMatrixDetailModal .attendance-manual-location');
             $field.select2({
                 theme: 'bootstrap4',
                 width: '100%',
@@ -5588,16 +5713,81 @@ function initControlPersonalSchedules() {
         });
     });
 
-    document.querySelectorAll('.js-delete-schedule').forEach((button) => {
+    document.querySelectorAll('.js-visibility-schedule').forEach((button) => {
         button.addEventListener('click', async () => {
-            if (!await confirmAction('¿Eliminar horario?')) return;
+            const restoring = button.dataset.action === 'restore';
+            const decision = await Swal.fire({
+                icon: restoring ? 'question' : 'warning',
+                title: restoring ? '¿Restaurar horario?' : '¿Ocultar horario?',
+                text: restoring ? 'El horario volverá a estar disponible.' : 'El horario dejará de estar disponible. Sus asignaciones, marcaciones, fotos e historial se conservarán.',
+                showCancelButton: true,
+                confirmButtonText: restoring ? 'Restaurar' : 'Ocultar',
+                cancelButtonText: 'Cancelar'
+            });
+            if (!decision.isConfirmed) return;
             const body = new FormData();
             body.append('csrf_token', csrf);
             body.append('id', button.dataset.id || '');
-            const response = await fetch(`${BASE_URL}/servicios/control_personal/eliminar_horario.php`, { method: 'POST', body });
-            const data = await response.json();
-            if (data.ok) window.location.href = `${BASE_URL}/modulos/control_personal/horarios.php`;
-            else Swal.fire('Atención', data.message || 'No se pudo eliminar el horario.', 'warning');
+            body.append('action', button.dataset.action || '');
+            button.disabled = true;
+            try {
+                const response = await fetch(`${BASE_URL}/servicios/control_personal/cambiar_visibilidad_horario.php`, { method: 'POST', body });
+                const data = await response.json();
+                if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo actualizar el horario.');
+                await Swal.fire('Completado', data.message, 'success');
+                window.location.href = `${BASE_URL}/modulos/control_personal/horarios.php${restoring ? '?view=hidden' : ''}`;
+            } catch (error) {
+                Swal.fire('Atención', error.message, 'warning');
+                button.disabled = false;
+            }
+        });
+    });
+
+    document.querySelectorAll('.js-delete-schedule').forEach((button) => {
+        button.addEventListener('click', async () => {
+            button.disabled = true;
+            try {
+                const impactResponse = await fetch(`${BASE_URL}/servicios/control_personal/impacto_eliminar_horario.php?id=${encodeURIComponent(button.dataset.id || '')}&_=${Date.now()}`, { cache: 'no-store' });
+                const impact = await impactResponse.json();
+                if (!impactResponse.ok || !impact.ok) throw new Error(impact.message || 'No se pudo calcular el impacto.');
+                const labels = [
+                    ['days', 'Días configurados'], ['assignments', 'Asignaciones'], ['marks', 'Marcaciones'],
+                    ['photos', 'Fotos y evidencias'], ['programs', 'Programaciones'], ['program_stops', 'Lugares programados'],
+                    ['trips', 'Desplazamientos'], ['trip_stops', 'Paradas de desplazamientos'],
+                    ['completions', 'Trabajos finalizados'], ['adjustments', 'Correcciones manuales'],
+                    ['overrides', 'Configuraciones de jornada']
+                ];
+                const rows = labels.filter(([key]) => Number(impact.counts?.[key] || 0) > 0);
+                const list = rows.length ? `<p>Se eliminarán definitivamente:</p><ul>${rows.map(([key, label]) => `<li><strong>${Number(impact.counts[key])}</strong> ${escapeHtml(label)}</li>`).join('')}</ul>` : '<p>Este horario no tiene registros relacionados.</p>';
+                const decision = await Swal.fire({
+                    icon: 'error',
+                    title: `Eliminar ${escapeHtml(impact.schedule?.name || 'horario')}`,
+                    html: `<div class="text-start">${list}<div class="alert alert-danger mb-0"><strong>Esta acción no se puede deshacer.</strong> Los reportes e historiales perderán estos registros.</div></div>`,
+                    input: 'text', inputLabel: 'Escriba ELIMINAR para confirmar', inputPlaceholder: 'ELIMINAR',
+                    showCancelButton: true, confirmButtonText: 'Eliminar definitivamente', cancelButtonText: 'Cancelar', confirmButtonColor: '#dc3545',
+                    preConfirm: (value) => {
+                        if (String(value || '').trim().toUpperCase() !== 'ELIMINAR') {
+                            Swal.showValidationMessage('Debe escribir ELIMINAR exactamente.');
+                            return false;
+                        }
+                        return value;
+                    }
+                });
+                if (!decision.isConfirmed) return;
+                const body = new FormData();
+                body.append('csrf_token', csrf);
+                body.append('id', button.dataset.id || '');
+                body.append('confirmation', 'ELIMINAR');
+                const response = await fetch(`${BASE_URL}/servicios/control_personal/eliminar_horario.php`, { method: 'POST', body });
+                const data = await response.json();
+                if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo eliminar el horario.');
+                await Swal.fire('Eliminación completada', data.message, 'success');
+                window.location.href = `${BASE_URL}/modulos/control_personal/horarios.php`;
+            } catch (error) {
+                Swal.fire('No se pudo eliminar', error.message, 'warning');
+            } finally {
+                button.disabled = false;
+            }
         });
     });
 

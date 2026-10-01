@@ -22,7 +22,6 @@ function initQuickAttendanceMarking() {
     const mapElement = document.getElementById('markMap');
     const mapEmpty = document.getElementById('markMapEmpty');
     const marksPagination = document.getElementById('recentMarksPagination');
-    const tripsPagination = document.getElementById('recentTripsPagination');
     if (!worker || !location || !schedule || !project || !entryButton || !exitButton || !changeSelectionButton || !camera || !canvas || !mapElement) return;
 
     let state = null;
@@ -37,7 +36,6 @@ function initQuickAttendanceMarking() {
     let currentMarker = null;
     let editingSelection = true;
     let marksPage = 1;
-    let movementsPage = 1;
 
     const selectElements = [location, schedule, project];
     const searchableSelects = new Map();
@@ -72,7 +70,6 @@ function initQuickAttendanceMarking() {
                 activeWorkerId = String(event.params?.data?.id || '').trim();
                 worker.value = activeWorkerId;
                 marksPage = 1;
-                movementsPage = 1;
                 loadState(true);
             });
             workerSearch.on('select2:clear.quickAttendance.worker', () => {
@@ -298,11 +295,10 @@ function initQuickAttendanceMarking() {
     }
     async function loadRecent() {
         const marksBody = document.getElementById('recentAttendanceMarks');
-        const movementsBody = document.getElementById('recentAttendanceTrips');
         if (!selectedWorkerValue()) return;
 
         try {
-            const response = await fetch(`${quickBaseUrl}/servicios/control_personal/listar_marcaciones_recientes.php?worker_id=${encodeURIComponent(selectedWorkerValue())}&marks_page=${marksPage}&movements_page=${movementsPage}&_=${Date.now()}`, { cache: 'no-store' });
+            const response = await fetch(`${quickBaseUrl}/servicios/control_personal/listar_marcaciones_recientes.php?worker_id=${encodeURIComponent(selectedWorkerValue())}&marks_page=${marksPage}&_=${Date.now()}`, { cache: 'no-store' });
             const data = await response.json();
             if (!data.ok) throw new Error(data.message || 'No se pudo cargar la actividad reciente.');
 
@@ -313,7 +309,7 @@ function initQuickAttendanceMarking() {
                     ? journeyMarks.map((mark) => `<tr>
                         <td>${quickEscapeHtml(mark.date)}</td>
                         <td>${quickEscapeHtml(mark.time || '-')}</td>
-                        <td class="fw-semibold ${mark.type === 'Entrada' ? 'text-success' : 'text-primary'}">${mark.type}</td>
+                        <td class="fw-semibold ${mark.type === 'Entrada' ? 'text-success' : 'text-primary'}">${mark.type}${mark.administrative ? '<small class="d-block text-primary">Administrativa</small>' : ''}</td>
                         <td>${quickEscapeHtml(mark.worker || '-')}</td>
                         <td>${quickEscapeHtml(mark.location || '-')}</td>
                         <td>${quickEscapeHtml(mark.project || '-')}</td>
@@ -323,28 +319,10 @@ function initQuickAttendanceMarking() {
                     : '<tr><td colspan="8" class="text-center text-muted py-4">Sin entradas ni salidas recientes.</td></tr>';
             }
 
-            const movements = data.movements || [];
-            if (movementsBody) {
-                movementsBody.innerHTML = movements.length
-                    ? movements.map((movement) => `<tr>
-                        <td>${quickEscapeHtml(movement.date)}</td>
-                        <td>${quickEscapeHtml(movement.start)}</td>
-                        <td>${quickEscapeHtml(movement.end)}</td>
-                        <td>${quickEscapeHtml(movement.duration)}</td>
-                        <td>${quickEscapeHtml(movement.origin)}</td>
-                        <td class="fw-semibold">${quickEscapeHtml(movement.destination)}</td>
-                        <td>${quickEscapeHtml(movement.project || '-')}</td>
-                        <td><span class="badge text-bg-success">${quickEscapeHtml(movement.status || 'Registrado')}</span></td>
-<td>${movement.photo_path ? `<a class="btn btn-sm btn-outline-success" target="_blank" href="${quickBaseUrl}/${quickEscapeHtml(movement.photo_path)}" title="Ver foto de llegada"><i class="fa-regular fa-image"></i></a>` : '-'}</td>
-                    </tr>`).join('')
-                    : '<tr><td colspan="9" class="text-center text-muted py-4">Sin desplazamientos laborales registrados.</td></tr>';
-            }
             marksPage = Number(data.pagination?.marks?.page || 1);
-            movementsPage = Number(data.pagination?.movements?.page || 1);
             renderPagination(marksPagination, data.pagination?.marks, 'marks');
-            renderPagination(tripsPagination, data.pagination?.movements, 'movements');        } catch (error) {
+        } catch (error) {
             if (marksBody) marksBody.innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">No se pudo cargar el historial.</td></tr>';
-            if (movementsBody) movementsBody.innerHTML = '<tr><td colspan="9" class="text-center text-danger py-4">No se pudieron cargar los desplazamientos.</td></tr>';
         }
     }
     async function loadState(resetSelections=false) {
@@ -423,7 +401,7 @@ function initQuickAttendanceMarking() {
         const button=type==='entrada'?entryButton:exitButton;const original=button.innerHTML;button.disabled=true;button.innerHTML='<i class="fa-solid fa-spinner fa-spin me-2"></i>Registrando...';
         try { const [position,photo]=await Promise.all([gps(),cameraPhoto()]);const place=selectedLocation();if(map&&place){const current=[position.coords.latitude,position.coords.longitude];if(!currentMarker)currentMarker=L.marker(current).addTo(map);else currentMarker.setLatLng(current);map.fitBounds(L.latLngBounds([[place.latitude,place.longitude],current]).pad(.3));}
             const body=new FormData();body.append('csrf_token',quickCsrf);body.append('worker_id',selectedWorkerValue());body.append('mark_type',type);body.append('location_id',locationValue);body.append('schedule_id',scheduleValue);body.append('project_id',projectValue);body.append('latitude',position.coords.latitude);body.append('longitude',position.coords.longitude);body.append('accuracy',position.coords.accuracy);body.append('photo_data',photo);body.append('observations','');
-            const response=await fetch(`${quickBaseUrl}/servicios/control_personal/registrar_marcacion.php`,{method:'POST',body});const data=await response.json();if(!data.ok)throw new Error(data.message||'No se pudo registrar la marcación.');stopCamera();state={...(state||{}),has_entry:true,has_exit:type==='salida'};editingSelection=false;marksPage=1;movementsPage=1;renderStatus();await Swal.fire('Marcación registrada',data.message,'success');await loadState(false);
+            const response=await fetch(`${quickBaseUrl}/servicios/control_personal/registrar_marcacion.php`,{method:'POST',body});const data=await response.json();if(!data.ok)throw new Error(data.message||'No se pudo registrar la marcación.');stopCamera();state={...(state||{}),has_entry:true,has_exit:type==='salida'};editingSelection=false;marksPage=1;renderStatus();await Swal.fire('Marcación registrada',data.message,'success');await loadState(false);
         } catch(error){Swal.fire('No se pudo registrar',error.message||String(error),'warning');} finally {stopCamera();button.innerHTML=original;renderStatus();}
     }
     function handlePaginationClick(event) {
@@ -431,12 +409,10 @@ function initQuickAttendanceMarking() {
         if (!button || button.disabled) return;
         const nextPage = Math.max(1, Number(button.dataset.page || 1));
         if (button.dataset.pageType === 'marks') marksPage = nextPage;
-        if (button.dataset.pageType === 'movements') movementsPage = nextPage;
         loadRecent();
     }
     marksPagination?.addEventListener('click', handlePaginationClick);
-    tripsPagination?.addEventListener('click', handlePaginationClick);
-    worker.addEventListener('change',()=>{ activeWorkerId=String(worker.value||'').trim(); marksPage=1; movementsPage=1; loadState(true); });
+    worker.addEventListener('change',()=>{ activeWorkerId=String(worker.value||'').trim(); marksPage=1; loadState(true); });
     selectElements.forEach(select=>select.addEventListener('change',()=>{selectedValues.set(select,String(select.value||''));renderStatus();if(select===location)updateMap();}));
     changeSelectionButton.addEventListener('click',()=>{
         editingSelection = true;

@@ -28,6 +28,8 @@ if ($personalView) {
     $dashboardWorkers = db()->query("SELECT w.id, w.company_id, w.full_name, w.document_number, c.name AS company FROM workers w LEFT JOIN companies c ON c.id = w.company_id ORDER BY w.full_name")->fetchAll();
 }
 $attendanceLocations = db()->query("SELECT id, name FROM attendance_locations WHERE status = 1 ORDER BY name")->fetchAll();
+$adminMarkSchedules = is_admin() ? db()->query("SELECT id, name FROM attendance_schedules WHERE status = 1 ORDER BY name")->fetchAll() : [];
+$adminMarkProjects = is_admin() ? db()->query("SELECT id, name FROM attendance_projects WHERE status = 1 ORDER BY name")->fetchAll() : [];
 
 if ($selectedWorkerId > 0) {
     $selectedWorker = array_values(array_filter(
@@ -115,7 +117,7 @@ $stmt = db()->prepare("SELECT
         SUM(mark_type = 'entrada') AS entradas,
         SUM(mark_type = 'salida') AS salidas,
         SUM(mark_type = 'entrada' AND schedule_status = 'tardanza') AS tardanzas,
-        SUM(within_radius = 0) AS fuera_radio
+        SUM(within_radius = 0 AND location_status NOT IN ('registro_administrativo', 'ajuste_manual')) AS fuera_radio
     FROM attendance_marks
     WHERE mark_date = :today");
 $stmt->execute(['today' => $today]);
@@ -166,7 +168,7 @@ $stmt->execute(['today_entry' => $today, 'today_exit' => $today]);
 $todayRows = $stmt->fetchAll();
 if ($personalView) {
     $todayRows = array_values(array_filter($todayRows, static fn(array $row): bool => (int) $row['worker_id'] === $selectedWorkerId));
-    $ownStats = db()->prepare("SELECT SUM(mark_type = 'entrada') AS entradas, SUM(mark_type = 'salida') AS salidas, SUM(mark_type = 'entrada' AND schedule_status = 'tardanza') AS tardanzas, SUM(within_radius = 0) AS fuera_radio FROM attendance_marks WHERE mark_date = :today AND worker_id = :worker_id");
+    $ownStats = db()->prepare("SELECT SUM(mark_type = 'entrada') AS entradas, SUM(mark_type = 'salida') AS salidas, SUM(mark_type = 'entrada' AND schedule_status = 'tardanza') AS tardanzas, SUM(within_radius = 0 AND location_status NOT IN ('registro_administrativo', 'ajuste_manual')) AS fuera_radio FROM attendance_marks WHERE mark_date = :today AND worker_id = :worker_id");
     $ownStats->execute(['today' => $today, 'worker_id' => $selectedWorkerId]);
     $todayStats = $ownStats->fetch() ?: [];
     $entriesToday = (int) ($todayStats['entradas'] ?? 0);
@@ -250,11 +252,16 @@ $stmt = db()->prepare("SELECT
         c.name AS company,
         aa.schedule_id,
         aa.location_id AS assignment_location_id,
+        aa.valid_from AS assignment_valid_from,
+        aa.valid_until AS assignment_valid_until,
         DATE(aa.created_at) AS assignment_start_date,
         am.mark_date,
         am.mark_type,
         am.mark_time,
+        am.schedule_id AS mark_schedule_id,
+        am.project_id AS mark_project_id,
         am.final_status,
+        am.location_status,
         am.location_id AS mark_location_id,
         l.name AS location_name
     FROM workers w
@@ -289,6 +296,8 @@ foreach ($stmt->fetchAll() as $row) {
         'company_id' => (int) ($row['company_id'] ?? 0),
         'schedule_id' => (int) ($row['schedule_id'] ?? 0),
         'assignment_location_id' => (int) ($row['assignment_location_id'] ?? 0),
+        'assignment_valid_from' => (string) ($row['assignment_valid_from'] ?? ''),
+        'assignment_valid_until' => (string) ($row['assignment_valid_until'] ?? ''),
         'assignment_start_date' => (string) ($row['assignment_start_date'] ?? ''),
         'days' => [],
     ];
@@ -301,8 +310,11 @@ foreach ($stmt->fetchAll() as $row) {
             $matrixRows[$workerId]['days'][$markDate][$markType] = [
                 'time' => cp_time($row['mark_time'] ?? null),
                 'status' => (string) ($row['final_status'] ?? ''),
+                'administrative' => ($row['location_status'] ?? '') === 'registro_administrativo',
                 'location' => (string) ($row['location_name'] ?? ''),
                 'location_id' => (int) ($row['mark_location_id'] ?? 0),
+                'schedule_id' => (int) ($row['mark_schedule_id'] ?? 0),
+                'project_id' => (int) ($row['mark_project_id'] ?? 0),
             ];
         }
     }
@@ -323,7 +335,7 @@ try {
 }
 $manualAdjustmentsByWorkerDate = [];
 try {
-    $manualAuditStmt = db()->prepare("SELECT a.worker_id, a.mark_date, a.created_at, u.name AS administrator
+    $manualAuditStmt = db()->prepare("SELECT a.worker_id, a.mark_date, a.created_at, a.reason, u.name AS administrator
         FROM attendance_manual_adjustments a
         LEFT JOIN users u ON u.id = a.adjusted_by_user_id
         WHERE a.mark_date BETWEEN :date_from AND :date_to
@@ -345,6 +357,7 @@ foreach ($manualDayOverrides as $overrideWorkerId => $overrideDates) {
         $manualAdjustmentsByWorkerDate[$overrideWorkerId][$overrideDate] = [
             'administrator' => $overrideRow['administrator'] ?? '',
             'created_at' => $overrideRow['updated_at'] ?? $overrideRow['created_at'] ?? null,
+            'reason' => $overrideRow['reason'] ?? '',
         ];
     }
 }$matrixSummary = [];
@@ -778,29 +791,35 @@ document.addEventListener('DOMContentLoaded', () => {
                                 ? 'No aplica'
                                 : ($incidents ? implode(' / ', $incidents) : 'Sin incidencias'));
                         $manualAudit = $manualAdjustmentsByWorkerDate[(int) $worker['worker_id']][$cellDate] ?? null;
-                        $manualCorrectionAllowed = is_admin() && $cellDate < $today;
+                        $manualCorrectionAllowed = is_admin() && ($cellDate < $today || ($cellDate === $today && ($entry || $exit)));
                         $entryLocation = (string) ($entry['location'] ?? '');
                         $exitLocation = (string) ($exit['location'] ?? '');
-                        $detailLocation = $entryLocation !== '' && $exitLocation !== '' && $entryLocation !== $exitLocation
-                            ? $entryLocation . ' → ' . $exitLocation
-                            : ($exitLocation ?: ($entryLocation ?: '-'));                        ?>
+                        ?>
                         <td class="<?= e($cellClass) ?> js-attendance-matrix-cell"
                             role="button"
                             tabindex="0"
                             data-date="<?= e(date('d/m/Y', strtotime($cellDate))) ?>"
                             data-date-iso="<?= e($cellDate) ?>"
                             data-worker-id="<?= (int) $worker['worker_id'] ?>"
+                            data-assigned="<?= $isAssignedPeriod && $worker['assignment_valid_from'] <= $cellDate && ($worker['assignment_valid_until'] === '' || $worker['assignment_valid_until'] >= $cellDate) ? '1' : '0' ?>"
+                            data-schedule-id="<?= (int) $worker['schedule_id'] ?>"
                             data-manual-enabled="<?= $manualCorrectionAllowed ? '1' : '0' ?>"
                             data-manual-lock="<?= $cellDate === $today ? 'today' : ($cellDate > $today ? 'future' : '') ?>"
                             data-adjusted-by="<?= e((string) ($manualAudit['administrator'] ?? '')) ?>"
                             data-adjusted-at="<?= $manualAudit ? e(date('d/m/Y H:i', strtotime((string) $manualAudit['created_at']))) : '' ?>"
-                            data-manual-reason="<?= e((string) ($manualOverride['reason'] ?? '')) ?>"
+                            data-manual-reason="<?= e((string) ($manualAudit['reason'] ?? '')) ?>"
                             data-worker="<?= e($worker['name']) ?>"
                             data-company="<?= e($worker['company']) ?>"
                             data-entry="<?= e($entry['time'] ?? '-') ?>"
                             data-exit="<?= e($exit['time'] ?? '-') ?>"
-                            data-location="<?= e($detailLocation) ?>"
-                            data-location-id="<?= (int) ($exit['location_id'] ?? $entry['location_id'] ?? $worker['assignment_location_id']) ?>"
+                            data-entry-location="<?= e($entryLocation ?: '-') ?>"
+                            data-exit-location="<?= e($exitLocation ?: '-') ?>"
+                            data-entry-administrative="<?= !empty($entry['administrative']) ? '1' : '0' ?>"
+                            data-exit-administrative="<?= !empty($exit['administrative']) ? '1' : '0' ?>"
+                            data-entry-location-id="<?= (int) ($entry['location_id'] ?? $worker['assignment_location_id']) ?>"
+                            data-exit-location-id="<?= (int) ($exit['location_id'] ?? $worker['assignment_location_id']) ?>"
+                            data-entry-schedule-id="<?= (int) ($entry['schedule_id'] ?? 0) ?>"
+                            data-entry-project-id="<?= (int) ($entry['project_id'] ?? 0) ?>"
                             data-code="<?= e($attendanceCode ?: attendance_calendar_event_abbreviation($calendarEventType)) ?>"
                             data-status="<?= e(strip_tags($detailLabel)) ?>"
                             data-incidents="<?= e($detailIncidents) ?>"
@@ -913,17 +932,18 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="attendance-detail-person"><span class="attendance-detail-person-icon"><i class="fa-solid fa-user-check"></i></span><div><strong id="matrixDetailWorker"></strong><span id="matrixDetailCompany"></span></div></div>
                         <div class="attendance-detail-status"><span class="badge" id="matrixDetailBadge"></span><strong id="matrixDetailStatus"></strong></div>
                         <dl class="attendance-detail-grid mb-0">
-                            <dt><i class="fa-regular fa-clock"></i> Entrada</dt><dd id="matrixDetailEntry"></dd>
-                            <dt><i class="fa-solid fa-arrow-right-from-bracket"></i> Salida</dt><dd id="matrixDetailExit"></dd>
-                            <dt><i class="fa-solid fa-location-dot"></i> Lugar de marcación</dt><dd id="matrixDetailLocation"></dd>
+                            <dt><i class="fa-regular fa-clock"></i> Entrada</dt><dd><span id="matrixDetailEntry"></span><small class="d-none text-primary" id="matrixDetailEntrySource"> · Registro administrativo</small></dd>
+                            <dt><i class="fa-solid fa-location-dot"></i> Lugar de entrada</dt><dd id="matrixDetailEntryLocation"></dd>
+                            <dt><i class="fa-solid fa-arrow-right-from-bracket"></i> Salida</dt><dd><span id="matrixDetailExit"></span><small class="d-none text-primary" id="matrixDetailExitSource"> · Registro administrativo</small></dd>
+                            <dt><i class="fa-solid fa-location-dot"></i> Lugar de salida</dt><dd id="matrixDetailExitLocation"></dd>
                             <dt><i class="fa-solid fa-circle-info"></i> Incidencias</dt><dd id="matrixDetailIncidents"></dd>
                         </dl>
-                        <?php if (is_admin()): ?><div class="attendance-manual-audit d-none" id="matrixManualAudit"><span><i class="fa-solid fa-shield-halved"></i></span><div><small>Última actualización administrativa</small><strong id="matrixManualAuditUser"></strong><time id="matrixManualAuditDate"></time></div></div><?php endif; ?>
+                        <?php if (is_admin()): ?><div class="attendance-manual-audit d-none" id="matrixManualAudit"><span><i class="fa-solid fa-shield-halved"></i></span><div><small>Última actualización administrativa</small><strong id="matrixManualAuditUser"></strong><time id="matrixManualAuditDate"></time><p class="attendance-manual-audit-reason d-none" id="matrixManualAuditReason"></p></div></div><?php endif; ?>
                     </section>
                     <?php if (is_admin()): ?>
                     <div class="attendance-manual-locked d-none" id="matrixManualLocked" role="status">
                         <span><i class="fa-solid fa-calendar-day"></i></span>
-                        <div><strong>Corrección aún no disponible</strong><p id="matrixManualLockedMessage">La jornada actual todavía está en curso.</p><small>Podrá corregirse a partir del día siguiente.</small></div>
+                        <div><strong>Corrección aún no disponible</strong><p id="matrixManualLockedMessage">La jornada actual todavía está en curso.</p><small>Podrá corregirse a partir del día siguiente.</small><button class="btn btn-outline-primary btn-sm d-none mt-2" type="button" id="matrixAdminMarkOpen"><i class="fa-solid fa-user-clock me-1"></i>Registrar marcación administrativa de hoy</button></div>
                     </div>
                     <form id="attendanceManualCorrectionForm" class="attendance-manual-form">
                         <input type="hidden" name="worker_id" id="matrixManualWorkerId"><input type="hidden" name="mark_date" id="matrixManualDate">
@@ -936,7 +956,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="attendance-manual-fields">
                             <div class="attendance-mark-input"><label class="form-label" for="matrixManualEntry">Primera entrada</label><input class="form-control" type="time" name="entry_time" id="matrixManualEntry"></div>
                             <div class="attendance-mark-input"><label class="form-label" for="matrixManualExit">Última salida</label><input class="form-control" type="time" name="exit_time" id="matrixManualExit"></div>
-                            <div class="attendance-manual-location attendance-mark-input"><label class="form-label" for="matrixManualLocation">Lugar de marcación</label><select class="form-select select2-searchable" name="location_id" id="matrixManualLocation" required data-placeholder="Buscar lugar de marcación" data-no-results="No se encontraron lugares"><option value="">Seleccione un lugar</option><?php foreach ($attendanceLocations as $location): ?><option value="<?= (int) $location['id'] ?>"><?= e($location['name']) ?></option><?php endforeach; ?></select><small class="attendance-location-help">Las ubicaciones ya registradas y los puntos de ruta no serán modificados.</small></div>
+                            <div class="attendance-manual-location attendance-mark-input"><label class="form-label" for="matrixManualEntryLocation">Lugar de marcación de entrada</label><select class="form-select select2-searchable" name="entry_location_id" id="matrixManualEntryLocation" data-placeholder="Buscar lugar de entrada" data-no-results="No se encontraron lugares"><option value="">Seleccione un lugar</option><?php foreach ($attendanceLocations as $location): ?><option value="<?= (int) $location['id'] ?>"><?= e($location['name']) ?></option><?php endforeach; ?></select></div>
+                            <div class="attendance-manual-location attendance-mark-input"><label class="form-label" for="matrixManualExitLocation">Lugar de marcación de salida</label><select class="form-select select2-searchable" name="exit_location_id" id="matrixManualExitLocation" data-placeholder="Buscar lugar de salida" data-no-results="No se encontraron lugares"><option value="">Seleccione un lugar</option><?php foreach ($attendanceLocations as $location): ?><option value="<?= (int) $location['id'] ?>"><?= e($location['name']) ?></option><?php endforeach; ?></select></div>
+                            <small class="attendance-location-help">Los puntos de ruta ya registrados no serán modificados.</small>
                             <div class="attendance-manual-reason"><label class="form-label" for="matrixManualReason">Observación</label><textarea class="form-control" name="reason" id="matrixManualReason" rows="2" maxlength="500" required placeholder="Ej.: El servidor no estuvo disponible durante el ingreso."></textarea></div>
                         </div>
                         <div class="attendance-manual-actions"><small><i class="fa-solid fa-lock"></i> El cambio quedará auditado con su usuario y fecha.</small><button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk me-1"></i> Guardar corrección</button></div>
@@ -950,4 +972,36 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
     </div>
 </div>
+<?php if (is_admin()): ?>
+<div class="modal fade" id="attendanceAdminMarkModal" tabindex="-1" aria-labelledby="attendanceAdminMarkTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable admin-mark-dialog">
+        <form class="modal-content admin-mark-modal" id="attendanceAdminMarkForm">
+            <div class="modal-header">
+                <div><h2 class="modal-title fs-5" id="attendanceAdminMarkTitle">Marcación administrativa de hoy</h2><small class="text-muted" id="adminMarkWorkerLabel"></small></div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+                <div class="modal-body">
+                    <input type="hidden" name="worker_id" id="adminMarkWorkerId">
+                    <input type="hidden" name="mark_date" id="adminMarkDate">
+                    <div class="d-flex flex-wrap gap-2 mb-3" id="adminMarkStatus" aria-live="polite"></div>
+                    <fieldset class="attendance-result-choice" id="adminMarkResultGroup"><legend>Resultado de asistencia</legend><div class="attendance-result-options">
+                        <label class="attendance-result-option result-on-time"><input type="radio" name="attendance_result" value="puntual" checked required><span><i class="fa-solid fa-circle-check"></i><strong>Asistió sin incidencias</strong></span></label>
+                        <label class="attendance-result-option result-late"><input type="radio" name="attendance_result" value="tardanza" required><span><i class="fa-solid fa-clock"></i><strong>Asistió con tardanza</strong></span></label>
+                        <label class="attendance-result-option result-absent"><input type="radio" name="attendance_result" value="falta" required><span><i class="fa-solid fa-user-xmark"></i><strong>Faltó</strong></span></label>
+                    </div></fieldset>
+                    <small class="d-block text-muted mb-3" id="adminMarkResultHelp">La falta se registra sin crear una marcación; las marcaciones existentes se conservan.</small>
+                    <div class="mb-3"><label class="form-label" for="adminMarkType">Tipo de marcación</label><select class="form-select" name="mark_type" id="adminMarkType" required><option value="entrada">Entrada</option><option value="salida">Salida</option></select></div>
+                    <div class="row g-3">
+                        <div class="col-sm-6"><label class="form-label" for="adminMarkTime">Hora</label><input class="form-control" type="time" name="mark_time" id="adminMarkTime" required></div>
+                        <div class="col-sm-6"><label class="form-label" for="adminMarkSchedule">Horario</label><select class="form-select" name="schedule_id" id="adminMarkSchedule" required><option value="">Seleccione un horario</option><?php foreach ($adminMarkSchedules as $schedule): ?><option value="<?= (int) $schedule['id'] ?>"><?= e($schedule['name']) ?></option><?php endforeach; ?></select></div>
+                        <div class="col-sm-6"><label class="form-label" for="adminMarkLocation">Lugar de marcación</label><select class="form-select" name="location_id" id="adminMarkLocation" required><option value="">Seleccione un lugar</option><?php foreach ($attendanceLocations as $location): ?><option value="<?= (int) $location['id'] ?>"><?= e($location['name']) ?></option><?php endforeach; ?></select></div>
+                        <div class="col-sm-6"><label class="form-label" for="adminMarkProject">Proyecto</label><select class="form-select" name="project_id" id="adminMarkProject" required><option value="">Seleccione un proyecto</option><?php foreach ($adminMarkProjects as $project): ?><option value="<?= (int) $project['id'] ?>"><?= e($project['name']) ?></option><?php endforeach; ?></select></div>
+                        <div class="col-12"><label class="form-label" for="adminMarkReason">Motivo</label><textarea class="form-control" name="reason" id="adminMarkReason" rows="2" maxlength="500" required placeholder="Indique por qué el trabajador no pudo marcar personalmente."></textarea></div>
+                    </div>
+                </div>
+                <div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cerrar</button><button class="btn btn-primary" type="submit">Guardar marcación</button></div>
+        </form>
+    </div>
+</div>
+<?php endif; ?>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>

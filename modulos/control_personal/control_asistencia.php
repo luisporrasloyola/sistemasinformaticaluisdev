@@ -97,14 +97,8 @@ require __DIR__ . '/../../includes/header.php';
         <div class="work-panel">
             <div class="mb-3">
                 <h2 class="mb-1">Actividad reciente</h2>
-                <p class="text-muted small mb-0">Consulta las marcaciones y los desplazamientos laborales del trabajador.</p>
+                <p class="text-muted small mb-0">Consulta las marcaciones recientes del trabajador.</p>
             </div>
-            <ul class="nav nav-tabs" id="attendanceActivityTabs" role="tablist">
-                <li class="nav-item" role="presentation"><button class="nav-link active" id="recent-marks-tab" data-bs-toggle="tab" data-bs-target="#recent-marks-pane" type="button" role="tab"><i class="fa-solid fa-clock me-2"></i>Marcaciones recientes</button></li>
-                <li class="nav-item" role="presentation"><button class="nav-link" id="recent-trips-tab" data-bs-toggle="tab" data-bs-target="#recent-trips-pane" type="button" role="tab"><i class="fa-solid fa-route me-2"></i>Desplazamientos laborales</button></li>
-            </ul>
-            <div class="tab-content pt-3">
-            <div class="tab-pane fade show active" id="recent-marks-pane" role="tabpanel" aria-labelledby="recent-marks-tab">
             <div class="table-responsive">
                 <table class="table table-hover align-middle attendance-recent-table">
                     <thead>
@@ -113,7 +107,7 @@ require __DIR__ . '/../../includes/header.php';
                         <th>Hora</th>
                         <th>Tipo</th>
                         <th>Trabajador</th>
-                        <th>Lugar</th>
+                        <th>Lugar de marcación</th>
                         <th>Proyecto</th>
                         <th>Estado</th>
                         <th>Foto</th>
@@ -124,16 +118,7 @@ require __DIR__ . '/../../includes/header.php';
                     </tbody>
                 </table>
                 <div class="attendance-table-pagination" id="recentMarksPagination"></div>
-            </div></div>
-            <div class="tab-pane fade" id="recent-trips-pane" role="tabpanel" aria-labelledby="recent-trips-tab">
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle attendance-recent-table attendance-trips-table">
-                        <thead><tr><th>Fecha</th><th>Inicio</th><th>Fin</th><th>Duración</th><th>Origen</th><th>Destino</th><th>Proyecto</th><th>Estado</th><th>Foto</th></tr></thead>
-                        <tbody id="recentAttendanceTrips"><tr><td colspan="9" class="text-muted text-center py-4">Seleccione un trabajador para consultar sus desplazamientos.</td></tr></tbody>
-                    </table>
-                    <div class="attendance-table-pagination" id="recentTripsPagination"></div>
-                </div>
-            </div></div>
+            </div>
         </div>
     </div>
 </div>

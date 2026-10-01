@@ -8,6 +8,16 @@ function marking_report_time(?string $time): string
     return $time ? substr($time, 0, 5) : '-';
 }
 
+function marking_report_location_label(array $mark): string
+{
+    return (string) ($mark['location_name'] ?? '-');
+}
+
+function marking_report_is_administrative(array $mark): bool
+{
+    return ($mark['location_status'] ?? '') === 'registro_administrativo';
+}
+
 function marking_report_status_label(?string $status): string
 {
     return match ($status) {
@@ -46,6 +56,7 @@ function marking_report_build(string $dateFrom, string $dateTo, int $workerId = 
 
     $sql = "SELECT am.*, w.full_name, w.document_number, c.name AS company,
             l.name AS location_name, l.radius_meters, s.name AS schedule_name,
+            audit.reason AS administrative_reason, actor.name AS administrative_actor,
             CASE WHEN am.mark_type = 'salida' AND am.final_status = 'salida_anticipada'
                 AND EXISTS (SELECT 1 FROM attendance_marks entry_mark
                     WHERE entry_mark.assignment_id = am.assignment_id AND entry_mark.mark_date = am.mark_date
@@ -56,6 +67,10 @@ function marking_report_build(string $dateFrom, string $dateTo, int $workerId = 
         LEFT JOIN companies c ON c.id = w.company_id
         JOIN attendance_locations l ON l.id = am.location_id
         JOIN attendance_schedules s ON s.id = am.schedule_id
+        LEFT JOIN attendance_manual_adjustments audit ON audit.id = (
+            SELECT MIN(a.id) FROM attendance_manual_adjustments a WHERE a.attendance_mark_id = am.id
+        ) AND am.location_status = 'registro_administrativo'
+        LEFT JOIN users actor ON actor.id = audit.adjusted_by_user_id
         WHERE " . implode(' AND ', $conditions)
         . ($status !== '' ? ' HAVING display_status = :status' : '') . ' ORDER BY am.marked_at DESC';
     $stmt = db()->prepare($sql); $stmt->execute($params);
@@ -67,6 +82,6 @@ function marking_report_catalogs(): array
     return [
         'workers' => db()->query("SELECT w.id, w.full_name, w.document_number FROM workers w ORDER BY w.full_name")->fetchAll(),
         'companies' => db()->query('SELECT id, name FROM companies ORDER BY name')->fetchAll(),
-        'locations' => db()->query('SELECT id, name FROM attendance_locations WHERE status = 1 ORDER BY name')->fetchAll(),
+        'locations' => db()->query('SELECT id, name FROM attendance_locations ORDER BY name')->fetchAll(),
     ];
 }

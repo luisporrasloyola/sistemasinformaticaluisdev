@@ -23,6 +23,7 @@ $summary = $report['summary'] ?? [];
 $rows = $report['individual_rows'] ?? [];
 $note = $report['note'] ?? null;
 $trips = $report['trips'] ?? [];
+$tripsByDate = attendance_report_trips_by_date($trips);
 $query = http_build_query(['desde' => $dateFrom, 'hasta' => $dateTo, 'trabajador_id' => $workerId]);
 
 require __DIR__ . '/../../includes/header.php';
@@ -88,7 +89,7 @@ require __DIR__ . '/../../includes/header.php';
         <div><span>Empresa</span><strong><?= e($worker['company'] ?: 'Sin empresa') ?></strong></div>
         <div><span>Cargo</span><strong><?= e($worker['positions'] ?: 'Sin cargo registrado') ?></strong></div>
         <div><span>Horario</span><strong><?= e($assignment['schedule_name'] ?? 'Sin horario asignado') ?></strong></div>
-        <div><span>Lugar de marcación</span><strong><?= e($assignment['location_name'] ?? 'Sin lugar asignado') ?></strong></div>
+        <div><span>Lugar asignado</span><strong><?= e($assignment['location_name'] ?? 'Sin lugar asignado') ?></strong></div>
     </div>
 
     <div class="individual-report-metrics">
@@ -110,12 +111,12 @@ require __DIR__ . '/../../includes/header.php';
     <div class="individual-report-section-title"><h3>Detalle diario</h3><p>Marcaciones y novedades del periodo seleccionado.</p></div>
     <div class="table-responsive">
         <table class="table align-middle individual-report-table">
-            <thead><tr><th>Fecha</th><th>Día</th><th>Horario</th><th>Tolerancia</th><th>Lugar de marcación</th><th>Entrada</th><th>Salida</th><th>Tardanza</th><th>Horas extras</th><th>Estado de asistencia</th><th>Estado de jornada</th><th>Proyecto</th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Día</th><th>Horario</th><th>Tolerancia</th><th>Lugar de entrada</th><th>Lugar de salida</th><th>Entrada</th><th>Salida</th><th>Tardanza</th><th>Horas extras</th><th>Estado de asistencia</th><th>Estado de jornada</th><th>Proyecto</th></tr></thead>
             <tbody>
-            <?php foreach ($rows as $row): ?>
+            <?php foreach ($rows as $row): $dayTrips = $tripsByDate[(string) $row['date']] ?? []; ?>
                 <tr>
-                    <td><?= e(date('d/m/Y', strtotime($row['date']))) ?></td><td><?= e($row['weekday']) ?></td><td class="attendance-time-cell text-nowrap"><?= e($row['schedule']) ?></td><td class="text-nowrap"><?= $row['tolerance_minutes'] !== null ? (int)$row['tolerance_minutes'].' min' : '-' ?></td><td><?= e($row['location']) ?></td>
-                    <td class="attendance-time-cell"><?= e($row['entry']) ?></td><td class="attendance-time-cell"><?= e($row['exit']) ?></td>
+                    <td><?= e(date('d/m/Y', strtotime($row['date']))) ?></td><td><?= e($row['weekday']) ?></td><td class="attendance-time-cell text-nowrap"><?= e($row['schedule']) ?></td><td class="text-nowrap"><?= $row['tolerance_minutes'] !== null ? (int)$row['tolerance_minutes'].' min' : '-' ?></td><td><span class="report-route-inline"><span><?= e($row['entry_location']) ?></span><?php foreach ($dayTrips as $trip): ?><span class="report-route-step"><span class="report-route-arrow" aria-hidden="true">→</span><?= e($trip['first_destination']) ?></span><?php endforeach; ?></span></td><td><?= e($row['exit_location']) ?></td>
+                    <td class="attendance-time-cell"><?= e($row['entry']) ?><?php if ($row['entry_administrative']): ?><small class="d-block text-primary">Administrativa</small><?php endif; ?></td><td class="attendance-time-cell"><?= e($row['exit']) ?><?php if ($row['exit_administrative']): ?><small class="d-block text-primary">Administrativa</small><?php endif; ?></td>
                     <td><?= $row['late_minutes'] > 0 ? e(attendance_report_minutes_label((int) $row['late_minutes'])) : '-' ?></td>
                     <td><?= $row['overtime_minutes'] > 0 ? e(attendance_report_minutes_label((int) $row['overtime_minutes'])) : '-' ?></td>
                     <td><span class="attendance-report-state <?= e($row['state_class']) ?>"><strong><?= e($row['state_code']) ?></strong><?= e($row['state_label']) ?></span></td>
@@ -123,7 +124,7 @@ require __DIR__ . '/../../includes/header.php';
                     <td><?= e($row['project'] ?? '-') ?></td>
                 </tr>
             <?php endforeach; ?>
-            <?php if (!$rows): ?><tr><td colspan="12" class="text-center text-muted py-4">No hay jornadas para este trabajador en el periodo seleccionado.</td></tr><?php endif; ?>
+            <?php if (!$rows): ?><tr><td colspan="13" class="text-center text-muted py-4">No hay jornadas para este trabajador en el periodo seleccionado.</td></tr><?php endif; ?>
             </tbody>
         </table>
     </div>

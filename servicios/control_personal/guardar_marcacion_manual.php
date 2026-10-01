@@ -31,11 +31,13 @@ $markDate = trim((string) ($_POST['mark_date'] ?? ''));
 $entryTime = trim((string) ($_POST['entry_time'] ?? ''));
 $exitTime = trim((string) ($_POST['exit_time'] ?? ''));
 $reason = trim((string) ($_POST['reason'] ?? ''));
-$requestedLocationId = max(0, (int) ($_POST['location_id'] ?? 0));
+$entryLocationId = max(0, (int) ($_POST['entry_location_id'] ?? 0));
+$exitLocationId = max(0, (int) ($_POST['exit_location_id'] ?? 0));
 $attendanceResult = trim((string) ($_POST['attendance_result'] ?? ''));
 
 if (!$workerId || !manual_valid_date($markDate)) manual_response(['ok' => false, 'message' => 'El trabajador o la fecha no son válidos.'], 422);
-if ($markDate >= date('Y-m-d')) manual_response(['ok' => false, 'message' => 'Solo se pueden corregir jornadas anteriores al día actual.'], 409);
+if ($markDate > date('Y-m-d')) manual_response(['ok' => false, 'message' => 'No se pueden corregir jornadas futuras.'], 409);
+$sameDay = $markDate === date('Y-m-d');
 if (!in_array($attendanceResult, ['puntual', 'tardanza', 'falta'], true)) manual_response(['ok' => false, 'message' => 'Seleccione el resultado de la asistencia.'], 422);
 if ($reason === '' || mb_strlen($reason) > 500) manual_response(['ok' => false, 'message' => 'Ingrese el motivo de la corrección.'], 422);
 
@@ -52,6 +54,13 @@ if ($attendanceResult === 'falta') {
         if (!$workerStmt->fetchColumn()) {
             throw new RuntimeException('El trabajador no existe.');
         }
+        if ($sameDay) {
+            $existingMarkStmt = $pdo->prepare('SELECT id FROM attendance_marks WHERE worker_id=:worker AND mark_date=:date LIMIT 1 FOR UPDATE');
+            $existingMarkStmt->execute(['worker' => $workerId, 'date' => $markDate]);
+            if (!$existingMarkStmt->fetchColumn()) {
+                throw new DomainException('Para corregir la asistencia de hoy debe existir una entrada o salida registrada.');
+            }
+        }
         $override = $pdo->prepare("INSERT INTO attendance_manual_day_overrides
             (worker_id, mark_date, attendance_status, reason, adjusted_by_user_id)
             VALUES (:worker, :date, 'falta', :reason, :user)
@@ -62,6 +71,7 @@ if ($attendanceResult === 'falta') {
         manual_response(['ok' => true, 'message' => 'La jornada fue registrada como falta y las marcaciones originales se conservaron.']);
     } catch (Throwable $error) {
         if ($pdo->inTransaction()) $pdo->rollBack();
+        if ($error instanceof DomainException) manual_response(['ok' => false, 'message' => $error->getMessage()], 409);
         manual_response(['ok' => false, 'message' => 'No se pudo registrar la falta. Ejecute la actualización SQL de correcciones manuales.'], 500);
     }
 }
@@ -69,10 +79,16 @@ if ($attendanceResult === 'falta') {
 if ($entryTime === '' && $exitTime === '') manual_response(['ok' => false, 'message' => 'Ingrese al menos la hora de entrada o de salida.'], 422);
 if (($entryTime !== '' && !manual_valid_time($entryTime)) || ($exitTime !== '' && !manual_valid_time($exitTime))) manual_response(['ok' => false, 'message' => 'Ingrese horas válidas.'], 422);
 if ($entryTime !== '' && $exitTime !== '' && $exitTime < $entryTime) manual_response(['ok' => false, 'message' => 'La hora de salida no puede ser anterior a la entrada.'], 422);
+if ($sameDay && (($entryTime !== '' && $entryTime > date('H:i')) || ($exitTime !== '' && $exitTime > date('H:i')))) {
+    manual_response(['ok' => false, 'message' => 'La hora corregida no puede ser futura.'], 422);
+}
 
-$locationStmt = $pdo->prepare('SELECT id, name FROM attendance_locations WHERE id = :id AND status = 1 LIMIT 1');
-$locationStmt->execute(['id' => $requestedLocationId]);
-if (!$locationStmt->fetch()) manual_response(['ok' => false, 'message' => 'Seleccione un lugar de marcación válido.'], 422);
+$locationStmt = $pdo->prepare('SELECT id FROM attendance_locations WHERE id = :id AND status = 1 LIMIT 1');
+foreach (['entrada' => [$entryTime, $entryLocationId], 'salida' => [$exitTime, $exitLocationId]] as $type => [$time, $locationId]) {
+    if ($time === '') continue;
+    $locationStmt->execute(['id' => $locationId]);
+    if (!$locationStmt->fetchColumn()) manual_response(['ok' => false, 'message' => 'Seleccione un lugar de marcación de ' . $type . ' válido.'], 422);
+}
 
 $stmt = $pdo->prepare("SELECT * FROM attendance_assignments WHERE worker_id=:worker AND valid_from<=:date1
     AND (valid_until IS NULL OR valid_until>=:date2) ORDER BY status DESC,valid_from DESC,id DESC LIMIT 1");
@@ -93,7 +109,7 @@ if (!$program) {
 }
 $officialExit = substr((string) ($program['exit_time'] ?? $scheduleDay['exit_time'] ?? $scheduleDay['exit_start'] ?? '00:00:00'), 0, 8);
 
-$saveMark = static function (string $type, string $time) use ($pdo, $workerId, $markDate, $assignment, $program, $scheduleId, $requestedLocationId, $officialExit, $reason, $actorId, $actorName, $attendanceResult): void {
+$saveMark = static function (string $type, string $time, int $locationId) use ($pdo, $workerId, $markDate, $assignment, $program, $scheduleId, $officialExit, $reason, $actorId, $actorName, $attendanceResult, $sameDay): void {
     $normalized = $time . ':00';
     $status = $type === 'entrada' ? $attendanceResult : ($normalized >= $officialExit ? 'salida_valida' : 'salida_anticipada');
     $markedAt = $markDate . ' ' . $normalized;
@@ -101,16 +117,16 @@ $saveMark = static function (string $type, string $time) use ($pdo, $workerId, $
     $find = $pdo->prepare("SELECT * FROM attendance_marks WHERE worker_id=:worker AND mark_date=:date AND mark_type=:type ORDER BY {$markOrder} LIMIT 1 FOR UPDATE");
     $find->execute(['worker' => $workerId, 'date' => $markDate, 'type' => $type]);
     $existing = $find->fetch() ?: null;
-    $locationId = $existing ? (int) $existing['location_id'] : $requestedLocationId;
-    if ($existing && substr((string) $existing['mark_time'], 0, 5) === $time && (string) $existing['final_status'] === $status) return;
-
+    if ($sameDay && !$existing) {
+        throw new DomainException('La marcación de ' . $type . ' aún no existe. Para registrarla, use Marcación administrativa de hoy.');
+    }
     $note = 'Corrección manual por ' . $actorName . ': ' . $reason;
     if ($existing) {
         $markId = (int) $existing['id'];
         $previous = (string) $existing['mark_time'];
-        $update = $pdo->prepare("UPDATE attendance_marks SET mark_time=:time,marked_at=:marked,schedule_status=:status,
+        $update = $pdo->prepare("UPDATE attendance_marks SET mark_time=:time,marked_at=:marked,location_id=:location,schedule_status=:status,
             final_status=:final,observations=CONCAT_WS(CHAR(10),NULLIF(observations,''),:note) WHERE id=:id");
-        $update->execute(['time' => $normalized, 'marked' => $markedAt, 'status' => $status, 'final' => $status, 'note' => $note, 'id' => $markId]);
+        $update->execute(['time' => $normalized, 'marked' => $markedAt, 'location' => $locationId, 'status' => $status, 'final' => $status, 'note' => $note, 'id' => $markId]);
     } else {
         $previous = null;
         $insert = $pdo->prepare("INSERT INTO attendance_marks
@@ -129,11 +145,12 @@ try {
     $pdo->beginTransaction();
     $clearOverride = $pdo->prepare('DELETE FROM attendance_manual_day_overrides WHERE worker_id=:worker AND mark_date=:date');
     $clearOverride->execute(['worker' => $workerId, 'date' => $markDate]);
-    if ($entryTime !== '') $saveMark('entrada', $entryTime);
-    if ($exitTime !== '') $saveMark('salida', $exitTime);
+    if ($entryTime !== '') $saveMark('entrada', $entryTime, $entryLocationId);
+    if ($exitTime !== '') $saveMark('salida', $exitTime, $exitLocationId);
     $pdo->commit();
     manual_response(['ok' => true, 'message' => 'La asistencia fue corregida y auditada correctamente.']);
 } catch (Throwable $error) {
     if ($pdo->inTransaction()) $pdo->rollBack();
+    if ($error instanceof DomainException) manual_response(['ok' => false, 'message' => $error->getMessage()], 409);
     manual_response(['ok' => false, 'message' => 'No se pudo guardar. Verifique que la actualización SQL esté instalada.'], 500);
 }

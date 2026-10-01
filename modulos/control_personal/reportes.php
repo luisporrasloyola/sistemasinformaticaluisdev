@@ -48,12 +48,12 @@ require __DIR__ . '/../../includes/header.php';
     </div>
     <div class="table-responsive marking-report-table-wrap">
         <table class="table table-hover align-middle dashboard-table marking-report-table">
-            <thead><tr><th>Fecha</th><th>Hora</th><th>Tipo</th><th>Personal</th><th>Empresa</th><th>Lugar</th><th>Distancia</th><th>Estado de marcación</th><th>Foto</th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Hora</th><th>Tipo</th><th>Personal</th><th>Empresa</th><th>Lugar de marcación</th><th>Distancia</th><th>Estado de marcación</th><th>Foto</th></tr></thead>
             <tbody>
             <?php foreach ($rows as $row): $displayStatus = $row['display_status'] ?? $row['final_status'] ?? ''; ?>
                 <tr><td class="text-nowrap"><?= e(date('d/m/Y', strtotime($row['mark_date']))) ?></td><td><?= e(marking_report_time($row['mark_time'] ?? null)) ?></td><td><?= e(ucfirst($row['mark_type'])) ?></td>
-                    <td><strong><?= e($row['full_name']) ?></strong><span class="text-muted small d-block"><?= e($row['document_number']) ?></span></td><td><?= e($row['company'] ?? '') ?></td><td><?= e($row['location_name']) ?></td>
-                    <td class="text-nowrap"><?= e(number_format((float) $row['distance_meters'], 2)) ?> m</td><td><span class="badge <?= marking_report_badge_class($displayStatus) ?>"><?= e(marking_report_status_label($displayStatus)) ?></span></td>
+                    <td><strong><?= e($row['full_name']) ?></strong><span class="text-muted small d-block"><?= e($row['document_number']) ?></span></td><td><?= e($row['company'] ?? '') ?></td><td><?= e(marking_report_location_label($row)) ?><?php if (marking_report_is_administrative($row)): ?><small class="d-block text-primary fw-semibold">Registro administrativo</small><small class="d-block text-muted">Por <?= e($row['administrative_actor'] ?: 'Administrador') ?> · Motivo: <?= e($row['administrative_reason'] ?: '-') ?></small><?php endif; ?></td>
+                    <td class="text-nowrap"><?= marking_report_is_administrative($row) ? '-' : e(number_format((float) $row['distance_meters'], 2)) . ' m' ?></td><td><span class="badge <?= marking_report_badge_class($displayStatus) ?>"><?= e(marking_report_status_label($displayStatus)) ?></span></td>
                     <td><?php if ($row['photo_path']): ?><a class="btn btn-sm btn-outline-secondary marking-photo-button" target="_blank" href="<?= APP_URL . '/' . e($row['photo_path']) ?>" title="Ver fotografía"><i class="fa-solid fa-image"></i></a><?php else: ?><span class="text-muted">-</span><?php endif; ?></td></tr>
             <?php endforeach; ?>
             <?php if (!$rows): ?><tr><td colspan="9" class="text-center text-muted py-4">No hay marcaciones para los filtros seleccionados.</td></tr><?php endif; ?>
