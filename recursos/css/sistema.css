@@ -7312,6 +7312,10 @@ input[type="checkbox"]:active {
 .attendance-result-choice legend{margin-bottom:5px;font-size:.67rem}
 .attendance-result-option span{min-height:39px;padding:7px 9px;font-size:.75rem}
 .attendance-manual-fields{display:grid;grid-template-columns:1fr 1fr;gap:9px 10px}
+.attendance-manual-schedule{grid-column:1/-1;display:grid;gap:3px;padding:8px 10px;border:1px solid #dbeafe;border-radius:9px;background:#f8fbff}
+.attendance-manual-schedule .form-label{margin:0;color:#475569}
+.attendance-manual-schedule strong{color:#1e3a8a;font-size:.84rem;overflow-wrap:anywhere}
+.attendance-manual-project{grid-column:1/-1}
 .attendance-manual-reason,.attendance-location-help{grid-column:1/-1}
 .attendance-manual-form .form-label{margin-bottom:4px;font-size:.69rem;text-transform:uppercase;letter-spacing:.02em}
 .attendance-manual-form .form-control,.attendance-manual-form .form-select{min-height:39px;border-color:#cbd5e1;border-radius:9px;font-size:.84rem}

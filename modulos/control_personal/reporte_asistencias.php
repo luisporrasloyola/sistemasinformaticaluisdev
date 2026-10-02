@@ -174,14 +174,14 @@ document.addEventListener('DOMContentLoaded', () => {
         <div><span>Jornadas finalizadas</span><strong><?= e((string) $summary['compliance']) ?>%</strong></div>
         <div><span>Minutos de tardanza</span><strong><?= (int) $summary['late_minutes'] ?> min</strong></div>
         <div><span>Extra por entrada autorizada</span><strong><?= e(attendance_report_minutes_label((int) $summary['early_overtime_minutes'])) ?></strong></div>
-        <div><span>Extra por salida (+15 min)</span><strong><?= e(attendance_report_minutes_label((int) $summary['exit_overtime_minutes'])) ?></strong></div>
+        <div><span>Extra por salida (tras 15 min)</span><strong><?= e(attendance_report_minutes_label((int) $summary['exit_overtime_minutes'])) ?></strong></div>
         <div><span>Horas extras totales</span><strong><?= e(attendance_report_minutes_label((int) $summary['overtime_minutes'])) ?></strong></div>
     </div>
 
     <div class="individual-report-section-title" id="detalle-diario"><h3>Detalle diario</h3><p>Marcaciones y novedades del periodo seleccionado.</p></div>
     <?php if (!$personalView): ?>
     <div class="report-early-overtime-toolbar" id="reportEarlyOvertimeToolbar" data-worker-id="<?= (int) $workerId ?>" data-date-from="<?= e($dateFrom) ?>" data-date-to="<?= e($dateTo) ?>">
-        <div><strong>Entrada anticipada autorizada</strong><small>Marque las fechas que desea autorizar o cuya autorización desea retirar. Las casillas se limpian al guardar; el estado aparece junto a cada fecha. La selección no afecta las horas extra de salida. En la salida, se cuentan como horas extra los minutos posteriores a los 15 minutos de tolerancia.</small><small class="report-early-overtime-status" id="earlyOvertimeSelectionStatus" role="status"></small></div>
+        <div><strong>Entrada anticipada autorizada</strong><small>Marque las fechas que desea autorizar o cuya autorización desea retirar. Las casillas se limpian al guardar; el estado aparece junto a cada fecha. La selección no afecta las horas extra de salida. Si la salida supera los 15 minutos de tolerancia, se cuenta todo el tiempo desde la hora de salida programada.</small><small class="report-early-overtime-status" id="earlyOvertimeSelectionStatus" role="status"></small></div>
         <button class="btn btn-primary" type="button" id="saveEarlyOvertimeSelection"><i class="fa-solid fa-floppy-disk me-2"></i>Guardar selección</button>
     </div>
     <?php endif; ?>

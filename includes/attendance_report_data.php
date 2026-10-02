@@ -78,6 +78,33 @@ function attendance_report_signed_minutes(string $start, string $end): int
     return (int) floor(($endTimestamp - $startTimestamp) / 60);
 }
 
+function attendance_report_effective_schedule_day(array $assignment, ?array $program, ?array $entry, ?array $exit, array $scheduleDaysBySchedule, int $weekday): ?array
+{
+    $markedScheduleId = (int) ($entry['schedule_id'] ?? $exit['schedule_id'] ?? 0);
+    if ($markedScheduleId > 0) {
+        if ($program && (int) ($program['schedule_id'] ?? 0) === $markedScheduleId) {
+            return [
+                'entry_time' => $program['entry_time'], 'entry_start' => $program['entry_start'],
+                'entry_end' => $program['entry_end'], 'exit_time' => $program['exit_time'],
+                'exit_start' => $program['exit_time'], 'exit_end' => $program['exit_time'],
+                'tolerance_minutes' => $program['tolerance_minutes'],
+                'break_start' => null, 'break_end' => null,
+            ];
+        }
+        return $scheduleDaysBySchedule[$markedScheduleId][$weekday] ?? null;
+    }
+    if ($program) {
+        return [
+            'entry_time' => $program['entry_time'], 'entry_start' => $program['entry_start'],
+            'entry_end' => $program['entry_end'], 'exit_time' => $program['exit_time'],
+            'exit_start' => $program['exit_time'], 'exit_end' => $program['exit_time'],
+            'tolerance_minutes' => $program['tolerance_minutes'],
+            'break_start' => null, 'break_end' => null,
+        ];
+    }
+    return $scheduleDaysBySchedule[(int) $assignment['schedule_id']][$weekday] ?? null;
+}
+
 /** @return array{early_eligible: bool, early_minutes: int, exit_minutes: int} */
 function attendance_report_overtime_components(string $scheduledEntry, string $scheduledExit, ?string $actualEntry, ?string $actualExit, bool $earlyAuthorized): array
 {
@@ -105,7 +132,8 @@ function attendance_report_overtime_components(string $scheduledEntry, string $s
         $result['early_minutes'] = (int) floor(($entryStart - $entryMark) / 60);
     }
     if ($exitMark !== false) {
-        $result['exit_minutes'] = max(0, (int) floor(($exitMark - ($exitStart + 15 * 60)) / 60));
+        $minutesAfterExit = (int) floor(($exitMark - $exitStart) / 60);
+        $result['exit_minutes'] = $exitMark > $exitStart + 15 * 60 ? max(0, $minutesAfterExit) : 0;
     }
     return $result;
 }
@@ -171,6 +199,10 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
         }
     }
 
+    $scheduleNames = [];
+    foreach (db()->query('SELECT id, name FROM attendance_schedules')->fetchAll() as $schedule) {
+        $scheduleNames[(int) $schedule['id']] = (string) $schedule['name'];
+    }
     $scheduleDaysBySchedule = [];
     foreach (db()->query("SELECT schedule_id, day_of_week, entry_time, entry_start, entry_end,
             break_start, break_end, exit_time, exit_start, exit_end, tolerance_minutes
@@ -194,7 +226,7 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
     $marksByWorkerAndDateAndAssignment = [];
     $quickAssignmentIds = [];
     $markParams = ['date_from' => $dateFrom, 'date_to' => $dateTo];
-    $markSql = 'SELECT am.assignment_id, am.worker_id, am.mark_date, am.mark_type, am.mark_time, am.project_id,
+    $markSql = 'SELECT am.assignment_id, am.worker_id, am.mark_date, am.mark_type, am.mark_time, am.project_id, am.schedule_id,
         am.schedule_status, am.final_status, am.observations, am.location_status,
         audit.reason AS administrative_reason, actor.name AS administrative_actor,
         l.name AS mark_location, p.name AS mark_project
@@ -390,21 +422,27 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 $exit = $marks['salida'] ?? null;
                 $manualOverride = $manualDayOverrides[$id][$date] ?? null;
                 if ($manualOverride) { $entry = null; $exit = null; }
-                $scheduleDay = $scheduleDaysBySchedule[(int) $assignment['schedule_id']][$weekday] ?? null;
                 $program = $dateProgramsMap[$aid] ?? null;
-                if ($program) {
-                    $scheduleDay = [
-                        'entry_time'=>$program['entry_time'], 'entry_start'=>$program['entry_start'], 'entry_end'=>$program['entry_end'],
-                        'exit_time'=>$program['exit_time'], 'exit_start'=>$program['exit_time'], 'exit_end'=>$program['exit_time'],
-                        'tolerance_minutes'=>$program['tolerance_minutes'], 'break_start'=>null, 'break_end'=>null,
-                    ];
-                }
+                $effectiveScheduleId = (int) ($entry['schedule_id'] ?? $exit['schedule_id'] ?? $program['schedule_id'] ?? $assignment['schedule_id']);
+                $scheduleDay = attendance_report_effective_schedule_day($assignment, $program, $entry, $exit, $scheduleDaysBySchedule, $weekday);
                 $calendarEvent = attendance_calendar_resolve_event($calendarEvents, $date, $id, (int) $worker['company_id']);
                 $eventType = (string) ($calendarEvent['event_type'] ?? '');
                 $isNonWorking = attendance_calendar_is_non_working_event($eventType);
                 $hasSchedule = $scheduleDay !== null;
                 $isLate = $entry && (($entry['schedule_status'] ?? '') === 'tardanza' || ($entry['final_status'] ?? '') === 'tardanza');
                 $isEarlyExit = $exit && (($exit['schedule_status'] ?? '') === 'salida_anticipada' || ($exit['final_status'] ?? '') === 'salida_anticipada');
+                if ($scheduleDay) {
+                    $scheduledEntry = (string) ($scheduleDay['entry_time'] ?? $scheduleDay['entry_start'] ?? '');
+                    $scheduledExit = (string) ($scheduleDay['exit_time'] ?? $scheduleDay['exit_start'] ?? '');
+                    if ($entry && $scheduledEntry !== '') {
+                        $delay = attendance_report_signed_minutes($scheduledEntry, (string) $entry['mark_time']);
+                        $isLate = $delay > max(0, (int) ($scheduleDay['tolerance_minutes'] ?? 0));
+                        if (($entry['location_status'] ?? '') === 'registro_administrativo' && ($entry['final_status'] ?? '') === 'puntual') $isLate = false;
+                    }
+                    if ($exit && $scheduledExit !== '') {
+                        $isEarlyExit = attendance_report_signed_minutes((string) $exit['mark_time'], $scheduledExit) > 0;
+                    }
+                }
 
             if ($manualOverride) {
                 $stateKey = 'absent';
@@ -528,6 +566,7 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 'entry_administrative_reason' => (string) ($entry['administrative_reason'] ?? ''),
                 'exit_administrative_reason' => (string) ($exit['administrative_reason'] ?? ''),
                 'schedule' => $scheduleLabel,
+                'schedule_id' => $effectiveScheduleId,
                 'scheduled_entry' => $hasSchedule ? attendance_report_time($scheduleDay['entry_time'] ?? $scheduleDay['entry_start'] ?? null) : '-',
                 'tolerance_minutes' => $hasSchedule ? max(0,(int)($scheduleDay['tolerance_minutes'] ?? 0)) : null,
                 'location' => $journeyLocations,
@@ -540,7 +579,9 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 'early_overtime_authorized' => isset($earlyOvertimeAuthorized[$date]),
                 'early_overtime_minutes' => $earlyOvertimeMinutes,
                 'exit_overtime_minutes' => $exitOvertimeMinutes,
-                'project' => $manualOverride ? '-' : (trim((string) ($entry['mark_project'] ?? $exit['mark_project'] ?? $assignment['activity'] ?? '')) ?: '-'),
+                'project' => $manualOverride ? '-' : (trim((string) (($entry || $exit)
+                    ? ($entry['mark_project'] ?? $exit['mark_project'] ?? '')
+                    : ($assignment['activity'] ?? ''))) ?: '-'),
                 'observation' => $observation,
                 'is_workday' => $hasSchedule && !$isNonWorking,
             ];
@@ -564,7 +605,7 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 'entry'=>'-', 'exit'=>'-', 'entry_administrative'=>false, 'exit_administrative'=>false,
                 'entry_administrative_actor'=>'', 'exit_administrative_actor'=>'',
                 'entry_administrative_reason'=>'', 'exit_administrative_reason'=>'',
-                'schedule'=>'-', 'scheduled_entry'=>'-', 'tolerance_minutes'=>null, 'location'=>'-',
+                'schedule'=>'-', 'schedule_id'=>0, 'scheduled_entry'=>'-', 'tolerance_minutes'=>null, 'location'=>'-',
                 'entry_location'=>'-', 'exit_location'=>'-',
                 'state_key'=>'absent', 'state_code'=>$state['code'],
                 'state_label'=>$state['label'], 'state_class'=>$state['class'],
@@ -611,6 +652,7 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
     $selectedAssignment = $workerId > 0 ? ($assignmentByWorker[$workerId] ?? null) : null;
     if ($workerId > 0 && $individualRows) {
         $periodAssignmentIds = array_values(array_unique(array_column($individualRows, 'assignment_id')));
+        $periodScheduleIds = array_values(array_unique(array_filter(array_map('intval', array_column($individualRows, 'schedule_id')))));
         if (count($periodAssignmentIds) === 1) {
             $selectedAssignment = $assignmentsById[(int) $periodAssignmentIds[0]] ?? $selectedAssignment;
         } elseif (count($periodAssignmentIds) > 1) {
@@ -618,6 +660,11 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 'schedule_name' => 'Varios horarios (ver detalle)',
                 'location_name' => 'Varios lugares (ver detalle)',
             ];
+        }
+        if ($selectedAssignment !== null) {
+            $selectedAssignment['schedule_name'] = count($periodScheduleIds) === 1
+                ? ($scheduleNames[$periodScheduleIds[0]] ?? 'Horario no disponible')
+                : (count($periodScheduleIds) > 1 ? 'Varios horarios (ver detalle)' : ($selectedAssignment['schedule_name'] ?? 'Sin horario asignado'));
         }
     }
     $summary = ['workdays' => 0, 'attendances' => 0, 'late' => 0, 'absent' => 0, 'leaves' => 0, 'vacations' => 0, 'worked_minutes' => 0, 'late_minutes' => 0, 'early_overtime_minutes' => 0, 'exit_overtime_minutes' => 0, 'overtime_minutes' => 0, 'completed' => 0];

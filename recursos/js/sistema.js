@@ -139,11 +139,16 @@ function initAttendanceMatrixDetail() {
         manualDate: document.getElementById('matrixManualDate'),
         manualEntry: document.getElementById('matrixManualEntry'),
         manualExit: document.getElementById('matrixManualExit'),
+        manualSchedule: document.getElementById('matrixManualSchedule'),
+        manualScheduleSelect: document.getElementById('matrixManualScheduleSelect'),
+        manualScheduleEditor: document.getElementById('matrixManualScheduleEditor'),
+        permitScheduleEdit: document.getElementById('matrixPermitScheduleEdit'),
         manualResultPunctual: document.getElementById('matrixManualResultPunctual'),
         manualResultLate: document.getElementById('matrixManualResultLate'),
         manualResultAbsent: document.getElementById('matrixManualResultAbsent'),
         manualEntryLocation: document.getElementById('matrixManualEntryLocation'),
         manualExitLocation: document.getElementById('matrixManualExitLocation'),
+        manualProject: document.getElementById('matrixManualProject'),
         manualReason: document.getElementById('matrixManualReason'),
         manualAudit: document.getElementById('matrixManualAudit'),
         manualAuditUser: document.getElementById('matrixManualAuditUser'),
@@ -260,9 +265,12 @@ function initAttendanceMatrixDetail() {
             container.querySelectorAll('input, select').forEach((control) => { control.disabled = isAbsent; });
         });
         syncManualLocationRequirements();
-        [fields.manualEntryLocation, fields.manualExitLocation].forEach((select) => {
+        [fields.manualEntryLocation, fields.manualExitLocation, fields.manualProject].forEach((select) => {
             if (select && window.jQuery && jQuery.fn.select2 && jQuery(select).hasClass('select2-hidden-accessible')) jQuery(select).trigger('change.select2');
         });
+        if (isAbsent) setScheduleEditing(false, fields.adminMarkOpen?._selectedCell);
+        const cell = fields.adminMarkOpen?._selectedCell;
+        fields.permitScheduleEdit?.classList.toggle('d-none', isAbsent || !cell?.dataset.markedScheduleId || cell.dataset.markedScheduleId === '0' || cell.dataset.manualEnabled !== '1');
     };
     const syncTodayEditFields = (cell) => {
         const sameDayEdit = cell?.dataset.manualLock === 'today' && cell.dataset.manualEnabled === '1';
@@ -296,6 +304,25 @@ function initAttendanceMatrixDetail() {
         syncTodayEditFields(cell);
         if (!editing) fields.manualExit.focus();
     });
+    const setScheduleEditing = (editing, cell) => {
+        fields.manualScheduleEditor?.classList.toggle('d-none', !editing);
+        fields.manualSchedule?.classList.toggle('d-none', editing);
+        if (fields.manualScheduleSelect) {
+            fields.manualScheduleSelect.disabled = !editing;
+            if (!editing) fields.manualScheduleSelect.value = cell?.dataset.markedScheduleId || '';
+            if (window.jQuery && jQuery.fn.select2 && jQuery(fields.manualScheduleSelect).hasClass('select2-hidden-accessible')) {
+                jQuery(fields.manualScheduleSelect).trigger('change.select2');
+            }
+        }
+        if (fields.permitScheduleEdit) fields.permitScheduleEdit.innerHTML = editing
+            ? '<i class="fa-solid fa-xmark me-1"></i>Cancelar edición'
+            : '<i class="fa-solid fa-pen me-1"></i>Permitir editar';
+    };
+    fields.permitScheduleEdit?.addEventListener('click', () => {
+        const cell = fields.adminMarkOpen?._selectedCell;
+        if (!cell) return;
+        setScheduleEditing(fields.manualScheduleSelect.disabled, cell);
+    });
     const openDetail = (cell) => {
         if (fields.adminMarkOpen) fields.adminMarkOpen._selectedCell = cell;
         fields.date.textContent = cell.dataset.date || '';
@@ -316,6 +343,10 @@ function initAttendanceMatrixDetail() {
             fields.manualDate.value = cell.dataset.dateIso || '';
             fields.manualEntry.value = cell.dataset.entry && cell.dataset.entry !== '-' ? cell.dataset.entry : '';
             fields.manualExit.value = cell.dataset.exit && cell.dataset.exit !== '-' ? cell.dataset.exit : '';
+            fields.manualSchedule.textContent = cell.dataset.markedScheduleLabel || 'Sin horario registrado';
+            fields.manualScheduleSelect.value = cell.dataset.markedScheduleId || '';
+            fields.permitScheduleEdit.classList.toggle('d-none', cell.dataset.code === 'F' || cell.dataset.markedScheduleId === '0' || !cell.dataset.markedScheduleId || cell.dataset.manualEnabled !== '1');
+            setScheduleEditing(false, cell);
             fields.allowTodayExit.value = '0';
             fields.permitExitEdit.classList.remove('btn-outline-danger');
             fields.permitExitEdit.classList.add('btn-outline-primary');
@@ -330,7 +361,8 @@ function initAttendanceMatrixDetail() {
             syncTodayEditFields(cell);
             fields.manualEntryLocation.value = cell.dataset.entryLocationId || '';
             fields.manualExitLocation.value = cell.dataset.exitLocationId || '';
-            [fields.manualEntryLocation, fields.manualExitLocation].forEach((select) => {
+            fields.manualProject.value = cell.dataset.markedProjectId || '';
+            [fields.manualEntryLocation, fields.manualExitLocation, fields.manualProject].forEach((select) => {
                 if (window.jQuery && jQuery.fn.select2 && jQuery(select).hasClass('select2-hidden-accessible')) jQuery(select).trigger('change.select2');
             });
             fields.manualReason.value = '';
@@ -341,7 +373,9 @@ function initAttendanceMatrixDetail() {
                 fields.manualAuditUser.textContent = adjustedBy;
                 fields.manualAuditDate.textContent = adjustedAt ? 'Actualizado el ' + adjustedAt : '';
                 if (fields.manualAuditReason) {
-                    const reason = (cell.dataset.manualReason || '').trim();
+                    const reason = (cell.dataset.manualReason || '')
+                        .replace(/^(?:(?:Proyecto|Horario)\s+(?:\d+|ninguno)\s*\u2192\s*(?:\d+|ninguno)\.\s*)+/iu, '')
+                        .trim();
                     fields.manualAuditReason.textContent = reason ? 'Observación: ' + reason : '';
                     fields.manualAuditReason.classList.toggle('d-none', reason === '');
                 }
@@ -390,6 +424,20 @@ function initAttendanceMatrixDetail() {
                 Swal.fire('Falta el lugar de salida', 'Seleccione el lugar de marcación de salida.', 'warning');
                 return;
             }
+            const selectedCell = fields.adminMarkOpen?._selectedCell;
+            if (fields.manualScheduleSelect && !fields.manualScheduleSelect.disabled
+                && fields.manualScheduleSelect.value !== selectedCell?.dataset.markedScheduleId) {
+                const chosenName = fields.manualScheduleSelect.selectedOptions[0]?.textContent || 'el horario seleccionado';
+                const confirmation = await Swal.fire({
+                    icon: 'question',
+                    title: 'Confirmar cambio de horario',
+                    text: `La jornada cambiará de ${selectedCell?.dataset.markedScheduleLabel || 'su horario actual'} a ${chosenName}.`,
+                    showCancelButton: true,
+                    confirmButtonText: 'Guardar cambio',
+                    cancelButtonText: 'Revisar'
+                });
+                if (!confirmation.isConfirmed) return;
+            }
             const button = manualForm.querySelector('button[type="submit"]');
             const body = new FormData(manualForm);
             body.append('csrf_token', csrf);
@@ -399,6 +447,7 @@ function initAttendanceMatrixDetail() {
                 const data = await response.json();
                 if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo guardar la corrección.');
                 await Swal.fire({ icon: 'success', title: 'Asistencia actualizada', text: data.message, timer: 1800, showConfirmButton: false });
+                localStorage.setItem('attendance-marks-updated-at', String(Date.now()));
                 window.location.reload();
             } catch (error) {
                 Swal.fire('Atención', error.message || 'No se pudo guardar la corrección.', 'warning');

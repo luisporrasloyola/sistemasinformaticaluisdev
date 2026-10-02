@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/attendance_calendar.php';
+require_once __DIR__ . '/../../includes/attendance_report_data.php';
 require_module_access('control_personal.dashboard');
 
 $attendanceLiveVersion = (int) db()->query('SELECT COALESCE(MAX(id), 0) FROM attendance_marks')->fetchColumn();
@@ -29,7 +30,26 @@ if ($personalView) {
 }
 $attendanceLocations = db()->query("SELECT id, name FROM attendance_locations WHERE status = 1 ORDER BY name")->fetchAll();
 $adminMarkSchedules = is_admin() ? db()->query("SELECT id, name FROM attendance_schedules WHERE status = 1 ORDER BY name")->fetchAll() : [];
+$activeScheduleIds = array_fill_keys(array_map('intval', array_column($adminMarkSchedules, 'id')), true);
+$markedScheduleLabels = [];
+if (is_admin()) {
+    $scheduleRows = db()->query("SELECT s.id, s.name, d.day_of_week, d.entry_time, d.entry_start, d.exit_time, d.exit_start
+        FROM attendance_schedules s
+        LEFT JOIN attendance_schedule_days d ON d.schedule_id = s.id AND d.status = 1")->fetchAll();
+    foreach ($scheduleRows as $scheduleRow) {
+        $scheduleKey = (int) $scheduleRow['id'];
+        $dayKey = (int) ($scheduleRow['day_of_week'] ?? 0);
+        $markedScheduleLabels[$scheduleKey][0] = (string) $scheduleRow['name'];
+        $entryHour = substr((string) ($scheduleRow['entry_time'] ?? $scheduleRow['entry_start'] ?? ''), 0, 5);
+        $exitHour = substr((string) ($scheduleRow['exit_time'] ?? $scheduleRow['exit_start'] ?? ''), 0, 5);
+        if ($dayKey > 0) {
+            $markedScheduleLabels[$scheduleKey][$dayKey] = (string) $scheduleRow['name']
+                . ($entryHour !== '' && $exitHour !== '' ? ' (' . $entryHour . ' - ' . $exitHour . ')' : '');
+        }
+    }
+}
 $adminMarkProjects = is_admin() ? db()->query("SELECT id, name FROM attendance_projects WHERE status = 1 ORDER BY name")->fetchAll() : [];
+$correctionProjects = is_admin() ? db()->query("SELECT id, name, status FROM attendance_projects ORDER BY name")->fetchAll() : [];
 
 if ($selectedWorkerId > 0) {
     $selectedWorker = array_values(array_filter(
@@ -201,22 +221,46 @@ foreach ($stmt->fetchAll() as $row) {
 $maxTrendValue = max(1, ...array_values(array_map(static fn(array $row): int => max($row), $trend)));
 
 $scheduleDaysBySchedule = [];
-$scheduleDayRows = db()->query('SELECT schedule_id, day_of_week
+$scheduleDayRows = db()->query('SELECT schedule_id, day_of_week, entry_time, entry_start, exit_time, exit_start, tolerance_minutes, break_start, break_end
     FROM attendance_schedule_days
     WHERE status = 1')->fetchAll();
 foreach ($scheduleDayRows as $scheduleDayRow) {
-    $scheduleDaysBySchedule[(int) $scheduleDayRow['schedule_id']][(int) $scheduleDayRow['day_of_week']] = true;
+    $scheduleDaysBySchedule[(int) $scheduleDayRow['schedule_id']][(int) $scheduleDayRow['day_of_week']] = $scheduleDayRow;
 }
 $programmedDaysByWorker = [];
+$programmedDaysByAssignment = [];
 try {
-    $programStmt = db()->prepare("SELECT worker_id,program_date FROM attendance_programs
-        WHERE status='programada' AND program_date BETWEEN :date_from AND :date_to");
+    $programStmt = db()->prepare("SELECT id, worker_id, assignment_id, program_date, schedule_id,
+            entry_time, entry_start, entry_end, exit_time, tolerance_minutes FROM attendance_programs
+        WHERE status='programada' AND program_date BETWEEN :date_from AND :date_to ORDER BY id");
     $programStmt->execute(['date_from'=>min($monthStart,$today),'date_to'=>max($monthEnd,$today)]);
     foreach ($programStmt->fetchAll() as $programRow) {
-        $programmedDaysByWorker[(int)$programRow['worker_id']][(string)$programRow['program_date']] = true;
+        $programmedDaysByWorker[(int)$programRow['worker_id']][(string)$programRow['program_date']] = $programRow;
+        $programmedDaysByAssignment[(int)$programRow['worker_id']][(string)$programRow['program_date']][(int)$programRow['assignment_id']] = $programRow;
     }
 } catch (Throwable $error) {
     $programmedDaysByWorker = [];
+    $programmedDaysByAssignment = [];
+}
+
+function dashboard_attendance_incidents(array $worker, ?array $program, ?array $entry, ?array $exit, array $scheduleDays, int $weekday): array
+{
+    $scheduleId = (int) ($entry['schedule_id'] ?? $exit['schedule_id'] ?? $program['schedule_id'] ?? $worker['schedule_id']);
+    $day = attendance_report_effective_schedule_day($worker, $program, $entry, $exit, $scheduleDays, $weekday);
+    $late = ($entry['status'] ?? '') === 'tardanza';
+    $earlyExit = ($exit['status'] ?? '') === 'salida_anticipada';
+    if ($day) {
+        $officialEntry = (string) ($day['entry_time'] ?? $day['entry_start'] ?? '');
+        $officialExit = (string) ($day['exit_time'] ?? $day['exit_start'] ?? '');
+        if ($entry && $officialEntry !== '') {
+            $late = attendance_report_signed_minutes($officialEntry, (string) $entry['time']) > max(0, (int) ($day['tolerance_minutes'] ?? 0));
+            if ($entry['administrative'] && $entry['status'] === 'puntual') $late = false;
+        }
+        if ($exit && $officialExit !== '') {
+            $earlyExit = attendance_report_signed_minutes((string) $exit['time'], $officialExit) > 0;
+        }
+    }
+    return [$scheduleId, $late, $earlyExit];
 }
 
 $calendarEvents = attendance_calendar_events_between($monthStart, $monthEnd);
@@ -256,6 +300,7 @@ $stmt = db()->prepare("SELECT
         aa.valid_until AS assignment_valid_until,
         DATE(aa.created_at) AS assignment_start_date,
         am.mark_date,
+        am.assignment_id AS mark_assignment_id,
         am.mark_type,
         am.mark_time,
         am.schedule_id AS mark_schedule_id,
@@ -314,6 +359,7 @@ foreach ($stmt->fetchAll() as $row) {
                 'location' => (string) ($row['location_name'] ?? ''),
                 'location_id' => (int) ($row['mark_location_id'] ?? 0),
                 'schedule_id' => (int) ($row['mark_schedule_id'] ?? 0),
+                'assignment_id' => (int) ($row['mark_assignment_id'] ?? 0),
                 'project_id' => (int) ($row['mark_project_id'] ?? 0),
             ];
         }
@@ -389,7 +435,14 @@ foreach ($matrixRows as $workerId => $worker) {
         $manualAbsence = isset($manualDayOverrides[$workerId][$cellDate]);
         if ($manualAbsence) { $entry = null; $exit = null; }
         $weekdayNumber = (int) date('N', strtotime($cellDate));
-        $scheduleId = (int) $worker['schedule_id'];
+        $markedAssignmentId = (int) ($entry['assignment_id'] ?? $exit['assignment_id'] ?? 0);
+        $dayProgram = $markedAssignmentId > 0
+            ? ($programmedDaysByAssignment[(int) $worker['worker_id']][$cellDate][$markedAssignmentId] ?? null)
+            : ($programmedDaysByWorker[(int) $worker['worker_id']][$cellDate] ?? null);
+        [$scheduleId, $isLate, $isEarlyExit] = dashboard_attendance_incidents(
+            $worker, $dayProgram,
+            $entry, $exit, $scheduleDaysBySchedule, $weekdayNumber
+        );
         $assignmentStartDate = (string) $worker['assignment_start_date'];
         $calendarEvent = attendance_calendar_resolve_event(
             $calendarEvents,
@@ -405,8 +458,6 @@ foreach ($matrixRows as $workerId => $worker) {
         $isExplicitlyProgrammed = isset($programmedDaysByWorker[(int)$worker['worker_id']][$cellDate]);
         $isScheduledDay = !$isNonWorkingDay && ($isExplicitlyProgrammed || ($isAssignedPeriod && $isWeeklyScheduled));
         $isAbsence = $manualAbsence || (!$entry && !$exit && $cellDate < $today && $isScheduledDay);
-        $isLate = ($entry['status'] ?? '') === 'tardanza';
-        $isEarlyExit = ($exit['status'] ?? '') === 'salida_anticipada';
 
         $attendanceCode = '';
         if ($isAbsence) {
@@ -709,7 +760,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         $manualAbsence = $manualOverride !== null;
                         if ($manualAbsence) { $entry = null; $exit = null; }
                         $weekdayNumber = (int) date('N', strtotime($cellDate));
-                        $scheduleId = (int) $worker['schedule_id'];
+                        $markedAssignmentId = (int) ($entry['assignment_id'] ?? $exit['assignment_id'] ?? 0);
+                        $dayProgram = $markedAssignmentId > 0
+                            ? ($programmedDaysByAssignment[(int) $worker['worker_id']][$cellDate][$markedAssignmentId] ?? null)
+                            : ($programmedDaysByWorker[(int) $worker['worker_id']][$cellDate] ?? null);
+                        [$scheduleId, $isLate, $isEarlyExit] = dashboard_attendance_incidents(
+                            $worker, $dayProgram,
+                            $entry, $exit, $scheduleDaysBySchedule, $weekdayNumber
+                        );
                         $assignmentStartDate = (string) $worker['assignment_start_date'];
                         $calendarEvent = attendance_calendar_resolve_event(
                             $calendarEvents,
@@ -730,8 +788,6 @@ document.addEventListener('DOMContentLoaded', () => {
                             && !$isExplicitlyProgrammed;
                         $isScheduledDay = !$isNonWorkingDay && ($isExplicitlyProgrammed || ($isAssignedPeriod && $isWeeklyScheduled));
                         $isAbsence = $manualAbsence || (!$entry && !$exit && $cellDate < $today && $isScheduledDay);
-                        $isLate = ($entry['status'] ?? '') === 'tardanza';
-                        $isEarlyExit = ($exit['status'] ?? '') === 'salida_anticipada';
                         $attendanceCode = '';
                         $attendanceLabel = '';
                         $incidents = [];
@@ -794,6 +850,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         $manualCorrectionAllowed = is_admin() && ($cellDate < $today || ($cellDate === $today && ($entry || $exit)));
                         $entryLocation = (string) ($entry['location'] ?? '');
                         $exitLocation = (string) ($exit['location'] ?? '');
+                        $markedScheduleId = (int) ($entry['schedule_id'] ?? $exit['schedule_id'] ?? 0);
+                        $markedProjectId = (int) ($entry['project_id'] ?? 0) ?: (int) ($exit['project_id'] ?? 0);
+                        $markedScheduleLabel = $markedScheduleId > 0
+                            ? ($markedScheduleLabels[$markedScheduleId][(int) date('N', strtotime($cellDate))]
+                                ?? $markedScheduleLabels[$markedScheduleId][0]
+                                ?? 'Horario registrado no disponible')
+                            : 'Sin horario registrado';
+                        if ($entry && $exit && (int) ($entry['schedule_id'] ?? 0) !== (int) ($exit['schedule_id'] ?? 0)) {
+                            $markedScheduleLabel .= ' · La salida tiene otro horario';
+                        }
                         ?>
                         <td class="<?= e($cellClass) ?> js-attendance-matrix-cell"
                             role="button"
@@ -802,7 +868,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             data-date-iso="<?= e($cellDate) ?>"
                             data-worker-id="<?= (int) $worker['worker_id'] ?>"
                             data-assigned="<?= $isAssignedPeriod && $worker['assignment_valid_from'] <= $cellDate && ($worker['assignment_valid_until'] === '' || $worker['assignment_valid_until'] >= $cellDate) ? '1' : '0' ?>"
-                            data-schedule-id="<?= (int) $worker['schedule_id'] ?>"
+                            data-schedule-id="<?= $scheduleId ?>"
                             data-manual-enabled="<?= $manualCorrectionAllowed ? '1' : '0' ?>"
                             data-manual-lock="<?= $cellDate === $today ? 'today' : ($cellDate > $today ? 'future' : '') ?>"
                             data-adjusted-by="<?= e((string) ($manualAudit['administrator'] ?? '')) ?>"
@@ -819,6 +885,9 @@ document.addEventListener('DOMContentLoaded', () => {
                             data-entry-location-id="<?= (int) ($entry['location_id'] ?? $worker['assignment_location_id']) ?>"
                             data-exit-location-id="<?= (int) ($exit['location_id'] ?? $worker['assignment_location_id']) ?>"
                             data-entry-schedule-id="<?= (int) ($entry['schedule_id'] ?? 0) ?>"
+                            data-marked-schedule-id="<?= $markedScheduleId ?>"
+                            data-marked-schedule-label="<?= e($markedScheduleLabel) ?>"
+                            data-marked-project-id="<?= $markedProjectId ?>"
                             data-entry-project-id="<?= (int) ($entry['project_id'] ?? 0) ?>"
                             data-code="<?= e($attendanceCode ?: attendance_calendar_event_abbreviation($calendarEventType)) ?>"
                             data-status="<?= e(strip_tags($detailLabel)) ?>"
@@ -954,10 +1023,12 @@ document.addEventListener('DOMContentLoaded', () => {
                             <label class="attendance-result-option result-absent" for="matrixManualResultAbsent"><input type="radio" name="attendance_result" id="matrixManualResultAbsent" value="falta" required><span><i class="fa-solid fa-user-xmark"></i><strong>Faltó</strong></span></label>
                         </div></fieldset>
                         <div class="attendance-manual-fields">
+                            <div class="attendance-manual-schedule"><div class="attendance-exit-label"><label class="form-label" for="matrixManualScheduleSelect">Horario de la marcación</label><button class="btn btn-outline-primary btn-sm d-none" type="button" id="matrixPermitScheduleEdit"><i class="fa-solid fa-pen me-1"></i>Permitir editar</button></div><strong id="matrixManualSchedule">Sin horario registrado</strong><div class="d-none" id="matrixManualScheduleEditor"><select class="form-select select2-searchable" name="schedule_id" id="matrixManualScheduleSelect" data-placeholder="Buscar horario" data-no-results="No se encontraron horarios" required disabled><option value="">Seleccione un horario</option><?php foreach ($markedScheduleLabels as $scheduleId => $labels): ?><option value="<?= (int) $scheduleId ?>" <?= isset($activeScheduleIds[(int) $scheduleId]) ? '' : 'disabled' ?>><?= e($labels[0]) ?></option><?php endforeach; ?></select></div></div>
                             <div class="attendance-mark-input"><label class="form-label" for="matrixManualEntry">Primera entrada</label><input class="form-control" type="time" name="entry_time" id="matrixManualEntry"></div>
                             <div class="attendance-mark-input"><div class="attendance-exit-label"><label class="form-label" for="matrixManualExit">Última salida</label><button class="btn btn-outline-primary btn-sm d-none" type="button" id="matrixPermitExitEdit"><i class="fa-solid fa-pen me-1"></i>Permitir editar</button></div><input class="form-control" type="time" name="exit_time" id="matrixManualExit"><input type="hidden" name="allow_today_exit" id="matrixAllowTodayExit" value="0"></div>
                             <div class="attendance-manual-location attendance-mark-input"><label class="form-label" for="matrixManualEntryLocation">Lugar de marcación de entrada</label><select class="form-select select2-searchable" name="entry_location_id" id="matrixManualEntryLocation" data-placeholder="Buscar lugar de entrada" data-no-results="No se encontraron lugares"><option value="">Seleccione un lugar</option><?php foreach ($attendanceLocations as $location): ?><option value="<?= (int) $location['id'] ?>"><?= e($location['name']) ?></option><?php endforeach; ?></select></div>
                             <div class="attendance-manual-location attendance-mark-input"><label class="form-label" for="matrixManualExitLocation">Lugar de marcación de salida</label><select class="form-select select2-searchable" name="exit_location_id" id="matrixManualExitLocation" data-placeholder="Buscar lugar de salida" data-no-results="No se encontraron lugares"><option value="">Seleccione un lugar</option><?php foreach ($attendanceLocations as $location): ?><option value="<?= (int) $location['id'] ?>"><?= e($location['name']) ?></option><?php endforeach; ?></select></div>
+                            <div class="attendance-manual-location attendance-manual-project attendance-mark-input"><label class="form-label" for="matrixManualProject">Proyecto</label><select class="form-select select2-searchable" name="project_id" id="matrixManualProject" data-placeholder="Buscar proyecto" data-no-results="No se encontraron proyectos"><option value="">Sin proyecto</option><?php foreach ($correctionProjects as $project): ?><option value="<?= (int) $project['id'] ?>" <?= (int) $project['status'] === 1 ? '' : 'disabled' ?>><?= e($project['name']) ?></option><?php endforeach; ?></select></div>
                             <small class="attendance-location-help">Los puntos de ruta ya registrados no serán modificados.</small>
                             <div class="attendance-manual-reason"><label class="form-label" for="matrixManualReason">Observación</label><textarea class="form-control" name="reason" id="matrixManualReason" rows="2" maxlength="500" required placeholder="Ej.: El servidor no estuvo disponible durante el ingreso."></textarea></div>
                         </div>
