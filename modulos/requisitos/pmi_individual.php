@@ -6,7 +6,8 @@ $pmiWorkerId = $personalView ? (int) (current_user_worker_id() ?? 0) : 0;
 $pmiWorkerLabel = '';
 if ($pmiWorkerId) {
     require_once __DIR__ . '/../../config/database.php';
-    $stmt = db()->prepare("SELECT CONCAT(full_name, ' - ', document_number) FROM workers WHERE id = :id");
+    $stmt = db()->prepare("SELECT CONCAT(w.full_name, ' - ', w.document_number, ' - ', COALESCE(c.name, 'Sin empresa'))
+        FROM workers w LEFT JOIN companies c ON c.id = w.company_id WHERE w.id = :id");
     $stmt->execute(['id' => $pmiWorkerId]);
     $pmiWorkerLabel = (string) $stmt->fetchColumn();
 }
@@ -20,7 +21,7 @@ require __DIR__ . '/../../includes/header.php';
 </div>
 
 <div class="work-panel mb-3">
-    <label class="form-label"><?= $personalView ? 'Mi información' : 'Buscar por nombre o DNI / documento' ?></label>
+    <label class="form-label"><?= $personalView ? 'Mi información' : 'Buscar por nombre, DNI / documento o empresa' ?></label>
     <select class="form-select" id="workerSearch" <?= $personalView ? 'disabled' : '' ?>><?php if ($pmiWorkerId): ?><option value="<?= $pmiWorkerId ?>" selected><?= e($pmiWorkerLabel) ?></option><?php endif; ?></select>
 </div>
 

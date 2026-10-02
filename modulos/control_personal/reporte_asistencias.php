@@ -11,13 +11,22 @@ $dateFrom = trim((string) ($_GET['desde'] ?? $defaultFrom));
 $dateTo = trim((string) ($_GET['hasta'] ?? $today));
 $personalView = is_personal_role();
 $workerId = $personalView ? (int) (current_user_worker_id() ?? 0) : (int) ($_GET['trabajador_id'] ?? 0);
+$companyId = $personalView ? 0 : max(0, (int) ($_GET['empresa_id'] ?? 0));
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom)) $dateFrom = $defaultFrom;
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateTo)) $dateTo = $today;
 if ($dateFrom > $dateTo) [$dateFrom, $dateTo] = [$dateTo, $dateFrom];
 
-$catalogStmt = db()->prepare('SELECT id, full_name, document_number FROM workers' . ($personalView ? ' WHERE id = :worker_id' : '') . ' ORDER BY full_name');
+$companies = $personalView ? [] : db()->query('SELECT id, name FROM companies ORDER BY name')->fetchAll();
+$companyIds = array_map('intval', array_column($companies, 'id'));
+if ($companyId > 0 && !in_array($companyId, $companyIds, true)) $companyId = 0;
+$catalogWhere = $personalView ? ' WHERE id = :worker_id' : '';
+$catalogStmt = db()->prepare('SELECT id, company_id, full_name, document_number FROM workers' . $catalogWhere . ' ORDER BY full_name');
 $catalogStmt->execute($personalView ? ['worker_id' => $workerId] : []);
 $catalog = $catalogStmt->fetchAll();
+if (!$personalView && $companyId > 0 && $workerId > 0) {
+    $selectedWorker = array_values(array_filter($catalog, static fn(array $item): bool => (int) $item['id'] === $workerId))[0] ?? null;
+    if (!$selectedWorker || (int) $selectedWorker['company_id'] !== $companyId) $workerId = 0;
+}
 $report = $workerId > 0 ? attendance_report_build($dateFrom, $dateTo, $workerId) : null;
 $worker = $report['worker'] ?? null;
 $assignment = $report['assignment'] ?? null;
@@ -43,7 +52,7 @@ if ($worker && !$personalView) {
 $note = $report['note'] ?? null;
 $trips = $report['trips'] ?? [];
 $tripsByDate = attendance_report_trips_by_date($trips);
-$query = http_build_query(['desde' => $dateFrom, 'hasta' => $dateTo, 'trabajador_id' => $workerId]);
+$query = http_build_query(['desde' => $dateFrom, 'hasta' => $dateTo, 'empresa_id' => $companyId, 'trabajador_id' => $workerId]);
 
 require __DIR__ . '/../../includes/header.php';
 ?>
@@ -62,21 +71,32 @@ require __DIR__ . '/../../includes/header.php';
 
 <form class="dashboard-filters attendance-report-filters attendance-report-filters-simple" method="get">
     <div class="row g-3 align-items-end">
-        <div class="col-md-6 col-xl-3">
+        <div class="col-md-6 col-xl-2">
             <label class="form-label">Desde</label>
             <input class="form-control" type="date" name="desde" value="<?= e($dateFrom) ?>" required>
         </div>
-        <div class="col-md-6 col-xl-3">
+        <div class="col-md-6 col-xl-2">
             <label class="form-label">Hasta</label>
             <input class="form-control" type="date" name="hasta" value="<?= e($dateTo) ?>" required>
         </div>
-        <div class="col-xl-4">
+        <?php if (!$personalView): ?>
+        <div class="col-md-6 col-xl-3">
+            <label class="form-label" for="attendanceReportCompany">Empresa</label>
+            <select class="form-select select2-searchable" id="attendanceReportCompany" name="empresa_id" data-placeholder="Buscar empresa" data-no-results="No se encontraron empresas">
+                <option value="0">Todas las empresas</option>
+                <?php foreach ($companies as $company): ?>
+                    <option value="<?= (int) $company['id'] ?>" <?= $companyId === (int) $company['id'] ? 'selected' : '' ?>><?= e($company['name']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <?php endif; ?>
+        <div class="col-md-6 col-xl-<?= $personalView ? '6' : '3' ?>">
             <label class="form-label">Trabajador</label>
             <?php if ($personalView): ?><input type="hidden" name="trabajador_id" value="<?= $workerId ?>"><?php endif; ?>
-            <select class="form-select select2-searchable" name="trabajador_id" <?= $personalView ? 'disabled' : '' ?> data-placeholder="Buscar trabajador" data-no-results="No se encontraron trabajadores" required>
+            <select class="form-select select2-searchable" id="attendanceReportWorker" name="trabajador_id" <?= $personalView ? 'disabled' : '' ?> data-placeholder="Buscar trabajador" data-no-results="No se encontraron trabajadores" required>
                 <option value="">Seleccione un trabajador</option>
                 <?php foreach ($catalog as $item): ?>
-                    <option value="<?= (int) $item['id'] ?>" <?= $workerId === (int) $item['id'] ? 'selected' : '' ?>><?= e($item['full_name'] . ' - ' . $item['document_number']) ?></option>
+                    <option value="<?= (int) $item['id'] ?>" data-company-id="<?= (int) $item['company_id'] ?>" <?= $workerId === (int) $item['id'] ? 'selected' : '' ?>><?= e($item['full_name'] . ' - ' . $item['document_number']) ?></option>
                 <?php endforeach; ?>
             </select>
         </div>
@@ -85,6 +105,35 @@ require __DIR__ . '/../../includes/header.php';
         </div>
     </div>
 </form>
+<?php if (!$personalView): ?>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const company = document.getElementById('attendanceReportCompany');
+    const worker = document.getElementById('attendanceReportWorker');
+    if (!company || !worker) return;
+    const workers = Array.from(worker.options).slice(1).map((option) => ({
+        value: option.value,
+        label: option.textContent.trim(),
+        companyId: option.dataset.companyId || '0'
+    }));
+    const refreshWorkers = (keepSelection = false) => {
+        const companyId = company.value;
+        const selectedId = keepSelection ? worker.value : '';
+        const visible = companyId === '0' ? workers : workers.filter((item) => item.companyId === companyId);
+        worker.replaceChildren(new Option('Seleccione un trabajador', ''));
+        visible.forEach((item) => worker.add(new Option(item.label, item.value, false, item.value === selectedId)));
+        if (!visible.some((item) => item.value === selectedId)) worker.value = '';
+        if (window.jQuery && window.jQuery.fn.select2) window.jQuery(worker).trigger('change.select2');
+    };
+    refreshWorkers(true);
+    if (window.jQuery) {
+        window.jQuery(company).on('change.attendanceReport', () => refreshWorkers(false));
+    } else {
+        company.addEventListener('change', () => refreshWorkers(false));
+    }
+});
+</script>
+<?php endif; ?>
 
 <?php if (!$worker): ?>
     <section class="work-panel attendance-report-empty">

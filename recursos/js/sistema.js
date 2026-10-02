@@ -1621,7 +1621,7 @@ function initRequirementsModule() {
     workerSearch.select2({
         theme: 'bootstrap4',
         width: '100%',
-        placeholder: 'Escriba nombre o documento',
+        placeholder: 'Escriba nombre, documento o empresa',
         ajax: {
             url: personalServiceUrl('buscar_personal.php'),
             dataType: 'json',
