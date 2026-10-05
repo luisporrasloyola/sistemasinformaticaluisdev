@@ -7311,7 +7311,8 @@ input[type="checkbox"]:active {
 .attendance-result-choice{margin-bottom:10px}
 .attendance-result-choice legend{margin-bottom:5px;font-size:.67rem}
 .attendance-result-option span{min-height:39px;padding:7px 9px;font-size:.75rem}
-.attendance-manual-fields{display:grid;grid-template-columns:1fr 1fr;gap:9px 10px}
+.attendance-manual-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px 10px}
+.attendance-manual-fields>*{min-width:0}
 .attendance-manual-schedule{grid-column:1/-1;display:grid;gap:3px;padding:8px 10px;border:1px solid #dbeafe;border-radius:9px;background:#f8fbff}
 .attendance-manual-schedule .form-label{margin:0;color:#475569}
 .attendance-manual-schedule strong{color:#1e3a8a;font-size:.84rem;overflow-wrap:anywhere}
@@ -7325,7 +7326,7 @@ input[type="checkbox"]:active {
 .attendance-manual-actions small i{color:#7c3aed}
 .attendance-manual-actions .btn{min-width:170px;min-height:40px;padding:.5rem .85rem;border-radius:9px;font-size:.82rem;font-weight:800;box-shadow:0 7px 16px rgba(37,99,235,.2)}
 @media(max-width:991.98px){.attendance-matrix-modal-dialog{max-width:720px}.attendance-detail-layout{grid-template-columns:1fr}.attendance-detail-overview{display:grid;grid-template-columns:1fr 1fr}.attendance-detail-person{grid-column:1/-1}.attendance-manual-audit{margin-top:0}.attendance-detail-grid{align-content:start}}
-@media(max-width:575.98px){.attendance-matrix-modal-dialog{margin:.5rem}.attendance-matrix-detail-modal .modal-body{padding:12px}.attendance-detail-overview{display:flex;padding:13px}.attendance-manual-form{padding:13px}.attendance-manual-fields{grid-template-columns:1fr}.attendance-manual-location,.attendance-manual-reason{grid-column:auto}.attendance-result-options{grid-template-columns:1fr}.attendance-manual-actions{align-items:stretch;flex-direction:column}.attendance-manual-actions small{max-width:none}.attendance-manual-actions .btn{width:100%}}
+@media(max-width:575.98px){.attendance-matrix-modal-dialog{margin:.5rem}.attendance-matrix-detail-modal .modal-body{padding:12px}.attendance-detail-overview{display:flex;padding:13px}.attendance-manual-form{padding:13px}.attendance-manual-fields{grid-template-columns:minmax(0,1fr)}.attendance-manual-location,.attendance-manual-reason{grid-column:auto}.attendance-result-options{grid-template-columns:1fr}.attendance-manual-actions{align-items:stretch;flex-direction:column}.attendance-manual-actions small{max-width:none}.attendance-manual-actions .btn{width:100%}}
 .attendance-location-help{display:block;margin-top:4px;color:#64748b;font-size:.66rem;line-height:1.3}
 
 #attendanceMatrixDetailModal .attendance-matrix-modal-dialog{width:min(980px,calc(100vw - 32px));max-width:980px;margin-left:auto;margin-right:auto}
@@ -7333,15 +7334,16 @@ input[type="checkbox"]:active {
 #attendanceMatrixDetailModal .modal-body{overflow-x:hidden}
 @media(max-width:991.98px){#attendanceMatrixDetailModal .attendance-matrix-modal-dialog{width:min(720px,calc(100vw - 24px))}}
 @media(max-width:575.98px){#attendanceMatrixDetailModal .attendance-matrix-modal-dialog{width:calc(100vw - 16px);margin:.5rem auto}#attendanceMatrixDetailModal .modal-content{max-height:calc(100vh - 16px)}}
-#attendanceMatrixDetailModal .attendance-manual-location .select2-container{width:100%!important}
+#attendanceMatrixDetailModal .attendance-manual-location .select2-container{width:100%!important;min-width:0;max-width:100%}
 #attendanceMatrixDetailModal .attendance-manual-location .select2-selection--single{min-height:39px!important;border-color:#cbd5e1!important;border-radius:9px!important;background:#fff!important}
-#attendanceMatrixDetailModal .attendance-manual-location .select2-selection__rendered{line-height:37px!important;padding-left:12px!important;font-size:.84rem}
+#attendanceMatrixDetailModal .attendance-manual-location .select2-selection__rendered{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:37px!important;padding-left:12px!important;padding-right:34px!important;font-size:.84rem}
 #attendanceMatrixDetailModal .attendance-manual-location .select2-selection__arrow{height:37px!important}
 #attendanceMatrixDetailModal .select2-container--open{z-index:1085}
 #attendanceMatrixDetailModal .attendance-manual-location{position:relative}
 #attendanceMatrixDetailModal .attendance-manual-location>.select2-container--open{z-index:1090}
 #attendanceMatrixDetailModal .attendance-manual-location .select2-dropdown{width:100%!important;max-width:100%;border:1px solid #93c5fd;border-radius:9px;box-shadow:0 12px 28px rgba(15,23,42,.18);overflow:hidden}
 #attendanceMatrixDetailModal .attendance-manual-location .select2-results__options{max-height:180px!important;overflow-y:auto}
+#attendanceMatrixDetailModal .attendance-manual-location .select2-results__option{white-space:normal;overflow-wrap:anywhere}
 #attendanceMatrixDetailModal .attendance-manual-location .select2-search--dropdown{padding:7px;background:#f8fafc}
 #attendanceMatrixDetailModal .attendance-manual-location .select2-search__field{height:36px;padding:6px 10px!important;border:1px solid #bfdbfe!important;border-radius:7px!important}
 #attendanceMatrixDetailModal .attendance-manual-location .select2-container--bootstrap4 .select2-selection--single .select2-selection__arrow{top:0!important;right:8px!important;height:100%!important;width:28px!important;display:flex!important;align-items:center!important;justify-content:center!important}
