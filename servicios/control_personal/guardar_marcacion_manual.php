@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../includes/attendance_report_closure.php';
 
 require_role('Administrador');
 verify_csrf($_POST['csrf_token'] ?? null);
@@ -60,6 +61,7 @@ if ($projectProvided && $projectId > 0) {
 if ($attendanceResult === 'falta') {
     try {
         $pdo->beginTransaction();
+        attendance_report_assert_editable($workerId, $markDate, $pdo, true);
         $workerStmt = $pdo->prepare('SELECT id FROM workers WHERE id = :id LIMIT 1 FOR UPDATE');
         $workerStmt->execute(['id' => $workerId]);
         if (!$workerStmt->fetchColumn()) {
@@ -190,6 +192,7 @@ $saveMark = static function (string $type, string $time, int $locationId) use ($
 
 try {
     $pdo->beginTransaction();
+    attendance_report_assert_editable($workerId, $markDate, $pdo, true);
     $clearOverride = $pdo->prepare('DELETE FROM attendance_manual_day_overrides WHERE worker_id=:worker AND mark_date=:date');
     $clearOverride->execute(['worker' => $workerId, 'date' => $markDate]);
     if ($entryTime !== '') $saveMark('entrada', $entryTime, $entryLocationId);

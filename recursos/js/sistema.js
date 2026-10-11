@@ -91,6 +91,35 @@ if (attendanceReportNoteForm) {
         }
     });
 }
+document.querySelectorAll('.js-close-attendance-month').forEach((button) => {
+    button.addEventListener('click', async () => {
+        const role = button.dataset.role === 'administrador' ? 'administrador' : 'trabajador';
+        const confirmed = await Swal.fire({
+            icon: 'warning',
+            title: `Cerrar como ${role}`,
+            text: `Se registrará su conformidad para el mes ${button.dataset.month}. Este cierre no se puede deshacer. Cuando ambas partes cierren, ya no se podrán corregir datos del mes.`,
+            showCancelButton: true,
+            confirmButtonText: 'Sí, cerrar mi parte',
+            cancelButtonText: 'Cancelar',
+        });
+        if (!confirmed.isConfirmed) return;
+        const body = new FormData();
+        body.append('csrf_token', csrf);
+        body.append('worker_id', button.dataset.workerId);
+        body.append('month', button.dataset.month);
+        button.disabled = true;
+        try {
+            const response = await fetch(`${BASE_URL}/servicios/control_personal/cerrar_reporte_asistencia_mensual.php`, { method: 'POST', body });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo cerrar el reporte.');
+            await Swal.fire('Cierre registrado', data.message, 'success');
+            window.location.reload();
+        } catch (error) {
+            button.disabled = false;
+            Swal.fire('Atención', error.message || 'No se pudo cerrar el reporte.', 'warning');
+        }
+    });
+});
 let currentWorkerId = null;
 let currentPositionId = null;
 let requirementModal = null;
@@ -6024,6 +6053,9 @@ function initControlPersonalCalendar() {
     const startDateField = document.getElementById('calendarDate');
     const endDateField = document.getElementById('calendarEndDate');
     const nameField = document.getElementById('calendarDayName');
+    const nameWrapper = document.getElementById('calendarDayNameField');
+    const modalityWrapper = document.getElementById('calendarRestModalityField');
+    const modalityFields = Array.from(form.querySelectorAll('input[type="radio"][name="name"]'));
     const workerChecks = Array.from(document.querySelectorAll('.calendar-worker-check'));
     const workersField = document.getElementById('calendarWorkersField');
     const workersError = document.getElementById('calendarWorkersError');
@@ -6043,15 +6075,17 @@ function initControlPersonalCalendar() {
     });
 
     function syncFields() {
-        const defaultNames = {
-            vacation: 'Vacaciones',
-            permission: 'Permiso',
-            rest: 'Descanso'
-        };
-        const automaticNames = Object.values(defaultNames);
-
-        if (!nameField.value.trim() || automaticNames.includes(nameField.value.trim())) {
-            nameField.value = defaultNames[typeField.value] || '';
+        const isRest = typeField.value === 'rest';
+        nameWrapper.classList.toggle('d-none', isRest);
+        modalityWrapper.classList.toggle('d-none', !isRest);
+        nameField.disabled = isRest;
+        nameField.required = !isRest;
+        modalityFields.forEach((field) => {
+            field.disabled = !isRest;
+            field.required = isRest;
+        });
+        if (!isRest && (!nameField.value.trim() || ['Vacaciones', 'Descanso'].includes(nameField.value.trim()))) {
+            nameField.value = typeField.value === 'vacation' ? 'Vacaciones' : '';
         }
         if (!endDateField.value) endDateField.value = startDateField.value;
         document.getElementById('calendarDateLabel').textContent = 'Fecha inicial';
@@ -6082,6 +6116,7 @@ function initControlPersonalCalendar() {
         setValue('calendarEndDate', data.endDate || data.date || localDateValue());
         setValue('calendarEventType', data.eventType || 'holiday');
         setValue('calendarDayName', data.name);
+        modalityFields.forEach((field) => { field.checked = field.value === data.name; });
         setValue('calendarScopeType', data.scopeType || 'all');
         setValue('calendarWorkerId', data.workerId);
         if (window.jQuery && jQuery(workerField).hasClass('select2-hidden-accessible')) {

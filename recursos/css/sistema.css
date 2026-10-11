@@ -7477,3 +7477,36 @@ input[type="checkbox"]:active {
 .attendance-exit-label .form-label{margin:0}
 .attendance-exit-label .btn{white-space:nowrap;font-size:11px;padding:4px 7px}
 @media(max-width:640px){.attendance-exit-label{align-items:flex-start;flex-direction:column}}
+.attendance-reference-heading{display:grid;grid-template-columns:minmax(170px,1fr) minmax(260px,2.4fr) auto;align-items:start}
+.attendance-reference-person{min-width:0;padding-right:18px;border-right:3px solid #14243f}.attendance-reference-person h2{font-size:18px;overflow-wrap:anywhere}
+.attendance-reference-profile{min-width:0;padding:0 18px;font-size:13px;line-height:1.45;overflow-wrap:anywhere}.attendance-reference-profile span{font-weight:700}
+.attendance-month-rates{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin:14px 0;padding-bottom:10px;border-bottom:1px solid #d0d9e5}
+.attendance-month-rates>div{padding:8px 12px;text-align:center;border:1px solid #7d8999;border-radius:999px;background:#f1f4f8;font-size:12px}
+.attendance-month-rates strong{color:#0d418c}
+.attendance-reference-days{display:grid;grid-template-columns:1.15fr 1.8fr 1.35fr;gap:10px;padding-bottom:12px;border-bottom:1px solid #d0d9e5}
+.attendance-reference-days>div{min-width:0}.attendance-reference-days strong{font-variant-numeric:tabular-nums}
+.attendance-reference-workdays{display:flex;flex-direction:column;gap:7px}.attendance-reference-worked{padding:10px;border:2px solid #268260;border-radius:999px;text-align:center;background:#f1faf5;font-size:14px;font-weight:800}.attendance-reference-worktypes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;flex:1}
+.attendance-reference-worktypes>div,.attendance-reference-otherdays>div,.attendance-reference-rest-types>div{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;min-width:0;padding:9px 6px;text-align:center;border:1px solid #e9a86d;border-radius:19px;background:#f4f7fc;font-size:11px;line-height:1.25;font-weight:700}
+.attendance-reference-worktypes>div:first-child,.attendance-reference-worktypes>div:nth-child(2){border-color:#9b95c8}.attendance-reference-worktypes strong,.attendance-reference-otherdays strong,.attendance-reference-rest-types strong{font-size:14px;color:#122e54}
+.attendance-reference-otherdays{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
+.attendance-reference-rest{display:flex;flex-direction:column;gap:7px}.attendance-reference-rest-total{padding:10px;text-align:center;border:1px solid #e9a86d;border-radius:999px;background:#f4f7fc;font-size:13px;font-weight:800}.attendance-reference-rest-types{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;flex:1}.attendance-reference-rest-types>div:last-child{border-color:#78c9e0}
+.attendance-reference-rest-extra{font-size:11px;text-align:center;color:#5a6c82}
+.attendance-worked-total{display:flex;align-items:center;justify-content:center;gap:6px;margin:12px 0 7px;padding:10px 16px;border:3px solid #298164;border-radius:999px;background:#f1faf6;font-size:15px;font-weight:800}.attendance-worked-total strong{color:#12543f;font-variant-numeric:tabular-nums}
+.attendance-reference-hours{display:grid;grid-template-columns:1.05fr 1.55fr 1.25fr;gap:10px}.attendance-reference-hour-source{display:grid;gap:8px}
+.attendance-reference-hour-box,.attendance-reference-extra-parts>div,.attendance-reference-extra-total,.attendance-reference-hour-result{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:0;padding:12px;text-align:center;background:#f4f7fc;border:1px solid #a3b9d0;border-radius:18px}
+.attendance-reference-hour-box:first-child{border-color:#65a98f}.attendance-reference-hour-box span,.attendance-reference-extra-total span,.attendance-reference-hour-result span{font-size:12px;font-weight:800;text-transform:uppercase}.attendance-reference-hours strong{margin-top:5px;font-size:21px;font-variant-numeric:tabular-nums;color:#173c75}.attendance-reference-hours small{margin-top:4px;font-size:10px;color:#66758a}
+.attendance-reference-hour-extras{display:grid;grid-template-columns:1fr 1.15fr;gap:8px;padding:8px;border-radius:20px;background:#e5e7eb}.attendance-reference-extra-parts{display:grid;gap:7px}.attendance-reference-extra-parts>div{font-size:11px}.attendance-reference-extra-parts strong{font-size:15px}.attendance-reference-extra-total{border:3px solid #298164}
+.attendance-reference-hour-result{border:3px solid #f18435}.attendance-reference-hour-result strong{font-size:25px}
+.attendance-hours-note{margin:9px 0 0;color:#65758c;font-size:12px}
+@media(max-width:800px){.attendance-reference-days{grid-template-columns:1fr 1.5fr}.attendance-reference-rest{grid-column:1/-1}.attendance-reference-hours{grid-template-columns:1fr 1.3fr}.attendance-reference-hour-result{grid-column:1/-1}}
+@media(max-width:700px){.attendance-reference-heading{grid-template-columns:1fr}.attendance-reference-person{border-right:0;border-bottom:2px solid #14243f;padding:0 0 8px}.attendance-reference-profile{padding:9px 0}.attendance-reference-days,.attendance-reference-hours{grid-template-columns:1fr}.attendance-reference-otherdays{min-height:110px}.attendance-reference-rest,.attendance-reference-hour-result{grid-column:auto}.attendance-month-rates{gap:8px}}
+@media(max-width:460px){.attendance-reference-worktypes,.attendance-reference-otherdays{grid-template-columns:repeat(2,minmax(0,1fr))}.attendance-reference-hour-extras{grid-template-columns:1fr}.attendance-month-rates{grid-template-columns:1fr}}
+.attendance-month-closure{margin-top:18px;padding:18px;border:1px solid #cbd8e8;border-radius:13px;background:#f8fbff}
+.attendance-month-closure-heading h3{margin:0 0 4px;font-size:17px;color:#152d50}.attendance-month-closure-heading p{margin:0 0 13px;color:#5d6d83;font-size:13px}
+.attendance-month-closure-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.attendance-month-closure-card{display:flex;flex-direction:column;align-items:flex-start;gap:8px;min-width:0;padding:15px;border:1px solid #cbd8e8;border-radius:11px;background:#fff}
+.attendance-month-closure-card.is-closed{border-color:#7fcba4;background:#eaf8f0}.attendance-month-closure-role{font-size:12px;font-weight:800;text-transform:uppercase;color:#476381}
+.attendance-month-closure-card strong{font-size:14px;color:#135d3f}.attendance-month-closure-card small{color:#456b59}.attendance-month-closure-card .attendance-month-closure-pending{color:#6b778b}
+.attendance-month-closure-complete{margin:12px 0 0;padding:10px 12px;border-radius:8px;background:#daf3e4;color:#105735;font-weight:700}
+.report-is-locked .report-early-overtime-select{display:none}
+@media(max-width:640px){.attendance-month-closure-cards{grid-template-columns:1fr}.attendance-month-closure-card .btn{width:100%}}

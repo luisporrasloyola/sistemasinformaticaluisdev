@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../includes/attendance_report_closure.php';
 require_module_access('control_personal.reporte_asistencias');
 if (is_personal_role()) json_response(['ok' => false, 'message' => 'El rol Personal solo puede visualizar su reporte.'], 403);
 verify_csrf($_POST['csrf_token'] ?? null);
@@ -30,6 +31,9 @@ try {
         CONSTRAINT fk_attendance_report_note_worker FOREIGN KEY (worker_id) REFERENCES workers(id) ON DELETE CASCADE,
         CONSTRAINT fk_attendance_report_note_user FOREIGN KEY (responsible_user_id) REFERENCES users(id) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo = db();
+    $pdo->beginTransaction();
+    attendance_report_assert_range_editable($workerId, $dateFrom, $dateTo, $pdo, true);
     $user = current_user();
     $stmt = db()->prepare('INSERT INTO attendance_report_notes
         (worker_id, date_from, date_to, observation, responsible_user_id, responsible_name)
@@ -39,7 +43,12 @@ try {
     $stmt->execute(['worker_id' => $workerId, 'date_from' => $dateFrom, 'date_to' => $dateTo,
         'observation' => $observation, 'user_id' => (int) ($user['id'] ?? 0) ?: null,
         'responsible_name' => (string) ($user['name'] ?? 'Responsable')]);
+    $pdo->commit();
     echo json_encode(['ok' => true, 'message' => 'Observación guardada correctamente.', 'responsible_name' => $user['name'] ?? 'Responsable']);
+} catch (DomainException $e) {
+    if (isset($pdo) && $pdo->inTransaction()) $pdo->rollBack();
+    http_response_code(409); echo json_encode(['ok' => false, 'message' => $e->getMessage()]);
 } catch (Throwable $e) {
+    if (isset($pdo) && $pdo->inTransaction()) $pdo->rollBack();
     http_response_code(500); echo json_encode(['ok' => false, 'message' => 'No se pudo guardar la observación.']);
 }

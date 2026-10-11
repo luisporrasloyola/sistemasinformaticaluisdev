@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../includes/attendance_report_data.php';
+require_once __DIR__ . '/../../includes/attendance_report_closure.php';
 require_module_access('control_personal.reporte_asistencias');
 header('Content-Type: application/json; charset=utf-8');
 if (is_personal_role()) json_response(['ok' => false, 'message' => 'No tiene permiso para autorizar horas extra.'], 403);
@@ -41,6 +42,7 @@ try {
 
     $pdo = db();
     $pdo->beginTransaction();
+    attendance_report_assert_range_editable((int) $workerId, $from, $to, $pdo, true);
     $lookup = $pdo->prepare('SELECT work_date, is_authorized FROM attendance_early_overtime_authorizations WHERE worker_id = ? AND work_date BETWEEN ? AND ? FOR UPDATE');
     $lookup->execute([(int) $workerId, $from, $to]);
     $existing = [];
@@ -65,6 +67,9 @@ try {
     }
     $pdo->commit();
     json_response(['ok' => true, 'message' => 'Autorizaciones guardadas.', 'changed' => $changedCount]);
+} catch (DomainException $error) {
+    if (isset($pdo) && $pdo->inTransaction()) $pdo->rollBack();
+    json_response(['ok' => false, 'message' => $error->getMessage()], 409);
 } catch (Throwable $error) {
     if (isset($pdo) && $pdo->inTransaction()) $pdo->rollBack();
     error_log('Error al guardar autorizaciones de horas extra de entrada: ' . $error->getMessage());

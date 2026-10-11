@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../includes/attendance_report_closure.php';
 require_module_access('control_personal.programacion');
 verify_csrf($_POST['csrf_token'] ?? null);
 
@@ -23,6 +24,8 @@ $assignment = $stmt->fetch();
 if (!$assignment) json_response(['ok' => false, 'message' => 'La asignación ya no está activa.'], 404);
 
 $workerId = (int) $assignment['worker_id'];
+try { attendance_report_assert_editable($workerId, $date); }
+catch (DomainException $error) { json_response(['ok' => false, 'message' => $error->getMessage()], 409); }
 $used = db()->prepare("SELECT
     EXISTS(SELECT 1 FROM attendance_marks WHERE worker_id=:worker_marks AND mark_date=:date_marks) AS has_marks,
     EXISTS(SELECT 1 FROM attendance_programs WHERE worker_id=:worker_program AND program_date=:date_program AND status='programada') AS has_program,

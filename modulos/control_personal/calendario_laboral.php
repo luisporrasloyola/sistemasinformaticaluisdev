@@ -76,7 +76,7 @@ require __DIR__ . '/../../includes/header.php';
 <div class="page-title">
     <div>
         <h1>Calendario laboral</h1>
-        <p>Vacaciones, permisos, descansos y d&iacute;as especiales del personal.</p>
+        <p>Vacaciones, descansos y d&iacute;as especiales del personal.</p>
     </div>
     <div class="d-flex gap-2 align-items-end flex-wrap">
         <form class="d-flex gap-2 align-items-end" method="get">
@@ -94,7 +94,6 @@ require __DIR__ . '/../../includes/header.php';
     <div class="d-flex align-items-end justify-content-between gap-3 flex-wrap mb-3">
         <div class="attendance-matrix-legend mb-0">
             <span class="legend-vacation"><strong>VAC</strong>Vacaciones</span>
-            <span class="legend-permission"><strong>PER</strong>Permiso</span>
             <span class="legend-rest"><strong>D</strong>Descanso</span>
             <span class="legend-holiday"><strong>FER</strong>Feriado</span>
             <span class="legend-non-working"><strong>NL</strong>No laborable</span>
@@ -143,6 +142,7 @@ require __DIR__ . '/../../includes/header.php';
                     <td><?= (string) $event['scope_type'] === 'worker' ? '<strong>' . e(calendar_scope_label($event)) . '</strong>' : e(calendar_scope_label($event)) ?></td>
                     <td><?= e($event['created_by_name'] ?? '-') ?></td>
                     <td class="text-nowrap">
+                        <?php if ($eventType !== 'permission'): ?>
                         <button class="btn btn-sm btn-outline-primary js-edit-calendar-day" type="button"
                             data-id="<?= (int) $event['id'] ?>"
                             data-date="<?= e($event['calendar_date']) ?>"
@@ -153,6 +153,7 @@ require __DIR__ . '/../../includes/header.php';
                             data-company-id="<?= (int) ($event['company_id'] ?? 0) ?>"
                             data-worker-id="<?= (int) ($event['worker_id'] ?? 0) ?>"
                             title="Editar"><i class="fa-solid fa-pen"></i></button>
+                        <?php endif; ?>
                         <button class="btn btn-sm btn-outline-danger js-delete-calendar-day" type="button" data-id="<?= (int) $event['id'] ?>" title="Eliminar"><i class="fa-solid fa-trash"></i></button>
                     </td>
                 </tr>
@@ -183,7 +184,6 @@ require __DIR__ . '/../../includes/header.php';
                         <label class="form-label">Tipo</label>
                         <select class="form-select" name="event_type" id="calendarEventType" required>
                             <option value="vacation">Vacaciones</option>
-                            <option value="permission">Permiso</option>
                             <option value="rest">Descanso</option>
                             <option value="holiday">Feriado</option>
                             <option value="non_working">No laborable</option>
@@ -205,9 +205,24 @@ require __DIR__ . '/../../includes/header.php';
                             <option value="selected">Seleccionar trabajadores</option>
                         </select>
                     </div>
-                    <div class="col-12">
-                        <label class="form-label">Motivo o nombre</label>
+                    <div class="col-12" id="calendarDayNameField">
+                        <label class="form-label" for="calendarDayName">Motivo o nombre</label>
                         <input class="form-control" name="name" id="calendarDayName" maxlength="180" placeholder="Ej. Fiestas Patrias" required>
+                    </div>
+                    <div class="col-12 d-none" id="calendarRestModalityField">
+                        <fieldset>
+                            <legend class="form-label fs-6 mb-2">Modalidad del descanso</legend>
+                            <div class="d-flex flex-wrap gap-3">
+                                <label class="form-check border rounded px-3 py-2 m-0 d-flex align-items-center gap-2">
+                                    <input class="form-check-input m-0" type="radio" name="name" value="A cuenta de horas" disabled>
+                                    <span class="form-check-label">A cuenta de horas</span>
+                                </label>
+                                <label class="form-check border rounded px-3 py-2 m-0 d-flex align-items-center gap-2">
+                                    <input class="form-check-input m-0" type="radio" name="name" value="Régimen laboral" disabled>
+                                    <span class="form-check-label">Régimen laboral</span>
+                                </label>
+                            </div>
+                        </fieldset>
                     </div>
                     <div class="col-12 d-none" id="calendarWorkerField">
                         <label class="form-label">Personal</label>

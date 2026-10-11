@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../includes/attendance_report_closure.php';
 require_module_access('control_personal.calendario_laboral');
 verify_csrf($_POST['csrf_token'] ?? null);
 
@@ -19,11 +20,17 @@ $parsedDate = DateTimeImmutable::createFromFormat('!Y-m-d', $date);
 if (!$parsedDate || $parsedDate->format('Y-m-d') !== $date) {
     json_response(['ok' => false, 'message' => 'Ingrese una fecha valida.'], 400);
 }
-if (!in_array($eventType, ['holiday', 'non_working', 'vacation', 'permission', 'rest'], true)) {
+if (!in_array($eventType, ['holiday', 'non_working', 'vacation', 'rest'], true)) {
     json_response(['ok' => false, 'message' => 'Seleccione un tipo de dia valido.'], 400);
 }
-if (!in_array($scopeType, ['all', 'worker', 'selected'], true) || $name === '') {
-    json_response(['ok' => false, 'message' => 'Complete el motivo y el alcance.'], 400);
+if (!in_array($scopeType, ['all', 'worker', 'selected'], true)) {
+    json_response(['ok' => false, 'message' => 'Seleccione a quién se aplicará el día.'], 400);
+}
+if ($eventType === 'rest' && !in_array($name, ['A cuenta de horas', 'Régimen laboral'], true)) {
+    json_response(['ok' => false, 'message' => 'Seleccione A cuenta de horas o Régimen laboral.'], 400);
+}
+if ($eventType !== 'rest' && $name === '') {
+    json_response(['ok' => false, 'message' => 'Complete el motivo o nombre.'], 400);
 }
 if ($scopeType === 'worker' && $workerId <= 0) {
     json_response(['ok' => false, 'message' => 'Seleccione el trabajador.'], 400);
@@ -48,6 +55,20 @@ $targetWorkerIds = match ($scopeType) {
     default => [0],
 };
 $storedScopeType = $scopeType === 'all' ? 'all' : 'worker';
+
+try {
+    attendance_report_assert_calendar_editable($date, $endDate, $scopeType === 'all' ? [] : $targetWorkerIds);
+    if ($id > 0) {
+        $oldStmt = db()->prepare('SELECT calendar_date, COALESCE(end_date, calendar_date) AS end_date, scope_type, worker_id
+            FROM attendance_calendar_days WHERE id = :id AND status = 1 LIMIT 1');
+        $oldStmt->execute(['id' => $id]);
+        $old = $oldStmt->fetch();
+        if ($old) attendance_report_assert_calendar_editable((string) $old['calendar_date'], (string) $old['end_date'],
+            $old['scope_type'] === 'worker' ? [(int) $old['worker_id']] : []);
+    }
+} catch (DomainException $error) {
+    json_response(['ok' => false, 'message' => $error->getMessage()], 409);
+}
 
 $duplicate = db()->prepare("SELECT id FROM attendance_calendar_days
     WHERE calendar_date <= :end_date

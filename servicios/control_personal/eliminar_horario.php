@@ -3,6 +3,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/attendance_schedule_deletion.php';
+require_once __DIR__ . '/../../includes/attendance_report_closure.php';
 require_role('Administrador');
 verify_csrf($_POST['csrf_token'] ?? null);
 $id = max(0, (int)($_POST['id'] ?? 0));
@@ -13,6 +14,7 @@ if ($confirmation !== 'ELIMINAR') json_response(['ok'=>false,'message'=>'Escriba
 $pdo = db();
 $pdo->beginTransaction();
 try {
+    attendance_report_assert_schedule_editable($id, $pdo);
     $stmt = $pdo->prepare('SELECT id FROM attendance_schedules WHERE id=:id FOR UPDATE');
     $stmt->execute(['id'=>$id]);
     if (!$stmt->fetchColumn()) throw new DomainException('El horario ya no existe.');

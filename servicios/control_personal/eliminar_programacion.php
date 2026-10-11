@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../includes/attendance_report_closure.php';
 require_module_access('control_personal.programacion');
 verify_csrf($_POST['csrf_token'] ?? null);
 
@@ -11,7 +12,7 @@ if ($id <= 0) {
     json_response(['ok' => false, 'message' => 'La programación seleccionada no es válida.'], 422);
 }
 
-$check = db()->prepare("SELECT ap.id,
+$check = db()->prepare("SELECT ap.id, ap.worker_id, ap.program_date,
         (SELECT COUNT(*) FROM attendance_program_stops aps WHERE aps.program_id = ap.id) AS stops_count,
         (SELECT COUNT(*) FROM attendance_marks am
          WHERE am.program_id=ap.id OR (am.program_id IS NULL AND am.assignment_id=ap.assignment_id AND am.worker_id=ap.worker_id AND am.mark_date=ap.program_date)) AS marks_count,
@@ -26,6 +27,8 @@ $program = $check->fetch();
 if (!$program) {
     json_response(['ok' => false, 'message' => 'La programación ya no existe o fue eliminada anteriormente.'], 404);
 }
+try { attendance_report_assert_editable((int) $program['worker_id'], (string) $program['program_date']); }
+catch (DomainException $error) { json_response(['ok' => false, 'message' => $error->getMessage()], 409); }
 $marksCount = (int) $program['marks_count'];
 $tripsCount = (int) $program['trips_count'];
 $completionsCount = (int) $program['completions_count'];

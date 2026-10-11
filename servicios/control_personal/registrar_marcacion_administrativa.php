@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/attendance_location_access.php';
+require_once __DIR__ . '/../../includes/attendance_report_closure.php';
 require_role('Administrador');
 verify_csrf($_POST['csrf_token'] ?? null);
 
@@ -34,6 +35,7 @@ if ($attendanceResult !== 'falta' && $type === 'entrada' && !in_array($attendanc
 $pdo = db();
 $pdo->beginTransaction();
 try {
+    attendance_report_assert_editable($workerId, $date, $pdo, true);
     $workerStmt = $pdo->prepare('SELECT id FROM workers WHERE id=:id FOR UPDATE');
     $workerStmt->execute(['id'=>$workerId]);
     if (!$workerStmt->fetchColumn()) throw new DomainException('El trabajador ya no existe.');

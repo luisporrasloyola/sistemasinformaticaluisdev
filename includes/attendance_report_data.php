@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/attendance_calendar.php';
+require_once __DIR__ . '/attendance_report_daily.php';
+require_once __DIR__ . '/attendance_report_hours.php';
 
 function attendance_report_time(?string $time): string
 {
@@ -584,6 +586,9 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                     : ($assignment['activity'] ?? ''))) ?: '-'),
                 'observation' => $observation,
                 'is_workday' => $hasSchedule && !$isNonWorking,
+                'calendar_event_id' => (int) ($calendarEvent['id'] ?? 0),
+                'calendar_event_type' => $eventType,
+                'calendar_event_name' => (string) ($calendarEvent['name'] ?? ''),
             ];
             }
             $cursor = $cursor->modify('+1 day');
@@ -598,6 +603,7 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
             if (isset($reportedDays[$id][$date])) continue;
             $weekday = (int) (new DateTimeImmutable($date))->format('N');
             $state = attendance_report_state('absent');
+            $calendarEvent = attendance_calendar_resolve_event($calendarEvents, $date, $id, (int) $worker['company_id']);
             $rows[] = [
                 'worker_id'=>$id, 'date'=>$date, 'weekday'=>$weekdayLabels[$weekday],
                 'assignment_id'=>0, 'worker'=>(string) $worker['full_name'],
@@ -614,6 +620,9 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 'early_overtime_eligible'=>false, 'early_overtime_authorized'=>isset($earlyOvertimeAuthorized[$date]),
                 'early_overtime_minutes'=>0, 'exit_overtime_minutes'=>0,
                 'project'=>'-', 'observation'=>(string) ($override['reason'] ?? '-'), 'is_workday'=>true,
+                'calendar_event_id'=>(int) ($calendarEvent['id'] ?? 0),
+                'calendar_event_type'=>(string) ($calendarEvent['event_type'] ?? ''),
+                'calendar_event_name'=>(string) ($calendarEvent['name'] ?? ''),
             ];
         }
     }
@@ -649,6 +658,27 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
     });
     $selectedWorker = $workerId > 0 ? ($workers[0] ?? null) : null;
     $individualRows = $workerId > 0 ? array_values(array_filter($rows, static fn(array $row): bool => $row['worker_id'] === $workerId)) : [];
+    $classificationRows = $individualRows;
+    if ($selectedWorker && !empty($assignmentsByWorker[$workerId])) {
+        $firstAssignmentDate = min(array_column($assignmentsByWorker[$workerId], 'assignment_start_date'));
+        $reportedDates = array_fill_keys(array_column($individualRows, 'date'), true);
+        foreach (array_keys($calendarEvents) as $date) {
+            if ($date < $firstAssignmentDate || isset($reportedDates[$date])) continue;
+            $calendarEvent = attendance_calendar_resolve_event(
+                $calendarEvents, $date, $workerId, (int) $selectedWorker['company_id']
+            );
+            if (!$calendarEvent) continue;
+            $classificationRows[] = [
+                'worker_id' => $workerId, 'date' => $date, 'entry' => '-', 'exit' => '-',
+                'state_key' => (string) $calendarEvent['event_type'], 'journey_key' => null,
+                'calendar_event_id' => (int) $calendarEvent['id'],
+                'calendar_event_type' => (string) $calendarEvent['event_type'],
+                'calendar_event_name' => (string) $calendarEvent['name'],
+            ];
+        }
+    }
+    $dailyReconciliation = attendance_report_reconcile_days($classificationRows);
+    $monthlyDaySummary = attendance_report_summarize_monthly_days($dailyReconciliation['days']);
     $selectedAssignment = $workerId > 0 ? ($assignmentByWorker[$workerId] ?? null) : null;
     if ($workerId > 0 && $individualRows) {
         $periodAssignmentIds = array_values(array_unique(array_column($individualRows, 'assignment_id')));
@@ -791,8 +821,51 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
 
     return [
         'workers' => $workers, 'rows' => $rows, 'individual_rows' => $individualRows,
+        'daily_classification' => $dailyReconciliation['days'],
+        'monthly_day_summary' => $monthlyDaySummary,
+        'duplicate_days' => $dailyReconciliation['duplicate_days'],
         'worker' => $selectedWorker, 'assignment' => $selectedAssignment, 'summary' => $summary,
         'note' => $workerId > 0 ? attendance_report_note($workerId, $dateFrom, $dateTo) : null,
         'trips' => $trips,
     ];
+}
+
+/**
+ * Calcula el saldo histórico en una sola lectura hasta el mes solicitado.
+ * El inicio es la primera asignación del trabajador; el saldo anterior es cero.
+ *
+ * @return array{months: array<string, array<string, int>>, current: array<string, int>, current_labels: array<string, string>}
+ */
+function attendance_report_build_hours_ledger(int $workerId, string $throughMonth, ?array $currentDays = null): array
+{
+    if ($workerId <= 0 || !preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $throughMonth)) {
+        throw new InvalidArgumentException('Trabajador o mes inválido para el libro de horas.');
+    }
+
+    $stmt = db()->prepare('SELECT MIN(valid_from) FROM attendance_assignments WHERE worker_id = :worker_id');
+    $stmt->execute(['worker_id' => $workerId]);
+    $firstDate = $stmt->fetchColumn();
+    $firstMonth = $firstDate ? substr((string) $firstDate, 0, 7) : $throughMonth;
+    if ($firstMonth > $throughMonth) $firstMonth = $throughMonth;
+
+    if ($currentDays === null) {
+        $historical = attendance_report_build($firstMonth . '-01',
+            (new DateTimeImmutable($throughMonth . '-01'))->format('Y-m-t'), $workerId);
+        $days = $historical['daily_classification'];
+    } else {
+        $days = $currentDays;
+        if ($firstMonth < $throughMonth) {
+            $previousEnd = (new DateTimeImmutable($throughMonth . '-01'))->modify('-1 day')->format('Y-m-d');
+            $historical = attendance_report_build($firstMonth . '-01', $previousEnd, $workerId);
+            $days = array_merge($historical['daily_classification'], $days);
+        }
+    }
+    $months = attendance_report_hours_ledger($days, $firstMonth, $throughMonth);
+    $current = $months[$throughMonth];
+    $labels = [];
+    foreach (['opening_minutes', 'worked_minutes', 'early_overtime_minutes',
+        'exit_overtime_minutes', 'overtime_minutes', 'redeemed_minutes', 'closing_minutes'] as $field) {
+        $labels[$field] = attendance_report_hours_label($current[$field]);
+    }
+    return ['months' => $months, 'current' => $current, 'current_labels' => $labels];
 }

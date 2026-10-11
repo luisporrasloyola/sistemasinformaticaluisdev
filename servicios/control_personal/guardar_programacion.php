@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../includes/attendance_report_closure.php';
 require_module_access('control_personal.programacion');
 verify_csrf($_POST['csrf_token'] ?? null);
 
@@ -45,6 +46,22 @@ if ($id > 0) {
     // al trabajador; no debe trasladar silenciosamente el historial a otra asignación.
     $assignmentId = (int) $existingProgram['assignment_id'];
     if ($editingExistingRoute) $programDate = (string) $existingProgram['program_date'];
+}
+$programWorkerId = (int) ($existingProgram['worker_id'] ?? 0);
+if ($programWorkerId <= 0) {
+    $workerStmt = db()->prepare('SELECT worker_id FROM attendance_assignments WHERE id = :id LIMIT 1');
+    $workerStmt->execute(['id' => $assignmentId]);
+    $programWorkerId = (int) $workerStmt->fetchColumn();
+}
+if ($programWorkerId > 0) {
+    try {
+        attendance_report_assert_editable($programWorkerId, $programDate);
+        if ($existingProgram && $existingProgram['program_date'] !== $programDate) {
+            attendance_report_assert_editable($programWorkerId, (string) $existingProgram['program_date']);
+        }
+    } catch (DomainException $error) {
+        json_response(['ok' => false, 'message' => $error->getMessage()], 409);
+    }
 }
 
 // Al retirar el último destino de un recorrido que todavía no fue utilizado,

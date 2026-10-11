@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../includes/attendance_report_closure.php';
 require_role('Administrador');
 
 verify_csrf($_POST['csrf_token'] ?? null);
@@ -31,12 +32,17 @@ $pdo = db();
 $pdo->beginTransaction();
 try {
     $placeholders = implode(',', array_fill(0, count($assignmentIds), '?'));
-    $assignmentStmt = $pdo->prepare("SELECT id, location_id, schedule_id
+    $assignmentStmt = $pdo->prepare("SELECT id, worker_id, location_id, schedule_id, valid_from, valid_until
         FROM attendance_assignments WHERE id IN ({$placeholders}) AND status = 1 FOR UPDATE");
     $assignmentStmt->execute($assignmentIds);
     $rows = $assignmentStmt->fetchAll();
     if (count($rows) !== count($assignmentIds)) {
         throw new RuntimeException('Una o más asignaciones ya no están vigentes. Actualice la página e inténtelo nuevamente.');
+    }
+    foreach ($rows as $row) {
+        $affectedWorkerId = (int) $row['worker_id'];
+        attendance_report_assert_calendar_editable((string) $row['valid_from'], (string) ($row['valid_until'] ?: '9999-12-31'), [$affectedWorkerId], $pdo);
+        attendance_report_assert_calendar_editable($validFrom, $validUntil ?: '9999-12-31', [$affectedWorkerId], $pdo);
     }
     $groupKeys = array_unique(array_map(
         static fn(array $row): string => (string) $row['location_id'] . '-' . (string) $row['schedule_id'],

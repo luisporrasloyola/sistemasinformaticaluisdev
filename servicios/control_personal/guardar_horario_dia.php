@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../includes/attendance_report_closure.php';
 require_role('Administrador');
 
 verify_csrf($_POST['csrf_token'] ?? null);
@@ -53,6 +54,8 @@ $entryEnd = minutes_to_time($entryTimeMinutes + $tolerance);
 $exitStart = $exitTime;
 $exitEnd = $exitTime;
 
+try { attendance_report_assert_schedule_editable($scheduleId); }
+catch (DomainException $error) { json_response(['ok' => false, 'message' => $error->getMessage()], 409); }
 $stmt = db()->prepare('SELECT id FROM attendance_schedules WHERE id = :id AND status = 1');
 $stmt->execute(['id' => $scheduleId]);
 if (!$stmt->fetch()) {

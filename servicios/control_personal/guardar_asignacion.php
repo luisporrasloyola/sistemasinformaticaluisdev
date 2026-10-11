@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../includes/attendance_report_closure.php';
 require_role('Administrador');
 
 verify_csrf($_POST['csrf_token'] ?? null);
@@ -164,12 +165,15 @@ if ($id > 0) {
     $pdo = db();
     $pdo->beginTransaction();
     try {
-        $currentStmt = $pdo->prepare('SELECT worker_id FROM attendance_assignments WHERE id = :id AND status = 1 LIMIT 1 FOR UPDATE');
+        $currentStmt = $pdo->prepare('SELECT worker_id, valid_from, valid_until FROM attendance_assignments WHERE id = :id AND status = 1 LIMIT 1 FOR UPDATE');
         $currentStmt->execute(['id' => $id]);
-        $currentWorkerId = (int) $currentStmt->fetchColumn();
+        $currentAssignment = $currentStmt->fetch() ?: [];
+        $currentWorkerId = (int) ($currentAssignment['worker_id'] ?? 0);
         if ($currentWorkerId <= 0) {
             throw new RuntimeException('La asignación ya no está activa.');
         }
+        attendance_report_assert_calendar_editable((string) $currentAssignment['valid_from'], (string) ($currentAssignment['valid_until'] ?: '9999-12-31'), [$currentWorkerId], $pdo);
+        attendance_report_assert_calendar_editable($validFrom, $validUntil ?: '9999-12-31', [$currentWorkerId], $pdo);
         $conflict = assignment_conflict($pdo, $currentWorkerId, $scheduleId, $validFrom, $validUntil, $id);
         if ($conflict) throw new DomainException(assignment_conflict_message($conflict));
         $pdo->prepare('UPDATE attendance_assignments
@@ -212,6 +216,7 @@ if ($id > 0) {
             throw new RuntimeException('No hay trabajadores para asignar.');
         }
         $workerIds = array_values(array_unique(array_map('intval', $workerIds)));
+        attendance_report_assert_calendar_editable($validFrom, $validUntil ?: '9999-12-31', $workerIds, $pdo);
         $placeholders = implode(',', array_fill(0, count($workerIds), '?'));
         $activeStmt = $pdo->prepare("SELECT DISTINCT worker_id FROM attendance_assignments
             WHERE status = 1 AND worker_id IN ({$placeholders})

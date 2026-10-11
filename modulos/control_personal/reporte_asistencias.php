@@ -3,18 +3,16 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../includes/attendance_report_data.php';
+require_once __DIR__ . '/../../includes/attendance_report_closure.php';
 require_module_access('control_personal.reporte_asistencias');
 
-$today = date('Y-m-d');
-$defaultFrom = date('Y-m-01');
-$dateFrom = trim((string) ($_GET['desde'] ?? $defaultFrom));
-$dateTo = trim((string) ($_GET['hasta'] ?? $today));
+$month = trim((string) ($_GET['mes'] ?? substr((string) ($_GET['desde'] ?? date('Y-m')), 0, 7)));
+if (!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $month)) $month = date('Y-m');
+$dateFrom = $month . '-01';
+$dateTo = (new DateTimeImmutable($dateFrom))->format('Y-m-t');
 $personalView = is_personal_role();
 $workerId = $personalView ? (int) (current_user_worker_id() ?? 0) : (int) ($_GET['trabajador_id'] ?? 0);
 $companyId = $personalView ? 0 : max(0, (int) ($_GET['empresa_id'] ?? 0));
-if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom)) $dateFrom = $defaultFrom;
-if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateTo)) $dateTo = $today;
-if ($dateFrom > $dateTo) [$dateFrom, $dateTo] = [$dateTo, $dateFrom];
 
 $companies = $personalView ? [] : db()->query('SELECT id, name FROM companies ORDER BY name')->fetchAll();
 $companyIds = array_map('intval', array_column($companies, 'id'));
@@ -29,8 +27,34 @@ if (!$personalView && $companyId > 0 && $workerId > 0) {
 }
 $report = $workerId > 0 ? attendance_report_build($dateFrom, $dateTo, $workerId) : null;
 $worker = $report['worker'] ?? null;
+$closure = null;
+$closureError = false;
+if ($worker) {
+    try {
+        $closure = attendance_report_closure_status($workerId, $month);
+        $closureError = (bool) ($closure['schema_missing'] ?? false);
+    } catch (Throwable $error) {
+        $closureError = true;
+    }
+}
+$reportLocked = (bool) ($closure['fully_closed'] ?? false);
+$canEditReport = !$personalView && !$reportLocked;
 $assignment = $report['assignment'] ?? null;
 $summary = $report['summary'] ?? [];
+$monthlyDays = $report['monthly_day_summary'][$month] ?? [];
+$hoursBook = $worker ? attendance_report_build_hours_ledger($workerId, $month, $report['daily_classification']) : null;
+$monthlyHours = $hoursBook['current'] ?? [];
+$completedDays = 0;
+foreach ($report['daily_classification'] ?? [] as $classifiedDay) {
+    if (!empty($classifiedDay['worked']) && !empty($classifiedDay['has_exit'])) $completedDays++;
+}
+$workedDays = (int) ($monthlyDays['worked'] ?? 0);
+$punctuality = $workedDays > 0 ? round(100 * ($workedDays - (int) ($monthlyDays['late'] ?? 0)) / $workedDays) : 0;
+$completion = $workedDays > 0 ? round(100 * $completedDays / $workedDays) : 0;
+$monthNames = [1 => 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+$monthLabel = $monthNames[(int) substr($month, 5, 2)] . ' ' . substr($month, 0, 4);
+$previousDate = (new DateTimeImmutable($dateFrom))->modify('-1 month');
+$previousMonthLabel = $monthNames[(int) $previousDate->format('n')] . ' ' . $previousDate->format('Y');
 $rows = $report['individual_rows'] ?? [];
 $rowsPerPage = 20;
 $totalRows = count($rows);
@@ -52,7 +76,7 @@ if ($worker && !$personalView) {
 $note = $report['note'] ?? null;
 $trips = $report['trips'] ?? [];
 $tripsByDate = attendance_report_trips_by_date($trips);
-$query = http_build_query(['desde' => $dateFrom, 'hasta' => $dateTo, 'empresa_id' => $companyId, 'trabajador_id' => $workerId]);
+$query = http_build_query(['mes' => $month, 'desde' => $dateFrom, 'hasta' => $dateTo, 'empresa_id' => $companyId, 'trabajador_id' => $workerId]);
 
 require __DIR__ . '/../../includes/header.php';
 ?>
@@ -71,13 +95,9 @@ require __DIR__ . '/../../includes/header.php';
 
 <form class="dashboard-filters attendance-report-filters attendance-report-filters-simple" method="get">
     <div class="row g-3 align-items-end">
-        <div class="col-md-6 col-xl-2">
-            <label class="form-label">Desde</label>
-            <input class="form-control" type="date" name="desde" value="<?= e($dateFrom) ?>" required>
-        </div>
-        <div class="col-md-6 col-xl-2">
-            <label class="form-label">Hasta</label>
-            <input class="form-control" type="date" name="hasta" value="<?= e($dateTo) ?>" required>
+        <div class="col-md-6 col-xl-3">
+            <label class="form-label" for="attendanceReportMonth">Mes y año</label>
+            <input class="form-control" id="attendanceReportMonth" type="month" name="mes" value="<?= e($month) ?>" required>
         </div>
         <?php if (!$personalView): ?>
         <div class="col-md-6 col-xl-3">
@@ -90,7 +110,7 @@ require __DIR__ . '/../../includes/header.php';
             </select>
         </div>
         <?php endif; ?>
-        <div class="col-md-6 col-xl-<?= $personalView ? '6' : '3' ?>">
+        <div class="col-md-6 col-xl-<?= $personalView ? '7' : '4' ?>">
             <label class="form-label">Trabajador</label>
             <?php if ($personalView): ?><input type="hidden" name="trabajador_id" value="<?= $workerId ?>"><?php endif; ?>
             <select class="form-select select2-searchable" id="attendanceReportWorker" name="trabajador_id" <?= $personalView ? 'disabled' : '' ?> data-placeholder="Buscar trabajador" data-no-results="No se encontraron trabajadores" required>
@@ -142,44 +162,89 @@ document.addEventListener('DOMContentLoaded', () => {
         <p>Indique el periodo y el trabajador para preparar su reporte individual de asistencia y descargarlo en PDF.</p>
     </section>
 <?php else: ?>
-<section class="work-panel individual-report-preview">
-    <div class="individual-report-heading">
-        <div>
+<section class="work-panel individual-report-preview <?= $reportLocked ? 'report-is-locked' : '' ?>">
+    <div class="individual-report-heading attendance-reference-heading">
+        <div class="attendance-reference-person">
             <span class="report-eyebrow">REPORTE INDIVIDUAL</span>
             <h2><?= e($worker['full_name']) ?></h2>
             <p><?= e(date('d/m/Y', strtotime($dateFrom))) ?> al <?= e(date('d/m/Y', strtotime($dateTo))) ?></p>
         </div>
-        <span class="report-record-count"><?= count($rows) ?> días registrados</span>
+        <div class="attendance-reference-profile">
+            <div><span>Documento:</span> <?= e(($worker['document_type'] ?: 'Documento') . ' - ' . $worker['document_number']) ?></div>
+            <div><span>Empresa:</span> <?= e($worker['company'] ?: 'Sin empresa') ?></div>
+            <div><span>Cargo:</span> <?= e($worker['positions'] ?: 'Sin cargo registrado') ?></div>
+            <div><span>Horario:</span> <?= e($assignment['schedule_name'] ?? 'Sin horario asignado') ?></div>
+        </div>
+        <span class="report-record-count"><?= count($report['daily_classification']) ?> días registrados</span>
     </div>
 
-    <div class="individual-report-profile">
-        <div><span>Documento</span><strong><?= e(($worker['document_type'] ?: 'Documento') . ': ' . $worker['document_number']) ?></strong></div>
-        <div><span>Empresa</span><strong><?= e($worker['company'] ?: 'Sin empresa') ?></strong></div>
-        <div><span>Cargo</span><strong><?= e($worker['positions'] ?: 'Sin cargo registrado') ?></strong></div>
-        <div><span>Horario</span><strong><?= e($assignment['schedule_name'] ?? 'Sin horario asignado') ?></strong></div>
-        <div><span>Lugar asignado</span><strong><?= e($assignment['location_name'] ?? 'Sin lugar asignado') ?></strong></div>
+    <div class="attendance-month-rates">
+        <div><span>Puntualidad: <strong><?= $punctuality ?>%</strong></span></div>
+        <div><span>Jornadas finalizadas: <strong><?= $completion ?>%</strong></span></div>
     </div>
 
-    <div class="individual-report-metrics">
-        <div><span>Días laborables</span><strong><?= (int) $summary['workdays'] ?></strong></div>
-        <div class="metric-success"><span>Asistencias</span><strong><?= (int) $summary['attendances'] ?></strong></div>
-        <div class="metric-warning"><span>Tardanzas</span><strong><?= (int) $summary['late'] ?></strong></div>
-        <div class="metric-danger"><span>Faltas</span><strong><?= (int) $summary['absent'] ?></strong></div>
-        <div class="metric-vacation"><span>Vacaciones</span><strong><?= (int) $summary['vacations'] ?></strong></div>
-        <div><span>Horas trabajadas</span><strong><?= e(attendance_report_minutes_label((int) $summary['worked_minutes'])) ?></strong></div>
+    <div class="attendance-reference-days" aria-label="Resumen de días de <?= e($monthLabel) ?>">
+        <div class="attendance-reference-workdays">
+            <div class="attendance-reference-worked">Días trabajados: <strong><?= $workedDays ?></strong></div>
+            <div class="attendance-reference-worktypes">
+                <div>Asistencia regular<strong><?= (int) ($monthlyDays['regular'] ?? 0) ?></strong></div>
+                <div>No concluidos<strong><?= (int) ($monthlyDays['incomplete'] ?? 0) ?></strong></div>
+                <div>Tardanzas<strong><?= (int) ($monthlyDays['late'] ?? 0) ?></strong></div>
+            </div>
+        </div>
+        <div class="attendance-reference-otherdays">
+            <div>Feriados<strong><?= (int) ($monthlyDays['holiday'] ?? 0) ?> días</strong></div>
+            <div>No laborables<strong><?= (int) ($monthlyDays['non_working'] ?? 0) ?> días</strong></div>
+            <div>Vacaciones<strong><?= (int) ($monthlyDays['vacation'] ?? 0) ?> días</strong></div>
+            <div>Faltas<strong><?= (int) ($monthlyDays['absent'] ?? 0) ?> días</strong></div>
+        </div>
+        <div class="attendance-reference-rest">
+            <div class="attendance-reference-rest-total">Descansos: <strong><?= (int) ($monthlyDays['rest'] ?? 0) ?> días</strong></div>
+            <div class="attendance-reference-rest-types">
+                <div>A cuenta de horas<strong><?= (int) ($monthlyDays['rest_hours'] ?? 0) ?> días</strong></div>
+                <div>Régimen laboral<strong><?= (int) ($monthlyDays['rest_regime'] ?? 0) ?> días</strong></div>
+            </div>
+            <?php if (($monthlyDays['rest_unclassified'] ?? 0) > 0): ?><div class="attendance-reference-rest-extra">Sin clasificar: <?= (int) $monthlyDays['rest_unclassified'] ?></div><?php endif; ?>
+        </div>
     </div>
+    <?php if (($monthlyDays['pending'] ?? 0) > 0): ?><p class="attendance-hours-note"><?= (int) $monthlyDays['pending'] ?> día(s) pendientes no se cuentan como faltas.</p><?php endif; ?>
 
-    <div class="individual-report-indicators">
-        <div><span>Puntualidad</span><strong><?= e((string) $summary['punctuality']) ?>%</strong></div>
-        <div><span>Jornadas finalizadas</span><strong><?= e((string) $summary['compliance']) ?>%</strong></div>
-        <div><span>Minutos de tardanza</span><strong><?= (int) $summary['late_minutes'] ?> min</strong></div>
-        <div><span>Extra por entrada autorizada</span><strong><?= e(attendance_report_minutes_label((int) $summary['early_overtime_minutes'])) ?></strong></div>
-        <div><span>Extra por salida (tras 15 min)</span><strong><?= e(attendance_report_minutes_label((int) $summary['exit_overtime_minutes'])) ?></strong></div>
-        <div><span>Horas extras totales</span><strong><?= e(attendance_report_minutes_label((int) $summary['overtime_minutes'])) ?></strong></div>
+    <div class="attendance-worked-total"><span>Horas trabajadas:</span><strong><?= e(attendance_report_hours_label((int) ($monthlyHours['worked_minutes'] ?? 0))) ?></strong></div>
+    <div class="attendance-reference-hours">
+        <div class="attendance-reference-hour-source">
+            <div class="attendance-reference-hour-box">
+                <span>H. canjeadas · <?= e($monthLabel) ?></span>
+                <strong><?= e(attendance_report_hours_label((int) ($monthlyHours['redeemed_minutes'] ?? 0))) ?></strong>
+                <small><?= (int) ($monthlyHours['redeemed_days'] ?? 0) ?> día(s) × 8 h 30 min</small>
+            </div>
+            <div class="attendance-reference-hour-box">
+                <span>HEMP · <?= e($previousMonthLabel) ?></span>
+                <strong><?= e(attendance_report_hours_label((int) ($monthlyHours['opening_minutes'] ?? 0))) ?></strong>
+                <small>Saldo del mes anterior</small>
+            </div>
+        </div>
+        <div class="attendance-reference-hour-extras">
+            <div class="attendance-reference-extra-parts">
+                <div>Extra por entrada<strong><?= e(attendance_report_hours_label((int) ($monthlyHours['early_overtime_minutes'] ?? 0))) ?></strong></div>
+                <div>Extra por salida<strong><?= e(attendance_report_hours_label((int) ($monthlyHours['exit_overtime_minutes'] ?? 0))) ?></strong></div>
+            </div>
+            <div class="attendance-reference-extra-total">
+                <span>Horas extras · <?= e($monthLabel) ?></span>
+                <strong><?= e(attendance_report_hours_label((int) ($monthlyHours['overtime_minutes'] ?? 0))) ?></strong>
+            </div>
+        </div>
+        <div class="attendance-reference-hour-result">
+            <span>Horas extras vigentes</span>
+            <strong><?= e(attendance_report_hours_label((int) ($monthlyHours['closing_minutes'] ?? 0))) ?></strong>
+            <small>HEMP + extras del mes − horas canjeadas</small>
+        </div>
     </div>
+    <?php if (($monthlyHours['planned_redemption_days'] ?? 0) > 0): ?>
+        <p class="attendance-hours-note"><?= (int) $monthlyHours['planned_redemption_days'] ?> día(s) «A cuenta de horas» programado(s) para fechas futuras; se descontarán al llegar esas fechas.</p>
+    <?php endif; ?>
 
     <div class="individual-report-section-title" id="detalle-diario"><h3>Detalle diario</h3><p>Marcaciones y novedades del periodo seleccionado.</p></div>
-    <?php if (!$personalView): ?>
+    <?php if (!$personalView && !$reportLocked): ?>
     <div class="report-early-overtime-toolbar" id="reportEarlyOvertimeToolbar" data-worker-id="<?= (int) $workerId ?>" data-date-from="<?= e($dateFrom) ?>" data-date-to="<?= e($dateTo) ?>">
         <div><strong>Entrada anticipada autorizada</strong><small>Marque las fechas que desea autorizar o cuya autorización desea retirar. Las casillas se limpian al guardar; el estado aparece junto a cada fecha. La selección no afecta las horas extra de salida. Si la salida supera los 15 minutos de tolerancia, se cuenta todo el tiempo desde la hora de salida programada.</small><small class="report-early-overtime-status" id="earlyOvertimeSelectionStatus" role="status"></small></div>
         <button class="btn btn-primary" type="button" id="saveEarlyOvertimeSelection"><i class="fa-solid fa-floppy-disk me-2"></i>Guardar selección</button>
@@ -240,7 +305,7 @@ document.addEventListener('DOMContentLoaded', () => {
     </div>
     <?php endif; ?>
 
-    <?php if (!$personalView): ?>
+    <?php if (!$personalView && !$reportLocked): ?>
     <div class="individual-report-bottom">
         <form id="attendanceReportNoteForm" class="report-note-card report-note-card-full">
             <input type="hidden" name="worker_id" value="<?= (int) $worker['id'] ?>"><input type="hidden" name="date_from" value="<?= e($dateFrom) ?>"><input type="hidden" name="date_to" value="<?= e($dateTo) ?>">
@@ -249,7 +314,47 @@ document.addEventListener('DOMContentLoaded', () => {
             <div><small><?= $note ? 'Última actualización: ' . e(date('d/m/Y H:i', strtotime($note['updated_at']))) : 'Esta observación aparecerá en el PDF.' ?></small><button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk me-2"></i>Guardar observación</button></div>
         </form>
     </div>
+    <?php else: ?>
+    <div class="report-note-card report-note-card-full mt-3">
+        <label>Observación general del responsable</label>
+        <p class="mb-0"><?= nl2br(e($note['observation'] ?? 'Sin observaciones.')) ?></p>
+    </div>
     <?php endif; ?>
+    <section class="attendance-month-closure" aria-label="Cierre del reporte mensual">
+        <div class="attendance-month-closure-heading">
+            <h3>Cierre del reporte · <?= e(ucfirst($monthLabel)) ?></h3>
+            <p>El administrador y el trabajador confirman por separado. Cuando ambos cierren, este mes no admitirá correcciones.</p>
+        </div>
+        <?php if ($closureError): ?>
+            <p class="alert alert-warning mb-0">No se pudo consultar el cierre. Instale la actualización SQL del cierre mensual.</p>
+        <?php else: ?>
+            <div class="attendance-month-closure-cards">
+                <div class="attendance-month-closure-card <?= !empty($closure['admin_closed_at']) ? 'is-closed' : '' ?>">
+                    <span class="attendance-month-closure-role">Administrador</span>
+                    <?php if (!empty($closure['admin_closed_at'])): ?>
+                        <strong><i class="fa-solid fa-circle-check"></i> Cerrado por el administrador</strong>
+                        <small><?= e($closure['admin_name'] ?: 'Administrador') ?> · <?= e(date('d/m/Y H:i', strtotime($closure['admin_closed_at']))) ?></small>
+                    <?php elseif (is_admin()): ?>
+                        <button class="btn btn-primary js-close-attendance-month" type="button" data-worker-id="<?= (int) $workerId ?>" data-month="<?= e($month) ?>" data-role="administrador">Cerrar como administrador</button>
+                    <?php else: ?>
+                        <button class="btn btn-outline-secondary" type="button" disabled aria-label="Solo el administrador puede cerrar esta parte">Pendiente: cierre del administrador</button>
+                    <?php endif; ?>
+                </div>
+                <div class="attendance-month-closure-card <?= !empty($closure['staff_closed_at']) ? 'is-closed' : '' ?>">
+                    <span class="attendance-month-closure-role">Trabajador</span>
+                    <?php if (!empty($closure['staff_closed_at'])): ?>
+                        <strong><i class="fa-solid fa-circle-check"></i> Cerrado por el trabajador</strong>
+                        <small><?= e($closure['staff_name'] ?: 'Trabajador') ?> · <?= e(date('d/m/Y H:i', strtotime($closure['staff_closed_at']))) ?></small>
+                    <?php elseif ($personalView): ?>
+                        <button class="btn btn-primary js-close-attendance-month" type="button" data-worker-id="<?= (int) $workerId ?>" data-month="<?= e($month) ?>" data-role="trabajador">Cerrar como trabajador</button>
+                    <?php else: ?>
+                        <button class="btn btn-outline-secondary" type="button" disabled aria-label="Solo el trabajador puede cerrar esta parte">Pendiente: cierre del trabajador</button>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <?php if ($reportLocked): ?><p class="attendance-month-closure-complete"><i class="fa-solid fa-lock"></i> Reporte cerrado por ambas partes. No se permiten correcciones de este mes.</p><?php endif; ?>
+        <?php endif; ?>
+    </section>
 </section>
 <?php endif; ?>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>

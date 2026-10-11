@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../includes/attendance_report_closure.php';
 require_module_access('control_personal.programacion');
 verify_csrf($_POST['csrf_token'] ?? null);
 
@@ -21,6 +22,8 @@ $event = $stmt->fetch();
 if (!$event) {
     json_response(['ok' => false, 'message' => 'La exclusion ya no existe o no puede restaurarse desde esta vista.'], 404);
 }
+try { attendance_report_assert_editable((int) $event['worker_id'], (string) $event['calendar_date']); }
+catch (DomainException $error) { json_response(['ok' => false, 'message' => $error->getMessage()], 409); }
 if ((string) $event['calendar_date'] < date('Y-m-d')) {
     json_response(['ok' => false, 'message' => 'No se puede modificar una jornada de una fecha pasada.'], 409);
 }
