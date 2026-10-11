@@ -32,8 +32,7 @@ function attendance_report_classify_day(array $row, ?string $asOfDate = null): a
     $incomplete = ($hasEntry && !$hasExit && $journey !== 'active') || (!$hasEntry && $hasExit);
     $regular = $worked && $hasExit && $state === 'attended'
         && $journey === 'completed'
-        && (int) ($row['late_minutes'] ?? 0) === 0
-        && (int) ($row['exit_overtime_minutes'] ?? 0) === 0;
+        && (int) ($row['late_minutes'] ?? 0) === 0;
     $futureUnmarked = $date > $asOfDate && !$hasEntry && !$hasExit;
 
     return [
