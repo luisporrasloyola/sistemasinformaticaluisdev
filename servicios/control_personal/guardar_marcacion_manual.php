@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/attendance_report_closure.php';
+require_once __DIR__ . '/../../includes/attendance_calendar.php';
 
 require_role('Administrador');
 verify_csrf($_POST['csrf_token'] ?? null);
@@ -52,6 +53,18 @@ $pdo = db();
 $actor = current_user();
 $actorId = (int) ($actor['id'] ?? 0) ?: null;
 $actorName = trim((string) ($actor['name'] ?? 'Administrador'));
+$calendarWorker = $pdo->prepare('SELECT company_id FROM workers WHERE id = :worker LIMIT 1');
+$calendarWorker->execute(['worker' => $workerId]);
+$calendarCompanyId = $calendarWorker->fetchColumn();
+if ($calendarCompanyId === false) manual_response(['ok' => false, 'message' => 'El trabajador no existe.'], 404);
+$calendarEvent = attendance_calendar_event_for_worker($markDate, $workerId, (int) $calendarCompanyId);
+if ($calendarEvent && $attendanceResult !== 'falta') {
+    $existingMark = $pdo->prepare('SELECT id FROM attendance_marks WHERE worker_id = :worker AND mark_date = :date LIMIT 1');
+    $existingMark->execute(['worker' => $workerId, 'date' => $markDate]);
+    if (!$existingMark->fetchColumn()) {
+        manual_response(['ok' => false, 'message' => 'Este día figura en el calendario laboral. Use el selector de calendario para corregirlo.'], 409);
+    }
+}
 if ($projectProvided && $projectId > 0) {
     $projectCheck = $pdo->prepare('SELECT id FROM attendance_projects WHERE id=:project AND status=1 LIMIT 1');
     $projectCheck->execute(['project' => $projectId]);
@@ -74,6 +87,13 @@ if ($attendanceResult === 'falta') {
                 throw new DomainException('Para corregir la asistencia de hoy debe existir una entrada o salida registrada.');
             }
         }
+        // Al reemplazar un día especial individual por una falta, retire ese
+        // registro del calendario. Los eventos generales o rangos se conservan
+        // y la falta individual prevalece solo en esta fecha.
+        $clearIndividualDay = $pdo->prepare("UPDATE attendance_calendar_days SET status = 0
+            WHERE scope_type = 'worker' AND worker_id = :worker AND calendar_date = :date
+              AND (end_date IS NULL OR end_date = :end_date) AND status = 1");
+        $clearIndividualDay->execute(['worker' => $workerId, 'date' => $markDate, 'end_date' => $markDate]);
         $override = $pdo->prepare("INSERT INTO attendance_manual_day_overrides
             (worker_id, mark_date, attendance_status, reason, adjusted_by_user_id)
             VALUES (:worker, :date, 'falta', :reason, :user)

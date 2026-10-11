@@ -175,6 +175,9 @@ function initAttendanceMatrixDetail() {
         manualResultPunctual: document.getElementById('matrixManualResultPunctual'),
         manualResultLate: document.getElementById('matrixManualResultLate'),
         manualResultAbsent: document.getElementById('matrixManualResultAbsent'),
+        manualCalendarType: document.getElementById('matrixManualCalendarType'),
+        manualRestKind: document.getElementById('matrixManualRestKind'),
+        manualRestKindField: document.getElementById('matrixManualRestKindField'),
         manualEntryLocation: document.getElementById('matrixManualEntryLocation'),
         manualExitLocation: document.getElementById('matrixManualExitLocation'),
         manualProject: document.getElementById('matrixManualProject'),
@@ -301,6 +304,31 @@ function initAttendanceMatrixDetail() {
         const cell = fields.adminMarkOpen?._selectedCell;
         fields.permitScheduleEdit?.classList.toggle('d-none', isAbsent || !cell?.dataset.markedScheduleId || cell.dataset.markedScheduleId === '0' || cell.dataset.manualEnabled !== '1');
     };
+    const syncManualCalendarMode = () => {
+        const type = fields.manualCalendarType?.value || '';
+        const isCalendar = type !== '';
+        const isRest = type === 'rest';
+        fields.manualRestKindField?.classList.toggle('d-none', !isRest);
+        if (fields.manualRestKind) {
+            fields.manualRestKind.disabled = !isRest;
+            fields.manualRestKind.required = isRest;
+            if (!isRest) fields.manualRestKind.value = '';
+        }
+        modalElement.querySelectorAll('.attendance-result-choice input').forEach((input) => {
+            input.required = !isCalendar;
+            if (isCalendar) input.checked = false;
+        });
+        if (isCalendar) {
+            modalElement.querySelectorAll('.attendance-mark-input input, .attendance-mark-input select').forEach((input) => { input.disabled = true; });
+            if (fields.manualScheduleSelect) fields.manualScheduleSelect.disabled = true;
+            fields.permitScheduleEdit?.classList.add('d-none');
+            fields.permitExitEdit?.classList.add('d-none');
+        } else {
+            setManualAbsenceMode(!!fields.manualResultAbsent?.checked);
+            syncTodayEditFields(fields.adminMarkOpen?._selectedCell);
+        }
+        modalElement.querySelector('.attendance-manual-fields')?.classList.toggle('d-none', isCalendar);
+    };
     const syncTodayEditFields = (cell) => {
         const sameDayEdit = cell?.dataset.manualLock === 'today' && cell.dataset.manualEnabled === '1';
         [[fields.manualEntry, fields.manualEntryLocation, cell?.dataset.entry], [fields.manualExit, fields.manualExitLocation, cell?.dataset.exit]].forEach(([timeField, locationField, existingTime]) => {
@@ -388,6 +416,9 @@ function initAttendanceMatrixDetail() {
             fields.manualResultAbsent.checked = isAbsentResult;
             setManualAbsenceMode(isAbsentResult);
             syncTodayEditFields(cell);
+            fields.manualCalendarType.value = ['vacation', 'rest', 'holiday', 'non_working'].includes(cell.dataset.calendarType) ? cell.dataset.calendarType : '';
+            fields.manualRestKind.value = cell.dataset.calendarName === 'A cuenta de horas' ? 'hours' : (cell.dataset.calendarName === 'Régimen laboral' ? 'regime' : '');
+            syncManualCalendarMode();
             fields.manualEntryLocation.value = cell.dataset.entryLocationId || '';
             fields.manualExitLocation.value = cell.dataset.exitLocationId || '';
             fields.manualProject.value = cell.dataset.markedProjectId || '';
@@ -433,9 +464,16 @@ function initAttendanceMatrixDetail() {
         modal.show();
     };
 
-    fields.manualResultPunctual?.addEventListener('change', () => { setManualAbsenceMode(false); syncTodayEditFields(fields.adminMarkOpen?._selectedCell); });
-    fields.manualResultLate?.addEventListener('change', () => { setManualAbsenceMode(false); syncTodayEditFields(fields.adminMarkOpen?._selectedCell); });
-    fields.manualResultAbsent?.addEventListener('change', () => { setManualAbsenceMode(true); syncTodayEditFields(fields.adminMarkOpen?._selectedCell); });
+    const chooseManualAttendance = (isAbsent) => {
+        fields.manualCalendarType.value = '';
+        syncManualCalendarMode();
+        setManualAbsenceMode(isAbsent);
+        syncTodayEditFields(fields.adminMarkOpen?._selectedCell);
+    };
+    fields.manualResultPunctual?.addEventListener('change', () => chooseManualAttendance(false));
+    fields.manualResultLate?.addEventListener('change', () => chooseManualAttendance(false));
+    fields.manualResultAbsent?.addEventListener('change', () => chooseManualAttendance(true));
+    fields.manualCalendarType?.addEventListener('change', syncManualCalendarMode);
     fields.manualEntry?.addEventListener('change', syncManualLocationRequirements);
     fields.manualExit?.addEventListener('change', syncManualLocationRequirements);
     const manualForm = document.getElementById('attendanceManualCorrectionForm');
@@ -445,16 +483,17 @@ function initAttendanceMatrixDetail() {
             event.preventDefault();
             syncManualLocationRequirements();
             if (!manualForm.reportValidity()) return;
-            if (!fields.manualResultAbsent?.checked && fields.manualEntry?.value && !fields.manualEntryLocation?.value) {
+            const calendarMode = !!fields.manualCalendarType?.value;
+            if (!calendarMode && !fields.manualResultAbsent?.checked && fields.manualEntry?.value && !fields.manualEntryLocation?.value) {
                 Swal.fire('Falta el lugar de entrada', 'Seleccione el lugar de marcación de entrada.', 'warning');
                 return;
             }
-            if (!fields.manualResultAbsent?.checked && fields.manualExit?.value && !fields.manualExitLocation?.value) {
+            if (!calendarMode && !fields.manualResultAbsent?.checked && fields.manualExit?.value && !fields.manualExitLocation?.value) {
                 Swal.fire('Falta el lugar de salida', 'Seleccione el lugar de marcación de salida.', 'warning');
                 return;
             }
             const selectedCell = fields.adminMarkOpen?._selectedCell;
-            if (fields.manualScheduleSelect && !fields.manualScheduleSelect.disabled
+            if (!calendarMode && fields.manualScheduleSelect && !fields.manualScheduleSelect.disabled
                 && fields.manualScheduleSelect.value !== selectedCell?.dataset.markedScheduleId) {
                 const chosenName = fields.manualScheduleSelect.selectedOptions[0]?.textContent || 'el horario seleccionado';
                 const confirmation = await Swal.fire({
@@ -472,7 +511,8 @@ function initAttendanceMatrixDetail() {
             body.append('csrf_token', csrf);
             button.disabled = true;
             try {
-                const response = await fetch(`${window.APP_URL}/servicios/control_personal/guardar_marcacion_manual.php`, { method: 'POST', body });
+                const endpoint = calendarMode ? 'guardar_calendario_desde_asistencia.php' : 'guardar_marcacion_manual.php';
+                const response = await fetch(`${window.APP_URL}/servicios/control_personal/${endpoint}`, { method: 'POST', body });
                 const data = await response.json();
                 if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo guardar la corrección.');
                 await Swal.fire({ icon: 'success', title: 'Asistencia actualizada', text: data.message, timer: 1800, showConfirmButton: false });

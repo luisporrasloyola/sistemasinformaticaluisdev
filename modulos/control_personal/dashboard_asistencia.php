@@ -406,7 +406,24 @@ foreach ($manualDayOverrides as $overrideWorkerId => $overrideDates) {
             'reason' => $overrideRow['reason'] ?? '',
         ];
     }
-}$matrixSummary = [];
+}
+try {
+    $calendarAudit = db()->prepare('SELECT a.worker_id, a.calendar_date, a.created_at, a.reason,
+            u.name AS administrator
+        FROM attendance_calendar_corrections a
+        LEFT JOIN users u ON u.id = a.adjusted_by_user_id
+        WHERE a.calendar_date BETWEEN :date_from AND :date_to
+          AND a.id = (SELECT MAX(last_a.id) FROM attendance_calendar_corrections last_a
+              WHERE last_a.worker_id = a.worker_id AND last_a.calendar_date = a.calendar_date)');
+    $calendarAudit->execute(['date_from' => $monthStart, 'date_to' => $monthEnd]);
+    foreach ($calendarAudit->fetchAll() as $auditRow) {
+        if (isset($manualDayOverrides[(int) $auditRow['worker_id']][(string) $auditRow['calendar_date']])) continue;
+        $manualAdjustmentsByWorkerDate[(int) $auditRow['worker_id']][(string) $auditRow['calendar_date']] = $auditRow;
+    }
+} catch (PDOException $error) {
+    if ($error->getCode() !== '42S02') throw $error;
+}
+$matrixSummary = [];
 foreach ($matrixRows as $workerId => $worker) {
     $matrixSummary[$workerId] = [
         'name' => (string) $worker['name'],
@@ -450,6 +467,7 @@ foreach ($matrixRows as $workerId => $worker) {
             (int) $worker['worker_id'],
             (int) $worker['company_id']
         );
+        if ($manualAbsence) $calendarEvent = null;
         $isNonWorkingDay = attendance_calendar_is_non_working_event((string) ($calendarEvent['event_type'] ?? ''));
         $isAssignedPeriod = $scheduleId > 0
             && $assignmentStartDate !== ''
@@ -775,6 +793,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             (int) $worker['worker_id'],
                             (int) $worker['company_id']
                         );
+                        if ($manualAbsence) $calendarEvent = null;
                         $calendarEventType = (string) ($calendarEvent['event_type'] ?? '');
                         $isNonWorkingDay = attendance_calendar_is_non_working_event($calendarEventType);
                         $isAssignedPeriod = $scheduleId > 0
@@ -888,6 +907,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             data-marked-schedule-id="<?= $markedScheduleId ?>"
                             data-marked-schedule-label="<?= e($markedScheduleLabel) ?>"
                             data-marked-project-id="<?= $markedProjectId ?>"
+                            data-calendar-type="<?= e($calendarEventType) ?>"
+                            data-calendar-name="<?= e((string) ($calendarEvent['name'] ?? '')) ?>"
                             data-entry-project-id="<?= (int) ($entry['project_id'] ?? 0) ?>"
                             data-code="<?= e($attendanceCode ?: attendance_calendar_event_abbreviation($calendarEventType)) ?>"
                             data-status="<?= e(strip_tags($detailLabel)) ?>"
@@ -1022,6 +1043,25 @@ document.addEventListener('DOMContentLoaded', () => {
                             <label class="attendance-result-option result-late" for="matrixManualResultLate"><input type="radio" name="attendance_result" id="matrixManualResultLate" value="tardanza" required><span><i class="fa-solid fa-clock"></i><strong>Asistió con tardanza</strong></span></label>
                             <label class="attendance-result-option result-absent" for="matrixManualResultAbsent"><input type="radio" name="attendance_result" id="matrixManualResultAbsent" value="falta" required><span><i class="fa-solid fa-user-xmark"></i><strong>Faltó</strong></span></label>
                         </div></fieldset>
+                        <div class="attendance-manual-calendar mt-3">
+                            <label class="form-label fw-semibold" for="matrixManualCalendarType">Calendario laboral</label>
+                            <select class="form-select" id="matrixManualCalendarType" name="calendar_event_type">
+                                <option value="">Sin cambio en calendario laboral</option>
+                                <option value="vacation">Vacaciones</option>
+                                <option value="rest">Descanso</option>
+                                <option value="holiday">Feriado</option>
+                                <option value="non_working">No laborable</option>
+                            </select>
+                            <div class="mt-2 d-none" id="matrixManualRestKindField">
+                                <label class="form-label fw-semibold" for="matrixManualRestKind">Tipo de descanso</label>
+                                <select class="form-select" id="matrixManualRestKind" name="rest_kind" disabled>
+                                    <option value="">Seleccione una modalidad</option>
+                                    <option value="hours">A cuenta de horas</option>
+                                    <option value="regime">Régimen laboral</option>
+                                </select>
+                            </div>
+                            <small class="text-muted d-block mt-2">Se aplicará solo a este trabajador y fecha. Disponible para días sin marcaciones.</small>
+                        </div>
                         <div class="attendance-manual-fields">
                             <div class="attendance-manual-schedule"><div class="attendance-exit-label"><label class="form-label" for="matrixManualScheduleSelect">Horario de la marcación</label><button class="btn btn-outline-primary btn-sm d-none" type="button" id="matrixPermitScheduleEdit"><i class="fa-solid fa-pen me-1"></i>Permitir editar</button></div><strong id="matrixManualSchedule">Sin horario registrado</strong><div class="d-none" id="matrixManualScheduleEditor"><select class="form-select select2-searchable" name="schedule_id" id="matrixManualScheduleSelect" data-placeholder="Buscar horario" data-no-results="No se encontraron horarios" required disabled><option value="">Seleccione un horario</option><?php foreach ($markedScheduleLabels as $scheduleId => $labels): ?><option value="<?= (int) $scheduleId ?>" <?= isset($activeScheduleIds[(int) $scheduleId]) ? '' : 'disabled' ?>><?= e($labels[0]) ?></option><?php endforeach; ?></select></div></div>
                             <div class="attendance-mark-input"><label class="form-label" for="matrixManualEntry">Primera entrada</label><input class="form-control" type="time" name="entry_time" id="matrixManualEntry"></div>
@@ -1030,8 +1070,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             <div class="attendance-manual-location attendance-mark-input"><label class="form-label" for="matrixManualExitLocation">Lugar de marcación de salida</label><select class="form-select select2-searchable" name="exit_location_id" id="matrixManualExitLocation" data-placeholder="Buscar lugar de salida" data-no-results="No se encontraron lugares"><option value="">Seleccione un lugar</option><?php foreach ($attendanceLocations as $location): ?><option value="<?= (int) $location['id'] ?>"><?= e($location['name']) ?></option><?php endforeach; ?></select></div>
                             <div class="attendance-manual-location attendance-manual-project attendance-mark-input"><label class="form-label" for="matrixManualProject">Proyecto</label><select class="form-select select2-searchable" name="project_id" id="matrixManualProject" data-placeholder="Buscar proyecto" data-no-results="No se encontraron proyectos"><option value="">Sin proyecto</option><?php foreach ($correctionProjects as $project): ?><option value="<?= (int) $project['id'] ?>" <?= (int) $project['status'] === 1 ? '' : 'disabled' ?>><?= e($project['name']) ?></option><?php endforeach; ?></select></div>
                             <small class="attendance-location-help">Los puntos de ruta ya registrados no serán modificados.</small>
-                            <div class="attendance-manual-reason"><label class="form-label" for="matrixManualReason">Observación</label><textarea class="form-control" name="reason" id="matrixManualReason" rows="2" maxlength="500" required placeholder="Ej.: El servidor no estuvo disponible durante el ingreso."></textarea></div>
                         </div>
+                        <div class="attendance-manual-reason mt-2"><label class="form-label" for="matrixManualReason">Observación</label><textarea class="form-control" name="reason" id="matrixManualReason" rows="2" maxlength="500" required placeholder="Ej.: El servidor no estuvo disponible durante el ingreso."></textarea></div>
                         <div class="attendance-manual-actions"><small><i class="fa-solid fa-lock"></i> El cambio quedará auditado con su usuario y fecha.</small><button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk me-1"></i> Guardar corrección</button></div>
                     </form>
                     <?php endif; ?>

@@ -427,7 +427,8 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 $program = $dateProgramsMap[$aid] ?? null;
                 $effectiveScheduleId = (int) ($entry['schedule_id'] ?? $exit['schedule_id'] ?? $program['schedule_id'] ?? $assignment['schedule_id']);
                 $scheduleDay = attendance_report_effective_schedule_day($assignment, $program, $entry, $exit, $scheduleDaysBySchedule, $weekday);
-                $calendarEvent = attendance_calendar_resolve_event($calendarEvents, $date, $id, (int) $worker['company_id']);
+                $calendarEvent = $manualOverride ? null
+                    : attendance_calendar_resolve_event($calendarEvents, $date, $id, (int) $worker['company_id']);
                 $eventType = (string) ($calendarEvent['event_type'] ?? '');
                 $isNonWorking = attendance_calendar_is_non_working_event($eventType);
                 $hasSchedule = $scheduleDay !== null;
@@ -603,7 +604,6 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
             if (isset($reportedDays[$id][$date])) continue;
             $weekday = (int) (new DateTimeImmutable($date))->format('N');
             $state = attendance_report_state('absent');
-            $calendarEvent = attendance_calendar_resolve_event($calendarEvents, $date, $id, (int) $worker['company_id']);
             $rows[] = [
                 'worker_id'=>$id, 'date'=>$date, 'weekday'=>$weekdayLabels[$weekday],
                 'assignment_id'=>0, 'worker'=>(string) $worker['full_name'],
@@ -620,9 +620,9 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 'early_overtime_eligible'=>false, 'early_overtime_authorized'=>isset($earlyOvertimeAuthorized[$date]),
                 'early_overtime_minutes'=>0, 'exit_overtime_minutes'=>0,
                 'project'=>'-', 'observation'=>(string) ($override['reason'] ?? '-'), 'is_workday'=>true,
-                'calendar_event_id'=>(int) ($calendarEvent['id'] ?? 0),
-                'calendar_event_type'=>(string) ($calendarEvent['event_type'] ?? ''),
-                'calendar_event_name'=>(string) ($calendarEvent['name'] ?? ''),
+                'calendar_event_id'=>0,
+                'calendar_event_type'=>'',
+                'calendar_event_name'=>'',
             ];
         }
     }
