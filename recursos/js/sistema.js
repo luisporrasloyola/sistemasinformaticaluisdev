@@ -6341,9 +6341,6 @@ function initControlPersonalCalendar() {
     const form = document.getElementById('calendarDayForm');
     if (!form) return;
 
-    const calendarListWorkerFilter = document.getElementById('calendarListWorkerFilter');
-    const calendarWorkerRows = Array.from(document.querySelectorAll('.calendar-day-row'));
-    const calendarWorkerNoResults = document.getElementById('calendarWorkerNoResults');
     const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('calendarDayModal'));
     const typeField = document.getElementById('calendarEventType');
     const scopeField = document.getElementById('calendarScopeType');
@@ -6354,23 +6351,49 @@ function initControlPersonalCalendar() {
     const nameWrapper = document.getElementById('calendarDayNameField');
     const modalityWrapper = document.getElementById('calendarRestModalityField');
     const modalityFields = Array.from(form.querySelectorAll('input[type="radio"][name="name"]'));
-    const workerChecks = Array.from(document.querySelectorAll('.calendar-worker-check'));
+    let workerChecks = [];
+    let workersLoaded = false;
     const workersField = document.getElementById('calendarWorkersField');
+    const workersGrid = document.getElementById('calendarWorkersGrid');
     const workersError = document.getElementById('calendarWorkersError');
     const selectAllWorkers = document.getElementById('calendarSelectAllWorkers');
     const workerSearch = document.getElementById('calendarWorkerSearch');
 
-    calendarListWorkerFilter?.addEventListener('input', () => {
-        const query = normalizarTexto(calendarListWorkerFilter.value);
-        let visibleRows = 0;
-        calendarWorkerRows.forEach((row) => {
-            const workerName = normalizarTexto(row.dataset.workerName || '');
-            const visible = query === '' || workerName.includes(query);
-            row.classList.toggle('d-none', !visible);
-            if (visible) visibleRows++;
+    async function ensureCalendarWorkersLoaded() {
+        if (workersLoaded) return;
+        const response = await fetch(`${BASE_URL}/servicios/control_personal/listar_personal_calendario_laboral.php`, { cache: 'no-store' });
+        if (!response.ok) throw new Error('No se pudo cargar el personal.');
+        const data = await response.json();
+        if (!data.ok || !Array.isArray(data.workers)) throw new Error(data.message || 'No se pudo cargar el personal.');
+
+        const options = document.createDocumentFragment();
+        const labels = document.createDocumentFragment();
+        data.workers.forEach((worker) => {
+            const name = String(worker.full_name || '');
+            const documentNumber = String(worker.document_number || '');
+            const company = String(worker.company || '');
+            const label = `${name} - ${documentNumber}${company ? ` - ${company}` : ''}`;
+
+            options.appendChild(new Option(label, String(worker.id)));
+            const item = document.createElement('label');
+            item.className = 'assignment-worker-option calendar-worker-option';
+            item.dataset.search = label.toLocaleLowerCase();
+            const checkbox = document.createElement('input');
+            checkbox.className = 'form-check-input calendar-worker-check';
+            checkbox.type = 'checkbox';
+            checkbox.name = 'worker_ids[]';
+            checkbox.value = String(worker.id);
+            checkbox.addEventListener('change', () => workersError?.classList.add('d-none'));
+            const text = document.createElement('span');
+            text.textContent = label;
+            item.append(checkbox, text);
+            labels.appendChild(item);
         });
-        calendarWorkerNoResults?.classList.toggle('d-none', visibleRows > 0);
-    });
+        workerField.appendChild(options);
+        workersGrid.replaceChildren(labels);
+        workerChecks = Array.from(workersGrid.querySelectorAll('.calendar-worker-check'));
+        workersLoaded = true;
+    }
 
     function syncFields() {
         const isRest = typeField.value === 'rest';
@@ -6406,7 +6429,13 @@ function initControlPersonalCalendar() {
         if (field) field.value = value || '';
     }
 
-    function openCalendarModal(data = {}) {
+    async function openCalendarModal(data = {}) {
+        try {
+            await ensureCalendarWorkersLoaded();
+        } catch (error) {
+            Swal.fire('Atención', error.message || 'No se pudo cargar el personal.', 'warning');
+            return;
+        }
         form.reset();
         form.classList.remove('was-validated');
         setValue('calendarDayId', data.id);
@@ -6437,7 +6466,6 @@ function initControlPersonalCalendar() {
         });
         workersError?.classList.add('d-none');
     });
-    workerChecks.forEach((check) => check.addEventListener('change', () => workersError?.classList.add('d-none')));
     workerSearch?.addEventListener('input', () => {
         const query = normalizarTexto(workerSearch.value);
         document.querySelectorAll('.calendar-worker-option').forEach((option) => {

@@ -5,11 +5,33 @@ require_once __DIR__ . '/../../includes/attendance_calendar.php';
 require_module_access('control_personal.calendario_laboral');
 
 $selectedMonth = (string) ($_GET['mes'] ?? date('Y-m'));
-if (!preg_match('/^\d{4}-\d{2}$/', $selectedMonth)) {
+$selectedMonthDate = DateTimeImmutable::createFromFormat('!Y-m', $selectedMonth);
+if ($selectedMonthDate === false || $selectedMonthDate->format('Y-m') !== $selectedMonth) {
     $selectedMonth = date('Y-m');
 }
 $monthStart = $selectedMonth . '-01';
 $monthEnd = date('Y-m-t', strtotime($monthStart));
+$workerSearch = substr(trim((string) ($_GET['buscar'] ?? '')), 0, 100);
+$pageSize = 20;
+
+$calendarFrom = "FROM attendance_calendar_days acd
+    LEFT JOIN workers w ON w.id = acd.worker_id
+    WHERE acd.status = 1
+      AND acd.event_type IN ('holiday', 'non_working', 'vacation', 'permission', 'rest')
+      AND acd.calendar_date <= :month_end
+      AND COALESCE(acd.end_date, acd.calendar_date) >= :month_start";
+$calendarParams = ['month_start' => $monthStart, 'month_end' => $monthEnd];
+if ($workerSearch !== '') {
+    $calendarFrom .= ' AND w.full_name LIKE :worker_search';
+    $calendarParams['worker_search'] = '%' . $workerSearch . '%';
+}
+
+$countStmt = db()->prepare('SELECT COUNT(*) ' . $calendarFrom);
+$countStmt->execute($calendarParams);
+$calendarTotal = (int) $countStmt->fetchColumn();
+$pageCount = max(1, (int) ceil($calendarTotal / $pageSize));
+$currentPage = min($pageCount, max(1, (int) ($_GET['pagina'] ?? 1)));
+$offset = ($currentPage - 1) * $pageSize;
 
 $sql = "SELECT acd.*, c.name AS company_name, w.full_name AS worker_name,
         u.name AS created_by_name
@@ -22,16 +44,27 @@ $sql = "SELECT acd.*, c.name AS company_name, w.full_name AS worker_name,
       AND acd.calendar_date <= :month_end
       AND COALESCE(acd.end_date, acd.calendar_date) >= :month_start
 ";
-$params = ['month_start' => $monthStart, 'month_end' => $monthEnd];
-$sql .= ' ORDER BY acd.calendar_date, acd.id';
+$params = $calendarParams;
+if ($workerSearch !== '') {
+    $sql .= ' AND w.full_name LIKE :worker_search';
+}
+$sql .= ' ORDER BY acd.calendar_date, acd.id LIMIT :page_size OFFSET :page_offset';
 $stmt = db()->prepare($sql);
-$stmt->execute($params);
+$stmt->bindValue(':month_start', $monthStart);
+$stmt->bindValue(':month_end', $monthEnd);
+if ($workerSearch !== '') {
+    $stmt->bindValue(':worker_search', $params['worker_search']);
+}
+$stmt->bindValue(':page_size', $pageSize, PDO::PARAM_INT);
+$stmt->bindValue(':page_offset', $offset, PDO::PARAM_INT);
+$stmt->execute();
 $calendarDays = $stmt->fetchAll();
 
-$workers = db()->query("SELECT w.id, w.full_name, w.document_number, c.name AS company
-    FROM workers w
-    LEFT JOIN companies c ON c.id = w.company_id
-    ORDER BY w.full_name")->fetchAll();
+$pageUrl = static fn (int $page): string => '?' . http_build_query([
+    'mes' => $selectedMonth,
+    'buscar' => $workerSearch,
+    'pagina' => $page,
+]);
 
 $dayNames = [
     1 => 'Lunes', 2 => 'Martes', 3 => 'Miercoles', 4 => 'Jueves',
@@ -80,6 +113,7 @@ require __DIR__ . '/../../includes/header.php';
     </div>
     <div class="d-flex gap-2 align-items-end flex-wrap">
         <form class="d-flex gap-2 align-items-end" method="get">
+            <input type="hidden" name="buscar" value="<?= e($workerSearch) ?>">
             <div>
                 <label class="form-label small fw-bold text-muted">Mes</label>
                 <input class="form-control" type="month" name="mes" value="<?= e($selectedMonth) ?>">
@@ -98,13 +132,19 @@ require __DIR__ . '/../../includes/header.php';
             <span class="legend-holiday"><strong>FER</strong>Feriado</span>
             <span class="legend-non-working"><strong>NL</strong>No laborable</span>
         </div>
-        <div class="calendar-worker-filter">
+        <form class="calendar-worker-filter d-flex align-items-end gap-2" method="get">
+            <input type="hidden" name="mes" value="<?= e($selectedMonth) ?>">
             <div>
                 <label class="form-label small fw-bold text-muted mb-1" for="calendarListWorkerFilter">Buscar personal</label>
-                <input class="form-control" type="search" id="calendarListWorkerFilter"
+                <input class="form-control" type="search" id="calendarListWorkerFilter" name="buscar"
+                    value="<?= e($workerSearch) ?>" maxlength="100"
                     placeholder="Escriba el nombre del trabajador" autocomplete="off">
             </div>
-        </div>
+            <button class="btn btn-outline-primary" type="submit">Buscar</button>
+            <?php if ($workerSearch !== ''): ?>
+                <a class="btn btn-outline-secondary" href="?<?= e(http_build_query(['mes' => $selectedMonth])) ?>">Limpiar</a>
+            <?php endif; ?>
+        </form>
     </div>
     <div class="table-responsive">
         <table class="table table-hover align-middle" id="calendarDaysTable">
@@ -129,7 +169,7 @@ require __DIR__ . '/../../includes/header.php';
                 $periodDays = (new DateTimeImmutable((string) $event['calendar_date']))
                     ->diff(new DateTimeImmutable($eventEndDate))->days + 1;
                 ?>
-                <tr class="calendar-day-row" data-worker-name="<?= e((string) ($event['worker_name'] ?? '')) ?>">
+                <tr class="calendar-day-row">
                     <td><strong><?= e(date('d/m/Y', strtotime((string) $event['calendar_date']))) ?></strong><?= $isRange ? ' - ' . e(date('d/m/Y', strtotime($eventEndDate))) : '' ?></td>
                     <td><?= $isRange ? (int) $periodDays . ' d&iacute;as' : e($dayNames[$dayNumber]) ?></td>
                     <td>
@@ -159,13 +199,22 @@ require __DIR__ . '/../../includes/header.php';
                 </tr>
             <?php endforeach; ?>
             <?php if (!$calendarDays): ?>
-                <tr><td colspan="7" class="text-muted text-center py-4">No hay d&iacute;as especiales registrados en este mes.</td></tr>
-            <?php endif; ?>
-            <?php if ($calendarDays): ?>
-                <tr class="d-none" id="calendarWorkerNoResults"><td colspan="7" class="text-muted text-center py-4">No hay registros para el personal buscado en este mes.</td></tr>
+                <tr><td colspan="7" class="text-muted text-center py-4"><?= $workerSearch !== '' ? 'No hay registros para el personal buscado en este mes.' : 'No hay d&iacute;as especiales registrados en este mes.' ?></td></tr>
             <?php endif; ?>
             </tbody>
         </table>
+    </div>
+    <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mt-3 small text-muted" aria-label="Paginación del calendario laboral">
+        <span>Mostrando <?= $calendarTotal ? ($offset + 1) : 0 ?>–<?= min($offset + $pageSize, $calendarTotal) ?> de <?= $calendarTotal ?> registros</span>
+        <?php if ($pageCount > 1): ?>
+            <nav class="d-flex align-items-center gap-1" aria-label="Páginas del calendario laboral">
+                <?php if ($currentPage > 1): ?><a class="btn btn-sm btn-outline-secondary" href="<?= e($pageUrl($currentPage - 1)) ?>">Anterior</a><?php endif; ?>
+                <?php for ($page = max(1, $currentPage - 2); $page <= min($pageCount, $currentPage + 2); $page++): ?>
+                    <a class="btn btn-sm <?= $page === $currentPage ? 'btn-primary' : 'btn-outline-secondary' ?>" href="<?= e($pageUrl($page)) ?>" <?= $page === $currentPage ? 'aria-current="page"' : '' ?>><?= $page ?></a>
+                <?php endfor; ?>
+                <?php if ($currentPage < $pageCount): ?><a class="btn btn-sm btn-outline-secondary" href="<?= e($pageUrl($currentPage + 1)) ?>">Siguiente</a><?php endif; ?>
+            </nav>
+        <?php endif; ?>
     </div>
 </div>
 
@@ -230,9 +279,6 @@ require __DIR__ . '/../../includes/header.php';
                             data-placeholder="Buscar por nombre, documento o empresa"
                             data-no-results="No se encontraron trabajadores">
                             <option value="">Seleccione</option>
-                            <?php foreach ($workers as $worker): ?>
-                                <option value="<?= (int) $worker['id'] ?>"><?= e($worker['full_name'] . ' - ' . $worker['document_number'] . (!empty($worker['company']) ? ' - ' . $worker['company'] : '')) ?></option>
-                            <?php endforeach; ?>
                         </select>
                     </div>
                     <div class="col-12 d-none" id="calendarWorkersField">
@@ -248,15 +294,7 @@ require __DIR__ . '/../../includes/header.php';
                                 </label>
                             </div>
                             <input class="form-control form-control-sm mb-2" type="search" id="calendarWorkerSearch" placeholder="Buscar por nombre, documento o empresa">
-                            <div class="assignment-workers-grid" id="calendarWorkersGrid">
-                                <?php foreach ($workers as $worker): ?>
-                                    <?php $workerLabel = $worker['full_name'] . ' - ' . $worker['document_number'] . (!empty($worker['company']) ? ' - ' . $worker['company'] : ''); ?>
-                                    <label class="assignment-worker-option calendar-worker-option" data-search="<?= e(strtolower($workerLabel)) ?>">
-                                        <input class="form-check-input calendar-worker-check" type="checkbox" name="worker_ids[]" value="<?= (int) $worker['id'] ?>">
-                                        <span><?= e($workerLabel) ?></span>
-                                    </label>
-                                <?php endforeach; ?>
-                            </div>
+                            <div class="assignment-workers-grid" id="calendarWorkersGrid"></div>
                             <div class="invalid-feedback d-block d-none" id="calendarWorkersError">Seleccione al menos un trabajador.</div>
                         </div>
                     </div>
