@@ -24,12 +24,16 @@ $companies = [];
 $positions = [];
 $requirements = [];
 $counts = ['verde' => 0, 'amarillo' => 0, 'rojo' => 0];
+$countsByCompany = [];
 
 foreach ($summaryRows as $row) {
     $hasRequirement = !empty($row['requirement_row_id']);
     if ($hasRequirement) {
         $status = status_alert_document_status($row['end_date'], 'requisitos.pmi_individual', (int) $row['requirement_id'], true);
         $counts[$status['key']]++;
+        $companyKey = (string) $row['company'];
+        $countsByCompany[$companyKey] ??= ['verde' => 0, 'amarillo' => 0, 'rojo' => 0];
+        $countsByCompany[$companyKey][$status['key']]++;
     }
 
     $company = (string) $row['company'];
@@ -64,6 +68,19 @@ $positionChartRows = db()->query("SELECT COALESCE(p.name, 'Sin puesto asignado')
 foreach ($positionChartRows as $chartRow) {
     $positionCounts[(string) $chartRow['position_name']] = (int) $chartRow['total'];
 }
+$positionCountsByCompany = [];
+$companyPositionRows = db()->query("SELECT COALESCE(c.name, 'Sin empresa') AS company,
+        COALESCE(p.name, 'Sin puesto asignado') AS position_name,
+        COUNT(DISTINCT wp.worker_id) AS total
+    FROM worker_positions wp
+    JOIN workers w ON w.id = wp.worker_id
+    LEFT JOIN companies c ON c.id = w.company_id
+    LEFT JOIN positions p ON p.id = wp.position_id
+    GROUP BY COALESCE(c.name, 'Sin empresa'), COALESCE(p.name, 'Sin puesto asignado')
+    ORDER BY company ASC, total DESC, position_name ASC")->fetchAll();
+foreach ($companyPositionRows as $chartRow) {
+    $positionCountsByCompany[(string) $chartRow['company']][(string) $chartRow['position_name']] = (int) $chartRow['total'];
+}
 
 $topCompanies = $companyCounts;
 $topPositions = $positionCounts;
@@ -85,6 +102,19 @@ $chartPayload = [
         'values' => array_values($topPositions),
     ],
 ];
+foreach (array_keys($companies) as $company) {
+    $companyStatuses = $countsByCompany[$company] ?? ['verde' => 0, 'amarillo' => 0, 'rojo' => 0];
+    $companyPositions = $positionCountsByCompany[$company] ?? [];
+    $chartPayload['byCompany'][$company] = [
+        'status' => [
+            'labels' => ['APTO', 'POR VENCER', 'NO APTO'],
+            'values' => [$companyStatuses['verde'], $companyStatuses['amarillo'], $companyStatuses['rojo']],
+            'total' => array_sum($companyStatuses),
+        ],
+        'companies' => ['labels' => [$company], 'values' => [$companyCounts[$company] ?? 0]],
+        'positions' => ['labels' => array_keys($companyPositions), 'values' => array_values($companyPositions)],
+    ];
+}
 
 function dashboard_document_status(string $endDate, int $requirementId): array
 {
@@ -179,7 +209,7 @@ require __DIR__ . '/includes/header.php';
             </div>
             <div class="executive-card-body">
                 <span>Total en Verde</span>
-                <strong><?= $counts['verde'] ?></strong>
+                <strong id="dashboardCountGreen"><?= $counts['verde'] ?></strong>
                 <small>Documentos Aptos</small>
             </div>
         </div>
@@ -194,7 +224,7 @@ require __DIR__ . '/includes/header.php';
             </div>
             <div class="executive-card-body">
                 <span>Total en Amarillo</span>
-                <strong><?= $counts['amarillo'] ?></strong>
+                <strong id="dashboardCountYellow"><?= $counts['amarillo'] ?></strong>
                 <small>Documentos por vencer</small>
             </div>
         </div>
@@ -210,7 +240,7 @@ require __DIR__ . '/includes/header.php';
             </div>
             <div class="executive-card-body">
                 <span>Total en Rojo</span>
-                <strong><?= $counts['rojo'] ?></strong>
+                <strong id="dashboardCountRed"><?= $counts['rojo'] ?></strong>
                 <small>Documentos vencidos</small>
             </div>
         </div>
@@ -254,7 +284,7 @@ require __DIR__ . '/includes/header.php';
         <div class="dashboard-filter-company">
             <label class="form-label">Empresa</label>
             <select class="form-select select2-searchable" id="dashboardEmpresaFilter" data-placeholder="Buscar empresa" data-no-results="No se encontraron empresas">
-                <option value="">Todas</option>
+                <option value="__all__">Todas</option>
                 <?php foreach (array_keys($companies) as $company): ?>
                     <option value="<?= e($company) ?>"><?= e($company) ?></option>
                 <?php endforeach; ?>

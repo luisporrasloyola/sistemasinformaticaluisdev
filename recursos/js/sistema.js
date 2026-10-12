@@ -4542,7 +4542,7 @@ function initDashboardEjecutivo() {
         const params = new URLSearchParams({
             page: String(currentPage),
             limit: String(limit),
-            company: filters.company?.value || '',
+            company: filters.company?.value === '__all__' ? '' : (filters.company?.value || ''),
             name: filters.name?.value || '',
             position: filters.position?.value || '',
             requirement: filters.requirement?.value || '',
@@ -4647,7 +4647,8 @@ function initDashboardEjecutivo() {
     Chart.defaults.color = '#334155';
     Chart.defaults.font.weight = '500';
 
-    const data = window.dashboardEjecutivoData;
+    const allDashboardData = window.dashboardEjecutivoData;
+    let data = allDashboardData;
     const colors = {
         green: '#198754',      // Verde original
         yellow: '#ffc107',     // Amarillo original
@@ -4960,6 +4961,51 @@ function initDashboardEjecutivo() {
                 maintainAspectRatio: false
             }
         });
+    }
+
+    const updateVisualsForCompany = () => {
+        const company = filters.company?.value === '__all__' ? '' : (filters.company?.value || '');
+        data = company ? (allDashboardData.byCompany?.[company] || {
+            status: { labels: allDashboardData.status.labels, values: [0, 0, 0], total: 0 },
+            companies: { labels: [company], values: [0] },
+            positions: { labels: [], values: [] }
+        }) : allDashboardData;
+
+        ['dashboardCountGreen', 'dashboardCountYellow', 'dashboardCountRed'].forEach((id, index) => {
+            const element = document.getElementById(id);
+            if (element) element.textContent = String(data.status.values[index] || 0);
+        });
+
+        const statusChart = statusCanvas ? Chart.getChart(statusCanvas) : null;
+        if (statusChart) {
+            statusChart.data.datasets[0].data = [...data.status.values];
+            statusChart.update();
+        }
+
+        const companyChart = companyCanvas ? Chart.getChart(companyCanvas) : null;
+        if (companyChart) {
+            companyChart.data.labels = [...data.companies.labels];
+            companyChart.data.datasets[0].data = [...data.companies.values];
+            companyChart.data.datasets[0].backgroundColor = data.companies.labels.map((_, index) => companyColors[index % companyColors.length]);
+            companyChart.options.scales.y.suggestedMax = Math.max(0, ...data.companies.values) + 2;
+            companyChart.update();
+        }
+
+        const positionChart = positionCanvas ? Chart.getChart(positionCanvas) : null;
+        if (positionChart) {
+            positionChart.data.labels = data.positions.labels.map(label => label.includes(' de ') ? [label.split(' de ')[0] + ' de', label.split(' de ').slice(1).join(' de ')] : label);
+            positionChart.data.datasets[0].data = [...data.positions.values];
+            positionChart.data.datasets[0].backgroundColor = data.positions.labels.map((_, index) => positionColors[index % positionColors.length]);
+            positionChart.options.scales.x.suggestedMax = Math.max(0, ...data.positions.values) + 1;
+            const wrapper = positionCanvas.closest('.dashboard-chart-wrapper');
+            if (wrapper) wrapper.style.setProperty('height', `${Math.max(220, (data.positions.labels.length || 1) * 34)}px`, 'important');
+            positionChart.resize();
+            positionChart.update();
+        }
+    };
+    filters.company?.addEventListener('change', updateVisualsForCompany);
+    if (window.jQuery && filters.company) {
+        jQuery(filters.company).on('select2:select.dashboardVisuals select2:clear.dashboardVisuals', updateVisualsForCompany);
     }
 }
 function initUsuariosModule() {
