@@ -78,7 +78,7 @@ if ($rangeStart > $rangeEnd) {
     [$rangeStart, $rangeEnd] = [$rangeEnd, $rangeStart];
 }
 
-$summaryPageSize = 10;
+$summaryPageSize = 20;
 $filteredDashboardWorkers = array_values(array_filter($dashboardWorkers, static function (array $worker) use ($selectedCompanyId, $selectedWorkerId): bool {
     return ($selectedCompanyId === 0 || (int) $worker['company_id'] === $selectedCompanyId)
         && ($selectedWorkerId === 0 || (int) $worker['id'] === $selectedWorkerId);
