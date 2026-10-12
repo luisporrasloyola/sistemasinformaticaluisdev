@@ -1404,6 +1404,21 @@ body {
     margin-top: 18px;
 }
 
+.attendance-summary-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 12px;
+    color: #64748b;
+    font-size: .8rem;
+}
+
+.attendance-summary-pagination[hidden] {
+    display: none;
+}
+
 .attendance-monthly-summary-header {
     display: flex;
     align-items: flex-end;

@@ -555,7 +555,9 @@ function initAttendanceDashboardLiveUpdates() {
         const pageScrollY = window.scrollY;
 
         try {
-            const response = await fetch(window.location.href, {
+            const refreshUrl = new URL(window.location.href);
+            refreshUrl.searchParams.set('refresh_totals', '1');
+            const response = await fetch(refreshUrl, {
                 cache: 'no-store',
                 headers: { 'X-Requested-With': 'XMLHttpRequest' }
             });

@@ -26,7 +26,7 @@ if ($personalView) {
     $selectedCompanyId = (int) ($ownWorker['company_id'] ?? 0);
 } else {
     $dashboardCompanies = db()->query('SELECT id, name FROM companies ORDER BY name')->fetchAll();
-    $dashboardWorkers = db()->query("SELECT w.id, w.company_id, w.full_name, w.document_number, c.name AS company FROM workers w LEFT JOIN companies c ON c.id = w.company_id ORDER BY w.full_name")->fetchAll();
+    $dashboardWorkers = db()->query("SELECT w.id, w.company_id, w.full_name, w.document_number, c.name AS company FROM workers w LEFT JOIN companies c ON c.id = w.company_id ORDER BY w.full_name, w.id")->fetchAll();
 }
 $attendanceLocations = db()->query("SELECT id, name FROM attendance_locations WHERE status = 1 ORDER BY name")->fetchAll();
 $adminMarkSchedules = is_admin() ? db()->query("SELECT id, name FROM attendance_schedules WHERE status = 1 ORDER BY name")->fetchAll() : [];
@@ -77,6 +77,25 @@ if (!$isValidDate($rangeEnd)) {
 if ($rangeStart > $rangeEnd) {
     [$rangeStart, $rangeEnd] = [$rangeEnd, $rangeStart];
 }
+
+$summaryPageSize = 10;
+$filteredDashboardWorkers = array_values(array_filter($dashboardWorkers, static function (array $worker) use ($selectedCompanyId, $selectedWorkerId): bool {
+    return ($selectedCompanyId === 0 || (int) $worker['company_id'] === $selectedCompanyId)
+        && ($selectedWorkerId === 0 || (int) $worker['id'] === $selectedWorkerId);
+}));
+$summaryWorkerCount = count($filteredDashboardWorkers);
+$summaryPageCount = max(1, (int) ceil($summaryWorkerCount / $summaryPageSize));
+$summaryPage = min($summaryPageCount, max(1, (int) ($_GET['pagina'] ?? 1)));
+$pageWorkers = array_slice($filteredDashboardWorkers, ($summaryPage - 1) * $summaryPageSize, $summaryPageSize);
+$pageWorkerIds = array_map('intval', array_column($pageWorkers, 'id'));
+
+// Guardar solo los cinco totales generales; las marcaciones de la página se consultan de nuevo.
+$summaryCacheKey = hash('sha256', implode('|', [$rangeStart, $rangeEnd, $selectedCompanyId, $selectedWorkerId, $attendanceLiveVersion]));
+$summaryCache = $_SESSION['attendance_dashboard_totals'][$summaryCacheKey] ?? null;
+$hasSummaryCache = is_array($summaryCache)
+    && isset($summaryCache['expires'], $summaryCache['totals'])
+    && (int) $summaryCache['expires'] >= time()
+    && empty($_GET['refresh_totals']);
 
 $rangeDates = [];
 $cursor = new DateTimeImmutable($rangeStart);
@@ -130,96 +149,6 @@ function cp_badge_class(?string $status): string
     };
 }
 
-$activeAssignments = (int) db()->query('SELECT COUNT(*) FROM attendance_assignments WHERE status = 1 AND valid_from <= CURDATE() AND (valid_until IS NULL OR valid_until >= CURDATE())')->fetchColumn();
-$activeWorkers = (int) db()->query('SELECT COUNT(DISTINCT worker_id) FROM attendance_assignments WHERE status = 1 AND valid_from <= CURDATE() AND (valid_until IS NULL OR valid_until >= CURDATE())')->fetchColumn();
-
-$stmt = db()->prepare("SELECT
-        SUM(mark_type = 'entrada') AS entradas,
-        SUM(mark_type = 'salida') AS salidas,
-        SUM(mark_type = 'entrada' AND schedule_status = 'tardanza') AS tardanzas,
-        SUM(within_radius = 0 AND location_status NOT IN ('registro_administrativo', 'ajuste_manual')) AS fuera_radio
-    FROM attendance_marks
-    WHERE mark_date = :today");
-$stmt->execute(['today' => $today]);
-$todayStats = $stmt->fetch() ?: [];
-
-$entriesToday = (int) ($todayStats['entradas'] ?? 0);
-$exitsToday = (int) ($todayStats['salidas'] ?? 0);
-$lateToday = (int) ($todayStats['tardanzas'] ?? 0);
-$outsideToday = (int) ($todayStats['fuera_radio'] ?? 0);
-$absentToday = max(0, $activeWorkers - $entriesToday);
-
-$stmt = db()->prepare("SELECT
-        aa.id AS assignment_id,
-        aa.schedule_id,
-        aa.location_id AS assignment_location_id,
-        DATE(aa.created_at) AS assignment_start_date,
-        aa.activity,
-        w.id AS worker_id,
-        w.company_id,
-        w.full_name,
-        w.document_number,
-        c.name AS company,
-        l.name AS location_name,
-        s.name AS schedule_name,
-        entrada.mark_time AS entry_time,
-        entrada.final_status AS entry_status,
-        entrada.distance_meters AS entry_distance,
-        salida.mark_time AS exit_time,
-        salida.final_status AS exit_status
-    FROM workers w
-    LEFT JOIN attendance_assignments aa ON aa.id = (
-        SELECT MAX(active_assignment.id)
-        FROM attendance_assignments active_assignment
-        WHERE active_assignment.worker_id = w.id
-          AND active_assignment.status = 1
-    )
-    LEFT JOIN companies c ON c.id = w.company_id
-    LEFT JOIN attendance_locations l ON l.id = aa.location_id
-    LEFT JOIN attendance_schedules s ON s.id = aa.schedule_id
-    LEFT JOIN attendance_marks entrada ON entrada.worker_id = aa.worker_id
-        AND entrada.mark_date = :today_entry
-        AND entrada.mark_type = 'entrada'
-    LEFT JOIN attendance_marks salida ON salida.worker_id = aa.worker_id
-        AND salida.mark_date = :today_exit
-        AND salida.mark_type = 'salida'
-    ORDER BY w.full_name");
-$stmt->execute(['today_entry' => $today, 'today_exit' => $today]);
-$todayRows = $stmt->fetchAll();
-if ($personalView) {
-    $todayRows = array_values(array_filter($todayRows, static fn(array $row): bool => (int) $row['worker_id'] === $selectedWorkerId));
-    $ownStats = db()->prepare("SELECT SUM(mark_type = 'entrada') AS entradas, SUM(mark_type = 'salida') AS salidas, SUM(mark_type = 'entrada' AND schedule_status = 'tardanza') AS tardanzas, SUM(within_radius = 0 AND location_status NOT IN ('registro_administrativo', 'ajuste_manual')) AS fuera_radio FROM attendance_marks WHERE mark_date = :today AND worker_id = :worker_id");
-    $ownStats->execute(['today' => $today, 'worker_id' => $selectedWorkerId]);
-    $todayStats = $ownStats->fetch() ?: [];
-    $entriesToday = (int) ($todayStats['entradas'] ?? 0);
-    $exitsToday = (int) ($todayStats['salidas'] ?? 0);
-    $lateToday = (int) ($todayStats['tardanzas'] ?? 0);
-    $outsideToday = (int) ($todayStats['fuera_radio'] ?? 0);
-}
-
-$stmt = db()->prepare("SELECT worker_id, mark_date, mark_type, schedule_status
-    FROM attendance_marks
-    WHERE mark_date >= DATE_SUB(:today_from, INTERVAL 6 DAY) AND mark_date <= :today_to
-    ORDER BY mark_date");
-$stmt->execute(['today_from' => $today, 'today_to' => $today]);
-$trend = [];
-for ($i = 6; $i >= 0; $i--) {
-    $date = date('Y-m-d', strtotime($today . " -{$i} day"));
-    $trend[$date] = ['entrada' => 0, 'salida' => 0, 'tardanza' => 0];
-}
-foreach ($stmt->fetchAll() as $row) {
-    if ($personalView && (int) $row['worker_id'] !== $selectedWorkerId) continue;
-    $date = (string) $row['mark_date'];
-    if (!isset($trend[$date])) {
-        continue;
-    }
-    $trend[$date][(string) $row['mark_type']]++;
-    if ($row['mark_type'] === 'entrada' && $row['schedule_status'] === 'tardanza') {
-        $trend[$date]['tardanza']++;
-    }
-}
-$maxTrendValue = max(1, ...array_values(array_map(static fn(array $row): int => max($row), $trend)));
-
 $scheduleDaysBySchedule = [];
 $scheduleDayRows = db()->query('SELECT schedule_id, day_of_week, entry_time, entry_start, exit_time, exit_start, tolerance_minutes, break_start, break_end
     FROM attendance_schedule_days
@@ -230,9 +159,10 @@ foreach ($scheduleDayRows as $scheduleDayRow) {
 $programmedDaysByWorker = [];
 $programmedDaysByAssignment = [];
 try {
+    $programWorkerClause = $hasSummaryCache ? ' AND worker_id IN (' . implode(',', $pageWorkerIds ?: [0]) . ')' : '';
     $programStmt = db()->prepare("SELECT id, worker_id, assignment_id, program_date, schedule_id,
             entry_time, entry_start, entry_end, exit_time, tolerance_minutes FROM attendance_programs
-        WHERE status='programada' AND program_date BETWEEN :date_from AND :date_to ORDER BY id");
+        WHERE status='programada' AND program_date BETWEEN :date_from AND :date_to $programWorkerClause ORDER BY id");
     $programStmt->execute(['date_from'=>min($monthStart,$today),'date_to'=>max($monthEnd,$today)]);
     foreach ($programStmt->fetchAll() as $programRow) {
         $programmedDaysByWorker[(int)$programRow['worker_id']][(string)$programRow['program_date']] = $programRow;
@@ -264,31 +194,9 @@ function dashboard_attendance_incidents(array $worker, ?array $program, ?array $
 }
 
 $calendarEvents = attendance_calendar_events_between($monthStart, $monthEnd);
-$todayCalendarEvents = $today >= $monthStart && $today <= $monthEnd
-    ? $calendarEvents
-    : attendance_calendar_events_between($today, $today);
-
-$absentToday = 0;
-$todayWeekday = (int) date('N', strtotime($today));
-foreach ($todayRows as $todayRow) {
-    if (empty($todayRow['assignment_id']) || $today < (string) $todayRow['assignment_start_date']) {
-        continue;
-    }
-    $todayEvent = attendance_calendar_resolve_event(
-        $todayCalendarEvents,
-        $today,
-        (int) $todayRow['worker_id'],
-        (int) ($todayRow['company_id'] ?? 0)
-    );
-    $todayEventType = (string) ($todayEvent['event_type'] ?? '');
-    $hasScheduleToday = !attendance_calendar_is_non_working_event($todayEventType)
-        && (isset($programmedDaysByWorker[(int)$todayRow['worker_id']][$today])
-            || isset($scheduleDaysBySchedule[(int) $todayRow['schedule_id']][$todayWeekday]));
-    if ($hasScheduleToday && empty($todayRow['entry_time'])) {
-        $absentToday++;
-    }
-}
-
+$matrixWorkerClause = $hasSummaryCache
+    ? 'AND w.id IN (' . implode(',', $pageWorkerIds ?: [0]) . ')'
+    : '';
 $stmt = db()->prepare("SELECT
         w.id AS worker_id,
         w.company_id,
@@ -322,7 +230,8 @@ $stmt = db()->prepare("SELECT
     LEFT JOIN attendance_locations l ON l.id = am.location_id
     WHERE (:filter_company = 0 OR w.company_id = :company_id)
       AND (:filter_worker = 0 OR w.id = :worker_id)
-    ORDER BY w.full_name, am.mark_date, am.mark_type, am.mark_time, am.id");
+      $matrixWorkerClause
+    ORDER BY w.full_name, w.id, am.mark_date, am.mark_type, am.mark_time, am.id");
 $stmt->execute([
     'month_start' => $monthStart,
     'month_end' => $monthEnd,
@@ -368,10 +277,11 @@ foreach ($stmt->fetchAll() as $row) {
 
 $manualDayOverrides = [];
 try {
+    $overrideWorkerClause = $hasSummaryCache ? ' AND o.worker_id IN (' . implode(',', $pageWorkerIds ?: [0]) . ')' : '';
     $overrideStmt = db()->prepare("SELECT o.*, u.name AS administrator
         FROM attendance_manual_day_overrides o
         LEFT JOIN users u ON u.id = o.adjusted_by_user_id
-        WHERE o.mark_date BETWEEN :date_from AND :date_to");
+        WHERE o.mark_date BETWEEN :date_from AND :date_to $overrideWorkerClause");
     $overrideStmt->execute(['date_from' => $monthStart, 'date_to' => $monthEnd]);
     foreach ($overrideStmt->fetchAll() as $overrideRow) {
         $manualDayOverrides[(int) $overrideRow['worker_id']][(string) $overrideRow['mark_date']] = $overrideRow;
@@ -381,10 +291,12 @@ try {
 }
 $manualAdjustmentsByWorkerDate = [];
 try {
+    $auditWorkerClause = $hasSummaryCache ? ' AND a.worker_id IN (' . implode(',', $pageWorkerIds ?: [0]) . ')' : '';
     $manualAuditStmt = db()->prepare("SELECT a.worker_id, a.mark_date, a.created_at, a.reason, u.name AS administrator
         FROM attendance_manual_adjustments a
         LEFT JOIN users u ON u.id = a.adjusted_by_user_id
         WHERE a.mark_date BETWEEN :date_from AND :date_to
+          $auditWorkerClause
           AND a.id = (
               SELECT MAX(last_adjustment.id)
               FROM attendance_manual_adjustments last_adjustment
@@ -408,13 +320,14 @@ foreach ($manualDayOverrides as $overrideWorkerId => $overrideDates) {
     }
 }
 try {
-    $calendarAudit = db()->prepare('SELECT a.worker_id, a.calendar_date, a.created_at, a.reason,
+    $calendarAudit = db()->prepare("SELECT a.worker_id, a.calendar_date, a.created_at, a.reason,
             u.name AS administrator
         FROM attendance_calendar_corrections a
         LEFT JOIN users u ON u.id = a.adjusted_by_user_id
         WHERE a.calendar_date BETWEEN :date_from AND :date_to
+          $auditWorkerClause
           AND a.id = (SELECT MAX(last_a.id) FROM attendance_calendar_corrections last_a
-              WHERE last_a.worker_id = a.worker_id AND last_a.calendar_date = a.calendar_date)');
+              WHERE last_a.worker_id = a.worker_id AND last_a.calendar_date = a.calendar_date)");
     $calendarAudit->execute(['date_from' => $monthStart, 'date_to' => $monthEnd]);
     foreach ($calendarAudit->fetchAll() as $auditRow) {
         if (isset($manualDayOverrides[(int) $auditRow['worker_id']][(string) $auditRow['calendar_date']])) continue;
@@ -507,6 +420,29 @@ foreach ($matrixRows as $workerId => $worker) {
         }
     }
 }
+
+if ($hasSummaryCache) {
+    $attendancePeriodTotals = $summaryCache['totals'];
+} else {
+    $_SESSION['attendance_dashboard_totals'][$summaryCacheKey] = [
+        'expires' => time() + 30,
+        'totals' => $attendancePeriodTotals,
+    ];
+    if (count($_SESSION['attendance_dashboard_totals']) > 20) {
+        $_SESSION['attendance_dashboard_totals'] = array_slice($_SESSION['attendance_dashboard_totals'], -20, null, true);
+    }
+    $pageWorkerSet = array_fill_keys($pageWorkerIds, true);
+    $matrixRows = array_intersect_key($matrixRows, $pageWorkerSet);
+    $matrixSummary = array_intersect_key($matrixSummary, $pageWorkerSet);
+}
+
+$summaryPageUrl = static fn (int $page): string => '?' . http_build_query([
+    'desde' => $rangeStart,
+    'hasta' => $rangeEnd,
+    'empresa_id' => $selectedCompanyId,
+    'trabajador_id' => $selectedWorkerId,
+    'pagina' => $page,
+]);
 
 require __DIR__ . '/../../includes/header.php';
 ?>
@@ -635,103 +571,10 @@ document.addEventListener('DOMContentLoaded', () => {
 </div>
 
 <div class="attendance-dashboard-content">
-<div class="row g-3 attendance-dashboard-secondary d-none" aria-hidden="true">
-    <div class="col-xl-7">
-        <div class="work-panel h-100">
-            <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
-                <h2 class="mb-0">Estado de hoy</h2>
-                <span class="badge text-bg-light border">Salidas: <?= $exitsToday ?> | Fuera de radio: <?= $outsideToday ?></span>
-            </div>
-            <div class="table-responsive">
-                <table class="table table-hover align-middle dashboard-table">
-                    <thead>
-                    <tr>
-                        <th>Personal</th>
-                        <th>Empresa</th>
-                        <th>Lugar</th>
-                        <th>Entrada</th>
-                        <th>Salida</th>
-                        <th>Estado</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    <?php foreach ($todayRows as $row): ?>
-                        <?php
-                        $todayEvent = attendance_calendar_resolve_event(
-                            $todayCalendarEvents,
-                            $today,
-                            (int) $row['worker_id'],
-                            (int) ($row['company_id'] ?? 0)
-                        );
-                        $todayEventType = (string) ($todayEvent['event_type'] ?? '');
-                        $hasScheduleToday = !empty($row['assignment_id'])
-                            && $today >= (string) $row['assignment_start_date']
-                            && !attendance_calendar_is_non_working_event($todayEventType)
-                            && (isset($programmedDaysByWorker[(int)$row['worker_id']][$today])
-                                || isset($scheduleDaysBySchedule[(int) $row['schedule_id']][$todayWeekday]));
-                        $status = empty($row['assignment_id']) ? 'sin_asignar' : ($hasScheduleToday ? 'ausente' : 'sin_horario');
-                        $label = empty($row['assignment_id'])
-                            ? 'Sin asignar'
-                            : ($hasScheduleToday
-                                ? 'Sin entrada'
-                                : ($todayEvent
-                                    ? attendance_calendar_event_label((string) $todayEvent['event_type'])
-                                    : 'Sin horario'));
-                        if ($hasScheduleToday && !empty($row['entry_time']) && !empty($row['exit_time'])) {
-                            $status = $row['entry_status'] === 'tardanza' ? 'tardanza' : 'completo';
-                            $label = $row['entry_status'] === 'tardanza' ? 'Tardanza' : 'Completo';
-                        } elseif ($hasScheduleToday && !empty($row['entry_time'])) {
-                            $status = $row['entry_status'] === 'tardanza' ? 'tardanza' : 'en_jornada';
-                            $label = $row['entry_status'] === 'tardanza' ? 'Tardanza' : 'En jornada';
-                        }
-                        ?>
-                        <tr>
-                            <td>
-                                <strong><?= e($row['full_name']) ?></strong>
-                                <span class="text-muted small d-block"><?= e($row['document_number']) ?></span>
-                            </td>
-                            <td><?= e($row['company'] ?: '-') ?></td>
-                            <td><?= e($row['location_name'] ?: '-') ?></td>
-                            <td><?= e(cp_time($row['entry_time'] ?? null)) ?></td>
-                            <td><?= e(cp_time($row['exit_time'] ?? null)) ?></td>
-                            <td><span class="badge <?= cp_badge_class($status) ?>"><?= e($label) ?></span></td>
-                        </tr>
-                    <?php endforeach; ?>
-                    <?php if (!$todayRows): ?>
-                        <tr><td colspan="6" class="text-muted">No hay personal registrado.</td></tr>
-                    <?php endif; ?>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-    <div class="col-xl-5">
-        <div class="work-panel h-100">
-            <h2>Últimos 7 días</h2>
-            <div class="attendance-mini-bars">
-                <?php foreach ($trend as $date => $values): ?>
-                    <div class="mini-bar-row">
-                        <span><?= e(date('d/m', strtotime($date))) ?></span>
-                        <div class="mini-bar-track">
-                            <i class="bar-entry" style="width: <?= (int) (($values['entrada'] / $maxTrendValue) * 100) ?>%"></i>
-                            <i class="bar-late" style="width: <?= (int) (($values['tardanza'] / $maxTrendValue) * 100) ?>%"></i>
-                        </div>
-                        <strong><?= (int) $values['entrada'] ?></strong>
-                    </div>
-                <?php endforeach; ?>
-            </div>
-            <div class="attendance-legend mt-3">
-                <span><i class="legend-entry"></i>Entradas</span>
-                <span><i class="legend-late"></i>Tardanzas</span>
-            </div>
-        </div>
-    </div>
-</div>
-
 <div class="work-panel attendance-dashboard-matrix" id="attendanceLiveMatrix">
     <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
         <h2 class="mb-0">Matriz mensual</h2>
-        <span class="text-muted small"><?= e(date('d/m/Y', strtotime($monthStart))) ?> - <?= e(date('d/m/Y', strtotime($monthEnd))) ?></span>
+        <span class="text-muted small"><?= e(date('d/m/Y', strtotime($monthStart))) ?> - <?= e(date('d/m/Y', strtotime($monthEnd))) ?> · Página <?= $summaryPage ?> de <?= $summaryPageCount ?></span>
     </div>
     <div class="attendance-matrix-legend mb-3" aria-label="Leyenda de la matriz mensual">
         <span class="legend-attended"><strong>A</strong> Asisti&oacute;</span>
@@ -941,7 +784,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <h3 id="attendanceMonthlySummaryTitle">Resumen por fechas seleccionadas</h3>
                 <p>Totales por trabajador durante el periodo seleccionado.</p>
             </div>
-            <span><?= count($matrixSummary) ?> trabajador<?= count($matrixSummary) === 1 ? '' : 'es' ?></span>
+            <span><?= $summaryWorkerCount ?> trabajador<?= $summaryWorkerCount === 1 ? '' : 'es' ?></span>
         </div>
 
         <div class="table-responsive attendance-monthly-summary-wrap">
@@ -1002,6 +845,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 <?php endif; ?>
                 </tbody>
             </table>
+        </div>
+        <div class="attendance-summary-pagination" aria-label="Paginación de la matriz y el resumen">
+            <span>Mostrando <?= $summaryWorkerCount ? (($summaryPage - 1) * $summaryPageSize + 1) : 0 ?>–<?= min($summaryPage * $summaryPageSize, $summaryWorkerCount) ?> de <?= $summaryWorkerCount ?> trabajadores</span>
+            <?php if ($summaryPageCount > 1): ?>
+                <nav class="d-flex align-items-center gap-2" aria-label="Páginas de trabajadores">
+                    <?php if ($summaryPage > 1): ?><a class="btn btn-sm btn-outline-secondary" href="<?= e($summaryPageUrl($summaryPage - 1)) ?>">Anterior</a><?php endif; ?>
+                    <span class="small fw-semibold">Página <?= $summaryPage ?> de <?= $summaryPageCount ?></span>
+                    <?php if ($summaryPage < $summaryPageCount): ?><a class="btn btn-sm btn-outline-secondary" href="<?= e($summaryPageUrl($summaryPage + 1)) ?>">Siguiente</a><?php endif; ?>
+                </nav>
+            <?php endif; ?>
         </div>
     </section>
 </div>
