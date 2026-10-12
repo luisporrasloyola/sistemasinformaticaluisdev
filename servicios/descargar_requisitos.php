@@ -55,7 +55,7 @@ foreach ($rows as $row) {
         continue;
     }
 
-    $baseName = sanitize_download_name($row['requirement']);
+    $baseName = sanitize_download_name($row['full_name'] . ' - ' . $row['requirement']);
     $original = (string) ($row['original_file_name'] ?: basename($fullPath));
     $extension = strtolower(pathinfo($original, PATHINFO_EXTENSION)) ?: 'pdf';
     $files[] = [

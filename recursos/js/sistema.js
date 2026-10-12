@@ -1849,7 +1849,7 @@ function renderRequirements() {
     };
     const renderRow = (row, inFolder = false, isLast = false) => {
         const hasAttachment = !!row.file_path;
-        const downloadName = escapeHtml(row.original_file_name || `${row.requirement}`);
+        const downloadName = escapeHtml(requirementDownloadName(row));
         const downloadButton = hasAttachment
             ? `<a class="btn btn-sm btn-outline-success" href="${BASE_URL}/${row.file_path}" download="${downloadName}" title="Descargar documento"><i class="fa-solid fa-download"></i></a>`
             : '';
@@ -1896,6 +1896,14 @@ function renderRequirements() {
         ungrouped.forEach(row => renderRow(row));
     }
     if (!requirementRows.length && !requirementFolders.length) tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No hay requisitos registrados para este puesto.</td></tr>';
+}
+
+function requirementDownloadName(row) {
+    const worker = document.getElementById('workerName')?.textContent?.trim() || 'Trabajador';
+    const requirement = String(row.requirement || 'Requisito').trim();
+    const extension = String(row.file_path || '').match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase() || 'pdf';
+    const base = `${worker} - ${requirement}`.replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').replace(/\s+/g, ' ').trim();
+    return `${base}.${extension}`;
 }
 
 async function postRequirementFolder(action, values = {}) {
@@ -2055,7 +2063,7 @@ async function openViewRequirement(id) {
         document.getElementById('requirementFilePreviewOpen').href = url;
         const download = document.getElementById('requirementFilePreviewDownload');
         download.href = url;
-        download.download = fileName;
+        download.download = requirementDownloadName(row);
         const modalElement = document.getElementById('requirementFilePreviewModal');
         modalElement.addEventListener('hidden.bs.modal', () => body.replaceChildren(), { once: true });
         bootstrap.Modal.getOrCreateInstance(modalElement).show();
