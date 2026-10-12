@@ -44,9 +44,22 @@ $canObserve = is_admin()
         'upload'
     ));
 
+$duplicatesStmt = db()->prepare('SELECT wr.id, wr.position_id, p.name AS position_name
+    FROM worker_requirements wr
+    JOIN worker_positions wp ON wp.worker_id = wr.worker_id AND wp.position_id = wr.position_id
+    JOIN positions p ON p.id = wr.position_id
+    WHERE wr.worker_id = :worker_id AND wr.requirement_id = :requirement_id AND wr.id <> :id
+    ORDER BY p.name, wr.id');
+$duplicatesStmt->execute([
+    'worker_id' => (int) $row['worker_id'],
+    'requirement_id' => (int) $row['requirement_id'],
+    'id' => $id,
+]);
+
 json_response([
     'ok' => true,
     'row' => $row,
     'activity' => $logStmt->fetchAll(),
     'can_observe' => $canObserve,
+    'duplicate_positions' => $duplicatesStmt->fetchAll(),
 ]);

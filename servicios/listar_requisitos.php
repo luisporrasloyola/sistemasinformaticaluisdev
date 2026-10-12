@@ -16,10 +16,11 @@ $workerId = (int) ($_GET['trabajador_id'] ?? 0);
 $positionId = (int) ($_GET['puesto_id'] ?? 0);
 require_personal_own_worker($workerId, false);
 
-$stmt = db()->prepare("SELECT wr.*, rc.name AS requirement, COALESCE(u.name, '') AS registered_by
+$stmt = db()->prepare("SELECT wr.*, rc.name AS requirement, COALESCE(u.name, '') AS registered_by, fi.folder_id
     FROM worker_requirements wr
     JOIN requirements_catalog rc ON rc.id = wr.requirement_id
     LEFT JOIN users u ON u.id = wr.registered_by_user_id
+    LEFT JOIN pmi_requirement_folder_items fi ON fi.requirement_record_id = wr.id
     WHERE wr.worker_id = :worker_id AND wr.position_id = :position_id
     ORDER BY rc.name");
 $stmt->execute(['worker_id' => $workerId, 'position_id' => $positionId]);
@@ -29,4 +30,6 @@ foreach ($rows as &$row) {
     $row['status'] = requirement_status($row['end_date'], $row['start_date'], (int) $row['requirement_id']);
 }
 
-json_response(['ok' => true, 'rows' => $rows]);
+$foldersStmt = db()->prepare('SELECT id, name FROM pmi_requirement_folders WHERE worker_id = ? AND position_id = ? ORDER BY name');
+$foldersStmt->execute([$workerId, $positionId]);
+json_response(['ok' => true, 'rows' => $rows, 'folders' => $foldersStmt->fetchAll()]);
