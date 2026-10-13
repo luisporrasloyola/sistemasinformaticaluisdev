@@ -1419,6 +1419,28 @@ body {
     display: none;
 }
 
+.requirement-file-preview-body {
+    min-height: 260px;
+    background: #f4f7fb;
+    text-align: center;
+}
+
+.requirement-file-preview-body iframe {
+    display: block;
+    width: 100%;
+    height: min(72vh, 850px);
+    border: 0;
+    background: #fff;
+}
+
+.requirement-file-preview-body img {
+    display: block;
+    max-width: 100%;
+    max-height: 72vh;
+    margin: auto;
+    object-fit: contain;
+}
+
 .attendance-monthly-summary-header {
     display: flex;
     align-items: flex-end;

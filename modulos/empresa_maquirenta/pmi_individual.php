@@ -64,7 +64,7 @@ require __DIR__ . '/../../includes/header.php';
                 <table class="table table-hover align-middle" id="requirementsTable">
                     <thead>
                     <tr>
-                        <th>Seleccionar</th>
+                        <th><input class="form-check-input" type="checkbox" id="selectAllRequirements" aria-label="Seleccionar todos los registros visibles"></th>
                         <th>Requisito</th>
                         <th>F. Registro</th>
                         <th>F. Inicio</th>
@@ -147,6 +147,22 @@ require __DIR__ . '/../../includes/header.php';
                 <button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk me-2"></i>Guardar</button>
             </div>
         </form>
+    </div>
+</div>
+<div class="modal fade" id="requirementFilePreviewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div><h5 class="modal-title" id="requirementFilePreviewTitle">Vista previa del archivo</h5><small class="text-muted" id="requirementFilePreviewName"></small></div>
+                <button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body requirement-file-preview-body" id="requirementFilePreviewBody"></div>
+            <div class="modal-footer">
+                <a class="btn btn-outline-primary" id="requirementFilePreviewOpen" target="_blank" rel="noopener"><i class="fa-solid fa-arrow-up-right-from-square me-2"></i>Abrir en otra pestaña</a>
+                <a class="btn btn-primary" id="requirementFilePreviewDownload" download><i class="fa-solid fa-download me-2"></i>Descargar</a>
+                <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
     </div>
 </div>
 <script>

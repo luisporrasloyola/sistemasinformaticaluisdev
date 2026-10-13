@@ -1842,7 +1842,8 @@ async function loadRequirements() {
 }
 
 function renderRequirements() {
-    document.getElementById('selectAllRequirements').checked = false;
+    const selectAllRequirements = document.getElementById('selectAllRequirements');
+    if (selectAllRequirements) selectAllRequirements.checked = false;
     const tbody = document.querySelector('#requirementsTable tbody');
     tbody.innerHTML = '';
     const groupHeader = (folder, count) => {
