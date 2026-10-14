@@ -10,6 +10,13 @@ $stmtMaquinarias = db()->query("SELECT m.id, m.equipo, m.serie_placa, c.name AS 
 $maquinarias = $stmtMaquinarias->fetchAll();
 $selectedMaquinariaId = max(0, (int) ($_GET['maquinaria_id'] ?? 0));
 $selectedDocumentRecordId = max(0, (int) ($_GET['documento_registro_id'] ?? 0));
+$selectedDocumentCatalogId = max(0, (int) ($_GET['documento_id'] ?? 0));
+$selectedDocumentCatalogName = '';
+if ($selectedDocumentCatalogId) {
+    $catalogStmt = db()->prepare('SELECT nombre FROM maquinaria_documentos_catalogo WHERE id = ? AND estado = 1');
+    $catalogStmt->execute([$selectedDocumentCatalogId]);
+    $selectedDocumentCatalogName = (string) $catalogStmt->fetchColumn();
+}
 require __DIR__ . '/../../includes/header.php';
 ?>
 <div class="page-title">
@@ -135,7 +142,7 @@ require __DIR__ . '/../../includes/header.php';
         </form>
     </div>
 </div>
-<script>window.canManageMachineDocumentObservations = <?= (is_admin() || is_gestor_role()) ? 'true' : 'false' ?>; window.initialMachineDocumentRecordId = <?= $selectedDocumentRecordId ?>;</script>
+<script>window.canManageMachineDocumentObservations = <?= (is_admin() || is_gestor_role()) ? 'true' : 'false' ?>; window.initialMachineDocumentRecordId = <?= $selectedDocumentRecordId ?>; window.initialMachineDocumentCatalog = <?= json_encode($selectedDocumentCatalogName !== '' ? ['id' => $selectedDocumentCatalogId, 'name' => $selectedDocumentCatalogName] : null, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;</script>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>
 
 

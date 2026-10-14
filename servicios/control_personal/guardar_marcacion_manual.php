@@ -36,6 +36,7 @@ $reason = trim((string) ($_POST['reason'] ?? ''));
 $entryLocationId = max(0, (int) ($_POST['entry_location_id'] ?? 0));
 $exitLocationId = max(0, (int) ($_POST['exit_location_id'] ?? 0));
 $attendanceResult = trim((string) ($_POST['attendance_result'] ?? ''));
+$calendarEventType = trim((string) ($_POST['calendar_event_type'] ?? ''));
 $allowTodayExit = ($_POST['allow_today_exit'] ?? '') === '1';
 $requestedScheduleId = max(0, (int) ($_POST['schedule_id'] ?? 0));
 $projectProvided = array_key_exists('project_id', $_POST);
@@ -46,6 +47,8 @@ if (!$workerId || !manual_valid_date($markDate)) manual_response(['ok' => false,
 if ($markDate > date('Y-m-d')) manual_response(['ok' => false, 'message' => 'No se pueden corregir jornadas futuras.'], 409);
 $sameDay = $markDate === date('Y-m-d');
 if (!in_array($attendanceResult, ['puntual', 'tardanza', 'falta'], true)) manual_response(['ok' => false, 'message' => 'Seleccione el resultado de la asistencia.'], 422);
+if (!in_array($calendarEventType, ['', 'holiday'], true)) manual_response(['ok' => false, 'message' => 'El día especial seleccionado requiere una corrección de calendario.'], 422);
+if ($calendarEventType === 'holiday' && $attendanceResult === 'falta') manual_response(['ok' => false, 'message' => 'No se puede registrar una falta y trabajo en feriado a la vez.'], 422);
 if ($reason === '' || mb_strlen($reason) > 500) manual_response(['ok' => false, 'message' => 'Ingrese el motivo de la corrección.'], 422);
 if ($projectProvided && $projectId < 0) manual_response(['ok' => false, 'message' => 'Seleccione un proyecto válido.'], 422);
 
@@ -58,7 +61,7 @@ $calendarWorker->execute(['worker' => $workerId]);
 $calendarCompanyId = $calendarWorker->fetchColumn();
 if ($calendarCompanyId === false) manual_response(['ok' => false, 'message' => 'El trabajador no existe.'], 404);
 $calendarEvent = attendance_calendar_event_for_worker($markDate, $workerId, (int) $calendarCompanyId);
-if ($calendarEvent && $attendanceResult !== 'falta') {
+if ($calendarEvent && $attendanceResult !== 'falta' && $calendarEventType !== 'holiday') {
     $existingMark = $pdo->prepare('SELECT id FROM attendance_marks WHERE worker_id = :worker AND mark_date = :date LIMIT 1');
     $existingMark->execute(['worker' => $workerId, 'date' => $markDate]);
     if (!$existingMark->fetchColumn()) {
@@ -110,9 +113,13 @@ if ($attendanceResult === 'falta') {
 }
 
 if ($entryTime === '' && $exitTime === '' && !$requestedScheduleId && !$projectProvided) manual_response(['ok' => false, 'message' => 'Ingrese al menos la hora de entrada o de salida.'], 422);
+if ($calendarEventType === 'holiday' && $entryTime === '' && $exitTime === '') {
+    $existingHolidayMark = $pdo->prepare('SELECT id FROM attendance_marks WHERE worker_id=:worker AND mark_date=:date LIMIT 1');
+    $existingHolidayMark->execute(['worker' => $workerId, 'date' => $markDate]);
+    if (!$existingHolidayMark->fetchColumn()) manual_response(['ok' => false, 'message' => 'Ingrese al menos una marcación para registrar trabajo en feriado.'], 422);
+}
 if ($sameDay && $exitTime !== '' && !$allowTodayExit) manual_response(['ok' => false, 'message' => 'Pulse «Permitir editar» antes de guardar la salida de hoy.'], 422);
 if (($entryTime !== '' && !manual_valid_time($entryTime)) || ($exitTime !== '' && !manual_valid_time($exitTime))) manual_response(['ok' => false, 'message' => 'Ingrese horas válidas.'], 422);
-if ($entryTime !== '' && $exitTime !== '' && $exitTime < $entryTime) manual_response(['ok' => false, 'message' => 'La hora de salida no puede ser anterior a la entrada.'], 422);
 if ($sameDay && (($entryTime !== '' && $entryTime > date('H:i')) || ($exitTime !== '' && $exitTime > date('H:i')))) {
     manual_response(['ok' => false, 'message' => 'La hora corregida no puede ser futura.'], 422);
 }
@@ -145,7 +152,7 @@ $program = $stmt->fetch() ?: null;
 $markedScheduleId = (int) ($assignment['marked_schedule_id'] ?? 0);
 $scheduleId = $requestedScheduleId ?: ($markedScheduleId ?: (int) ($program['schedule_id'] ?? $assignment['schedule_id']));
 if ($requestedScheduleId) {
-    if (!$markedScheduleId) manual_response(['ok' => false, 'message' => 'Solo puede cambiar el horario de una jornada con marcación registrada.'], 409);
+    if (!$markedScheduleId && $entryTime === '' && $exitTime === '') manual_response(['ok' => false, 'message' => 'Ingrese una marcación antes de cambiar el horario de esta jornada.'], 409);
     $scheduleCheck = $pdo->prepare('SELECT id FROM attendance_schedules WHERE id=:schedule AND status=1 LIMIT 1');
     $scheduleCheck->execute(['schedule' => $scheduleId]);
     if (!$scheduleCheck->fetchColumn()) manual_response(['ok' => false, 'message' => 'Seleccione un horario activo.'], 422);
@@ -163,11 +170,26 @@ $useProgramHours = $program && (!$markedScheduleId || (int) $program['schedule_i
 $officialExit = substr((string) (($useProgramHours ? $program['exit_time'] : null) ?? $scheduleDay['exit_time'] ?? $scheduleDay['exit_start'] ?? '00:00:00'), 0, 8);
 $officialEntry = (string) (($useProgramHours ? $program['entry_time'] : null) ?? $scheduleDay['entry_time'] ?? $scheduleDay['entry_start'] ?? '');
 $entryTolerance = max(0, (int) (($useProgramHours ? $program['tolerance_minutes'] : null) ?? $scheduleDay['tolerance_minutes'] ?? 0));
+$overnightSchedule = $officialEntry !== '' && $officialExit <= $officialEntry;
+if ($entryTime !== '' && $exitTime !== '' && $exitTime < $entryTime && !$overnightSchedule) {
+    manual_response(['ok' => false, 'message' => 'La hora de salida no puede ser anterior a la entrada en este horario.'], 422);
+}
+if ($exitTime !== '') {
+    $exitMarkDate = $overnightSchedule && $exitTime < substr($officialEntry, 0, 5)
+        ? (new DateTimeImmutable($markDate))->modify('+1 day')->format('Y-m-d') : $markDate;
+    if ($exitMarkDate . ' ' . $exitTime > date('Y-m-d H:i')) {
+        manual_response(['ok' => false, 'message' => 'La hora de salida corregida no puede ser futura.'], 422);
+    }
+}
 
-$saveMark = static function (string $type, string $time, int $locationId) use ($pdo, $workerId, $markDate, $assignment, $program, $scheduleId, $officialExit, $reason, $actorId, $actorName, $attendanceResult, $sameDay, $allowTodayExit, $requestedScheduleId, $markedScheduleId, $projectProvided, $projectId): void {
+$saveMark = static function (string $type, string $time, int $locationId) use ($pdo, $workerId, $markDate, $assignment, $program, $scheduleId, $officialEntry, $officialExit, $overnightSchedule, $reason, $actorId, $actorName, $attendanceResult, $sameDay, $allowTodayExit, $requestedScheduleId, $markedScheduleId, $projectProvided, $projectId): void {
     $normalized = $time . ':00';
-    $status = $type === 'entrada' ? $attendanceResult : ($normalized >= $officialExit ? 'salida_valida' : 'salida_anticipada');
-    $markedAt = $markDate . ' ' . $normalized;
+    $markedAtDate = $type === 'salida' && $overnightSchedule && $normalized < $officialEntry
+        ? (new DateTimeImmutable($markDate))->modify('+1 day')->format('Y-m-d') : $markDate;
+    $markedAt = $markedAtDate . ' ' . $normalized;
+    $scheduledExitAt = $markDate . ' ' . $officialExit;
+    if ($overnightSchedule) $scheduledExitAt = (new DateTimeImmutable($markDate))->modify('+1 day')->format('Y-m-d') . ' ' . $officialExit;
+    $status = $type === 'entrada' ? $attendanceResult : ($markedAt >= $scheduledExitAt ? 'salida_valida' : 'salida_anticipada');
     $markOrder = $type === 'entrada' ? 'mark_time ASC,id ASC' : 'mark_time DESC,id DESC';
     $find = $pdo->prepare("SELECT * FROM attendance_marks WHERE worker_id=:worker AND mark_date=:date AND mark_type=:type ORDER BY {$markOrder} LIMIT 1 FOR UPDATE");
     $find->execute(['worker' => $workerId, 'date' => $markDate, 'type' => $type]);
@@ -185,7 +207,7 @@ $saveMark = static function (string $type, string $time, int $locationId) use ($
         $entryCheck->execute(['worker' => $workerId, 'date' => $markDate]);
         $firstEntryTime = $entryCheck->fetchColumn();
         if (!$firstEntryTime) throw new DomainException('Primero debe existir una entrada registrada para completar la salida de hoy.');
-        if ($normalized < (string) $firstEntryTime) throw new DomainException('La salida no puede ser anterior a la entrada.');
+        if ($markedAt < $markDate . ' ' . $firstEntryTime) throw new DomainException('La salida no puede ser anterior a la entrada.');
     }
     if ($existing && $type === 'entrada' && $sameDay && $normalized === (string) $existing['mark_time']
         && $locationId === (int) $existing['location_id'] && $status === (string) $existing['final_status']) return;
@@ -220,7 +242,7 @@ try {
     if ($requestedScheduleId) {
         $marksStmt = $pdo->prepare('SELECT id, mark_type, mark_time, location_id, location_status, schedule_id, final_status FROM attendance_marks WHERE worker_id=:worker AND mark_date=:date FOR UPDATE');
         $marksStmt->execute(['worker' => $workerId, 'date' => $markDate]);
-        $updateSchedule = $pdo->prepare('UPDATE attendance_marks SET schedule_id=:schedule, schedule_status=:schedule_status, final_status=:final_status WHERE id=:id');
+        $updateSchedule = $pdo->prepare('UPDATE attendance_marks SET schedule_id=:schedule, marked_at=:marked_at, schedule_status=:schedule_status, final_status=:final_status WHERE id=:id');
         $auditSchedule = $pdo->prepare('INSERT INTO attendance_manual_adjustments
             (attendance_mark_id,worker_id,mark_date,mark_type,previous_time,new_time,previous_location_id,new_location_id,previous_status,new_status,reason,adjusted_by_user_id)
             VALUES (:mark,:worker,:date,:type,:previous_time,:new_time,:previous_location,:new_location,:previous_status,:new_status,:reason,:user)');
@@ -228,12 +250,19 @@ try {
             if ((int) $mark['schedule_id'] === $requestedScheduleId) continue;
             $newStatus = (string) $mark['final_status'];
             if ($mark['mark_type'] === 'salida') {
-                $newStatus = (string) $mark['mark_time'] >= $officialExit ? 'salida_valida' : 'salida_anticipada';
+                $exitDate = $overnightSchedule && (string) $mark['mark_time'] < $officialEntry
+                    ? (new DateTimeImmutable($markDate))->modify('+1 day')->format('Y-m-d') : $markDate;
+                $scheduledExitDate = $overnightSchedule
+                    ? (new DateTimeImmutable($markDate))->modify('+1 day')->format('Y-m-d') : $markDate;
+                $newStatus = $exitDate . ' ' . $mark['mark_time'] >= $scheduledExitDate . ' ' . $officialExit
+                    ? 'salida_valida' : 'salida_anticipada';
             } elseif ($officialEntry !== '' && !($mark['location_status'] === 'registro_administrativo' && $newStatus === 'puntual')) {
                 $delaySeconds = strtotime('2000-01-01 ' . (string) $mark['mark_time']) - strtotime('2000-01-01 ' . $officialEntry);
                 $newStatus = $delaySeconds > $entryTolerance * 60 ? 'tardanza' : 'puntual';
             }
-            $updateSchedule->execute(['schedule' => $requestedScheduleId, 'schedule_status' => $newStatus, 'final_status' => $newStatus, 'id' => (int) $mark['id']]);
+            $actualMarkDate = $mark['mark_type'] === 'salida' && $overnightSchedule && (string) $mark['mark_time'] < $officialEntry
+                ? (new DateTimeImmutable($markDate))->modify('+1 day')->format('Y-m-d') : $markDate;
+            $updateSchedule->execute(['schedule' => $requestedScheduleId, 'marked_at' => $actualMarkDate . ' ' . $mark['mark_time'], 'schedule_status' => $newStatus, 'final_status' => $newStatus, 'id' => (int) $mark['id']]);
             $auditSchedule->execute([
                 'mark' => (int) $mark['id'], 'worker' => $workerId, 'date' => $markDate,
                 'type' => $mark['mark_type'], 'previous_time' => $mark['mark_time'], 'new_time' => $mark['mark_time'],
@@ -267,8 +296,32 @@ try {
             ]);
         }
     }
+    if ($calendarEventType === 'holiday' && (string) ($calendarEvent['event_type'] ?? '') !== 'holiday') {
+        $hasMark = $pdo->prepare('SELECT id FROM attendance_marks WHERE worker_id=:worker AND mark_date=:date LIMIT 1');
+        $hasMark->execute(['worker' => $workerId, 'date' => $markDate]);
+        if (!$hasMark->fetchColumn()) throw new DomainException('Debe existir una marcación para corregir el feriado desde esta pantalla.');
+        $disableCalendarDay = $pdo->prepare("UPDATE attendance_calendar_days SET status=0
+            WHERE scope_type='worker' AND worker_id=:worker AND calendar_date=:date
+              AND (end_date IS NULL OR end_date=:end_date) AND status=1");
+        $disableCalendarDay->execute(['worker' => $workerId, 'date' => $markDate, 'end_date' => $markDate]);
+        $insertHoliday = $pdo->prepare("INSERT INTO attendance_calendar_days
+            (calendar_date,end_date,event_type,name,scope_type,company_id,worker_id,status,created_by_user_id)
+            VALUES (:date,:end_date,'holiday','Feriado','worker',NULL,:worker,1,:actor)");
+        $insertHoliday->execute(['date' => $markDate, 'end_date' => $markDate, 'worker' => $workerId, 'actor' => $actorId]);
+        $auditHoliday = $pdo->prepare("INSERT INTO attendance_calendar_corrections
+            (worker_id,calendar_date,previous_event_type,previous_name,event_type,event_name,reason,adjusted_by_user_id)
+            VALUES (:worker,:date,:previous_type,:previous_name,'holiday','Feriado',:reason,:actor)");
+        $auditHoliday->execute([
+            'worker' => $workerId, 'date' => $markDate,
+            'previous_type' => $calendarEvent['event_type'] ?? null,
+            'previous_name' => $calendarEvent['name'] ?? null,
+            'reason' => $reason, 'actor' => $actorId,
+        ]);
+    }
     $pdo->commit();
-    manual_response(['ok' => true, 'message' => 'La asistencia fue corregida y auditada correctamente.']);
+    manual_response(['ok' => true, 'message' => $calendarEventType === 'holiday'
+        ? 'El feriado y la asistencia fueron guardados y auditados correctamente.'
+        : 'La asistencia fue corregida y auditada correctamente.']);
 } catch (Throwable $error) {
     if ($pdo->inTransaction()) $pdo->rollBack();
     if ($error instanceof DomainException) manual_response(['ok' => false, 'message' => $error->getMessage()], 409);

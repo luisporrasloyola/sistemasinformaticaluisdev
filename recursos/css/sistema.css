@@ -7356,6 +7356,10 @@ input[type="checkbox"]:active {
 .attendance-manual-project{grid-column:1/-1}
 .attendance-manual-reason,.attendance-location-help{grid-column:1/-1}
 .attendance-manual-form .form-label{margin-bottom:4px;font-size:.69rem;text-transform:uppercase;letter-spacing:.02em}
+.attendance-calendar-label{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.attendance-calendar-label .form-label{margin-bottom:0}
+.attendance-holiday-info-button{display:inline-grid;place-items:center;width:21px;height:21px;padding:0;border:0;border-radius:50%;background:#cffafe;color:#0891b2;font-size:14px;cursor:pointer;box-shadow:0 0 0 1px #67e8f9}
+.attendance-holiday-info-button:hover,.attendance-holiday-info-button:focus-visible{background:#a5f3fc;color:#0e7490;box-shadow:0 0 0 3px rgba(6,182,212,.22)}
 .attendance-manual-form .form-control,.attendance-manual-form .form-select{min-height:39px;border-color:#cbd5e1;border-radius:9px;font-size:.84rem}
 .attendance-manual-form textarea{min-height:58px!important;max-height:76px;padding-top:8px}
 .attendance-manual-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:11px}
@@ -7534,6 +7538,9 @@ input[type="checkbox"]:active {
 .attendance-reference-hour-box:first-child{border-color:#65a98f}.attendance-reference-hour-box span,.attendance-reference-extra-total span,.attendance-reference-hour-result span{font-size:12px;font-weight:800;text-transform:uppercase}.attendance-reference-hours strong{margin-top:5px;font-size:21px;font-variant-numeric:tabular-nums;color:#173c75}.attendance-reference-hours small{margin-top:4px;font-size:10px;color:#66758a}
 .attendance-reference-hour-extras{display:grid;grid-template-columns:1fr 1.15fr;gap:8px;padding:8px;border-radius:20px;background:#e5e7eb}.attendance-reference-extra-parts{display:grid;gap:7px}.attendance-reference-extra-parts>div{font-size:11px}.attendance-reference-extra-parts strong{font-size:15px}.attendance-reference-extra-total{border:3px solid #298164}
 .attendance-reference-hour-result{border:3px solid #f18435}.attendance-reference-hour-result strong{font-size:25px}
+.attendance-hemp-value{display:flex;align-items:center;justify-content:center;gap:8px}
+.attendance-hemp-edit{display:inline-grid;place-items:center;width:28px;height:28px;margin-top:5px;padding:0;border:1px solid #9db5ce;border-radius:8px;background:#fff;color:#2563eb;font-size:12px;cursor:pointer}
+.attendance-hemp-edit:hover,.attendance-hemp-edit:focus-visible{border-color:#2563eb;background:#eff6ff;box-shadow:0 0 0 3px rgba(37,99,235,.14)}
 .attendance-hours-note{margin:9px 0 0;color:#65758c;font-size:12px}
 @media(max-width:800px){.attendance-reference-days{grid-template-columns:1fr 1.5fr}.attendance-reference-rest{grid-column:1/-1}.attendance-reference-hours{grid-template-columns:1fr 1.3fr}.attendance-reference-hour-result{grid-column:1/-1}}
 @media(max-width:700px){.attendance-reference-heading{grid-template-columns:1fr}.attendance-reference-person{border-right:0;border-bottom:2px solid #14243f;padding:0 0 8px}.attendance-reference-profile{padding:9px 0}.attendance-reference-days,.attendance-reference-hours{grid-template-columns:1fr}.attendance-reference-otherdays{min-height:110px}.attendance-reference-rest,.attendance-reference-hour-result{grid-column:auto}.attendance-month-rates{gap:8px}}

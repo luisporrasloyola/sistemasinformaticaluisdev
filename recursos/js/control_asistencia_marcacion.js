@@ -14,6 +14,7 @@ function initQuickAttendanceMarking() {
     const exitButton = document.getElementById('markExitBtn');
     const changeSelectionButton = document.getElementById('markChangeSelectionBtn');
     const statusPanel = document.getElementById('markStatusPanel');
+    const holidayInfoButton = document.getElementById('markHolidayInfoBtn');
     const help = document.getElementById('markPermissionHelp');
     const camera = document.getElementById('markCamera');
     const canvas = document.getElementById('markCanvas');
@@ -196,6 +197,7 @@ function initQuickAttendanceMarking() {
     }
 
     function renderStatus() {
+        holidayInfoButton?.classList.toggle('d-none', state?.holiday_today !== true);
         const requiresWorkerSelection = worker.tagName === 'SELECT';
         const locationValue = selectValue(location);
         const scheduleValue = selectValue(schedule);
@@ -401,7 +403,7 @@ function initQuickAttendanceMarking() {
         const button=type==='entrada'?entryButton:exitButton;const original=button.innerHTML;button.disabled=true;button.innerHTML='<i class="fa-solid fa-spinner fa-spin me-2"></i>Registrando...';
         try { const [position,photo]=await Promise.all([gps(),cameraPhoto()]);const place=selectedLocation();if(map&&place){const current=[position.coords.latitude,position.coords.longitude];if(!currentMarker)currentMarker=L.marker(current).addTo(map);else currentMarker.setLatLng(current);map.fitBounds(L.latLngBounds([[place.latitude,place.longitude],current]).pad(.3));}
             const body=new FormData();body.append('csrf_token',quickCsrf);body.append('worker_id',selectedWorkerValue());body.append('mark_type',type);body.append('location_id',locationValue);body.append('schedule_id',scheduleValue);body.append('project_id',projectValue);body.append('latitude',position.coords.latitude);body.append('longitude',position.coords.longitude);body.append('accuracy',position.coords.accuracy);body.append('photo_data',photo);body.append('observations','');
-            const response=await fetch(`${quickBaseUrl}/servicios/control_personal/registrar_marcacion.php`,{method:'POST',body});const data=await response.json();if(!data.ok)throw new Error(data.message||'No se pudo registrar la marcación.');stopCamera();state={...(state||{}),has_entry:true,has_exit:type==='salida'};editingSelection=false;marksPage=1;renderStatus();await Swal.fire('Marcación registrada',data.message,'success');await loadState(false);
+            const response=await fetch(`${quickBaseUrl}/servicios/control_personal/registrar_marcacion.php`,{method:'POST',body});const data=await response.json();if(!data.ok)throw new Error(data.message||'No se pudo registrar la marcación.');stopCamera();state={...(state||{}),has_entry:true,has_exit:type==='salida'};editingSelection=false;marksPage=1;renderStatus();await Swal.fire('Marcación registrada',data.message,'success');if(type==='salida')await loadRecent();else await loadState(false);
         } catch(error){Swal.fire('No se pudo registrar',error.message||String(error),'warning');} finally {stopCamera();button.innerHTML=original;renderStatus();}
     }
     function handlePaginationClick(event) {

@@ -65,8 +65,10 @@ function attendance_report_journey_state(?string $key): array
 
 function attendance_report_diff_minutes(string $start, string $end): int
 {
-    $startTimestamp = strtotime('2000-01-01 ' . $start);
-    $endTimestamp = strtotime('2000-01-01 ' . $end);
+    // El reporte muestra HH:mm; calcular con esos mismos minutos evita diferencias
+    // de un minuto cuando las marcaciones guardan segundos distintos.
+    $startTimestamp = strtotime('2000-01-01 ' . substr($start, 0, 5));
+    $endTimestamp = strtotime('2000-01-01 ' . substr($end, 0, 5));
     if ($startTimestamp === false || $endTimestamp === false) return 0;
     if ($endTimestamp < $startTimestamp) $endTimestamp += 86400;
     return max(0, (int) floor(($endTimestamp - $startTimestamp) / 60));
@@ -78,6 +80,19 @@ function attendance_report_signed_minutes(string $start, string $end): int
     $endTimestamp = strtotime('2000-01-01 ' . $end);
     if ($startTimestamp === false || $endTimestamp === false) return 0;
     return (int) floor(($endTimestamp - $startTimestamp) / 60);
+}
+
+function attendance_report_exit_is_early(string $scheduledEntry, string $scheduledExit, string $actualExit): bool
+{
+    $start = strtotime('2000-01-01 ' . $scheduledEntry);
+    $end = strtotime('2000-01-01 ' . $scheduledExit);
+    $actual = strtotime('2000-01-01 ' . $actualExit);
+    if ($start === false || $end === false || $actual === false) return false;
+    if ($end <= $start) {
+        $end += 86400;
+        if ($actual < $start && $actual - strtotime('2000-01-01 00:00:00') < 43200) $actual += 86400;
+    }
+    return $actual < $end;
 }
 
 function attendance_report_effective_schedule_day(array $assignment, ?array $program, ?array $entry, ?array $exit, array $scheduleDaysBySchedule, int $weekday): ?array
@@ -131,13 +146,25 @@ function attendance_report_overtime_components(string $scheduledEntry, string $s
 
     $result['early_eligible'] = $entryMark !== false && $entryMark < $entryStart;
     if ($earlyAuthorized && $result['early_eligible']) {
-        $result['early_minutes'] = (int) floor(($entryStart - $entryMark) / 60);
+        // La pantalla muestra HH:mm: 22:11:55 se presenta como 22:11 y hasta 22:15 son 4 min.
+        $result['early_minutes'] = (int) ceil(($entryStart - $entryMark) / 60);
     }
     if ($exitMark !== false) {
         $minutesAfterExit = (int) floor(($exitMark - $exitStart) / 60);
         $result['exit_minutes'] = $exitMark > $exitStart + 15 * 60 ? max(0, $minutesAfterExit) : 0;
     }
     return $result;
+}
+
+/** El feriado acredita la jornada completa de la plantilla al doble si hay entrada y salida. */
+function attendance_report_holiday_worked_minutes(int $scheduledMinutes, bool $completed): int
+{
+    return $completed ? 2 * max(0, $scheduledMinutes) : 0;
+}
+
+function attendance_report_early_credit(int $authorizedMinutes, bool $holiday): int
+{
+    return max(0, $authorizedMinutes) * ($holiday ? 2 : 1);
 }
 
 function attendance_report_note(int $workerId, string $dateFrom, string $dateTo): ?array
@@ -228,7 +255,7 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
     $marksByWorkerAndDateAndAssignment = [];
     $quickAssignmentIds = [];
     $markParams = ['date_from' => $dateFrom, 'date_to' => $dateTo];
-    $markSql = 'SELECT am.assignment_id, am.worker_id, am.mark_date, am.mark_type, am.mark_time, am.project_id, am.schedule_id,
+    $markSql = 'SELECT am.assignment_id, am.worker_id, am.mark_date, am.mark_type, am.mark_time, am.marked_at, am.project_id, am.schedule_id,
         am.schedule_status, am.final_status, am.observations, am.location_status,
         audit.reason AS administrative_reason, actor.name AS administrative_actor,
         l.name AS mark_location, p.name AS mark_project
@@ -442,8 +469,8 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                         $isLate = $delay > max(0, (int) ($scheduleDay['tolerance_minutes'] ?? 0));
                         if (($entry['location_status'] ?? '') === 'registro_administrativo' && ($entry['final_status'] ?? '') === 'puntual') $isLate = false;
                     }
-                    if ($exit && $scheduledExit !== '') {
-                        $isEarlyExit = attendance_report_signed_minutes((string) $exit['mark_time'], $scheduledExit) > 0;
+                    if ($exit && $scheduledEntry !== '' && $scheduledExit !== '') {
+                        $isEarlyExit = attendance_report_exit_is_early($scheduledEntry, $scheduledExit, (string) $exit['mark_time']);
                     }
                 }
 
@@ -532,6 +559,12 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 $exitOvertimeMinutes = $components['exit_minutes'];
                 $overtimeMinutes = $earlyOvertimeMinutes + $exitOvertimeMinutes;
             }
+            if ($eventType === 'holiday' && $entry && $scheduleDay) {
+                $workedMinutes = attendance_report_holiday_worked_minutes($scheduledMinutes, (bool) $exit);
+                $exitOvertimeMinutes *= 2;
+                $earlyOvertimeMinutes = attendance_report_early_credit($earlyOvertimeMinutes, true);
+                $overtimeMinutes = $earlyOvertimeMinutes + $exitOvertimeMinutes;
+            }
 
             $latestManualComment = $latestManualComments[$id][$date][$aid] ?? null;
             if ($manualOverride) {
@@ -562,6 +595,7 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 'company' => (string) ($worker['company'] ?? ''),
                 'entry' => attendance_report_time($entry['mark_time'] ?? null),
                 'exit' => attendance_report_time($exit['mark_time'] ?? null),
+                'exit_next_day' => $exit && substr((string) ($exit['marked_at'] ?? ''), 0, 10) > $date,
                 'entry_administrative' => ($entry['location_status'] ?? '') === 'registro_administrativo',
                 'exit_administrative' => ($exit['location_status'] ?? '') === 'registro_administrativo',
                 'entry_administrative_actor' => (string) ($entry['administrative_actor'] ?? ''),
@@ -609,6 +643,7 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 'assignment_id'=>0, 'worker'=>(string) $worker['full_name'],
                 'document'=>(string) $worker['document_number'], 'company'=>(string) ($worker['company'] ?? ''),
                 'entry'=>'-', 'exit'=>'-', 'entry_administrative'=>false, 'exit_administrative'=>false,
+                'exit_next_day'=>false,
                 'entry_administrative_actor'=>'', 'exit_administrative_actor'=>'',
                 'entry_administrative_reason'=>'', 'exit_administrative_reason'=>'',
                 'schedule'=>'-', 'schedule_id'=>0, 'scheduled_entry'=>'-', 'tolerance_minutes'=>null, 'location'=>'-',
@@ -860,12 +895,30 @@ function attendance_report_build_hours_ledger(int $workerId, string $throughMont
             $days = array_merge($historical['daily_classification'], $days);
         }
     }
-    $months = attendance_report_hours_ledger($days, $firstMonth, $throughMonth);
+    $openingOverrides = [];
+    $openingAdjustment = null;
+    $adjustmentSchemaAvailable = true;
+    if ($firstMonth <= '2026-10' && $throughMonth >= '2026-10') {
+        try {
+            $adjustmentStmt = db()->prepare("SELECT a.opening_minutes, a.reason, a.adjusted_at, u.name AS adjusted_by
+                FROM attendance_hemp_opening_adjustments a
+                LEFT JOIN users u ON u.id = a.adjusted_by_user_id
+                WHERE a.worker_id = :worker_id AND a.report_month = '2026-10' LIMIT 1");
+            $adjustmentStmt->execute(['worker_id' => $workerId]);
+            $openingAdjustment = $adjustmentStmt->fetch() ?: null;
+            if ($openingAdjustment) $openingOverrides['2026-10'] = (int) $openingAdjustment['opening_minutes'];
+        } catch (PDOException $error) {
+            if ($error->getCode() !== '42S02') throw $error;
+            $adjustmentSchemaAvailable = false;
+        }
+    }
+    $months = attendance_report_hours_ledger($days, $firstMonth, $throughMonth, 0, null, $openingOverrides);
     $current = $months[$throughMonth];
     $labels = [];
     foreach (['opening_minutes', 'worked_minutes', 'early_overtime_minutes',
         'exit_overtime_minutes', 'overtime_minutes', 'redeemed_minutes', 'closing_minutes'] as $field) {
         $labels[$field] = attendance_report_hours_label($current[$field]);
     }
-    return ['months' => $months, 'current' => $current, 'current_labels' => $labels];
+    return ['months' => $months, 'current' => $current, 'current_labels' => $labels,
+        'opening_adjustment' => $openingAdjustment, 'adjustment_schema_available' => $adjustmentSchemaAvailable];
 }

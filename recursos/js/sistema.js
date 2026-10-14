@@ -2,6 +2,30 @@ const BASE_URL = window.APP_URL || window.location.origin;
 const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
 const personalServiceUrl = (file) => `${window.personalServiceBase || BASE_URL + "/servicios"}/${file}`;
 
+const attendanceHempForm = document.getElementById('attendanceHempForm');
+if (attendanceHempForm) {
+    attendanceHempForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (!attendanceHempForm.reportValidity()) return;
+        const button = attendanceHempForm.querySelector('[type="submit"]');
+        const body = new FormData(attendanceHempForm);
+        body.set('hours', String(Number(attendanceHempForm.elements.hours.value)));
+        body.set('minutes', String(Number(attendanceHempForm.elements.minutes.value)));
+        body.set('reason', attendanceHempForm.elements.reason.value.trim());
+        body.append('csrf_token', csrf);
+        button.disabled = true;
+        try {
+            const response = await fetch(`${BASE_URL}/servicios/control_personal/guardar_ajuste_hemp_octubre.php`, { method: 'POST', body });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo guardar el ajuste.');
+            window.location.reload();
+        } catch (error) {
+            Swal.fire('No se pudo guardar', error.message || 'Inténtelo nuevamente.', 'warning');
+            button.disabled = false;
+        }
+    });
+}
+
 const earlyOvertimeToolbar = document.getElementById('reportEarlyOvertimeToolbar');
 if (earlyOvertimeToolbar) {
     const checkboxes = [...document.querySelectorAll('.early-overtime-day')];
@@ -179,6 +203,7 @@ function initAttendanceMatrixDetail() {
         manualResultLate: document.getElementById('matrixManualResultLate'),
         manualResultAbsent: document.getElementById('matrixManualResultAbsent'),
         manualCalendarType: document.getElementById('matrixManualCalendarType'),
+        holidayInfoButton: document.getElementById('matrixHolidayInfoButton'),
         manualRestKind: document.getElementById('matrixManualRestKind'),
         manualRestKindField: document.getElementById('matrixManualRestKindField'),
         manualEntryLocation: document.getElementById('matrixManualEntryLocation'),
@@ -305,11 +330,16 @@ function initAttendanceMatrixDetail() {
         });
         if (isAbsent) setScheduleEditing(false, fields.adminMarkOpen?._selectedCell);
         const cell = fields.adminMarkOpen?._selectedCell;
-        fields.permitScheduleEdit?.classList.toggle('d-none', isAbsent || !cell?.dataset.markedScheduleId || cell.dataset.markedScheduleId === '0' || cell.dataset.manualEnabled !== '1');
+        fields.permitScheduleEdit?.classList.toggle('d-none', isAbsent || !(Number(cell?.dataset.markedScheduleId) || Number(cell?.dataset.scheduleId)) || cell.dataset.manualEnabled !== '1');
+    };
+    const isHolidayAttendanceCorrection = () => {
+        return fields.manualCalendarType?.value === 'holiday'
+            && (fields.manualResultPunctual?.checked || fields.manualResultLate?.checked);
     };
     const syncManualCalendarMode = () => {
         const type = fields.manualCalendarType?.value || '';
-        const isCalendar = type !== '';
+        fields.holidayInfoButton?.classList.toggle('d-none', type !== 'holiday');
+        const isCalendar = type !== '' && !isHolidayAttendanceCorrection();
         const isRest = type === 'rest';
         fields.manualRestKindField?.classList.toggle('d-none', !isRest);
         if (fields.manualRestKind) {
@@ -319,7 +349,6 @@ function initAttendanceMatrixDetail() {
         }
         modalElement.querySelectorAll('.attendance-result-choice input').forEach((input) => {
             input.required = !isCalendar;
-            if (isCalendar) input.checked = false;
         });
         if (isCalendar) {
             modalElement.querySelectorAll('.attendance-mark-input input, .attendance-mark-input select').forEach((input) => { input.disabled = true; });
@@ -369,7 +398,7 @@ function initAttendanceMatrixDetail() {
         fields.manualSchedule?.classList.toggle('d-none', editing);
         if (fields.manualScheduleSelect) {
             fields.manualScheduleSelect.disabled = !editing;
-            if (!editing) fields.manualScheduleSelect.value = cell?.dataset.markedScheduleId || '';
+            if (!editing) fields.manualScheduleSelect.value = Number(cell?.dataset.markedScheduleId) > 0 ? cell.dataset.markedScheduleId : (cell?.dataset.scheduleId || '');
             if (window.jQuery && jQuery.fn.select2 && jQuery(fields.manualScheduleSelect).hasClass('select2-hidden-accessible')) {
                 jQuery(fields.manualScheduleSelect).trigger('change.select2');
             }
@@ -404,8 +433,8 @@ function initAttendanceMatrixDetail() {
             fields.manualEntry.value = cell.dataset.entry && cell.dataset.entry !== '-' ? cell.dataset.entry : '';
             fields.manualExit.value = cell.dataset.exit && cell.dataset.exit !== '-' ? cell.dataset.exit : '';
             fields.manualSchedule.textContent = cell.dataset.markedScheduleLabel || 'Sin horario registrado';
-            fields.manualScheduleSelect.value = cell.dataset.markedScheduleId || '';
-            fields.permitScheduleEdit.classList.toggle('d-none', cell.dataset.code === 'F' || cell.dataset.markedScheduleId === '0' || !cell.dataset.markedScheduleId || cell.dataset.manualEnabled !== '1');
+            fields.manualScheduleSelect.value = Number(cell.dataset.markedScheduleId) > 0 ? cell.dataset.markedScheduleId : (cell.dataset.scheduleId || '');
+            fields.permitScheduleEdit.classList.toggle('d-none', !(Number(cell.dataset.markedScheduleId) || Number(cell.dataset.scheduleId)) || cell.dataset.manualEnabled !== '1');
             setScheduleEditing(false, cell);
             fields.allowTodayExit.value = '0';
             fields.permitExitEdit.classList.remove('btn-outline-danger');
@@ -468,7 +497,7 @@ function initAttendanceMatrixDetail() {
     };
 
     const chooseManualAttendance = (isAbsent) => {
-        fields.manualCalendarType.value = '';
+        if (!isHolidayAttendanceCorrection() || isAbsent) fields.manualCalendarType.value = '';
         syncManualCalendarMode();
         setManualAbsenceMode(isAbsent);
         syncTodayEditFields(fields.adminMarkOpen?._selectedCell);
@@ -477,6 +506,17 @@ function initAttendanceMatrixDetail() {
     fields.manualResultLate?.addEventListener('change', () => chooseManualAttendance(false));
     fields.manualResultAbsent?.addEventListener('change', () => chooseManualAttendance(true));
     fields.manualCalendarType?.addEventListener('change', syncManualCalendarMode);
+    fields.holidayInfoButton?.addEventListener('click', () => {
+        Swal.fire({
+            icon: 'info',
+            title: 'Feriado',
+            html: '<p>Al seleccionar <strong>Feriado</strong>, el sistema cuenta al doble las horas del horario asignado.</p>'
+                + '<p>Si el responsable autoriza una entrada anticipada en el reporte, ese tiempo también se duplica. Por ejemplo, entrar a las <strong>7:30 p. m.</strong> para un turno de las <strong>8:00 p. m.</strong> suma <strong>1 hora extra</strong>.</p>'
+                + '<p>Para una salida habitual a las <strong>5:30 p. m.</strong>, las horas extra se cuentan si marcas después de las <strong>5:45 p. m.</strong>. Salir a las <strong>7:30 p. m.</strong> equivale a <strong>4 horas extra</strong>.</p>'
+                + '<p class="mb-0"><strong>Este cálculo se realiza automáticamente cuando el día está registrado como feriado.</strong></p>',
+            confirmButtonText: 'Entendido'
+        });
+    });
     fields.manualEntry?.addEventListener('change', syncManualLocationRequirements);
     fields.manualExit?.addEventListener('change', syncManualLocationRequirements);
     const manualForm = document.getElementById('attendanceManualCorrectionForm');
@@ -486,7 +526,13 @@ function initAttendanceMatrixDetail() {
             event.preventDefault();
             syncManualLocationRequirements();
             if (!manualForm.reportValidity()) return;
-            const calendarMode = !!fields.manualCalendarType?.value;
+            const selectedCell = fields.adminMarkOpen?._selectedCell;
+            const calendarMode = !!fields.manualCalendarType?.value && !isHolidayAttendanceCorrection();
+            if (!calendarMode && !fields.manualResultAbsent?.checked && selectedCell?.dataset.entry === '-' && selectedCell?.dataset.exit === '-'
+                && !fields.manualEntry?.value && !fields.manualExit?.value) {
+                Swal.fire('Faltan marcaciones', 'Ingrese al menos una hora de entrada o salida para registrar la asistencia.', 'warning');
+                return;
+            }
             if (!calendarMode && !fields.manualResultAbsent?.checked && fields.manualEntry?.value && !fields.manualEntryLocation?.value) {
                 Swal.fire('Falta el lugar de entrada', 'Seleccione el lugar de marcación de entrada.', 'warning');
                 return;
@@ -495,9 +541,8 @@ function initAttendanceMatrixDetail() {
                 Swal.fire('Falta el lugar de salida', 'Seleccione el lugar de marcación de salida.', 'warning');
                 return;
             }
-            const selectedCell = fields.adminMarkOpen?._selectedCell;
             if (!calendarMode && fields.manualScheduleSelect && !fields.manualScheduleSelect.disabled
-                && fields.manualScheduleSelect.value !== selectedCell?.dataset.markedScheduleId) {
+                && fields.manualScheduleSelect.value !== (Number(selectedCell?.dataset.markedScheduleId) > 0 ? selectedCell.dataset.markedScheduleId : selectedCell?.dataset.scheduleId)) {
                 const chosenName = fields.manualScheduleSelect.selectedOptions[0]?.textContent || 'el horario seleccionado';
                 const confirmation = await Swal.fire({
                     icon: 'question',
@@ -1822,8 +1867,22 @@ async function loadWorker(id) {
 
     const select = document.getElementById('positionSelect');
     select.innerHTML = data.positions.map((p) => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+    const linkedPosition = new URLSearchParams(location.search).get('puesto_id');
+    if (linkedPosition && [...select.options].some(option => option.value === linkedPosition)) select.value = linkedPosition;
     currentPositionId = select.value || null;
-    loadRequirements();
+    await loadRequirements();
+    const linkedParams = new URLSearchParams(location.search);
+    const linkedRequirement = Number(linkedParams.get('requisito_registro_id'));
+    if (linkedRequirement && requirementRows.some(row => Number(row.id) === linkedRequirement) && window.pmiPersonalReadOnly !== true) {
+        openEditRequirement(linkedRequirement);
+    } else if (!linkedRequirement && window.pmiPersonalReadOnly !== true) {
+        const catalogId = Number(linkedParams.get('requisito_id'));
+        const catalogName = linkedParams.get('requisito_nombre');
+        if (catalogId > 0 && catalogName) {
+            openAddRequirement();
+            $('#requirementSelect').append(new Option(catalogName, catalogId, true, true)).trigger('change');
+        }
+    }
 }
 
 async function loadRequirements() {
@@ -2661,6 +2720,11 @@ function initMaquinariaDatos() {
             modal.show();
         });
     });
+    const requestedMachineId = new URLSearchParams(window.location.search).get('maquinaria_id');
+    if (requestedMachineId && /^\d+$/.test(requestedMachineId)) {
+        const requestedEdit = [...document.querySelectorAll('.js-editar-maquinaria')].find(button => button.dataset.id === requestedMachineId);
+        requestedEdit?.click();
+    }
 
     document.querySelectorAll('.js-eliminar-maquinaria').forEach((button) => {
         button.addEventListener('click', async () => {
@@ -2854,6 +2918,11 @@ function initMaquinariaDocumentos() {
         loadMachine(machineSearchElement.value).then(() => {
             const recordId = Number(window.initialMachineDocumentRecordId || 0);
             if (recordId > 0) window.setTimeout(() => openEditMachineDocument(recordId), 150);
+            else if (window.initialMachineDocumentCatalog) window.setTimeout(() => {
+                openAddMachineDocument();
+                const catalog = window.initialMachineDocumentCatalog;
+                $('#machineDocumentSelect').append(new Option(catalog.name, catalog.id, true, true)).trigger('change');
+            }, 150);
         });
     }
 

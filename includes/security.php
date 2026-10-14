@@ -315,6 +315,8 @@ function default_user_landing_path(): string
         'empresa.seguridad' => 'modulos/empresa/seguridad.php',
         'empresa.calidad' => 'modulos/empresa/calidad.php',
         'empresa.medio_ambiente' => 'modulos/empresa/medio_ambiente.php',
+        'clientes.informacion' => 'modulos/clientes/informacion.php',
+        'clientes.pmi' => 'modulos/clientes/pmi.php',
         'empresa_maquirenta.dashboard' => 'modulos/empresa_maquirenta/dashboard.php',
         'empresa_maquirenta.datos_generales' => 'modulos/empresa_maquirenta/datos_generales.php',
         'empresa_maquirenta.documentos' => 'modulos/empresa_maquirenta/documentos.php',

@@ -2,7 +2,7 @@
 require_once __DIR__ . '/../../includes/security.php';
 require_module_access('requisitos.pmi_individual');
 $personalView = is_personal_role();
-$pmiWorkerId = $personalView ? (int) (current_user_worker_id() ?? 0) : 0;
+$pmiWorkerId = $personalView ? (int) (current_user_worker_id() ?? 0) : max(0, (int) ($_GET['worker_id'] ?? 0));
 $pmiWorkerLabel = '';
 if ($pmiWorkerId) {
     require_once __DIR__ . '/../../config/database.php';

@@ -22,7 +22,8 @@ function attendance_report_hours_ledger(
     string $firstMonth,
     string $lastMonth,
     int $openingMinutes = 0,
-    ?string $asOfDate = null
+    ?string $asOfDate = null,
+    array $openingOverrides = []
 ): array {
     foreach ([$firstMonth, $lastMonth] as $month) {
         if (!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $month)) {
@@ -69,7 +70,10 @@ function attendance_report_hours_ledger(
     }
 
     $balance = $openingMinutes;
-    foreach ($ledger as &$totals) {
+    foreach ($ledger as $key => &$totals) {
+        if (array_key_exists($key, $openingOverrides)) {
+            $balance = (int) $openingOverrides[$key];
+        }
         $totals['opening_minutes'] = $balance;
         $totals['overtime_minutes'] = $totals['early_overtime_minutes'] + $totals['exit_overtime_minutes'];
         $totals['redeemed_minutes'] = $totals['redeemed_days'] * 510;

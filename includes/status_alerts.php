@@ -8,6 +8,18 @@ const STATUS_ALERT_DEFAULT_WARNING_DAYS = 30;
 function status_alert_scopes(): array
 {
     return [
+        'clientes.pmi_base' => [
+            'label' => 'Clientes - PMI - Documentos base',
+            'table' => 'client_pmi_base_catalog',
+            'name_column' => 'name',
+            'active_column' => null,
+        ],
+        'clientes.pmi_formatos' => [
+            'label' => 'Clientes - PMI - Formatos editables',
+            'table' => 'client_pmi_format_catalog',
+            'name_column' => 'name',
+            'active_column' => null,
+        ],
         'requisitos.pmi_individual' => [
             'label' => 'Requisitos - PMI Individual',
             'table' => 'requirements_catalog',
@@ -79,7 +91,12 @@ function status_alert_catalog_items(): array
         $nameColumn = $scope['name_column'];
         $activeColumn = $scope['active_column'];
         try {
-            $rows = db()->query("SELECT id, {$nameColumn} AS name FROM {$table} WHERE {$activeColumn} = 1 ORDER BY {$nameColumn}")->fetchAll();
+            if ($scopeKey === 'clientes.pmi_base' || $scopeKey === 'clientes.pmi_formatos') {
+                $catalogTable = $scopeKey === 'clientes.pmi_base' ? 'client_pmi_base_catalog' : 'client_pmi_format_catalog';
+                $rows = db()->query("SELECT bc.id, CONCAT(bc.name, ' - ', c.business_name) AS name FROM {$catalogTable} bc JOIN clients c ON c.id = bc.client_id ORDER BY bc.name, c.business_name")->fetchAll();
+            } else {
+                $rows = db()->query("SELECT id, {$nameColumn} AS name FROM {$table} WHERE {$activeColumn} = 1 ORDER BY {$nameColumn}")->fetchAll();
+            }
         } catch (Throwable $e) {
             $rows = [];
         }

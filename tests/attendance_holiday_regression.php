@@ -1,0 +1,55 @@
+<?php
+declare(strict_types=1);
+
+require_once __DIR__ . '/../includes/attendance_report_data.php';
+
+function expect_same(mixed $expected, mixed $actual, string $case): void
+{
+    if ($expected !== $actual) {
+        throw new RuntimeException($case . ': esperado ' . json_encode($expected) . ', obtenido ' . json_encode($actual));
+    }
+}
+
+expect_same(164, attendance_report_diff_minutes('17:31:37', '20:15:16'), '17:31 a 20:15 son 2 h 44 min');
+expect_same(44, attendance_report_diff_minutes('01:10:24', '01:54:08'), '01:10 a 01:54 son 44 min');
+
+expect_same(480, attendance_report_holiday_worked_minutes(240, true), 'plantilla nocturna 20:00-00:00');
+expect_same(0, attendance_report_holiday_worked_minutes(240, false), 'sin salida no se acredita la jornada');
+expect_same(1140, attendance_report_holiday_worked_minutes(570, true), 'plantilla diurna');
+
+foreach ([['00:15:00', 0], ['00:16:00', 16], ['02:00:00', 120], ['21:54:00', 0]] as [$exit, $expected]) {
+    $components = attendance_report_overtime_components('20:00:00', '00:00:00', '20:00:00', $exit, false);
+    expect_same($expected, $components['exit_minutes'], 'salida ' . $exit);
+}
+expect_same(true, attendance_report_exit_is_early('20:00:00', '00:00:00', '21:54:00'), 'salida anticipada');
+$lateArrival = attendance_report_overtime_components('21:00:00', '22:00:00', '22:11:55', '22:18:33', false);
+expect_same(18, $lateArrival['exit_minutes'], 'salida 22:18 tras horario 22:00');
+expect_same(36, $lateArrival['exit_minutes'] * 2, 'salida feriada sin límite por entrada tardía');
+
+$early = attendance_report_overtime_components('20:00:00', '00:00:00', '19:30:00', '00:00:00', true);
+expect_same(true, $early['early_eligible'], 'casilla de entrada anticipada');
+expect_same(60, attendance_report_early_credit($early['early_minutes'], true), '30 min autorizados en feriado');
+expect_same(30, attendance_report_early_credit($early['early_minutes'], false), '30 min autorizados en día normal');
+expect_same(0, attendance_report_early_credit(0, true), 'entrada sin autorización');
+$seconds = attendance_report_overtime_components('22:15:00', '22:17:00', '22:11:55', '22:18:33', true);
+expect_same(4, $seconds['early_minutes'], '22:11 mostrado frente a 22:15 programado');
+expect_same(8, attendance_report_early_credit($seconds['early_minutes'], true), 'entrada anticipada de 4 min en feriado');
+
+$months = attendance_report_hours_ledger([
+    ['date' => '2027-08-31', 'worked_minutes' => 480, 'early_overtime_minutes' => 60, 'exit_overtime_minutes' => 32],
+], '2027-08', '2027-09', 0, '2027-09-02');
+expect_same(480, $months['2027-08']['worked_minutes'], 'horas trabajadas de agosto');
+expect_same(92, $months['2027-08']['overtime_minutes'], 'solo entrada y salida en horas extras');
+expect_same(0, $months['2027-09']['overtime_minutes'], 'sin crédito nuevo en septiembre');
+expect_same(92, $months['2027-09']['opening_minutes'], 'saldo arrastrado a septiembre');
+
+$adjusted = attendance_report_hours_ledger([
+    ['date' => '2026-09-30', 'early_overtime_minutes' => 418],
+    ['date' => '2026-10-13', 'exit_overtime_minutes' => 120],
+], '2026-09', '2026-11', 0, '2026-11-01', ['2026-10' => 260]);
+expect_same(418, $adjusted['2026-09']['closing_minutes'], 'septiembre conserva 6 h 58 min');
+expect_same(260, $adjusted['2026-10']['opening_minutes'], 'HEMP de octubre ajustado a 4 h 20 min');
+expect_same(380, $adjusted['2026-10']['closing_minutes'], 'octubre cierra con 6 h 20 min');
+expect_same(380, $adjusted['2026-11']['opening_minutes'], 'noviembre arrastra el saldo ajustado');
+
+echo "OK: jornada feriada según plantilla, extras, autorización y cambio de mes\n";

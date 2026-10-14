@@ -6,6 +6,9 @@ $controlPersonalOpen = (!$personalOpen && str_contains($currentPath, '/modulos/a
 $requisitosOpen = $personalOpen || str_contains($currentPath, '/modulos/requisitos/');
 $maquinariaOpen = str_contains($currentPath, '/modulos/maquinaria/');
 $empresaOpen = str_contains($currentPath, '/modulos/empresa/');
+$clientesOpen = str_contains($currentPath, '/modulos/clientes/');
+$clientesInformacionOpen = str_ends_with($currentPath, '/modulos/clientes/informacion.php');
+$clientesPmiOpen = str_ends_with($currentPath, '/modulos/clientes/pmi.php');
 $empresaMaquirentaOpen = str_contains($currentPath, '/modulos/empresa_maquirenta/');
 $empresaMaquirentaDashboardOpen = str_ends_with($currentPath, '/modulos/empresa_maquirenta/dashboard.php');
 $ventanillaOpen = str_ends_with($currentPath, '/modulos/empresa_maquirenta/informes.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/charla_preoperacional.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/pms.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/permiso_trabajo.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/parada_planta.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/audios_charla.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/participacion_pms.php');
@@ -130,6 +133,16 @@ $isAdmin = is_admin();
                 </div>
             </div>
 
+            <button class="nav-link nav-parent <?= $clientesOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#clientesMenu" aria-expanded="<?= $clientesOpen ? 'true' : 'false' ?>" aria-controls="clientesMenu">
+                <i class="fa-solid fa-address-book"></i><span>Clientes</span><i class="fa-solid fa-chevron-down nav-caret"></i>
+            </button>
+            <div class="collapse <?= $clientesOpen ? 'show' : '' ?>" id="clientesMenu">
+                <div class="submenu">
+                    <a class="nav-link sub-link <?= $clientesInformacionOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/clientes/informacion.php"><i class="fa-solid fa-address-card"></i><span>Información de clientes</span></a>
+                    <a class="nav-link sub-link <?= $clientesPmiOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/clientes/pmi.php"><i class="fa-solid fa-file-shield"></i><span>PMI Clientes</span></a>
+                </div>
+            </div>
+
             <button class="nav-link nav-parent <?= $empresaMaquirentaOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#empresaMaquirentaMenu" aria-expanded="<?= $empresaMaquirentaOpen ? 'true' : 'false' ?>" aria-controls="empresaMaquirentaMenu">
                 <i class="fa-solid fa-building-circle-check"></i><span>Empresa Maquirenta</span><i class="fa-solid fa-chevron-down nav-caret"></i>
             </button>
@@ -201,6 +214,13 @@ $isAdmin = is_admin();
                     <?php if (current_user_can_module('empresa.seguridad')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa/seguridad.php"><i class="fa-solid fa-shield-halved"></i><span>Seguridad</span></a><?php endif; ?>
                     <?php if (current_user_can_module('empresa.calidad')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa/calidad.php"><i class="fa-solid fa-award"></i><span>Calidad</span></a><?php endif; ?>
                     <?php if (current_user_can_module('empresa.medio_ambiente')): ?><a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/empresa/medio_ambiente.php"><i class="fa-solid fa-leaf"></i><span>Medio ambiente</span></a><?php endif; ?>
+                </div></div>
+            <?php endif; ?>
+            <?php if (current_user_can_module('clientes')): ?>
+                <button class="nav-link nav-parent <?= $clientesOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#clientesMenuGestor" aria-expanded="<?= $clientesOpen ? 'true' : 'false' ?>" aria-controls="clientesMenuGestor"><i class="fa-solid fa-address-book"></i><span>Clientes</span><i class="fa-solid fa-chevron-down nav-caret"></i></button>
+                <div class="collapse <?= $clientesOpen ? 'show' : '' ?>" id="clientesMenuGestor"><div class="submenu">
+                    <?php if (current_user_can_module('clientes.informacion')): ?><a class="nav-link sub-link <?= $clientesInformacionOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/clientes/informacion.php"><i class="fa-solid fa-address-card"></i><span>Información de clientes</span></a><?php endif; ?>
+                    <?php if (current_user_can_module('clientes.pmi')): ?><a class="nav-link sub-link <?= $clientesPmiOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/clientes/pmi.php"><i class="fa-solid fa-file-shield"></i><span>PMI Clientes</span></a><?php endif; ?>
                 </div></div>
             <?php endif; ?>
             <?php if (current_user_can_module('empresa_maquirenta')): ?>

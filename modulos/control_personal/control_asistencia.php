@@ -33,7 +33,7 @@ require __DIR__ . '/../../includes/header.php';
 <div class="row g-3 attendance-marking-layout">
     <div class="col-xl-4">
         <div class="work-panel h-100 attendance-marking-panel">
-            <h2>Marcación</h2>
+            <div class="attendance-marking-heading"><h2>Marcación</h2><button class="attendance-holiday-trigger d-none" type="button" id="markHolidayInfoBtn" data-bs-toggle="modal" data-bs-target="#markHolidayInfoModal" aria-label="Información sobre la marcación en feriado" title="Información sobre la marcación en feriado">FER</button></div>
             <?php if ($isAdmin): ?>
                 <label class="form-label">Trabajador</label>
                 <div class="mb-3">
@@ -123,6 +123,18 @@ require __DIR__ . '/../../includes/header.php';
     </div>
 </div>
 
+<div class="modal fade" id="markHolidayInfoModal" tabindex="-1" aria-labelledby="markHolidayInfoTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header"><h2 class="modal-title h5" id="markHolidayInfoTitle">Marcación en feriado</h2><button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+        <div class="modal-body">
+            <p>En feriado, el tiempo trabajado según el horario que elijas se cuenta al doble.</p>
+            <p>Si marcas antes de la entrada prevista, ese tiempo se duplica cuando el responsable lo autoriza en el reporte. Por ejemplo, entrar a las 7:30 p. m. para un turno de las 8:00 p. m. suma 1 hora extra autorizada.</p>
+            <p class="mb-0">Si tu salida habitual es a las <strong>5:30 p. m.</strong>, las horas extra se consideran cuando marcas después de las <strong>5:45 p. m.</strong> Por ejemplo, si sales a las <strong>7:30 p. m.</strong>, las 2 horas adicionales equivalen a <strong>4 horas extra</strong>.</p>
+        </div>
+        <div class="modal-footer"><button class="btn btn-primary" type="button" data-bs-dismiss="modal">Entendido</button></div>
+    </div></div>
+</div>
+
 <div class="modal fade" id="myScheduleModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content">
         <div class="modal-header bg-primary text-white">
@@ -143,6 +155,10 @@ require __DIR__ . '/../../includes/header.php';
     </div></div>
 </div>
 <style>
+.attendance-marking-heading{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.work-panel.attendance-marking-panel .attendance-marking-heading h2{margin:0!important}
+.attendance-holiday-trigger{min-height:0;padding:2px 7px;border:1px solid #67e8f9;border-radius:5px;background:#0891b2;color:#fff;font-size:.68rem;font-weight:800;line-height:1.3;cursor:pointer}
+.attendance-holiday-trigger:hover,.attendance-holiday-trigger:focus-visible{background:#0e7490;color:#fff}
 #myScheduleCalendar .fc-toolbar-title{font-size:1.15rem}#myScheduleCalendar .fc-event{cursor:pointer;border-radius:5px;padding:2px 4px}#myScheduleCalendar .fc-day-today{background:#eff6ff!important}
 @media(max-width:767.98px){#myScheduleCalendar .fc-header-toolbar{align-items:stretch;gap:.5rem;flex-direction:column}#myScheduleCalendar .fc-toolbar-chunk{display:flex;justify-content:center}}
 </style>

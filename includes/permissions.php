@@ -47,6 +47,13 @@ function permission_modules_catalog(): array
                 'empresa.medio_ambiente' => 'Medio ambiente',
             ],
         ],
+        'clientes' => [
+            'label' => 'Clientes',
+            'children' => [
+                'clientes.informacion' => 'Información de clientes',
+                'clientes.pmi' => 'PMI Clientes',
+            ],
+        ],
         'empresa_maquirenta' => [
             'label' => 'Empresa Maquirenta',
             'children' => [

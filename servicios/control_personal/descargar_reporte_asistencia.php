@@ -60,6 +60,7 @@ if ($signatureFile && $appRoot && str_starts_with($signatureFile, $appRoot . DIR
 }
 $markCell = static function (array $row, string $type) use ($h): string {
     $value = $h($row[$type]);
+    if ($type === 'exit' && !empty($row['exit_next_day'])) $value .= '<br><span class="muted">Día siguiente</span>';
     if (!$row[$type . '_administrative']) return $value;
     return $value . '<br><b>Administrativa</b><br><span>Por ' . $h($row[$type . '_administrative_actor'] ?: 'Administrador')
         . '. Motivo: ' . $h($row[$type . '_administrative_reason'] ?: '-') . '</span>';
@@ -73,10 +74,13 @@ foreach ($rows as $row) {
     }
     $overtimeCell = $row['overtime_minutes'] > 0
         ? $h(attendance_report_minutes_label((int) $row['overtime_minutes']))
-            . '<br><span class="muted">Entrada: ' . $h(attendance_report_minutes_label((int) $row['early_overtime_minutes']))
-            . '<br>Salida: ' . $h(attendance_report_minutes_label((int) $row['exit_overtime_minutes'])) . '</span>'
+            . '<br><span class="muted">'
+            . 'Entrada' . (($row['calendar_event_type'] ?? '') === 'holiday' ? ' ×2' : '') . ': ' . $h(attendance_report_minutes_label((int) $row['early_overtime_minutes'])) . '<br>'
+            . 'Salida' . (($row['calendar_event_type'] ?? '') === 'holiday' ? ' ×2' : '') . ': ' . $h(attendance_report_minutes_label((int) $row['exit_overtime_minutes'])) . '</span>'
         : '-';
-    $bodyRows .= '<tr><td>' . date('d/m/Y', strtotime($row['date'])) . '</td><td>' . $h($row['weekday']) . '</td><td class="schedule">' . $h($row['schedule']) . '</td><td>' . ($row['tolerance_minutes'] !== null ? (int)$row['tolerance_minutes'].' min' : '-') . '</td><td>' . $h($row['project'] ?? '-') . '</td><td>' . $entryRoute . '</td><td>' . $h($row['exit_location']) . '</td><td>' . $markCell($row, 'entry') . '</td><td>' . $markCell($row, 'exit') . '</td><td>' . ($row['late_minutes'] ? $h(attendance_report_minutes_label((int) $row['late_minutes'])) : '-') . '</td><td>' . $overtimeCell . '</td><td>' . ($row['entry'] !== '-' && $row['exit'] !== '-' ? $h(attendance_report_minutes_label((int) $row['worked_minutes'])) : '-') . '</td><td><span class="state ' . $stateClass . '"><b>' . $h($row['state_code']) . '</b></span></td><td><span class="journey">' . $h($row['journey_label']) . '</span></td></tr>';
+    $workedCell = $row['entry'] !== '-' && $row['exit'] !== '-' ? $h(attendance_report_minutes_label((int) $row['worked_minutes'])) : '-';
+    if (($row['calendar_event_type'] ?? '') === 'holiday' && $workedCell !== '-') $workedCell .= '<br><span class="muted">Horario ×2 por feriado</span>';
+    $bodyRows .= '<tr><td>' . date('d/m/Y', strtotime($row['date'])) . '</td><td>' . $h($row['weekday']) . '</td><td class="schedule">' . $h($row['schedule']) . '</td><td>' . ($row['tolerance_minutes'] !== null ? (int)$row['tolerance_minutes'].' min' : '-') . '</td><td>' . $h($row['project'] ?? '-') . '</td><td>' . $entryRoute . '</td><td>' . $h($row['exit_location']) . '</td><td>' . $markCell($row, 'entry') . '</td><td>' . $markCell($row, 'exit') . '</td><td>' . ($row['late_minutes'] ? $h(attendance_report_minutes_label((int) $row['late_minutes'])) : '-') . '</td><td>' . $overtimeCell . '</td><td>' . $workedCell . '</td><td><span class="state ' . $stateClass . '"><b>' . $h($row['state_code']) . '</b></span></td><td><span class="journey">' . $h($row['journey_label']) . '</span></td></tr>';
 }
 if ($bodyRows === '') $bodyRows = '<tr><td colspan="14" class="center">No hay jornadas en el periodo seleccionado.</td></tr>';
 $tripSection = '';
@@ -135,7 +139,7 @@ ob_start();
 <table class="monthly-hour-ledger"><tr>
     <td class="monthly-hour-source">
         <div class="monthly-hour-card"><span>H. canjeadas · <?= $h($monthLabel) ?></span><b><?= $h($hoursLabel('redeemed_minutes')) ?></b><small><?= (int) $hours['redeemed_days'] ?> día(s) × 8 h 30 min</small></div>
-        <div class="monthly-hour-card"><span>HEMP · <?= $h($previousMonthLabel) ?></span><b><?= $h($hoursLabel('opening_minutes')) ?></b><small>Saldo del mes anterior</small></div>
+        <div class="monthly-hour-card"><span>HEMP · <?= $h($previousMonthLabel) ?></span><b><?= $h($hoursLabel('opening_minutes')) ?></b><small><?= $month === '2026-10' && !empty($book['opening_adjustment']) ? 'Saldo ajustado para octubre' : 'Saldo del mes anterior' ?></small></div>
     </td>
     <td class="monthly-hour-extra">
         <table><tr>

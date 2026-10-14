@@ -714,9 +714,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         $exitLocation = (string) ($exit['location'] ?? '');
                         $markedScheduleId = (int) ($entry['schedule_id'] ?? $exit['schedule_id'] ?? 0);
                         $markedProjectId = (int) ($entry['project_id'] ?? 0) ?: (int) ($exit['project_id'] ?? 0);
-                        $markedScheduleLabel = $markedScheduleId > 0
-                            ? ($markedScheduleLabels[$markedScheduleId][(int) date('N', strtotime($cellDate))]
-                                ?? $markedScheduleLabels[$markedScheduleId][0]
+                        $displayScheduleId = $markedScheduleId ?: $scheduleId;
+                        $markedScheduleLabel = $displayScheduleId > 0
+                            ? ($markedScheduleLabels[$displayScheduleId][(int) date('N', strtotime($cellDate))]
+                                ?? $markedScheduleLabels[$displayScheduleId][0]
                                 ?? 'Horario registrado no disponible')
                             : 'Sin horario registrado';
                         if ($entry && $exit && (int) ($entry['schedule_id'] ?? 0) !== (int) ($exit['schedule_id'] ?? 0)) {
@@ -897,7 +898,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <label class="attendance-result-option result-absent" for="matrixManualResultAbsent"><input type="radio" name="attendance_result" id="matrixManualResultAbsent" value="falta" required><span><i class="fa-solid fa-user-xmark"></i><strong>Faltó</strong></span></label>
                         </div></fieldset>
                         <div class="attendance-manual-calendar mt-3">
-                            <label class="form-label fw-semibold" for="matrixManualCalendarType">Calendario laboral</label>
+                            <div class="attendance-calendar-label"><label class="form-label fw-semibold" for="matrixManualCalendarType">Calendario laboral</label><button class="attendance-holiday-info-button d-none" type="button" id="matrixHolidayInfoButton" aria-label="Información sobre el cálculo en feriado" title="Cómo se calculan las horas en feriado"><i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i></button></div>
                             <select class="form-select" id="matrixManualCalendarType" name="calendar_event_type">
                                 <option value="">Sin cambio en calendario laboral</option>
                                 <option value="vacation">Vacaciones</option>
@@ -913,7 +914,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                     <option value="regime">Régimen laboral</option>
                                 </select>
                             </div>
-                            <small class="text-muted d-block mt-2">Se aplicará solo a este trabajador y fecha. Disponible para días sin marcaciones.</small>
+                            <small class="text-muted d-block mt-2">Para registrar trabajo en feriado, elija «Asistió sin incidencias» o «Asistió con tardanza» y complete las marcaciones abajo. Los demás días especiales se aplican a fechas sin marcaciones.</small>
                         </div>
                         <div class="attendance-manual-fields">
                             <div class="attendance-manual-schedule"><div class="attendance-exit-label"><label class="form-label" for="matrixManualScheduleSelect">Horario de la marcación</label><button class="btn btn-outline-primary btn-sm d-none" type="button" id="matrixPermitScheduleEdit"><i class="fa-solid fa-pen me-1"></i>Permitir editar</button></div><strong id="matrixManualSchedule">Sin horario registrado</strong><div class="d-none" id="matrixManualScheduleEditor"><select class="form-select select2-searchable" name="schedule_id" id="matrixManualScheduleSelect" data-placeholder="Buscar horario" data-no-results="No se encontraron horarios" required disabled><option value="">Seleccione un horario</option><?php foreach ($markedScheduleLabels as $scheduleId => $labels): ?><option value="<?= (int) $scheduleId ?>" <?= isset($activeScheduleIds[(int) $scheduleId]) ? '' : 'disabled' ?>><?= e($labels[0]) ?></option><?php endforeach; ?></select></div></div>

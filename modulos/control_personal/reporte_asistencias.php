@@ -44,6 +44,20 @@ $summary = $report['summary'] ?? [];
 $monthlyDays = $report['monthly_day_summary'][$month] ?? [];
 $hoursBook = $worker ? attendance_report_build_hours_ledger($workerId, $month, $report['daily_classification']) : null;
 $monthlyHours = $hoursBook['current'] ?? [];
+$hempAdjustment = $month === '2026-10' ? ($hoursBook['opening_adjustment'] ?? null) : null;
+$canEditHemp = $worker && $month === '2026-10' && is_admin() && !$reportLocked && !$closureError
+    && ($hoursBook['adjustment_schema_available'] ?? false);
+if ($canEditHemp) {
+    try {
+        $laterClosure = db()->prepare("SELECT 1 FROM attendance_report_month_closures
+            WHERE worker_id=:worker_id AND report_month>'2026-10'
+              AND admin_closed_at IS NOT NULL AND staff_closed_at IS NOT NULL LIMIT 1");
+        $laterClosure->execute(['worker_id' => $workerId]);
+        $canEditHemp = !$laterClosure->fetchColumn();
+    } catch (Throwable $error) {
+        $canEditHemp = false;
+    }
+}
 $completedDays = 0;
 foreach ($report['daily_classification'] ?? [] as $classifiedDay) {
     if (!empty($classifiedDay['worked']) && !empty($classifiedDay['has_exit'])) $completedDays++;
@@ -219,8 +233,8 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
             <div class="attendance-reference-hour-box">
                 <span>HEMP · <?= e($previousMonthLabel) ?></span>
-                <strong><?= e(attendance_report_hours_label((int) ($monthlyHours['opening_minutes'] ?? 0))) ?></strong>
-                <small>Saldo del mes anterior</small>
+                <div class="attendance-hemp-value"><strong><?= e(attendance_report_hours_label((int) ($monthlyHours['opening_minutes'] ?? 0))) ?></strong><?php if ($canEditHemp): ?><button class="attendance-hemp-edit" type="button" data-bs-toggle="modal" data-bs-target="#attendanceHempModal" aria-label="Editar HEMP de octubre" title="Editar HEMP de octubre"><i class="fa-solid fa-pen" aria-hidden="true"></i></button><?php endif; ?></div>
+                <small><?= $hempAdjustment ? 'Saldo ajustado para octubre; septiembre no cambia' : 'Saldo del mes anterior' ?></small>
             </div>
         </div>
         <div class="attendance-reference-hour-extras">
@@ -246,7 +260,7 @@ document.addEventListener('DOMContentLoaded', () => {
     <div class="individual-report-section-title" id="detalle-diario"><h3>Detalle diario</h3><p>Marcaciones y novedades del periodo seleccionado.</p></div>
     <?php if (!$personalView && !$reportLocked): ?>
     <div class="report-early-overtime-toolbar" id="reportEarlyOvertimeToolbar" data-worker-id="<?= (int) $workerId ?>" data-date-from="<?= e($dateFrom) ?>" data-date-to="<?= e($dateTo) ?>">
-        <div><strong>Entrada anticipada autorizada</strong><small>Marque las fechas que desea autorizar o cuya autorización desea retirar. Las casillas se limpian al guardar; el estado aparece junto a cada fecha. La selección no afecta las horas extra de salida. Si la salida supera los 15 minutos de tolerancia, se cuenta todo el tiempo desde la hora de salida programada.</small><small class="report-early-overtime-status" id="earlyOvertimeSelectionStatus" role="status"></small></div>
+        <div><strong>Entrada anticipada autorizada</strong><small>Marque las fechas para autorizar la entrada anticipada. En feriado, 30 minutos autorizados equivalen a 1 hora extra. La salida se calcula aparte: al superar 15 minutos de tolerancia, se cuenta desde la hora programada y, en feriado, también se duplica.</small><small class="report-early-overtime-status" id="earlyOvertimeSelectionStatus" role="status"></small></div>
         <button class="btn btn-primary" type="button" id="saveEarlyOvertimeSelection"><i class="fa-solid fa-floppy-disk me-2"></i>Guardar selección</button>
     </div>
     <?php endif; ?>
@@ -257,10 +271,10 @@ document.addEventListener('DOMContentLoaded', () => {
             <?php $selectionShown = []; foreach ($visibleRows as $row): $dayTrips = $tripsByDate[(string) $row['date']] ?? []; $earlyEligible = (bool) ($row['early_overtime_eligible'] ?? false) && !isset($selectionShown[(string) $row['date']]); if ($earlyEligible) $selectionShown[(string) $row['date']] = true; $earlyAuthorized = isset($earlyOvertimeAuthorizations[(string) $row['date']]); ?>
                 <tr>
                     <?php if (!$personalView): ?><td class="report-early-overtime-select"><?php if ($earlyEligible): ?><input class="form-check-input early-overtime-day" type="checkbox" value="<?= e($row['date']) ?>" data-authorized="<?= $earlyAuthorized ? '1' : '0' ?>" aria-label="<?= $earlyAuthorized ? 'Retirar' : 'Autorizar' ?> entrada anticipada del <?= e(date('d/m/Y', strtotime($row['date']))) ?>" title="<?= $earlyAuthorized ? e('Autorizado por ' . $earlyOvertimeAuthorizations[(string) $row['date']]['authorized_by_name'] . ' el ' . $earlyOvertimeAuthorizations[(string) $row['date']]['authorized_at'] . '. Marque para retirar.') : 'Marque para autorizar la entrada anticipada' ?>"><?php else: ?><span class="text-muted" title="No hay entrada anticipada elegible">—</span><?php endif; ?></td><?php endif; ?><td><?= e(date('d/m/Y', strtotime($row['date']))) ?><?php if ($earlyAuthorized): ?><small class="report-early-overtime-badge">Entrada autorizada</small><?php endif; ?></td><td><?= e($row['weekday']) ?></td><td class="attendance-time-cell text-nowrap"><?= e($row['schedule']) ?></td><td class="text-nowrap"><?= $row['tolerance_minutes'] !== null ? (int)$row['tolerance_minutes'].' min' : '-' ?></td><td><?= e($row['project'] ?? '-') ?></td><td><span class="report-route-inline"><span><?= e($row['entry_location']) ?></span><?php foreach ($dayTrips as $trip): ?><span class="report-route-step"><span class="report-route-arrow" aria-hidden="true">→</span><?= e($trip['first_destination']) ?></span><?php endforeach; ?></span></td><td><?= e($row['exit_location']) ?></td>
-                    <td class="attendance-time-cell"><?= e($row['entry']) ?><?php if ($row['entry_administrative']): ?><small class="d-block text-primary">Administrativa</small><?php endif; ?></td><td class="attendance-time-cell"><?= e($row['exit']) ?><?php if ($row['exit_administrative']): ?><small class="d-block text-primary">Administrativa</small><?php endif; ?></td>
+                    <td class="attendance-time-cell"><?= e($row['entry']) ?><?php if ($row['entry_administrative']): ?><small class="d-block text-primary">Administrativa</small><?php endif; ?></td><td class="attendance-time-cell"><?= e($row['exit']) ?><?php if (!empty($row['exit_next_day'])): ?><small class="d-block text-primary">Día siguiente</small><?php endif; ?><?php if ($row['exit_administrative']): ?><small class="d-block text-primary">Administrativa</small><?php endif; ?></td>
                     <td><?= $row['late_minutes'] > 0 ? e(attendance_report_minutes_label((int) $row['late_minutes'])) : '-' ?></td>
-                    <td class="report-overtime-cell"><?= $row['overtime_minutes'] > 0 ? e(attendance_report_minutes_label((int) $row['overtime_minutes'])) : '-' ?><?php if ($row['overtime_minutes'] > 0): ?><small>Entrada: <?= e(attendance_report_minutes_label((int) $row['early_overtime_minutes'])) ?><br>Salida: <?= e(attendance_report_minutes_label((int) $row['exit_overtime_minutes'])) ?></small><?php endif; ?></td>
-                    <td class="attendance-time-cell text-nowrap"><?= $row['entry'] !== '-' && $row['exit'] !== '-' ? e(attendance_report_minutes_label((int) $row['worked_minutes'])) : '-' ?></td>
+                    <td class="report-overtime-cell"><?= $row['overtime_minutes'] > 0 ? e(attendance_report_minutes_label((int) $row['overtime_minutes'])) : '-' ?><?php if ($row['overtime_minutes'] > 0): ?><small>Entrada<?= ($row['calendar_event_type'] ?? '') === 'holiday' ? ' ×2' : '' ?>: <?= e(attendance_report_minutes_label((int) $row['early_overtime_minutes'])) ?><br>Salida<?= ($row['calendar_event_type'] ?? '') === 'holiday' ? ' ×2' : '' ?>: <?= e(attendance_report_minutes_label((int) $row['exit_overtime_minutes'])) ?></small><?php endif; ?></td>
+                    <td class="attendance-time-cell text-nowrap"><?= $row['entry'] !== '-' && $row['exit'] !== '-' ? e(attendance_report_minutes_label((int) $row['worked_minutes'])) : '-' ?><?php if (($row['calendar_event_type'] ?? '') === 'holiday' && $row['entry'] !== '-' && $row['exit'] !== '-'): ?><small class="d-block text-primary">Horario ×2 por feriado</small><?php endif; ?></td>
                     <td><span class="attendance-report-state report-state-code-only <?= e($row['state_class']) ?>" title="<?= e($row['state_label']) ?>" aria-label="<?= e($row['state_label']) ?>"><strong><?= e($row['state_code']) ?></strong></span></td>
                     <td><span class="journey-state <?= e($row['journey_class']) ?>"><?= e($row['journey_label']) ?></span></td>
                 </tr>
@@ -356,5 +370,22 @@ document.addEventListener('DOMContentLoaded', () => {
         <?php endif; ?>
     </section>
 </section>
+<?php if ($canEditHemp): ?>
+<div class="modal fade" id="attendanceHempModal" tabindex="-1" aria-labelledby="attendanceHempModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header"><h2 class="modal-title h5" id="attendanceHempModalTitle">Ajustar HEMP de octubre de 2026</h2><button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+        <form id="attendanceHempForm">
+            <div class="modal-body">
+                <input type="hidden" name="worker_id" value="<?= (int) $workerId ?>"><input type="hidden" name="month" value="2026-10">
+                <p class="text-muted small">Corrige solo el saldo inicial de octubre. Las horas extras vigentes y los saldos de los meses siguientes se recalcularán automáticamente; septiembre y las marcaciones no cambian.</p>
+                <div class="row g-2"><div class="col-6"><label class="form-label" for="hempHours">Horas</label><input class="form-control" type="number" id="hempHours" name="hours" min="0" max="9999" step="1" value="<?= intdiv(max(0, (int) ($monthlyHours['opening_minutes'] ?? 0)), 60) ?>" required></div><div class="col-6"><label class="form-label" for="hempMinutes">Minutos</label><input class="form-control" type="number" id="hempMinutes" name="minutes" min="0" max="59" step="1" value="<?= max(0, (int) ($monthlyHours['opening_minutes'] ?? 0)) % 60 ?>" required></div></div>
+                <label class="form-label mt-3" for="hempReason">Motivo del ajuste</label><textarea class="form-control" id="hempReason" name="reason" maxlength="500" rows="3" required placeholder="Explique por qué se corrige el saldo inicial"></textarea>
+                <?php if ($hempAdjustment): ?><p class="small text-muted mt-2 mb-0">Último ajuste: <?= e((string) ($hempAdjustment['adjusted_by'] ?? 'Administrador')) ?> · <?= e(date('d/m/Y H:i', strtotime((string) $hempAdjustment['adjusted_at']))) ?></p><?php endif; ?>
+            </div>
+            <div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-primary" type="submit">Guardar ajuste</button></div>
+        </form>
+    </div></div>
+</div>
+<?php endif; ?>
 <?php endif; ?>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>

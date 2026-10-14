@@ -38,7 +38,8 @@ $monthLabel = $monthNames[(int) substr($month, 5, 2)] . ' ' . substr($month, 0, 
 $previousDate = (new DateTimeImmutable($dateFrom))->modify('-1 month');
 $previousMonthLabel = $monthNames[(int) $previousDate->format('n')] . ' ' . $previousDate->format('Y');
 $days = $report['monthly_day_summary'][$month] ?? [];
-$hours = attendance_report_build_hours_ledger($workerId, $month, $report['daily_classification'])['current'];
+$hoursBook = attendance_report_build_hours_ledger($workerId, $month, $report['daily_classification']);
+$hours = $hoursBook['current'];
 $workedDays = (int) ($days['worked'] ?? 0);
 $completedDays = 0;
 foreach ($report['daily_classification'] as $classifiedDay) {
@@ -64,9 +65,12 @@ $summaryRows[] = xlsx_row(15, [xlsx_cell(1, 15, 'LIBRO MENSUAL DE HORAS', 1)], 2
 $summaryRows[] = xlsx_row(16, [xlsx_cell(1, 16, 'Horas trabajadas', 3), xlsx_cell(2, 16, $hoursLabel('worked_minutes'), 9), xlsx_cell(3, 16, 'Extra por entrada', 3), xlsx_cell(4, 16, $hoursLabel('early_overtime_minutes'), 9), xlsx_cell(5, 16, 'Extra por salida', 3), xlsx_cell(6, 16, $hoursLabel('exit_overtime_minutes'), 9)], 28);
 $summaryRows[] = xlsx_row(17, [xlsx_cell(1, 17, 'HEMP · ' . $previousMonthLabel, 3), xlsx_cell(2, 17, $hoursLabel('opening_minutes'), 9), xlsx_cell(3, 17, 'Extras · ' . $monthLabel, 4), xlsx_cell(4, 17, $hoursLabel('overtime_minutes'), 4), xlsx_cell(5, 17, 'H. canjeadas · ' . $monthLabel, 5), xlsx_cell(6, 17, $hoursLabel('redeemed_minutes'), 5)], 32);
 $summaryRows[] = xlsx_row(18, [xlsx_cell(1, 18, 'Horas extras vigentes', 4), xlsx_cell(2, 18, $hoursLabel('closing_minutes'), 4), xlsx_cell(3, 18, 'Días canjeados (8 h 30 min c/u)', 3), xlsx_cell(4, 18, $hours['redeemed_days'], 9, true), xlsx_cell(5, 18, 'Canjes futuros sin descontar', 3), xlsx_cell(6, 18, $hours['planned_redemption_days'], 9, true)], 34);
+if ($month === '2026-10' && !empty($hoursBook['opening_adjustment'])) {
+    $summaryRows[] = xlsx_row(19, [xlsx_cell(1, 19, 'HEMP ajustado para octubre; septiembre no cambia.', 9)], 24);
+}
 $summaryRows[] = xlsx_row(20, [xlsx_cell(1, 20, 'OBSERVACIÓN GENERAL DEL RESPONSABLE', 1)], 22);
 $summaryRows[] = xlsx_row(21, [xlsx_cell(1, 21, $note['observation'] ?? 'Sin observaciones.', 9)], 45);
-$headers = ['Fecha', 'Día', 'Horario', 'Tolerancia', 'Proyecto', 'Lugar de entrada', 'Lugar de salida', 'Entrada', 'Salida', 'Tardanza', 'Horas extras (total / entrada / salida)', 'Horas trabajadas', 'Estado de asistencia', 'Estado de jornada'];
+$headers = ['Fecha', 'Día', 'Horario', 'Tolerancia', 'Proyecto', 'Lugar de entrada', 'Lugar de salida', 'Entrada', 'Salida', 'Tardanza', 'Horas extras (total / feriado / entrada / salida)', 'Horas trabajadas', 'Estado de asistencia', 'Estado de jornada'];
 $summaryRows[] = xlsx_row(23, [xlsx_cell(1, 23, 'DETALLE DIARIO DE ASISTENCIA', 1)], 24);
 $headerCells = [];
 foreach ($headers as $index => $header) $headerCells[] = xlsx_cell($index + 1, 24, $header, 1);
@@ -78,11 +82,11 @@ foreach ($rows as $row) {
     $entryRoute = (string) $row['entry_location'];
     foreach ($dayTrips as $trip) $entryRoute .= "\n→ " . (string) $trip['first_destination'];
     $entryLabel = $row['entry'] . ($row['entry_administrative'] ? ' | Administrativa; por ' . ($row['entry_administrative_actor'] ?: 'Administrador') . '; motivo: ' . ($row['entry_administrative_reason'] ?: '-') : '');
-    $exitLabel = $row['exit'] . ($row['exit_administrative'] ? ' | Administrativa; por ' . ($row['exit_administrative_actor'] ?: 'Administrador') . '; motivo: ' . ($row['exit_administrative_reason'] ?: '-') : '');
+    $exitLabel = $row['exit'] . (!empty($row['exit_next_day']) ? ' | Día siguiente' : '') . ($row['exit_administrative'] ? ' | Administrativa; por ' . ($row['exit_administrative_actor'] ?: 'Administrador') . '; motivo: ' . ($row['exit_administrative_reason'] ?: '-') : '');
     $values = [date('d/m/Y', strtotime($row['date'])), $row['weekday'], $row['schedule'], $row['tolerance_minutes'] !== null ? $row['tolerance_minutes'].' min' : '-', $row['project'] ?? '-', $entryRoute, $row['exit_location'], $entryLabel, $exitLabel,
         $row['late_minutes'] ? attendance_report_minutes_label((int) $row['late_minutes']) : '-',
-        $row['overtime_minutes'] ? 'Total: ' . attendance_report_minutes_label((int) $row['overtime_minutes']) . "\nEntrada: " . attendance_report_minutes_label((int) $row['early_overtime_minutes']) . "\nSalida: " . attendance_report_minutes_label((int) $row['exit_overtime_minutes']) : '-',
-        $row['entry'] !== '-' && $row['exit'] !== '-' ? attendance_report_minutes_label((int) $row['worked_minutes']) : '-',
+        $row['overtime_minutes'] ? 'Total: ' . attendance_report_minutes_label((int) $row['overtime_minutes']) . "\nEntrada" . (($row['calendar_event_type'] ?? '') === 'holiday' ? ' x2' : '') . ': ' . attendance_report_minutes_label((int) $row['early_overtime_minutes']) . "\nSalida" . (($row['calendar_event_type'] ?? '') === 'holiday' ? ' x2' : '') . ': ' . attendance_report_minutes_label((int) $row['exit_overtime_minutes']) : '-',
+        $row['entry'] !== '-' && $row['exit'] !== '-' ? attendance_report_minutes_label((int) $row['worked_minutes']) . (($row['calendar_event_type'] ?? '') === 'holiday' ? "\nHorario x2 por feriado" : '') : '-',
         $row['state_code'], $row['journey_label']];
     $cells = [];
     foreach ($values as $index => $value) $cells[] = xlsx_cell($index + 1, $excelRow, $value, $index === 12 ? $stateStyle : 9);
