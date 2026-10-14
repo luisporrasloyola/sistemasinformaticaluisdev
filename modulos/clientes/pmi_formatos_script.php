@@ -10,10 +10,25 @@ document.addEventListener('DOMContentLoaded', () => {
     const folderModal = document.getElementById('formatFolderModal');
     const documentModal = document.getElementById('formatDocumentModal');
     const documentForm = document.getElementById('formatDocumentForm');
+    const linkInput = document.getElementById('formatLinkUrl');
+    const linkOpen = document.getElementById('formatLinkOpen');
+    const linkRemove = document.getElementById('formatLinkRemove');
+    const linkHelp = document.getElementById('formatLinkHelp');
     const formatCatalog = $('#formatDocumentName');
     const catalogUrl = baseUrl + '/modulos/clientes/pmi_formatos_catalogo.php';
     const csrf = documentForm.querySelector('[name="csrf_token"]').value;
     const today = () => { const date = new Date(); return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-'); };
+    const updateLinkControls = () => {
+        const value = linkInput.value.trim();
+        let validUrl = null;
+        try { const url = new URL(value); if (['http:', 'https:'].includes(url.protocol) && !url.username && !url.password) validUrl = url.href; } catch (_) {}
+        linkOpen.classList.toggle('d-none', !validUrl);
+        linkRemove.classList.toggle('d-none', !value);
+        linkOpen.href = validUrl || '#';
+        linkHelp.textContent = value ? 'Puedes cambiarlo o quitarlo. Los cambios se aplican al guardar.' : 'Pega un enlace que empiece con https:// o http://.';
+    };
+    linkInput.addEventListener('input', updateLinkControls);
+    linkRemove.addEventListener('click', () => { linkInput.value = ''; updateLinkControls(); linkInput.focus(); });
     formatCatalog.select2({theme: 'bootstrap4', width: '100%', dropdownParent: $('#formatDocumentModal'), placeholder: 'Buscar formato', ajax: {
         url: catalogUrl, dataType: 'json', delay: 250,
         data: params => ({client_id: clientId, q: params.term || ''}),
@@ -82,8 +97,7 @@ document.addEventListener('DOMContentLoaded', () => {
         documentForm.reset();
         formatCatalog.val(null).trigger('change');
         document.getElementById('formatDocumentId').value = '';
-        document.getElementById('formatObservationHistory').classList.add('d-none');
-        document.getElementById('formatObservationList').replaceChildren();
+        updateLinkControls();
         const current = document.getElementById('formatCurrentFile');
         current.classList.add('d-none');
         current.replaceChildren();
@@ -94,7 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('formatDocumentTitle').textContent = 'Agregar formato';
         bootstrap.Modal.getOrCreateInstance(documentModal).show();
     });
-    table.querySelectorAll('.edit-format-document').forEach(button => button.addEventListener('click', async () => {
+    table.querySelectorAll('.edit-format-document').forEach(button => button.addEventListener('click', () => {
         const item = JSON.parse(button.dataset.document);
         clearDocument();
         document.getElementById('formatDocumentId').value = item.id;
@@ -102,6 +116,8 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('formatRegistration').value = item.registration_date;
         document.getElementById('formatStart').value = item.start_date || '';
         document.getElementById('formatEnd').value = item.end_date || '';
+        linkInput.value = item.link_url || '';
+        updateLinkControls();
         document.getElementById('formatDocumentTitle').textContent = 'Editar formato';
         if (item.file_path) {
             const link = document.createElement('a');
@@ -113,20 +129,6 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('formatCurrentFile').classList.remove('d-none');
         }
         bootstrap.Modal.getOrCreateInstance(documentModal).show();
-        try {
-            const response = await fetch(baseUrl + '/modulos/clientes/pmi_formatos_observaciones.php?client_id=' + clientId + '&document_id=' + encodeURIComponent(item.id));
-            if (!response.ok) return;
-            const data = await response.json();
-            if (!data.observations?.length) return;
-            const list = document.getElementById('formatObservationList');
-            data.observations.forEach(entry => {
-                const line = document.createElement('div'); line.className = 'border-top py-2';
-                const head = document.createElement('strong'); head.textContent = entry.user_name + ' · ' + entry.created_at;
-                const note = document.createElement('div'); note.textContent = entry.note;
-                line.append(head, note); list.append(line);
-            });
-            document.getElementById('formatObservationHistory').classList.remove('d-none');
-        } catch (_) { /* La edición permanece disponible. */ }
     }));
 
     const syncAll = () => { const available = folderChecks(); folderSelectAll.checked = available.length > 0 && available.every(check => check.checked); folderSelectAll.indeterminate = available.some(check => check.checked) && !folderSelectAll.checked; };

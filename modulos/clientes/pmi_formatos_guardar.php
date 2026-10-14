@@ -25,10 +25,15 @@ try {
         $registration = trim((string) ($_POST['registration_date'] ?? ''));
         $start = trim((string) ($_POST['start_date'] ?? ''));
         $end = trim((string) ($_POST['end_date'] ?? ''));
-        $observation = trim((string) ($_POST['observation'] ?? ''));
+        $linkUrl = trim((string) ($_POST['link_url'] ?? ''));
         if ($name === '' || mb_strlen($name) > 180) { throw new DomainException('Ingrese un nombre de formato válido.'); }
         if ($registration === '') { throw new DomainException('Ingrese la fecha de registro.'); }
-        if (mb_strlen($observation) > 3000) { throw new DomainException('La observación es demasiado extensa.'); }
+        if ($linkUrl !== '') {
+            $parts = parse_url($linkUrl);
+            if (strlen($linkUrl) > 2048 || !filter_var($linkUrl, FILTER_VALIDATE_URL) || !$parts || !in_array(strtolower((string) ($parts['scheme'] ?? '')), ['http', 'https'], true) || empty($parts['host']) || isset($parts['user']) || isset($parts['pass'])) {
+                throw new DomainException('Ingrese un enlace válido que empiece con https:// o http://.');
+            }
+        }
         foreach ([$registration, $start, $end] as $date) {
             if ($date !== '' && (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) || DateTime::createFromFormat('!Y-m-d', $date)?->format('Y-m-d') !== $date)) { throw new DomainException('Ingrese fechas válidas.'); }
         }
@@ -47,21 +52,16 @@ try {
         $catalog->execute(['client_id' => $clientId, 'name' => $name]);
         $catalogId = (int) db()->lastInsertId();
         if ($id) {
-            db()->prepare('UPDATE client_pmi_format_documents SET catalog_id = :catalog_id, registration_date = :registration_date, start_date = :start_date, end_date = :end_date, file_path = :file_path WHERE id = :id AND client_id = :client_id')->execute([
+            db()->prepare('UPDATE client_pmi_format_documents SET catalog_id = :catalog_id, registration_date = :registration_date, start_date = :start_date, end_date = :end_date, file_path = :file_path, link_url = :link_url WHERE id = :id AND client_id = :client_id')->execute([
                 'catalog_id' => $catalogId, 'registration_date' => $registration, 'start_date' => $start ?: null, 'end_date' => $end ?: null,
-                'file_path' => $newFile ?: $oldFile, 'id' => $id, 'client_id' => $clientId,
+                'file_path' => $newFile ?: $oldFile, 'link_url' => $linkUrl ?: null, 'id' => $id, 'client_id' => $clientId,
             ]);
         } else {
-            db()->prepare('INSERT INTO client_pmi_format_documents (client_id, catalog_id, registration_date, start_date, end_date, file_path, registered_by_user_id) VALUES (:client_id, :catalog_id, :registration_date, :start_date, :end_date, :file_path, :user_id)')->execute([
+            db()->prepare('INSERT INTO client_pmi_format_documents (client_id, catalog_id, registration_date, start_date, end_date, file_path, link_url, registered_by_user_id) VALUES (:client_id, :catalog_id, :registration_date, :start_date, :end_date, :file_path, :link_url, :user_id)')->execute([
                 'client_id' => $clientId, 'catalog_id' => $catalogId, 'registration_date' => $registration, 'start_date' => $start ?: null,
-                'end_date' => $end ?: null, 'file_path' => $newFile, 'user_id' => (int) ($_SESSION['user']['id'] ?? 0) ?: null,
+                'end_date' => $end ?: null, 'file_path' => $newFile, 'link_url' => $linkUrl ?: null, 'user_id' => (int) ($_SESSION['user']['id'] ?? 0) ?: null,
             ]);
             $id = (int) db()->lastInsertId();
-        }
-        if ($observation !== '') {
-            db()->prepare('INSERT INTO client_pmi_format_observations (document_id, note, created_by_user_id) VALUES (:document_id, :note, :user_id)')->execute([
-                'document_id' => $id, 'note' => $observation, 'user_id' => (int) ($_SESSION['user']['id'] ?? 0) ?: null,
-            ]);
         }
         db()->commit();
         if ($newFile && $oldFile) { delete_uploaded_file($oldFile); }

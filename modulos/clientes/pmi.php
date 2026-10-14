@@ -44,7 +44,7 @@ if ($clientId) {
     }
     if ($activeTab === 'formatos') {
     try {
-        $stmt = db()->prepare("SELECT d.id, d.catalog_id, c.name, d.registration_date, d.start_date, d.end_date, d.file_path, d.created_at, COALESCE(u.name, '—') AS registered_by, fi.folder_id FROM client_pmi_format_documents d JOIN client_pmi_format_catalog c ON c.id = d.catalog_id LEFT JOIN users u ON u.id = d.registered_by_user_id LEFT JOIN client_pmi_format_folder_items fi ON fi.document_id = d.id WHERE d.client_id = :id ORDER BY c.name, d.id");
+        $stmt = db()->prepare("SELECT d.id, d.catalog_id, c.name, d.registration_date, d.start_date, d.end_date, d.file_path, d.link_url, d.created_at, COALESCE(u.name, '—') AS registered_by, fi.folder_id FROM client_pmi_format_documents d JOIN client_pmi_format_catalog c ON c.id = d.catalog_id LEFT JOIN users u ON u.id = d.registered_by_user_id LEFT JOIN client_pmi_format_folder_items fi ON fi.document_id = d.id WHERE d.client_id = :id ORDER BY c.name, d.id");
         $stmt->execute(['id' => $clientId]);
         $formatDocuments = $stmt->fetchAll();
         $stmt = db()->prepare('SELECT id, name FROM client_pmi_format_folders WHERE client_id = :id ORDER BY name, id');

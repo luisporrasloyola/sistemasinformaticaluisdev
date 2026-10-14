@@ -13,6 +13,7 @@ $formatHasFile = !empty($document['file_path']);
 <td><?= e($document['registered_by']) ?></td>
 <td class="text-nowrap">
     <button class="btn btn-sm btn-outline-primary edit-format-document" type="button" data-document='<?= e(json_encode($document, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE)) ?>' title="Editar"><i class="fa-solid fa-pen"></i></button>
+    <?php if (!empty($document['link_url'])): ?><a class="btn btn-sm btn-outline-info" href="<?= e($document['link_url']) ?>" target="_blank" rel="noopener noreferrer" title="Abrir enlace en otra pestaña" aria-label="Abrir enlace de <?= e($document['name']) ?> en otra pestaña"><i class="fa-solid fa-link" aria-hidden="true"></i></a><?php endif; ?>
     <?php if ($formatHasFile): ?>
         <button class="btn btn-sm btn-outline-secondary preview-base-document" type="button" data-file-path="<?= e($document['file_path']) ?>" data-document-name="<?= e($document['name']) ?>" data-document-id="<?= (int) $document['id'] ?>" data-download-type="formatos" title="Previsualizar"><i class="fa-solid fa-eye"></i></button>
         <a class="btn btn-sm btn-outline-success" href="<?= APP_URL ?>/modulos/clientes/pmi_descargar.php?tipo=formatos&cliente_id=<?= $clientId ?>&ids[]=<?= (int) $document['id'] ?>" title="Descargar"><i class="fa-solid fa-download"></i></a>
