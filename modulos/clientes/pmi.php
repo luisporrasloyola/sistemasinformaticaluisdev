@@ -66,7 +66,7 @@ require __DIR__ . '/../../includes/header.php';
 .client-pmi-tabs button.active[data-tab="requisitos"]{background:#8353ee;color:white}.client-pmi-tabs button.active[data-tab="formatos"]{background:#1495e0;color:white}.client-pmi-tabs button.active[data-tab="personal"]{background:#168764;color:white}
 .client-pmi-heading{background:#f3f6fb;color:#284672;font-size:.82rem;font-weight:750;letter-spacing:.045em;padding:11px 14px;border-left:3px solid #9bb7e8;border-radius:7px;margin:20px 0 12px}
 .client-pmi-profile{min-width:0;overflow:hidden}
-.client-pmi-profile-photo{width:150px;height:150px;max-width:100%;object-fit:cover;border-radius:10px;border:1px solid #d1dbea;background:#eef2f8}
+.client-pmi-profile-photo{display:block;width:auto;height:auto;max-width:100%;max-height:150px;margin-inline:auto;object-fit:contain;border-radius:10px;border:1px solid #d1dbea;background:#eef2f8}
 .client-pmi-details{margin:0;display:grid;gap:11px}
 .client-pmi-details>div{min-width:0;display:grid;grid-template-columns:minmax(82px,41%) minmax(0,1fr);align-items:start;gap:8px}
 .client-pmi-details dt{min-width:0;color:#536783;font-size:.77rem;font-weight:650;line-height:1.38}
