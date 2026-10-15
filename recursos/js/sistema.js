@@ -344,7 +344,9 @@ function initAttendanceMatrixDetail() {
         const type = fields.manualCalendarType?.value || '';
         if (type && fields.manualResultAbsent?.checked) fields.manualResultAbsent.checked = false;
         const selectedCell = fields.adminMarkOpen?._selectedCell;
-        const showCalendar = !!fields.manualResultAbsent?.checked || type !== '' || !!selectedCell?.dataset.calendarType;
+        const attendanceSelected = !!fields.manualResultPunctual?.checked || !!fields.manualResultLate?.checked;
+        const showCalendar = !attendanceSelected
+            && (!!fields.manualResultAbsent?.checked || type !== '' || !!selectedCell?.dataset.calendarType);
         fields.manualCalendarSection?.classList.toggle('d-none', !showCalendar);
         fields.holidayInfoButton?.classList.toggle('d-none', type !== 'holiday');
         fields.holidayDoubleWrap?.classList.toggle('d-none', type !== 'holiday');
