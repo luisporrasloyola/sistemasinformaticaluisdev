@@ -78,8 +78,9 @@ foreach ($rows as $row) {
             . 'Entrada' . (!empty($row['holiday_double_applied']) && $row['early_overtime_minutes'] > 0 ? ' ×2' : '') . ': ' . $h(attendance_report_minutes_label((int) $row['early_overtime_minutes'])) . '<br>'
             . 'Salida' . (!empty($row['holiday_double_applied']) && $row['exit_overtime_minutes'] > 0 ? ' ×2' : '') . ': ' . $h(attendance_report_minutes_label((int) $row['exit_overtime_minutes'])) . '</span>'
         : '-';
-    $workedCell = $row['entry'] !== '-' && $row['exit'] !== '-' ? $h(attendance_report_minutes_label((int) $row['worked_minutes'])) : '-';
+    $workedCell = ($row['entry'] !== '-' && $row['exit'] !== '-') || !empty($row['holiday_schedule_credit']) ? $h(attendance_report_minutes_label((int) $row['worked_minutes'])) : '-';
     if (!empty($row['holiday_double_applied']) && $workedCell !== '-') $workedCell .= '<br><span class="muted">Horario ×2 por feriado</span>';
+    if (!empty($row['holiday_schedule_credit'])) $workedCell .= '<br><span class="muted">Crédito de feriado según horario</span>';
     if (!empty($row['lunch_deduction_minutes'])) $workedCell .= '<br><span class="muted">Almuerzo −' . $h(attendance_report_minutes_label((int) $row['lunch_deduction_minutes'])) . '</span>';
     $bodyRows .= '<tr><td>' . date('d/m/Y', strtotime($row['date'])) . '</td><td>' . $h($row['weekday']) . '</td><td class="schedule">' . $h($row['schedule']) . '</td><td>' . ($row['tolerance_minutes'] !== null ? (int)$row['tolerance_minutes'].' min' : '-') . '</td><td>' . $h($row['project'] ?? '-') . '</td><td>' . $entryRoute . '</td><td>' . $h($row['exit_location']) . '</td><td>' . $markCell($row, 'entry') . '</td><td>' . $markCell($row, 'exit') . '</td><td>' . ($row['late_minutes'] ? $h(attendance_report_minutes_label((int) $row['late_minutes'])) : '-') . '</td><td>' . $overtimeCell . '</td><td>' . $workedCell . '</td><td><span class="state ' . $stateClass . '"><b>' . $h($row['state_code']) . '</b></span></td><td><span class="journey">' . $h($row['journey_label']) . '</span></td></tr>';
 }

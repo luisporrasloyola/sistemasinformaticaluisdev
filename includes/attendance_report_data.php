@@ -157,7 +157,7 @@ function attendance_report_overtime_components(string $scheduledEntry, string $s
     return $result;
 }
 
-/** El feriado acredita la jornada completa de la plantilla al doble si hay entrada y salida. */
+/** Trabajo registrado en feriado: la jornada completa se duplica solo con entrada y salida. */
 function attendance_report_holiday_worked_minutes(int $scheduledMinutes, bool $completed): int
 {
     return $completed ? 2 * max(0, $scheduledMinutes) : 0;
@@ -172,6 +172,16 @@ function attendance_report_early_credit(int $authorizedMinutes, bool $holiday): 
 function attendance_report_worked_after_lunch(int $workedMinutes, bool $completed): int
 {
     return $completed ? max(0, $workedMinutes - 60) : max(0, $workedMinutes);
+}
+
+/** Feriado de calendario sin marcaciones: acredita el horario, sin inventar extras. */
+function attendance_report_holiday_calendar_credit(int $scheduledMinutes, bool $doubleEnabled): array
+{
+    $gross = max(0, $scheduledMinutes) * ($doubleEnabled ? 2 : 1);
+    return [
+        'worked_minutes' => attendance_report_worked_after_lunch($gross, true),
+        'lunch_deduction_minutes' => min(60, $gross),
+    ];
 }
 
 function attendance_report_note(int $workerId, string $dateFrom, string $dateTo): ?array
@@ -465,6 +475,8 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 $scheduleDay = attendance_report_effective_schedule_day($assignment, $program, $entry, $exit, $scheduleDaysBySchedule, $weekday);
                 $eventType = (string) ($calendarEvent['event_type'] ?? '');
                 $holidayDoubleEnabled = $eventType === 'holiday' && !isset($holidayDoubleDisabled[$id][$date]);
+                $holidayCalendarOnlyMarks = $eventType === 'holiday'
+                    && (($entry['final_status'] ?? '') === 'feriado' || ($exit['final_status'] ?? '') === 'feriado');
                 $isNonWorking = attendance_calendar_is_non_working_event($eventType);
                 $hasSchedule = $scheduleDay !== null;
                 $isLate = $entry && (($entry['schedule_status'] ?? '') === 'tardanza' || ($entry['final_status'] ?? '') === 'tardanza');
@@ -484,6 +496,8 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
 
             if ($manualOverride) {
                 $stateKey = 'absent';
+            } elseif ($holidayCalendarOnlyMarks) {
+                $stateKey = 'holiday';
             } elseif ($entry || $exit) {
                 $stateKey = !$entry ? 'incomplete'
                     : ($isLate && $isEarlyExit ? 'late_early_exit'
@@ -571,8 +585,18 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 $exitOvertimeMinutes = $holidayMinutes['exit_overtime_minutes'];
                 $overtimeMinutes = $earlyOvertimeMinutes + $exitOvertimeMinutes;
             }
-            $lunchDeductionMinutes = $entry && $exit ? min(60, $workedMinutes) : 0;
-            $workedMinutes = attendance_report_worked_after_lunch($workedMinutes, (bool) ($entry && $exit));
+            $holidayScheduleCredit = $eventType === 'holiday' && !$entry && !$exit
+                && $scheduleDay && $date < $today;
+            if ($holidayScheduleCredit) {
+                $holidayCredit = attendance_report_holiday_calendar_credit($scheduledMinutes, $holidayDoubleEnabled);
+                $workedMinutes = $holidayCredit['worked_minutes'];
+                $lunchDeductionMinutes = $holidayCredit['lunch_deduction_minutes'];
+            } else {
+                $completedForLunch = (bool) ($entry && $exit);
+                $lunchDeductionMinutes = $completedForLunch ? min(60, $workedMinutes) : 0;
+                $workedMinutes = attendance_report_worked_after_lunch($workedMinutes, $completedForLunch);
+            }
+            if ($holidayCalendarOnlyMarks) $lateMinutes = 0;
 
             $latestManualComment = $latestManualComments[$id][$date][$aid] ?? null;
             if ($manualOverride) {
@@ -619,6 +643,7 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 'state_key' => $stateKey, 'state_code' => $state['code'], 'state_label' => $state['label'], 'state_class' => $state['class'],
                 'journey_key' => $journeyKey, 'journey_label' => $journey['label'], 'journey_class' => $journey['class'],
                 'worked_minutes' => $workedMinutes, 'scheduled_minutes' => $scheduledMinutes,
+                'holiday_schedule_credit' => $holidayScheduleCredit,
                 'lunch_deduction_minutes' => $lunchDeductionMinutes,
                 'late_minutes' => $lateMinutes, 'overtime_minutes' => $overtimeMinutes,
                 'early_overtime_eligible' => $earlyOvertimeEligible,
@@ -633,7 +658,8 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 'calendar_event_id' => (int) ($calendarEvent['id'] ?? 0),
                 'calendar_event_type' => $eventType,
                 'holiday_double_enabled' => $holidayDoubleEnabled,
-                'holiday_double_applied' => $holidayDoubleEnabled && (bool) $entry && (bool) $scheduleDay,
+                'holiday_double_applied' => $holidayDoubleEnabled && (bool) $scheduleDay
+                    && ((bool) $entry || $holidayScheduleCredit),
                 'calendar_event_name' => (string) ($calendarEvent['name'] ?? ''),
             ];
             }

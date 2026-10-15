@@ -203,6 +203,7 @@ function initAttendanceMatrixDetail() {
         manualResultLate: document.getElementById('matrixManualResultLate'),
         manualResultAbsent: document.getElementById('matrixManualResultAbsent'),
         manualCalendarType: document.getElementById('matrixManualCalendarType'),
+        manualCalendarSection: document.getElementById('matrixManualCalendarSection'),
         holidayInfoButton: document.getElementById('matrixHolidayInfoButton'),
         holidayDoubleWrap: document.getElementById('matrixHolidayDoubleWrap'),
         holidayDoubleEnabled: document.getElementById('matrixHolidayDoubleEnabled'),
@@ -342,15 +343,16 @@ function initAttendanceMatrixDetail() {
     const syncManualCalendarMode = () => {
         const type = fields.manualCalendarType?.value || '';
         if (type && fields.manualResultAbsent?.checked) fields.manualResultAbsent.checked = false;
-        fields.holidayInfoButton?.classList.toggle('d-none', type !== 'holiday');
         const selectedCell = fields.adminMarkOpen?._selectedCell;
+        const showCalendar = !!fields.manualResultAbsent?.checked || type !== '' || !!selectedCell?.dataset.calendarType;
+        fields.manualCalendarSection?.classList.toggle('d-none', !showCalendar);
+        fields.holidayInfoButton?.classList.toggle('d-none', type !== 'holiday');
         fields.holidayDoubleWrap?.classList.toggle('d-none', type !== 'holiday');
         if (fields.holidayDoubleEnabled) {
-            fields.holidayDoubleEnabled.disabled = type !== 'holiday' || selectedCell?.dataset.calendarType !== 'holiday'
-                || selectedCell?.dataset.manualEnabled !== '1';
+            fields.holidayDoubleEnabled.disabled = type !== 'holiday' || selectedCell?.dataset.manualEnabled !== '1';
             fields.holidayDoubleWrap.title = selectedCell?.dataset.calendarType === 'holiday'
                 ? 'Se guarda al cambiar el interruptor.'
-                : 'Guarde primero el feriado para activar este interruptor.';
+                : 'Se guardará junto con la corrección.';
             fields.holidayDoubleLabel.textContent = fields.holidayDoubleEnabled.checked ? 'Duplicar horas' : 'Sin duplicar';
         }
         const isCalendar = type !== '' && !isHolidayAttendanceCorrection();
@@ -364,7 +366,8 @@ function initAttendanceMatrixDetail() {
         modalElement.querySelectorAll('.attendance-result-choice input').forEach((input) => {
             input.required = !isCalendar;
         });
-        if (isCalendar) {
+        const hideMarkFields = isCalendar && type !== 'holiday';
+        if (hideMarkFields) {
             modalElement.querySelectorAll('.attendance-mark-input input, .attendance-mark-input select').forEach((input) => { input.disabled = true; });
             if (fields.manualScheduleSelect) fields.manualScheduleSelect.disabled = true;
             fields.permitScheduleEdit?.classList.add('d-none');
@@ -373,7 +376,7 @@ function initAttendanceMatrixDetail() {
             setManualAbsenceMode(!!fields.manualResultAbsent?.checked);
             syncTodayEditFields(fields.adminMarkOpen?._selectedCell);
         }
-        modalElement.querySelector('.attendance-manual-fields')?.classList.toggle('d-none', isCalendar);
+        modalElement.querySelector('.attendance-manual-fields')?.classList.toggle('d-none', hideMarkFields);
     };
     const syncTodayEditFields = (cell) => {
         const sameDayEdit = cell?.dataset.manualLock === 'today' && cell.dataset.manualEnabled === '1';
@@ -513,7 +516,8 @@ function initAttendanceMatrixDetail() {
     };
 
     const chooseManualAttendance = (isAbsent) => {
-        if (!isHolidayAttendanceCorrection() || isAbsent) fields.manualCalendarType.value = '';
+        const savedHoliday = fields.adminMarkOpen?._selectedCell?.dataset.calendarType === 'holiday';
+        fields.manualCalendarType.value = !isAbsent && savedHoliday ? 'holiday' : '';
         syncManualCalendarMode();
         setManualAbsenceMode(isAbsent);
         syncTodayEditFields(fields.adminMarkOpen?._selectedCell);
@@ -527,6 +531,7 @@ function initAttendanceMatrixDetail() {
         if (!cell) return;
         const enabled = fields.holidayDoubleEnabled.checked;
         fields.holidayDoubleLabel.textContent = enabled ? 'Duplicar horas' : 'Sin duplicar';
+        if (cell.dataset.calendarType !== 'holiday') return;
         fields.holidayDoubleEnabled.disabled = true;
         const body = new FormData();
         body.append('worker_id', cell.dataset.workerId || '');
@@ -567,23 +572,30 @@ function initAttendanceMatrixDetail() {
         manualForm.addEventListener('submit', async (event) => {
             event.preventDefault();
             syncManualLocationRequirements();
-            if (!manualForm.reportValidity()) return;
             const selectedCell = fields.adminMarkOpen?._selectedCell;
             const calendarMode = !!fields.manualCalendarType?.value && !isHolidayAttendanceCorrection();
+            const holidayWithMarks = calendarMode && fields.manualCalendarType?.value === 'holiday'
+                && !!(fields.manualEntry?.value || fields.manualExit?.value);
+            const calendarOnlyMode = calendarMode && !holidayWithMarks;
+            const scheduleRequired = fields.manualScheduleSelect?.required;
+            if (calendarOnlyMode && fields.manualScheduleSelect) fields.manualScheduleSelect.required = false;
+            const formValid = manualForm.reportValidity();
+            if (fields.manualScheduleSelect) fields.manualScheduleSelect.required = scheduleRequired;
+            if (!formValid) return;
             if (!calendarMode && !fields.manualResultAbsent?.checked && selectedCell?.dataset.entry === '-' && selectedCell?.dataset.exit === '-'
                 && !fields.manualEntry?.value && !fields.manualExit?.value) {
                 Swal.fire('Faltan marcaciones', 'Ingrese al menos una hora de entrada o salida para registrar la asistencia.', 'warning');
                 return;
             }
-            if (!calendarMode && !fields.manualResultAbsent?.checked && fields.manualEntry?.value && !fields.manualEntryLocation?.value) {
+            if (!calendarOnlyMode && !fields.manualResultAbsent?.checked && fields.manualEntry?.value && !fields.manualEntryLocation?.value) {
                 Swal.fire('Falta el lugar de entrada', 'Seleccione el lugar de marcación de entrada.', 'warning');
                 return;
             }
-            if (!calendarMode && !fields.manualResultAbsent?.checked && fields.manualExit?.value && !fields.manualExitLocation?.value) {
+            if (!calendarOnlyMode && !fields.manualResultAbsent?.checked && fields.manualExit?.value && !fields.manualExitLocation?.value) {
                 Swal.fire('Falta el lugar de salida', 'Seleccione el lugar de marcación de salida.', 'warning');
                 return;
             }
-            if (!calendarMode && fields.manualScheduleSelect && !fields.manualScheduleSelect.disabled
+            if (!calendarOnlyMode && fields.manualScheduleSelect && !fields.manualScheduleSelect.disabled
                 && fields.manualScheduleSelect.value !== (Number(selectedCell?.dataset.markedScheduleId) > 0 ? selectedCell.dataset.markedScheduleId : selectedCell?.dataset.scheduleId)) {
                 const chosenName = fields.manualScheduleSelect.selectedOptions[0]?.textContent || 'el horario seleccionado';
                 const confirmation = await Swal.fire({
@@ -598,10 +610,17 @@ function initAttendanceMatrixDetail() {
             }
             const button = manualForm.querySelector('button[type="submit"]');
             const body = new FormData(manualForm);
+            if (calendarOnlyMode) {
+                ['entry_time', 'exit_time', 'entry_location_id', 'exit_location_id', 'project_id', 'schedule_id'].forEach((name) => body.delete(name));
+            }
+            if (holidayWithMarks) body.set('attendance_result', 'feriado');
+            if (fields.manualCalendarType?.value === 'holiday') {
+                body.set('holiday_double_enabled', fields.holidayDoubleEnabled?.checked ? '1' : '0');
+            }
             body.append('csrf_token', csrf);
             button.disabled = true;
             try {
-                const endpoint = calendarMode ? 'guardar_calendario_desde_asistencia.php' : 'guardar_marcacion_manual.php';
+                const endpoint = calendarOnlyMode ? 'guardar_calendario_desde_asistencia.php' : 'guardar_marcacion_manual.php';
                 const response = await fetch(`${window.APP_URL}/servicios/control_personal/${endpoint}`, { method: 'POST', body });
                 const data = await response.json();
                 if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo guardar la corrección.');

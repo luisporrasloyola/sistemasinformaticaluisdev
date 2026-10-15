@@ -46,7 +46,7 @@ try {
             if (!$row) { throw new DomainException('Formato no encontrado.'); }
             $oldFile = $row['file_path'];
         }
-        $newFile = upload_file($_FILES['file'] ?? [], 'clientes_pmi_formatos', document_attachment_mimes())['path'];
+        $newFile = upload_file($_FILES['file'] ?? [], 'clientes_pmi_formatos', format_attachment_mimes(), format_attachment_extensions())['path'];
         db()->beginTransaction();
         $catalog = db()->prepare('INSERT INTO client_pmi_format_catalog (client_id, name) VALUES (:client_id, :name) ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)');
         $catalog->execute(['client_id' => $clientId, 'name' => $name]);

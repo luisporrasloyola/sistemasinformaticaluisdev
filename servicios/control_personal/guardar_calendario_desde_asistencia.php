@@ -14,11 +14,13 @@ $date = trim((string) ($_POST['mark_date'] ?? ''));
 $type = trim((string) ($_POST['calendar_event_type'] ?? ''));
 $restKind = trim((string) ($_POST['rest_kind'] ?? ''));
 $reason = trim((string) ($_POST['reason'] ?? ''));
+$holidayDoubleEnabled = (string) ($_POST['holiday_double_enabled'] ?? '1');
 $parsedDate = DateTimeImmutable::createFromFormat('!Y-m-d', $date);
 
 if ($workerId <= 0 || !$parsedDate || $parsedDate->format('Y-m-d') !== $date
     || !in_array($type, ['vacation', 'rest', 'holiday', 'non_working'], true)
     || ($type === 'rest' && !in_array($restKind, ['hours', 'regime'], true))
+    || ($type === 'holiday' && !in_array($holidayDoubleEnabled, ['0', '1'], true))
     || $reason === '' || mb_strlen($reason) > 500) {
     json_response(['ok' => false, 'message' => 'Revise el trabajador, la fecha, el tipo y la observación.'], 422);
 }
@@ -71,6 +73,15 @@ try {
     if ($current && (string) $current['event_type'] === $type
         && ($type !== 'rest' || (string) $current['name'] === $name)
         && !$hasAdministrativeAbsence) {
+        if ($type === 'holiday') {
+            $saveDouble = $pdo->prepare('INSERT INTO attendance_holiday_double_overrides
+                (worker_id, work_date, double_enabled, changed_by_user_id)
+                VALUES (:worker, :date, :enabled, :actor)
+                ON DUPLICATE KEY UPDATE double_enabled = VALUES(double_enabled),
+                    changed_by_user_id = VALUES(changed_by_user_id), updated_at = CURRENT_TIMESTAMP');
+            $saveDouble->execute(['worker' => $workerId, 'date' => $date,
+                'enabled' => (int) $holidayDoubleEnabled, 'actor' => (int) (current_user()['id'] ?? 0) ?: null]);
+        }
         $pdo->commit();
         json_response(['ok' => true, 'message' => 'El calendario laboral ya tiene esa clasificación para este día.']);
     }
@@ -104,6 +115,15 @@ try {
         'type' => $type, 'name' => $name, 'reason' => $reason,
         'actor' => (int) (current_user()['id'] ?? 0) ?: null,
     ]);
+    if ($type === 'holiday') {
+        $saveDouble = $pdo->prepare('INSERT INTO attendance_holiday_double_overrides
+            (worker_id, work_date, double_enabled, changed_by_user_id)
+            VALUES (:worker, :date, :enabled, :actor)
+            ON DUPLICATE KEY UPDATE double_enabled = VALUES(double_enabled),
+                changed_by_user_id = VALUES(changed_by_user_id), updated_at = CURRENT_TIMESTAMP');
+        $saveDouble->execute(['worker' => $workerId, 'date' => $date,
+            'enabled' => (int) $holidayDoubleEnabled, 'actor' => (int) (current_user()['id'] ?? 0) ?: null]);
+    }
     $pdo->commit();
     json_response(['ok' => true, 'message' => 'El día se actualizó en el calendario laboral y en el reporte de asistencias.']);
 } catch (Throwable $error) {

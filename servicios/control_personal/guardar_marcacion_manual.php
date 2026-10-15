@@ -37,6 +37,7 @@ $entryLocationId = max(0, (int) ($_POST['entry_location_id'] ?? 0));
 $exitLocationId = max(0, (int) ($_POST['exit_location_id'] ?? 0));
 $attendanceResult = trim((string) ($_POST['attendance_result'] ?? ''));
 $calendarEventType = trim((string) ($_POST['calendar_event_type'] ?? ''));
+$holidayDoubleEnabled = (string) ($_POST['holiday_double_enabled'] ?? '1');
 $allowTodayExit = ($_POST['allow_today_exit'] ?? '') === '1';
 $requestedScheduleId = max(0, (int) ($_POST['schedule_id'] ?? 0));
 $projectProvided = array_key_exists('project_id', $_POST);
@@ -46,8 +47,10 @@ $projectId = $projectValue === '' ? 0 : (ctype_digit($projectValue) ? (int) $pro
 if (!$workerId || !manual_valid_date($markDate)) manual_response(['ok' => false, 'message' => 'El trabajador o la fecha no son válidos.'], 422);
 if ($markDate > date('Y-m-d')) manual_response(['ok' => false, 'message' => 'No se pueden corregir jornadas futuras.'], 409);
 $sameDay = $markDate === date('Y-m-d');
-if (!in_array($attendanceResult, ['puntual', 'tardanza', 'falta'], true)) manual_response(['ok' => false, 'message' => 'Seleccione el resultado de la asistencia.'], 422);
+if (!in_array($attendanceResult, ['puntual', 'tardanza', 'falta', 'feriado'], true)) manual_response(['ok' => false, 'message' => 'Seleccione el resultado de la asistencia.'], 422);
 if (!in_array($calendarEventType, ['', 'holiday'], true)) manual_response(['ok' => false, 'message' => 'El día especial seleccionado requiere una corrección de calendario.'], 422);
+if ($calendarEventType === 'holiday' && !in_array($holidayDoubleEnabled, ['0', '1'], true)) manual_response(['ok' => false, 'message' => 'Estado de duplicación inválido.'], 422);
+if ($attendanceResult === 'feriado' && $calendarEventType !== 'holiday') manual_response(['ok' => false, 'message' => 'FER solo puede registrarse en un día feriado.'], 422);
 if ($calendarEventType === 'holiday' && $attendanceResult === 'falta') manual_response(['ok' => false, 'message' => 'No se puede registrar una falta y trabajo en feriado a la vez.'], 422);
 if ($reason === '' || mb_strlen($reason) > 500) manual_response(['ok' => false, 'message' => 'Ingrese el motivo de la corrección.'], 422);
 if ($projectProvided && $projectId < 0) manual_response(['ok' => false, 'message' => 'Seleccione un proyecto válido.'], 422);
@@ -189,7 +192,7 @@ $saveMark = static function (string $type, string $time, int $locationId) use ($
     $markedAt = $markedAtDate . ' ' . $normalized;
     $scheduledExitAt = $markDate . ' ' . $officialExit;
     if ($overnightSchedule) $scheduledExitAt = (new DateTimeImmutable($markDate))->modify('+1 day')->format('Y-m-d') . ' ' . $officialExit;
-    $status = $type === 'entrada' ? $attendanceResult : ($markedAt >= $scheduledExitAt ? 'salida_valida' : 'salida_anticipada');
+    $status = $attendanceResult === 'feriado' ? 'feriado' : ($type === 'entrada' ? $attendanceResult : ($markedAt >= $scheduledExitAt ? 'salida_valida' : 'salida_anticipada'));
     $markOrder = $type === 'entrada' ? 'mark_time ASC,id ASC' : 'mark_time DESC,id DESC';
     $find = $pdo->prepare("SELECT * FROM attendance_marks WHERE worker_id=:worker AND mark_date=:date AND mark_type=:type ORDER BY {$markOrder} LIMIT 1 FOR UPDATE");
     $find->execute(['worker' => $workerId, 'date' => $markDate, 'type' => $type]);
@@ -249,7 +252,9 @@ try {
         foreach ($marksStmt->fetchAll() as $mark) {
             if ((int) $mark['schedule_id'] === $requestedScheduleId) continue;
             $newStatus = (string) $mark['final_status'];
-            if ($mark['mark_type'] === 'salida') {
+            if ($attendanceResult === 'feriado') {
+                $newStatus = 'feriado';
+            } elseif ($mark['mark_type'] === 'salida') {
                 $exitDate = $overnightSchedule && (string) $mark['mark_time'] < $officialEntry
                     ? (new DateTimeImmutable($markDate))->modify('+1 day')->format('Y-m-d') : $markDate;
                 $scheduledExitDate = $overnightSchedule
@@ -318,10 +323,21 @@ try {
             'reason' => $reason, 'actor' => $actorId,
         ]);
     }
+    if ($calendarEventType === 'holiday') {
+        $saveDouble = $pdo->prepare('INSERT INTO attendance_holiday_double_overrides
+            (worker_id, work_date, double_enabled, changed_by_user_id)
+            VALUES (:worker, :date, :enabled, :actor)
+            ON DUPLICATE KEY UPDATE double_enabled = VALUES(double_enabled),
+                changed_by_user_id = VALUES(changed_by_user_id), updated_at = CURRENT_TIMESTAMP');
+        $saveDouble->execute(['worker' => $workerId, 'date' => $markDate,
+            'enabled' => (int) $holidayDoubleEnabled, 'actor' => $actorId]);
+    }
     $pdo->commit();
-    manual_response(['ok' => true, 'message' => $calendarEventType === 'holiday'
-        ? 'El feriado y la asistencia fueron guardados y auditados correctamente.'
-        : 'La asistencia fue corregida y auditada correctamente.']);
+    manual_response(['ok' => true, 'message' => $attendanceResult === 'feriado'
+        ? 'El feriado y sus marcaciones fueron guardados y auditados correctamente.'
+        : ($calendarEventType === 'holiday'
+            ? 'El feriado y la asistencia fueron guardados y auditados correctamente.'
+            : 'La asistencia fue corregida y auditada correctamente.')]);
 } catch (Throwable $error) {
     if ($pdo->inTransaction()) $pdo->rollBack();
     if ($error instanceof DomainException) manual_response(['ok' => false, 'message' => $error->getMessage()], 409);

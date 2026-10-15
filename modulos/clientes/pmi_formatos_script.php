@@ -121,10 +121,8 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('formatDocumentTitle').textContent = 'Editar formato';
         if (item.file_path) {
             const link = document.createElement('a');
-            link.href = baseUrl + '/' + item.file_path;
-            link.target = '_blank';
-            link.rel = 'noopener';
-            link.textContent = 'Ver archivo actual';
+            link.href = baseUrl + '/modulos/clientes/pmi_descargar.php?tipo=formatos&cliente_id=' + encodeURIComponent(clientId) + '&ids[]=' + encodeURIComponent(item.id);
+            link.textContent = 'Descargar archivo actual';
             document.getElementById('formatCurrentFile').append(link);
             document.getElementById('formatCurrentFile').classList.remove('d-none');
         }

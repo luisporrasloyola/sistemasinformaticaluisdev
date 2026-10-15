@@ -50,6 +50,13 @@ expect_same(540, attendance_report_worked_after_lunch($plainHoliday['worked_minu
 expect_same(660, attendance_report_worked_after_lunch(720, true), 'jornada ordinaria descuenta una hora');
 expect_same(0, attendance_report_worked_after_lunch(45, true), 'jornada corta nunca produce horas negativas');
 expect_same(0, attendance_report_worked_after_lunch(0, false), 'jornada incompleta sin descuento');
+expect_same(['worked_minutes' => 1140, 'lunch_deduction_minutes' => 60], attendance_report_holiday_calendar_credit(600, true), 'FER sin marcaciones: horario doble y un almuerzo');
+expect_same(['worked_minutes' => 540, 'lunch_deduction_minutes' => 60], attendance_report_holiday_calendar_credit(600, false), 'FER sin marcaciones con duplicación desactivada');
+expect_same(['worked_minutes' => 0, 'lunch_deduction_minutes' => 0], attendance_report_holiday_calendar_credit(0, true), 'FER sin horario no inventa horas');
+$holidayWithoutMarks = attendance_report_classify_day(['worker_id' => 1, 'date' => '2026-10-14', 'entry' => '-', 'exit' => '-', 'state_key' => 'holiday', 'calendar_event_type' => 'holiday', 'worked_minutes' => 1140], '2026-10-15');
+expect_same('holiday', $holidayWithoutMarks['calendar_type'], 'FER conserva la clasificación de calendario');
+expect_same(false, $holidayWithoutMarks['worked'], 'FER sin marcaciones no se cuenta como asistencia');
+expect_same(1140, $holidayWithoutMarks['worked_minutes'], 'FER acredita horas en el libro mensual');
 
 $months = attendance_report_hours_ledger([
     ['date' => '2027-08-31', 'worked_minutes' => 480, 'early_overtime_minutes' => 60, 'exit_overtime_minutes' => 32],

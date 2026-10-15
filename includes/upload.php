@@ -15,7 +15,7 @@ function upload_error_message(int $error): string
     };
 }
 
-function upload_file(array $file, string $folder, array $allowedMime): array
+function upload_file(array $file, string $folder, array $allowedMime, ?array $allowedExtensions = null): array
 {
     if (($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
         return ['path' => null, 'name' => null];
@@ -36,7 +36,27 @@ function upload_file(array $file, string $folder, array $allowedMime): array
         throw new RuntimeException('Tipo de archivo no permitido.');
     }
 
-    $extension = match ($mime) {
+    if ($allowedExtensions !== null) {
+        $originalExtension = strtolower(pathinfo((string) ($file['name'] ?? ''), PATHINFO_EXTENSION));
+        if (!isset($allowedExtensions[$originalExtension]) || !in_array($mime, $allowedExtensions[$originalExtension], true)) {
+            throw new RuntimeException('La extensión del archivo no corresponde a su tipo.');
+        }
+        if (in_array($originalExtension, ['docx', 'xlsx', 'pptx'], true) && in_array($mime, ['application/zip', 'application/x-zip-compressed'], true)) {
+            if (!class_exists('ZipArchive')) throw new RuntimeException('El servidor no puede verificar este archivo de Office.');
+            $zip = new ZipArchive();
+            if ($zip->open($file['tmp_name']) !== true) throw new RuntimeException('El archivo de Office no es válido.');
+            $officeFolder = ['docx' => 'word/', 'xlsx' => 'xl/', 'pptx' => 'ppt/'][$originalExtension];
+            $validOfficeFile = $zip->locateName('[Content_Types].xml') !== false;
+            for ($i = 0; $validOfficeFile && $i < $zip->numFiles; $i++) {
+                if (str_starts_with((string) $zip->getNameIndex($i), $officeFolder)) break;
+            }
+            $validOfficeFile = $validOfficeFile && $i < $zip->numFiles;
+            $zip->close();
+            if (!$validOfficeFile) throw new RuntimeException('El archivo de Office no corresponde a su extensión.');
+        }
+    }
+
+    $extension = $allowedExtensions !== null ? $originalExtension : match ($mime) {
         'image/jpeg' => 'jpg',
         'image/png' => 'png',
         'image/webp' => 'webp',
@@ -70,6 +90,28 @@ function upload_file(array $file, string $folder, array $allowedMime): array
 function document_attachment_mimes(): array
 {
     return ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+}
+
+function format_attachment_extensions(): array
+{
+    $zip = ['application/zip', 'application/x-zip-compressed'];
+    $ole = ['application/x-ole-storage', 'application/vnd.ms-office', 'application/CDFV2'];
+    return [
+        'pdf' => ['application/pdf'],
+        'jpg' => ['image/jpeg'], 'jpeg' => ['image/jpeg'],
+        'png' => ['image/png'], 'webp' => ['image/webp'],
+        'doc' => array_merge(['application/msword'], $ole),
+        'xls' => array_merge(['application/vnd.ms-excel'], $ole),
+        'ppt' => array_merge(['application/vnd.ms-powerpoint'], $ole),
+        'docx' => array_merge(['application/vnd.openxmlformats-officedocument.wordprocessingml.document'], $zip),
+        'xlsx' => array_merge(['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'], $zip),
+        'pptx' => array_merge(['application/vnd.openxmlformats-officedocument.presentationml.presentation'], $zip),
+    ];
+}
+
+function format_attachment_mimes(): array
+{
+    return array_values(array_unique(array_merge(...array_values(format_attachment_extensions()))));
 }
 
 function audio_attachment_mimes(): array

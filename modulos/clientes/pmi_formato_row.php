@@ -3,6 +3,7 @@ $formatStatus = !empty($document['end_date'])
     ? status_alert_document_status((string) $document['end_date'], 'clientes.pmi_formatos', (int) $document['catalog_id'])
     : ['label' => 'SIN VENCIMIENTO', 'class' => 'text-bg-secondary'];
 $formatHasFile = !empty($document['file_path']);
+$formatCanPreview = $formatHasFile && (bool) preg_match('/\.(?:pdf|jpe?g|png|webp)$/i', (string) $document['file_path']);
 ?>
 <td><input class="form-check-input format-document-check" type="checkbox" value="<?= (int) $document['id'] ?>" data-has-file="<?= $formatHasFile ? '1' : '0' ?>" aria-label="Seleccionar <?= e($document['name']) ?>"></td>
 <td><strong><?= e($document['name']) ?></strong></td>
@@ -14,8 +15,10 @@ $formatHasFile = !empty($document['file_path']);
 <td class="text-nowrap">
     <button class="btn btn-sm btn-outline-primary edit-format-document" type="button" data-document='<?= e(json_encode($document, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE)) ?>' title="Editar"><i class="fa-solid fa-pen"></i></button>
     <?php if (!empty($document['link_url'])): ?><a class="btn btn-sm btn-outline-info" href="<?= e($document['link_url']) ?>" target="_blank" rel="noopener noreferrer" title="Abrir enlace en otra pestaña" aria-label="Abrir enlace de <?= e($document['name']) ?> en otra pestaña"><i class="fa-solid fa-link" aria-hidden="true"></i></a><?php endif; ?>
-    <?php if ($formatHasFile): ?>
+    <?php if ($formatCanPreview): ?>
         <button class="btn btn-sm btn-outline-secondary preview-base-document" type="button" data-file-path="<?= e($document['file_path']) ?>" data-document-name="<?= e($document['name']) ?>" data-document-id="<?= (int) $document['id'] ?>" data-download-type="formatos" title="Previsualizar"><i class="fa-solid fa-eye"></i></button>
+    <?php endif; ?>
+    <?php if ($formatHasFile): ?>
         <a class="btn btn-sm btn-outline-success" href="<?= APP_URL ?>/modulos/clientes/pmi_descargar.php?tipo=formatos&cliente_id=<?= $clientId ?>&ids[]=<?= (int) $document['id'] ?>" title="Descargar"><i class="fa-solid fa-download"></i></a>
     <?php else: ?><button class="btn btn-sm btn-outline-secondary" type="button" disabled title="Sin archivo"><i class="fa-solid fa-eye"></i></button><?php endif; ?>
     <form class="d-inline" method="post" action="<?= APP_URL ?>/modulos/clientes/pmi_formatos_guardar.php"><input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="delete_document"><input type="hidden" name="client_id" value="<?= $clientId ?>"><input type="hidden" name="document_id" value="<?= (int) $document['id'] ?>"><button class="btn btn-sm btn-outline-danger" type="submit" title="Eliminar"><i class="fa-solid fa-trash"></i></button></form>
