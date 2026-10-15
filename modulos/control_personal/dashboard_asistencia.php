@@ -698,8 +698,13 @@ document.addEventListener('DOMContentLoaded', () => {
                                 ? 'Sin asignación activa para esta fecha'
                                 : ($isRestDay ? 'Sin horario configurado' : 'Sin marcaciones'));
                         $detailLabel = $attendanceLabel ?: $calendarLabel;
+                        $calendarScope = $calendarEvent ? match ((string) ($calendarEvent['scope_type'] ?? 'all')) {
+                            'worker' => 'Individual',
+                            'company' => 'Empresa: ' . (string) ($calendarEvent['company_name'] ?? '-'),
+                            default => 'Todo el personal',
+                        } : '';
                         $detailIncidents = $calendarEvent
-                            ? (string) ($calendarEvent['name'] ?? 'Sin incidencias')
+                            ? (string) ($calendarEvent['name'] ?? 'Sin incidencias') . ' · ' . $calendarScope . ' · Registro #' . (int) $calendarEvent['id']
                             : (!$isAssignedPeriod
                                 ? 'No aplica'
                                 : ($incidents ? implode(' / ', $incidents) : 'Sin incidencias'));
@@ -758,7 +763,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <?php if ($attendanceCode !== ''): ?>
                                 <span title="<?= e(strip_tags($attendanceLabel)) ?>"><?= e($attendanceCode) ?></span>
                             <?php elseif ($isNonWorkingDay): ?>
-                                <span title="<?= e($calendarEvent['name'] ?? '') ?>"><?= e(attendance_calendar_event_abbreviation($calendarEventType)) ?></span>
+                                <span title="<?= e($detailIncidents) ?>"><?= e(attendance_calendar_event_abbreviation($calendarEventType)) ?></span>
                             <?php elseif (!$isAssignedPeriod): ?>
                                 <span title="Sin asignación activa para esta fecha">-</span>
                             <?php elseif ($isRestDay): ?>

@@ -13,6 +13,22 @@ $monthStart = $selectedMonth . '-01';
 $monthEnd = date('Y-m-t', strtotime($monthStart));
 $workerSearch = substr(trim((string) ($_GET['buscar'] ?? '')), 0, 100);
 $pageSize = 20;
+$calendarSearchClause = '';
+$calendarSearchParams = [];
+if ($workerSearch !== '') {
+    // El filtro debe incluir también días que alcanzan al trabajador por empresa
+    // o por alcance general; de otro modo el dashboard muestra D y la lista parece vacía.
+    $calendarSearchClause = " AND EXISTS (
+        SELECT 1 FROM workers searched_worker
+        WHERE searched_worker.full_name LIKE :worker_search
+          AND (
+              acd.scope_type = 'all'
+              OR (acd.scope_type = 'worker' AND searched_worker.id = acd.worker_id)
+              OR (acd.scope_type = 'company' AND searched_worker.company_id = acd.company_id)
+          )
+    )";
+    $calendarSearchParams = ['worker_search' => '%' . $workerSearch . '%'];
+}
 
 $calendarFrom = "FROM attendance_calendar_days acd
     LEFT JOIN workers w ON w.id = acd.worker_id
@@ -20,11 +36,8 @@ $calendarFrom = "FROM attendance_calendar_days acd
       AND acd.event_type IN ('holiday', 'non_working', 'vacation', 'permission', 'rest')
       AND acd.calendar_date <= :month_end
       AND COALESCE(acd.end_date, acd.calendar_date) >= :month_start";
-$calendarParams = ['month_start' => $monthStart, 'month_end' => $monthEnd];
-if ($workerSearch !== '') {
-    $calendarFrom .= ' AND w.full_name LIKE :worker_search';
-    $calendarParams['worker_search'] = '%' . $workerSearch . '%';
-}
+$calendarFrom .= $calendarSearchClause;
+$calendarParams = ['month_start' => $monthStart, 'month_end' => $monthEnd] + $calendarSearchParams;
 
 $countStmt = db()->prepare('SELECT COUNT(*) ' . $calendarFrom);
 $countStmt->execute($calendarParams);
@@ -43,17 +56,14 @@ $sql = "SELECT acd.*, c.name AS company_name, w.full_name AS worker_name,
       AND acd.event_type IN ('holiday', 'non_working', 'vacation', 'permission', 'rest')
       AND acd.calendar_date <= :month_end
       AND COALESCE(acd.end_date, acd.calendar_date) >= :month_start
+      {$calendarSearchClause}
 ";
-$params = $calendarParams;
-if ($workerSearch !== '') {
-    $sql .= ' AND w.full_name LIKE :worker_search';
-}
 $sql .= ' ORDER BY acd.calendar_date, acd.id LIMIT :page_size OFFSET :page_offset';
 $stmt = db()->prepare($sql);
 $stmt->bindValue(':month_start', $monthStart);
 $stmt->bindValue(':month_end', $monthEnd);
 if ($workerSearch !== '') {
-    $stmt->bindValue(':worker_search', $params['worker_search']);
+    $stmt->bindValue(':worker_search', $calendarSearchParams['worker_search']);
 }
 $stmt->bindValue(':page_size', $pageSize, PDO::PARAM_INT);
 $stmt->bindValue(':page_offset', $offset, PDO::PARAM_INT);
