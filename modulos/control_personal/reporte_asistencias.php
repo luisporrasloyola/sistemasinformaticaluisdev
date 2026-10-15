@@ -229,7 +229,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="attendance-reference-hour-box">
                 <span>H. canjeadas · <?= e($monthLabel) ?></span>
                 <strong><?= e(attendance_report_hours_label((int) ($monthlyHours['redeemed_minutes'] ?? 0))) ?></strong>
-                <small><?= (int) ($monthlyHours['redeemed_days'] ?? 0) ?> día(s) × 8 h 30 min</small>
+                <small><?= (int) ($monthlyHours['redeemed_saturday_days'] ?? 0) ?> sábado(s) × 6 h + <?= (int) (($monthlyHours['redeemed_days'] ?? 0) - ($monthlyHours['redeemed_saturday_days'] ?? 0)) ?> otro(s) día(s) × 8 h 30 min</small>
             </div>
             <div class="attendance-reference-hour-box">
                 <span>HEMP · <?= e($previousMonthLabel) ?></span>

@@ -46,6 +46,7 @@ function attendance_report_hours_ledger(
             'exit_overtime_minutes' => 0,
             'overtime_minutes' => 0,
             'redeemed_days' => 0,
+            'redeemed_saturday_days' => 0,
             'redeemed_minutes' => 0,
             'planned_redemption_days' => 0,
             'closing_minutes' => 0,
@@ -63,6 +64,9 @@ function attendance_report_hours_ledger(
         if (($day['calendar_type'] ?? '') === 'rest' && ($day['rest_kind'] ?? '') === 'hours') {
             if ($date <= $asOfDate) {
                 $ledger[$key]['redeemed_days']++;
+                $isSaturday = (int) (new DateTimeImmutable($date))->format('N') === 6;
+                $ledger[$key]['redeemed_minutes'] += $isSaturday ? 360 : 510;
+                if ($isSaturday) $ledger[$key]['redeemed_saturday_days']++;
             } else {
                 $ledger[$key]['planned_redemption_days']++;
             }
@@ -76,7 +80,6 @@ function attendance_report_hours_ledger(
         }
         $totals['opening_minutes'] = $balance;
         $totals['overtime_minutes'] = $totals['early_overtime_minutes'] + $totals['exit_overtime_minutes'];
-        $totals['redeemed_minutes'] = $totals['redeemed_days'] * 510;
         $balance += $totals['overtime_minutes'] - $totals['redeemed_minutes'];
         $totals['closing_minutes'] = $balance;
     }

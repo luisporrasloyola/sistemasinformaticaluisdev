@@ -66,6 +66,19 @@ expect_same(92, $months['2027-08']['overtime_minutes'], 'solo entrada y salida e
 expect_same(0, $months['2027-09']['overtime_minutes'], 'sin crédito nuevo en septiembre');
 expect_same(92, $months['2027-09']['opening_minutes'], 'saldo arrastrado a septiembre');
 
+$restLedger = attendance_report_hours_ledger([
+    ['date' => '2026-10-09', 'calendar_type' => 'rest', 'rest_kind' => 'hours'],
+    ['date' => '2026-10-10', 'calendar_type' => 'rest', 'rest_kind' => 'hours'],
+    ['date' => '2026-10-11', 'calendar_type' => 'rest', 'rest_kind' => 'hours'],
+    ['date' => '2026-10-12', 'calendar_type' => 'rest', 'rest_kind' => 'regime'],
+    ['date' => '2026-10-17', 'calendar_type' => 'rest', 'rest_kind' => 'hours'],
+], '2026-10', '2026-11', 0, '2026-10-15');
+expect_same(3, $restLedger['2026-10']['redeemed_days'], 'solo descansos a cuenta de horas vencidos');
+expect_same(1, $restLedger['2026-10']['redeemed_saturday_days'], 'solo el sábado canjea seis horas');
+expect_same(1380, $restLedger['2026-10']['redeemed_minutes'], 'viernes y domingo 8 h 30 min; sábado 6 h');
+expect_same(1, $restLedger['2026-10']['planned_redemption_days'], 'sábado futuro aún no se descuenta');
+expect_same(-1380, $restLedger['2026-11']['opening_minutes'], 'saldo del mes siguiente respeta canje de sábado');
+
 $adjusted = attendance_report_hours_ledger([
     ['date' => '2026-09-30', 'early_overtime_minutes' => 418],
     ['date' => '2026-10-13', 'exit_overtime_minutes' => 120],

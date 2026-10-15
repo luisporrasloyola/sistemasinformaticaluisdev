@@ -140,7 +140,7 @@ ob_start();
 <div class="monthly-worked-hours">Horas trabajadas: <b><?= $h($hoursLabel('worked_minutes')) ?></b></div>
 <table class="monthly-hour-ledger"><tr>
     <td class="monthly-hour-source">
-        <div class="monthly-hour-card"><span>H. canjeadas · <?= $h($monthLabel) ?></span><b><?= $h($hoursLabel('redeemed_minutes')) ?></b><small><?= (int) $hours['redeemed_days'] ?> día(s) × 8 h 30 min</small></div>
+        <div class="monthly-hour-card"><span>H. canjeadas · <?= $h($monthLabel) ?></span><b><?= $h($hoursLabel('redeemed_minutes')) ?></b><small><?= (int) ($hours['redeemed_saturday_days'] ?? 0) ?> sábado(s) × 6 h + <?= (int) ($hours['redeemed_days'] - ($hours['redeemed_saturday_days'] ?? 0)) ?> otro(s) día(s) × 8 h 30 min</small></div>
         <div class="monthly-hour-card"><span>HEMP · <?= $h($previousMonthLabel) ?></span><b><?= $h($hoursLabel('opening_minutes')) ?></b><small><?= $month === '2026-10' && !empty($book['opening_adjustment']) ? 'Saldo ajustado para octubre' : 'Saldo del mes anterior' ?></small></div>
     </td>
     <td class="monthly-hour-extra">

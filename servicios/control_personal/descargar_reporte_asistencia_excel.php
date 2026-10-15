@@ -64,7 +64,7 @@ $summaryRows[] = xlsx_row(13, [xlsx_cell(1, 13, 'A cuenta de horas', 3), xlsx_ce
 $summaryRows[] = xlsx_row(15, [xlsx_cell(1, 15, 'LIBRO MENSUAL DE HORAS', 1)], 22);
 $summaryRows[] = xlsx_row(16, [xlsx_cell(1, 16, 'Horas trabajadas', 3), xlsx_cell(2, 16, $hoursLabel('worked_minutes'), 9), xlsx_cell(3, 16, 'Extra por entrada', 3), xlsx_cell(4, 16, $hoursLabel('early_overtime_minutes'), 9), xlsx_cell(5, 16, 'Extra por salida', 3), xlsx_cell(6, 16, $hoursLabel('exit_overtime_minutes'), 9)], 28);
 $summaryRows[] = xlsx_row(17, [xlsx_cell(1, 17, 'HEMP · ' . $previousMonthLabel, 3), xlsx_cell(2, 17, $hoursLabel('opening_minutes'), 9), xlsx_cell(3, 17, 'Extras · ' . $monthLabel, 4), xlsx_cell(4, 17, $hoursLabel('overtime_minutes'), 4), xlsx_cell(5, 17, 'H. canjeadas · ' . $monthLabel, 5), xlsx_cell(6, 17, $hoursLabel('redeemed_minutes'), 5)], 32);
-$summaryRows[] = xlsx_row(18, [xlsx_cell(1, 18, 'Horas extras vigentes', 4), xlsx_cell(2, 18, $hoursLabel('closing_minutes'), 4), xlsx_cell(3, 18, 'Días canjeados (8 h 30 min c/u)', 3), xlsx_cell(4, 18, $hours['redeemed_days'], 9, true), xlsx_cell(5, 18, 'Canjes futuros sin descontar', 3), xlsx_cell(6, 18, $hours['planned_redemption_days'], 9, true)], 34);
+$summaryRows[] = xlsx_row(18, [xlsx_cell(1, 18, 'Horas extras vigentes', 4), xlsx_cell(2, 18, $hoursLabel('closing_minutes'), 4), xlsx_cell(3, 18, 'Días canjeados (sábados 6 h; otros 8 h 30 min)', 3), xlsx_cell(4, 18, $hours['redeemed_days'], 9, true), xlsx_cell(5, 18, 'Canjes futuros sin descontar', 3), xlsx_cell(6, 18, $hours['planned_redemption_days'], 9, true)], 34);
 if ($month === '2026-10' && !empty($hoursBook['opening_adjustment'])) {
     $summaryRows[] = xlsx_row(19, [xlsx_cell(1, 19, 'HEMP ajustado para octubre; septiembre no cambia.', 9)], 24);
 }
