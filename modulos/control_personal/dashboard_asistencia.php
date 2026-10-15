@@ -88,9 +88,12 @@ $summaryPageCount = max(1, (int) ceil($summaryWorkerCount / $summaryPageSize));
 $summaryPage = min($summaryPageCount, max(1, (int) ($_GET['pagina'] ?? 1)));
 $pageWorkers = array_slice($filteredDashboardWorkers, ($summaryPage - 1) * $summaryPageSize, $summaryPageSize);
 $pageWorkerIds = array_map('intval', array_column($pageWorkers, 'id'));
+$holidayDoubleDisabled = $pageWorkerIds
+    ? attendance_holiday_double_disabled_between($rangeStart, $rangeEnd, $pageWorkerIds)
+    : [];
 
 // Guardar solo los cinco totales generales; las marcaciones de la página se consultan de nuevo.
-$summaryCacheKey = hash('sha256', implode('|', [$rangeStart, $rangeEnd, $selectedCompanyId, $selectedWorkerId, $attendanceLiveVersion]));
+$summaryCacheKey = hash('sha256', implode('|', ['calendar-priority-v2', $rangeStart, $rangeEnd, $selectedCompanyId, $selectedWorkerId, $attendanceLiveVersion]));
 $summaryCache = $_SESSION['attendance_dashboard_totals'][$summaryCacheKey] ?? null;
 $hasSummaryCache = is_array($summaryCache)
     && isset($summaryCache['expires'], $summaryCache['totals'])
@@ -362,7 +365,10 @@ foreach ($matrixRows as $workerId => $worker) {
         $cell = $worker['days'][$cellDate] ?? [];
         $entry = $cell['entrada'] ?? null;
         $exit = $cell['salida'] ?? null;
-        $manualAbsence = isset($manualDayOverrides[$workerId][$cellDate]);
+        $calendarEvent = attendance_calendar_resolve_event(
+            $calendarEvents, $cellDate, (int) $worker['worker_id'], (int) $worker['company_id']
+        );
+        $manualAbsence = !$calendarEvent && isset($manualDayOverrides[$workerId][$cellDate]);
         if ($manualAbsence) { $entry = null; $exit = null; }
         $weekdayNumber = (int) date('N', strtotime($cellDate));
         $markedAssignmentId = (int) ($entry['assignment_id'] ?? $exit['assignment_id'] ?? 0);
@@ -374,13 +380,6 @@ foreach ($matrixRows as $workerId => $worker) {
             $entry, $exit, $scheduleDaysBySchedule, $weekdayNumber
         );
         $assignmentStartDate = (string) $worker['assignment_start_date'];
-        $calendarEvent = attendance_calendar_resolve_event(
-            $calendarEvents,
-            $cellDate,
-            (int) $worker['worker_id'],
-            (int) $worker['company_id']
-        );
-        if ($manualAbsence) $calendarEvent = null;
         $isNonWorkingDay = attendance_calendar_is_non_working_event((string) ($calendarEvent['event_type'] ?? ''));
         $isAssignedPeriod = $scheduleId > 0
             && $assignmentStartDate !== ''
@@ -617,7 +616,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         $cell = $worker['days'][$cellDate] ?? [];
                         $entry = $cell['entrada'] ?? null;
                         $exit = $cell['salida'] ?? null;
-                        $manualOverride = $manualDayOverrides[(int) $worker['worker_id']][$cellDate] ?? null;
+                        $calendarEvent = attendance_calendar_resolve_event(
+                            $calendarEvents, $cellDate, (int) $worker['worker_id'], (int) $worker['company_id']
+                        );
+                        $manualOverride = $calendarEvent ? null : ($manualDayOverrides[(int) $worker['worker_id']][$cellDate] ?? null);
                         $manualAbsence = $manualOverride !== null;
                         if ($manualAbsence) { $entry = null; $exit = null; }
                         $weekdayNumber = (int) date('N', strtotime($cellDate));
@@ -630,13 +632,6 @@ document.addEventListener('DOMContentLoaded', () => {
                             $entry, $exit, $scheduleDaysBySchedule, $weekdayNumber
                         );
                         $assignmentStartDate = (string) $worker['assignment_start_date'];
-                        $calendarEvent = attendance_calendar_resolve_event(
-                            $calendarEvents,
-                            $cellDate,
-                            (int) $worker['worker_id'],
-                            (int) $worker['company_id']
-                        );
-                        if ($manualAbsence) $calendarEvent = null;
                         $calendarEventType = (string) ($calendarEvent['event_type'] ?? '');
                         $isNonWorkingDay = attendance_calendar_is_non_working_event($calendarEventType);
                         $isAssignedPeriod = $scheduleId > 0
@@ -708,7 +703,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             : (!$isAssignedPeriod
                                 ? 'No aplica'
                                 : ($incidents ? implode(' / ', $incidents) : 'Sin incidencias'));
-                        $manualAudit = $manualAdjustmentsByWorkerDate[(int) $worker['worker_id']][$cellDate] ?? null;
+                        $manualAudit = isset($manualDayOverrides[(int) $worker['worker_id']][$cellDate]) && $calendarEvent
+                            ? null : ($manualAdjustmentsByWorkerDate[(int) $worker['worker_id']][$cellDate] ?? null);
                         $manualCorrectionAllowed = is_admin() && ($cellDate < $today || ($cellDate === $today && ($entry || $exit)));
                         $entryLocation = (string) ($entry['location'] ?? '');
                         $exitLocation = (string) ($exit['location'] ?? '');
@@ -752,6 +748,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             data-marked-schedule-label="<?= e($markedScheduleLabel) ?>"
                             data-marked-project-id="<?= $markedProjectId ?>"
                             data-calendar-type="<?= e($calendarEventType) ?>"
+                            data-holiday-double-enabled="<?= isset($holidayDoubleDisabled[(int) $worker['worker_id']][$cellDate]) ? '0' : '1' ?>"
                             data-calendar-name="<?= e((string) ($calendarEvent['name'] ?? '')) ?>"
                             data-entry-project-id="<?= (int) ($entry['project_id'] ?? 0) ?>"
                             data-code="<?= e($attendanceCode ?: attendance_calendar_event_abbreviation($calendarEventType)) ?>"
@@ -898,7 +895,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <label class="attendance-result-option result-absent" for="matrixManualResultAbsent"><input type="radio" name="attendance_result" id="matrixManualResultAbsent" value="falta" required><span><i class="fa-solid fa-user-xmark"></i><strong>Faltó</strong></span></label>
                         </div></fieldset>
                         <div class="attendance-manual-calendar mt-3">
-                            <div class="attendance-calendar-label"><label class="form-label fw-semibold" for="matrixManualCalendarType">Calendario laboral</label><button class="attendance-holiday-info-button d-none" type="button" id="matrixHolidayInfoButton" aria-label="Información sobre el cálculo en feriado" title="Cómo se calculan las horas en feriado"><i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i></button></div>
+                            <div class="attendance-calendar-label"><label class="form-label fw-semibold" for="matrixManualCalendarType">Calendario laboral</label><button class="attendance-holiday-info-button d-none" type="button" id="matrixHolidayInfoButton" aria-label="Información sobre el cálculo en feriado" title="Cómo se calculan las horas en feriado"><i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i></button><label class="attendance-holiday-double-switch d-none" id="matrixHolidayDoubleWrap" for="matrixHolidayDoubleEnabled"><input class="form-check-input" type="checkbox" id="matrixHolidayDoubleEnabled" role="switch" checked><span id="matrixHolidayDoubleLabel">Duplicar horas</span></label></div>
                             <select class="form-select" id="matrixManualCalendarType" name="calendar_event_type">
                                 <option value="">Sin cambio en calendario laboral</option>
                                 <option value="vacation">Vacaciones</option>

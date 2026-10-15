@@ -35,6 +35,22 @@ $seconds = attendance_report_overtime_components('22:15:00', '22:17:00', '22:11:
 expect_same(4, $seconds['early_minutes'], '22:11 mostrado frente a 22:15 programado');
 expect_same(8, attendance_report_early_credit($seconds['early_minutes'], true), 'entrada anticipada de 4 min en feriado');
 
+$doubleHoliday = attendance_holiday_apply_multiplier(600, 600, 30, 120, true, true);
+$plainHoliday = attendance_holiday_apply_multiplier(600, 600, 30, 120, false, true);
+expect_same(['worked_minutes' => 1200, 'early_overtime_minutes' => 60, 'exit_overtime_minutes' => 240], $doubleHoliday, 'feriado con interruptor activo');
+expect_same(['worked_minutes' => 600, 'early_overtime_minutes' => 30, 'exit_overtime_minutes' => 120], $plainHoliday, 'feriado con interruptor desactivado');
+$plainLedger = attendance_report_hours_ledger([
+    ['date' => '2026-10-13'] + $plainHoliday,
+], '2026-10', '2026-11', 0, '2026-11-01');
+expect_same(600, $plainLedger['2026-10']['worked_minutes'], 'total mensual sin duplicar');
+expect_same(150, $plainLedger['2026-10']['overtime_minutes'], 'extra mensual sin duplicar');
+expect_same(150, $plainLedger['2026-11']['opening_minutes'], 'saldo siguiente sin duplicar');
+expect_same(1140, attendance_report_worked_after_lunch($doubleHoliday['worked_minutes'], true), 'feriado doble descuenta solo una hora de almuerzo');
+expect_same(540, attendance_report_worked_after_lunch($plainHoliday['worked_minutes'], true), 'feriado sin doble descuenta solo una hora de almuerzo');
+expect_same(660, attendance_report_worked_after_lunch(720, true), 'jornada ordinaria descuenta una hora');
+expect_same(0, attendance_report_worked_after_lunch(45, true), 'jornada corta nunca produce horas negativas');
+expect_same(0, attendance_report_worked_after_lunch(0, false), 'jornada incompleta sin descuento');
+
 $months = attendance_report_hours_ledger([
     ['date' => '2027-08-31', 'worked_minutes' => 480, 'early_overtime_minutes' => 60, 'exit_overtime_minutes' => 32],
 ], '2027-08', '2027-09', 0, '2027-09-02');

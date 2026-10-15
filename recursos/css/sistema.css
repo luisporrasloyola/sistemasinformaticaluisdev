@@ -7360,6 +7360,10 @@ input[type="checkbox"]:active {
 .attendance-calendar-label .form-label{margin-bottom:0}
 .attendance-holiday-info-button{display:inline-grid;place-items:center;width:21px;height:21px;padding:0;border:0;border-radius:50%;background:#cffafe;color:#0891b2;font-size:14px;cursor:pointer;box-shadow:0 0 0 1px #67e8f9}
 .attendance-holiday-info-button:hover,.attendance-holiday-info-button:focus-visible{background:#a5f3fc;color:#0e7490;box-shadow:0 0 0 3px rgba(6,182,212,.22)}
+.attendance-holiday-double-switch{display:inline-flex;align-items:center;gap:6px;margin:0 0 0 6px;padding:3px 8px;border:1px solid #a5d6c0;border-radius:999px;background:#ecfdf5;color:#166534;font-size:.69rem;font-weight:700;cursor:pointer;white-space:nowrap}
+.attendance-holiday-double-switch:has(input:not(:checked)){border-color:#cbd5e1;background:#f1f5f9;color:#475569}
+.attendance-holiday-double-switch:has(input:disabled){opacity:.6;cursor:not-allowed}
+.attendance-holiday-double-switch .form-check-input{float:none;margin:0;width:1.7rem;height:.9rem;cursor:inherit}
 .attendance-manual-form .form-control,.attendance-manual-form .form-select{min-height:39px;border-color:#cbd5e1;border-radius:9px;font-size:.84rem}
 .attendance-manual-form textarea{min-height:58px!important;max-height:76px;padding-top:8px}
 .attendance-manual-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:11px}

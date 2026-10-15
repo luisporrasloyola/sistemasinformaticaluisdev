@@ -47,15 +47,7 @@ function schedule_day_minutes(array $day): int
     if ($entry === false || $exit === false) return 0;
     if ($exit < $entry) $exit += 86400;
     $minutes = max(0, (int) floor(($exit - $entry) / 60));
-    if (!empty($day['break_start']) && !empty($day['break_end'])) {
-        $breakStart = strtotime('2000-01-01 ' . $day['break_start']);
-        $breakEnd = strtotime('2000-01-01 ' . $day['break_end']);
-        if ($breakStart !== false && $breakEnd !== false) {
-            if ($breakEnd < $breakStart) $breakEnd += 86400;
-            $minutes -= max(0, (int) floor(($breakEnd - $breakStart) / 60));
-        }
-    }
-    return max(0, $minutes);
+    return max(0, $minutes - 60);
 }
 
 function schedule_advance_minutes(?string $entryTime, ?string $entryStart): int
@@ -129,7 +121,7 @@ require __DIR__ . '/../../includes/header.php';
                 <div class="schedule-overview">
                     <div class="schedule-overview-configured"><i class="fa-solid fa-calendar-check"></i><span>Días configurados</span><strong><?= $configuredDays ?></strong></div>
                     <div class="schedule-overview-pending"><i class="fa-solid fa-calendar-minus"></i><span>Días sin horario</span><strong><?= 7 - $configuredDays ?></strong></div>
-                    <div class="schedule-overview-hours"><i class="fa-solid fa-clock"></i><span>Horas semanales</span><strong><?= e($weeklyHoursLabel) ?></strong></div>
+                    <div class="schedule-overview-hours"><i class="fa-solid fa-clock"></i><span>Horas semanales (1 h de almuerzo por día)</span><strong><?= e($weeklyHoursLabel) ?></strong></div>
                 </div>
                 <div class="schedule-color-legend" aria-label="Leyenda de colores">
                     <span class="schedule-legend-entry"><i class="fa-solid fa-right-to-bracket"></i>Entrada</span>

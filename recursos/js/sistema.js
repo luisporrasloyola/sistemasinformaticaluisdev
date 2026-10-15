@@ -204,6 +204,9 @@ function initAttendanceMatrixDetail() {
         manualResultAbsent: document.getElementById('matrixManualResultAbsent'),
         manualCalendarType: document.getElementById('matrixManualCalendarType'),
         holidayInfoButton: document.getElementById('matrixHolidayInfoButton'),
+        holidayDoubleWrap: document.getElementById('matrixHolidayDoubleWrap'),
+        holidayDoubleEnabled: document.getElementById('matrixHolidayDoubleEnabled'),
+        holidayDoubleLabel: document.getElementById('matrixHolidayDoubleLabel'),
         manualRestKind: document.getElementById('matrixManualRestKind'),
         manualRestKindField: document.getElementById('matrixManualRestKindField'),
         manualEntryLocation: document.getElementById('matrixManualEntryLocation'),
@@ -338,7 +341,18 @@ function initAttendanceMatrixDetail() {
     };
     const syncManualCalendarMode = () => {
         const type = fields.manualCalendarType?.value || '';
+        if (type && fields.manualResultAbsent?.checked) fields.manualResultAbsent.checked = false;
         fields.holidayInfoButton?.classList.toggle('d-none', type !== 'holiday');
+        const selectedCell = fields.adminMarkOpen?._selectedCell;
+        fields.holidayDoubleWrap?.classList.toggle('d-none', type !== 'holiday');
+        if (fields.holidayDoubleEnabled) {
+            fields.holidayDoubleEnabled.disabled = type !== 'holiday' || selectedCell?.dataset.calendarType !== 'holiday'
+                || selectedCell?.dataset.manualEnabled !== '1';
+            fields.holidayDoubleWrap.title = selectedCell?.dataset.calendarType === 'holiday'
+                ? 'Se guarda al cambiar el interruptor.'
+                : 'Guarde primero el feriado para activar este interruptor.';
+            fields.holidayDoubleLabel.textContent = fields.holidayDoubleEnabled.checked ? 'Duplicar horas' : 'Sin duplicar';
+        }
         const isCalendar = type !== '' && !isHolidayAttendanceCorrection();
         const isRest = type === 'rest';
         fields.manualRestKindField?.classList.toggle('d-none', !isRest);
@@ -442,13 +456,15 @@ function initAttendanceMatrixDetail() {
             fields.permitExitEdit.innerHTML = '<i class="fa-solid fa-pen me-1"></i>Permitir editar';
             const isAbsentResult = cell.dataset.code === 'F';
             const isLateResult = cell.dataset.code === 'T' || cell.dataset.code === 'ATSA';
-            fields.manualResultPunctual.checked = !isLateResult && !isAbsentResult;
+            const isAttendanceResult = ['A', 'T', 'ASA', 'ATSA'].includes(cell.dataset.code);
+            fields.manualResultPunctual.checked = isAttendanceResult && !isLateResult;
             fields.manualResultLate.checked = isLateResult;
             const sameDayEdit = cell.dataset.manualLock === 'today' && cell.dataset.manualEnabled === '1';
             fields.manualResultAbsent.checked = isAbsentResult;
             setManualAbsenceMode(isAbsentResult);
             syncTodayEditFields(cell);
             fields.manualCalendarType.value = ['vacation', 'rest', 'holiday', 'non_working'].includes(cell.dataset.calendarType) ? cell.dataset.calendarType : '';
+            if (fields.holidayDoubleEnabled) fields.holidayDoubleEnabled.checked = cell.dataset.holidayDoubleEnabled !== '0';
             fields.manualRestKind.value = cell.dataset.calendarName === 'A cuenta de horas' ? 'hours' : (cell.dataset.calendarName === 'Régimen laboral' ? 'regime' : '');
             syncManualCalendarMode();
             fields.manualEntryLocation.value = cell.dataset.entryLocationId || '';
@@ -506,6 +522,32 @@ function initAttendanceMatrixDetail() {
     fields.manualResultLate?.addEventListener('change', () => chooseManualAttendance(false));
     fields.manualResultAbsent?.addEventListener('change', () => chooseManualAttendance(true));
     fields.manualCalendarType?.addEventListener('change', syncManualCalendarMode);
+    fields.holidayDoubleEnabled?.addEventListener('change', async () => {
+        const cell = fields.adminMarkOpen?._selectedCell;
+        if (!cell) return;
+        const enabled = fields.holidayDoubleEnabled.checked;
+        fields.holidayDoubleLabel.textContent = enabled ? 'Duplicar horas' : 'Sin duplicar';
+        fields.holidayDoubleEnabled.disabled = true;
+        const body = new FormData();
+        body.append('worker_id', cell.dataset.workerId || '');
+        body.append('mark_date', cell.dataset.dateIso || '');
+        body.append('double_enabled', enabled ? '1' : '0');
+        body.append('csrf_token', csrf);
+        try {
+            const response = await fetch(`${window.APP_URL}/servicios/control_personal/guardar_duplicacion_feriado.php`, { method: 'POST', body });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo actualizar el feriado.');
+            cell.dataset.holidayDoubleEnabled = enabled ? '1' : '0';
+            localStorage.setItem('attendance-marks-updated-at', String(Date.now()));
+            Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: data.message, timer: 2400, showConfirmButton: false });
+        } catch (error) {
+            fields.holidayDoubleEnabled.checked = !enabled;
+            fields.holidayDoubleLabel.textContent = !enabled ? 'Duplicar horas' : 'Sin duplicar';
+            Swal.fire('No se pudo guardar', error.message || 'Inténtelo nuevamente.', 'warning');
+        } finally {
+            syncManualCalendarMode();
+        }
+    });
     fields.holidayInfoButton?.addEventListener('click', () => {
         Swal.fire({
             icon: 'info',
@@ -513,7 +555,7 @@ function initAttendanceMatrixDetail() {
             html: '<p>Al seleccionar <strong>Feriado</strong>, el sistema cuenta al doble las horas del horario asignado.</p>'
                 + '<p>Si el responsable autoriza una entrada anticipada en el reporte, ese tiempo también se duplica. Por ejemplo, entrar a las <strong>7:30 p. m.</strong> para un turno de las <strong>8:00 p. m.</strong> suma <strong>1 hora extra</strong>.</p>'
                 + '<p>Para una salida habitual a las <strong>5:30 p. m.</strong>, las horas extra se cuentan si marcas después de las <strong>5:45 p. m.</strong>. Salir a las <strong>7:30 p. m.</strong> equivale a <strong>4 horas extra</strong>.</p>'
-                + '<p class="mb-0"><strong>Este cálculo se realiza automáticamente cuando el día está registrado como feriado.</strong></p>',
+                + '<p class="mb-0"><strong>El interruptor «Duplicar horas» está activo por defecto. Si lo desactiva, no se duplican las horas trabajadas ni las horas extras de entrada o salida para ese trabajador y fecha.</strong></p>',
             confirmButtonText: 'Entendido'
         });
     });
