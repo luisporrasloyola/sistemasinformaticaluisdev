@@ -42,6 +42,7 @@ function attendance_report_hours_ledger(
         $ledger[$key] = [
             'opening_minutes' => 0,
             'worked_minutes' => 0,
+            'holiday_overtime_minutes' => 0,
             'early_overtime_minutes' => 0,
             'exit_overtime_minutes' => 0,
             'overtime_minutes' => 0,
@@ -59,6 +60,7 @@ function attendance_report_hours_ledger(
         $key = substr($date, 0, 7);
         if (!isset($ledger[$key])) continue;
         $ledger[$key]['worked_minutes'] += max(0, (int) ($day['worked_minutes'] ?? 0));
+        $ledger[$key]['holiday_overtime_minutes'] += max(0, (int) ($day['holiday_overtime_minutes'] ?? 0));
         $ledger[$key]['early_overtime_minutes'] += max(0, (int) ($day['early_overtime_minutes'] ?? 0));
         $ledger[$key]['exit_overtime_minutes'] += max(0, (int) ($day['exit_overtime_minutes'] ?? 0));
         if (($day['calendar_type'] ?? '') === 'rest' && ($day['rest_kind'] ?? '') === 'hours') {
@@ -79,7 +81,7 @@ function attendance_report_hours_ledger(
             $balance = (int) $openingOverrides[$key];
         }
         $totals['opening_minutes'] = $balance;
-        $totals['overtime_minutes'] = $totals['early_overtime_minutes'] + $totals['exit_overtime_minutes'];
+        $totals['overtime_minutes'] = $totals['holiday_overtime_minutes'] + $totals['early_overtime_minutes'] + $totals['exit_overtime_minutes'];
         $balance += $totals['overtime_minutes'] - $totals['redeemed_minutes'];
         $totals['closing_minutes'] = $balance;
     }

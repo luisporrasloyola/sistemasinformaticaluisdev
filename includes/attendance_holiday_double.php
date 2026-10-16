@@ -33,11 +33,12 @@ function attendance_holiday_double_disabled_between(string $from, string $to, ar
     return $disabled;
 }
 
-/** Mantiene intactos los minutos base cuando se desactiva el doble del feriado. */
+/** Separa la marcación real del crédito extraordinario por feriado. */
 function attendance_holiday_apply_multiplier(int $actualWorked, int $scheduled, int $earlyExtra, int $exitExtra, bool $enabled, bool $completed): array
 {
     return [
-        'worked_minutes' => $enabled && $completed ? max(0, $scheduled) * 2 : max(0, $actualWorked),
+        'worked_minutes' => max(0, $actualWorked),
+        'holiday_overtime_minutes' => $enabled && $completed ? max(0, $scheduled - 60) * 2 : 0,
         'early_overtime_minutes' => max(0, $earlyExtra) * ($enabled ? 2 : 1),
         'exit_overtime_minutes' => max(0, $exitExtra) * ($enabled ? 2 : 1),
     ];

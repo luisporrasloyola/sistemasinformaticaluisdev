@@ -54,6 +54,7 @@ function attendance_report_classify_day(array $row, ?string $asOfDate = null): a
         'calendar_event_id' => (int) ($row['calendar_event_id'] ?? 0),
         'rest_kind' => $restKind,
         'worked_minutes' => max(0, (int) ($row['worked_minutes'] ?? 0)),
+        'holiday_overtime_minutes' => max(0, (int) ($row['holiday_overtime_minutes'] ?? 0)),
         'early_overtime_minutes' => max(0, (int) ($row['early_overtime_minutes'] ?? 0)),
         'exit_overtime_minutes' => max(0, (int) ($row['exit_overtime_minutes'] ?? 0)),
     ];

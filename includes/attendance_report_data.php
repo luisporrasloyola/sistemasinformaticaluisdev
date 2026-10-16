@@ -534,6 +534,7 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
             $entryToleranceMinutes = 0;
             $toleranceObservation = '';
             $overtimeMinutes = 0;
+            $holidayOvertimeMinutes = 0;
             $earlyOvertimeMinutes = 0;
             $exitOvertimeMinutes = 0;
             $earlyOvertimeEligible = false;
@@ -581,9 +582,10 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                     $holidayDoubleEnabled, (bool) $exit
                 );
                 $workedMinutes = $holidayMinutes['worked_minutes'];
+                $holidayOvertimeMinutes = $holidayMinutes['holiday_overtime_minutes'];
                 $earlyOvertimeMinutes = $holidayMinutes['early_overtime_minutes'];
                 $exitOvertimeMinutes = $holidayMinutes['exit_overtime_minutes'];
-                $overtimeMinutes = $earlyOvertimeMinutes + $exitOvertimeMinutes;
+                $overtimeMinutes = $holidayOvertimeMinutes + $earlyOvertimeMinutes + $exitOvertimeMinutes;
             }
             $holidayScheduleCredit = $eventType === 'holiday' && !$entry && !$exit
                 && $scheduleDay && $date < $today;
@@ -646,6 +648,7 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 'holiday_schedule_credit' => $holidayScheduleCredit,
                 'lunch_deduction_minutes' => $lunchDeductionMinutes,
                 'late_minutes' => $lateMinutes, 'overtime_minutes' => $overtimeMinutes,
+                'holiday_overtime_minutes' => $holidayOvertimeMinutes,
                 'early_overtime_eligible' => $earlyOvertimeEligible,
                 'early_overtime_authorized' => isset($earlyOvertimeAuthorized[$date]),
                 'early_overtime_minutes' => $earlyOvertimeMinutes,
@@ -695,6 +698,7 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 'state_label'=>$state['label'], 'state_class'=>$state['class'],
                 'journey_key'=>null, 'journey_label'=>'-', 'journey_class'=>'',
                 'worked_minutes'=>0, 'scheduled_minutes'=>0, 'late_minutes'=>0, 'overtime_minutes'=>0,
+                'holiday_overtime_minutes'=>0,
                 'early_overtime_eligible'=>false, 'early_overtime_authorized'=>isset($earlyOvertimeAuthorized[$date]),
                 'early_overtime_minutes'=>0, 'exit_overtime_minutes'=>0,
                 'project'=>'-', 'observation'=>$calendarEvent ? (string) ($calendarEvent['name'] ?? '-') : (string) ($override['reason'] ?? '-'), 'is_workday'=>$calendarEvent === null,
@@ -716,11 +720,11 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
             $previousIndex = $bestEarlyRowByDay[$key];
             if ($minutes <= (int) $rows[$previousIndex]['early_overtime_minutes']) {
                 $row['early_overtime_minutes'] = 0;
-                $row['overtime_minutes'] = (int) $row['exit_overtime_minutes'];
+                $row['overtime_minutes'] = (int) $row['holiday_overtime_minutes'] + (int) $row['exit_overtime_minutes'];
                 continue;
             }
             $rows[$previousIndex]['early_overtime_minutes'] = 0;
-            $rows[$previousIndex]['overtime_minutes'] = (int) $rows[$previousIndex]['exit_overtime_minutes'];
+            $rows[$previousIndex]['overtime_minutes'] = (int) $rows[$previousIndex]['holiday_overtime_minutes'] + (int) $rows[$previousIndex]['exit_overtime_minutes'];
         }
         $bestEarlyRowByDay[$key] = $index;
     }
@@ -775,7 +779,7 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 : (count($periodScheduleIds) > 1 ? 'Varios horarios (ver detalle)' : ($selectedAssignment['schedule_name'] ?? 'Sin horario asignado'));
         }
     }
-    $summary = ['workdays' => 0, 'attendances' => 0, 'late' => 0, 'absent' => 0, 'leaves' => 0, 'vacations' => 0, 'worked_minutes' => 0, 'late_minutes' => 0, 'early_overtime_minutes' => 0, 'exit_overtime_minutes' => 0, 'overtime_minutes' => 0, 'completed' => 0];
+    $summary = ['workdays' => 0, 'attendances' => 0, 'late' => 0, 'absent' => 0, 'leaves' => 0, 'vacations' => 0, 'worked_minutes' => 0, 'late_minutes' => 0, 'holiday_overtime_minutes' => 0, 'early_overtime_minutes' => 0, 'exit_overtime_minutes' => 0, 'overtime_minutes' => 0, 'completed' => 0];
     foreach ($individualRows as $row) {
         if ($row['is_workday']) $summary['workdays']++;
         if (in_array($row['state_key'], ['attended', 'late', 'early_exit', 'late_early_exit', 'incomplete'], true)) $summary['attendances']++;
@@ -786,6 +790,7 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
         if ($row['journey_key'] === 'completed') $summary['completed']++;
         $summary['worked_minutes'] += $row['worked_minutes'];
         $summary['late_minutes'] += $row['late_minutes'];
+        $summary['holiday_overtime_minutes'] += $row['holiday_overtime_minutes'];
         $summary['early_overtime_minutes'] += $row['early_overtime_minutes'];
         $summary['exit_overtime_minutes'] += $row['exit_overtime_minutes'];
         $summary['overtime_minutes'] += $row['overtime_minutes'];
@@ -958,7 +963,7 @@ function attendance_report_build_hours_ledger(int $workerId, string $throughMont
     $months = attendance_report_hours_ledger($days, $firstMonth, $throughMonth, 0, null, $openingOverrides);
     $current = $months[$throughMonth];
     $labels = [];
-    foreach (['opening_minutes', 'worked_minutes', 'early_overtime_minutes',
+    foreach (['opening_minutes', 'worked_minutes', 'holiday_overtime_minutes', 'early_overtime_minutes',
         'exit_overtime_minutes', 'overtime_minutes', 'redeemed_minutes', 'closing_minutes'] as $field) {
         $labels[$field] = attendance_report_hours_label($current[$field]);
     }

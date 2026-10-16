@@ -37,16 +37,22 @@ expect_same(8, attendance_report_early_credit($seconds['early_minutes'], true), 
 
 $doubleHoliday = attendance_holiday_apply_multiplier(600, 600, 30, 120, true, true);
 $plainHoliday = attendance_holiday_apply_multiplier(600, 600, 30, 120, false, true);
-expect_same(['worked_minutes' => 1200, 'early_overtime_minutes' => 60, 'exit_overtime_minutes' => 240], $doubleHoliday, 'feriado con interruptor activo');
-expect_same(['worked_minutes' => 600, 'early_overtime_minutes' => 30, 'exit_overtime_minutes' => 120], $plainHoliday, 'feriado con interruptor desactivado');
+expect_same(['worked_minutes' => 600, 'holiday_overtime_minutes' => 1080, 'early_overtime_minutes' => 60, 'exit_overtime_minutes' => 240], $doubleHoliday, 'feriado con interruptor activo');
+expect_same(['worked_minutes' => 600, 'holiday_overtime_minutes' => 0, 'early_overtime_minutes' => 30, 'exit_overtime_minutes' => 120], $plainHoliday, 'feriado con interruptor desactivado');
 $plainLedger = attendance_report_hours_ledger([
     ['date' => '2026-10-13'] + $plainHoliday,
 ], '2026-10', '2026-11', 0, '2026-11-01');
 expect_same(600, $plainLedger['2026-10']['worked_minutes'], 'total mensual sin duplicar');
 expect_same(150, $plainLedger['2026-10']['overtime_minutes'], 'extra mensual sin duplicar');
 expect_same(150, $plainLedger['2026-11']['opening_minutes'], 'saldo siguiente sin duplicar');
-expect_same(1140, attendance_report_worked_after_lunch($doubleHoliday['worked_minutes'], true), 'feriado doble descuenta solo una hora de almuerzo');
+expect_same(540, attendance_report_worked_after_lunch($doubleHoliday['worked_minutes'], true), 'marcación real descuenta solo una hora de almuerzo');
 expect_same(540, attendance_report_worked_after_lunch($plainHoliday['worked_minutes'], true), 'feriado sin doble descuenta solo una hora de almuerzo');
+$markedHoliday = attendance_holiday_apply_multiplier(attendance_report_diff_minutes('07:07:00', '16:14:00'), attendance_report_diff_minutes('08:00:00', '17:30:00'), 0, 0, true, true);
+expect_same(487, attendance_report_worked_after_lunch($markedHoliday['worked_minutes'], true), 'marcación neta de 07:07 a 16:14: 8 h 07 min');
+expect_same(1020, $markedHoliday['holiday_overtime_minutes'], 'horario neto de 08:00 a 17:30 duplicado: 17 h');
+$holidayLedger = attendance_report_hours_ledger([['date' => '2026-10-08', 'worked_minutes' => 487, 'holiday_overtime_minutes' => $markedHoliday['holiday_overtime_minutes']]], '2026-10', '2026-10', 0, '2026-10-16');
+expect_same(487, $holidayLedger['2026-10']['worked_minutes'], 'resumen conserva la marcación neta');
+expect_same(1020, $holidayLedger['2026-10']['overtime_minutes'], 'resumen incorpora el feriado a horas extras');
 expect_same(660, attendance_report_worked_after_lunch(720, true), 'jornada ordinaria descuenta una hora');
 expect_same(0, attendance_report_worked_after_lunch(45, true), 'jornada corta nunca produce horas negativas');
 expect_same(0, attendance_report_worked_after_lunch(0, false), 'jornada incompleta sin descuento');
