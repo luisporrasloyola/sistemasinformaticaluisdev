@@ -75,7 +75,7 @@ foreach ($rows as $row) {
     $overtimeCell = $row['overtime_minutes'] > 0
         ? $h(attendance_report_minutes_label((int) $row['overtime_minutes']))
             . '<br><span class="muted">'
-            . (!empty($row['holiday_overtime_minutes']) ? 'Feriado ×2: ' . $h(attendance_report_minutes_label((int) $row['holiday_overtime_minutes'])) . '<br>' : '')
+            . (!empty($row['holiday_overtime_minutes']) ? 'Feriado ×2: ' . $h(attendance_report_minutes_label((int) $row['holiday_overtime_minutes'])) . '<br>Según horario neto<br>' : '')
             . 'Entrada' . (!empty($row['holiday_double_applied']) && $row['early_overtime_minutes'] > 0 ? ' ×2' : '') . ': ' . $h(attendance_report_minutes_label((int) $row['early_overtime_minutes'])) . '<br>'
             . 'Salida' . (!empty($row['holiday_double_applied']) && $row['exit_overtime_minutes'] > 0 ? ' ×2' : '') . ': ' . $h(attendance_report_minutes_label((int) $row['exit_overtime_minutes'])) . '</span>'
         : '-';
