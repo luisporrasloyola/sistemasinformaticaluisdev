@@ -45,24 +45,8 @@ try {
     $workerRow = $worker->fetch();
     if (!$workerRow) throw new DomainException('El trabajador no existe.');
 
-    $assignment = $pdo->prepare('SELECT id FROM attendance_assignments
-        WHERE worker_id = :worker AND status = 1 AND valid_from <= :date_from
-          AND (valid_until IS NULL OR valid_until >= :date_until)
-          AND (deactivated_at IS NULL OR DATE(deactivated_at) >= :date_deactivated)
-        LIMIT 1');
-    $assignment->execute([
-        'worker' => $workerId, 'date_from' => $date,
-        'date_until' => $date, 'date_deactivated' => $date,
-    ]);
-    if (!$assignment->fetchColumn()) {
-        throw new DomainException('El trabajador no tiene una asignación activa para esa fecha.');
-    }
-
-    $marks = $pdo->prepare('SELECT id FROM attendance_marks WHERE worker_id = :worker AND mark_date = :date LIMIT 1');
-    $marks->execute(['worker' => $workerId, 'date' => $date]);
-    if ($marks->fetchColumn()) {
-        throw new DomainException('Este día tiene marcaciones. Revise las marcaciones antes de asignarle un día especial.');
-    }
+    // El calendario laboral identifica al trabajador, no a su asignación vigente.
+    // Las marcaciones históricas se conservan para auditoría al cambiar el día.
 
     $current = attendance_calendar_resolve_event(
         attendance_calendar_events_between($date, $date), $date, $workerId, (int) $workerRow['company_id']
@@ -125,7 +109,7 @@ try {
             'enabled' => (int) $holidayDoubleEnabled, 'actor' => (int) (current_user()['id'] ?? 0) ?: null]);
     }
     $pdo->commit();
-    json_response(['ok' => true, 'message' => 'El día se actualizó en el calendario laboral y en el reporte de asistencias.']);
+    json_response(['ok' => true, 'message' => 'El día se actualizó en el calendario laboral y en el reporte de asistencias. Las marcaciones anteriores se conservaron.']);
 } catch (Throwable $error) {
     if ($pdo->inTransaction()) $pdo->rollBack();
     if ($error instanceof DomainException) {

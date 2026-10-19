@@ -3,6 +3,15 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../includes/attendance_report_data.php';
 
+foreach (['vacation', 'rest', 'non_working'] as $specialDay) {
+    if (!attendance_calendar_overrides_marks($specialDay)) {
+        throw new RuntimeException($specialDay . ' debe prevalecer sobre las marcaciones anteriores.');
+    }
+}
+if (attendance_calendar_overrides_marks('holiday')) {
+    throw new RuntimeException('El feriado debe conservar sus marcaciones para calcular el trabajo.');
+}
+
 function expect_same(mixed $expected, mixed $actual, string $case): void
 {
     if ($expected !== $actual) {

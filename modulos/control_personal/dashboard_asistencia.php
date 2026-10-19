@@ -369,7 +369,7 @@ foreach ($matrixRows as $workerId => $worker) {
             $calendarEvents, $cellDate, (int) $worker['worker_id'], (int) $worker['company_id']
         );
         $manualAbsence = !$calendarEvent && isset($manualDayOverrides[$workerId][$cellDate]);
-        if ($manualAbsence) { $entry = null; $exit = null; }
+        if ($manualAbsence || attendance_calendar_overrides_marks((string) ($calendarEvent['event_type'] ?? ''))) { $entry = null; $exit = null; }
         $weekdayNumber = (int) date('N', strtotime($cellDate));
         $markedAssignmentId = (int) ($entry['assignment_id'] ?? $exit['assignment_id'] ?? 0);
         $dayProgram = $markedAssignmentId > 0
@@ -621,7 +621,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         );
                         $manualOverride = $calendarEvent ? null : ($manualDayOverrides[(int) $worker['worker_id']][$cellDate] ?? null);
                         $manualAbsence = $manualOverride !== null;
-                        if ($manualAbsence) { $entry = null; $exit = null; }
+                        if ($manualAbsence || attendance_calendar_overrides_marks((string) ($calendarEvent['event_type'] ?? ''))) { $entry = null; $exit = null; }
                         $weekdayNumber = (int) date('N', strtotime($cellDate));
                         $markedAssignmentId = (int) ($entry['assignment_id'] ?? $exit['assignment_id'] ?? 0);
                         $dayProgram = $markedAssignmentId > 0

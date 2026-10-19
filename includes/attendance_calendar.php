@@ -111,3 +111,9 @@ function attendance_calendar_is_non_working_event(string $eventType): bool
 {
     return in_array($eventType, ['holiday', 'non_working', 'vacation', 'permission', 'rest'], true);
 }
+
+/** Las marcaciones se conservan para auditoría, pero estos días prevalecen en asistencia. */
+function attendance_calendar_overrides_marks(string $eventType): bool
+{
+    return in_array($eventType, ['vacation', 'rest', 'non_working'], true);
+}

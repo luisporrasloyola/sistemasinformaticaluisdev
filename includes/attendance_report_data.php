@@ -469,7 +469,8 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 $exit = $marks['salida'] ?? null;
                 $calendarEvent = attendance_calendar_resolve_event($calendarEvents, $date, $id, (int) $worker['company_id']);
                 $manualOverride = $calendarEvent ? null : ($manualDayOverrides[$id][$date] ?? null);
-                if ($manualOverride) { $entry = null; $exit = null; }
+                // El día especial prevalece; las marcaciones permanecen intactas en la base.
+                if ($manualOverride || attendance_calendar_overrides_marks((string) ($calendarEvent['event_type'] ?? ''))) { $entry = null; $exit = null; }
                 $program = $dateProgramsMap[$aid] ?? null;
                 $effectiveScheduleId = (int) ($entry['schedule_id'] ?? $exit['schedule_id'] ?? $program['schedule_id'] ?? $assignment['schedule_id']);
                 $scheduleDay = attendance_report_effective_schedule_day($assignment, $program, $entry, $exit, $scheduleDaysBySchedule, $weekday);
@@ -705,6 +706,47 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 'calendar_event_id'=>(int) ($calendarEvent['id'] ?? 0),
                 'calendar_event_type'=>$eventType,
                 'calendar_event_name'=>(string) ($calendarEvent['name'] ?? ''),
+            ];
+        }
+    }
+
+    // Un día individual de calendario también debe figurar si no hubo asignación en esa fecha.
+    $reportedDatesByWorker = [];
+    foreach ($rows as $row) $reportedDatesByWorker[(int) $row['worker_id']][(string) $row['date']] = true;
+    foreach ($workers as $worker) {
+        $id = (int) $worker['id'];
+        foreach ($calendarEvents as $date => $events) {
+            if (isset($reportedDatesByWorker[$id][$date])) continue;
+            $event = attendance_calendar_resolve_event($calendarEvents, $date, $id, (int) $worker['company_id']);
+            if (!$event || (string) $event['scope_type'] !== 'worker'
+                || !attendance_calendar_overrides_marks((string) $event['event_type'])) continue;
+            $stateKey = match ((string) $event['event_type']) {
+                'vacation' => 'vacation', 'rest' => 'rest', default => 'non_working',
+            };
+            $state = attendance_report_state($stateKey);
+            $weekday = (int) (new DateTimeImmutable($date))->format('N');
+            $rows[] = [
+                'worker_id' => $id, 'date' => $date, 'weekday' => $weekdayLabels[$weekday],
+                'assignment_id' => 0, 'worker' => (string) $worker['full_name'],
+                'document' => (string) $worker['document_number'], 'company' => (string) ($worker['company'] ?? ''),
+                'entry' => '-', 'exit' => '-', 'exit_next_day' => false,
+                'entry_administrative' => false, 'exit_administrative' => false,
+                'entry_administrative_actor' => '', 'exit_administrative_actor' => '',
+                'entry_administrative_reason' => '', 'exit_administrative_reason' => '',
+                'schedule' => '-', 'schedule_id' => 0, 'scheduled_entry' => '-',
+                'tolerance_minutes' => null, 'location' => '-', 'entry_location' => '-', 'exit_location' => '-',
+                'state_key' => $stateKey, 'state_code' => $state['code'],
+                'state_label' => $state['label'], 'state_class' => $state['class'],
+                'journey_key' => null, 'journey_label' => '-', 'journey_class' => '',
+                'worked_minutes' => 0, 'scheduled_minutes' => 0, 'holiday_schedule_credit' => false,
+                'lunch_deduction_minutes' => 0, 'late_minutes' => 0, 'overtime_minutes' => 0,
+                'holiday_overtime_minutes' => 0, 'early_overtime_eligible' => false,
+                'early_overtime_authorized' => false, 'early_overtime_minutes' => 0,
+                'exit_overtime_minutes' => 0, 'project' => '-', 'observation' => (string) $event['name'],
+                'is_workday' => false, 'calendar_event_id' => (int) $event['id'],
+                'calendar_event_type' => (string) $event['event_type'],
+                'holiday_double_enabled' => false, 'holiday_double_applied' => false,
+                'calendar_event_name' => (string) $event['name'],
             ];
         }
     }
