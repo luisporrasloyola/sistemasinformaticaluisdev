@@ -319,6 +319,7 @@ function default_user_landing_path(): string
         'clientes.pmi' => 'modulos/clientes/pmi.php',
         'empresa_maquirenta.dashboard' => 'modulos/empresa_maquirenta/dashboard.php',
         'empresa_maquirenta.datos_generales' => 'modulos/empresa_maquirenta/datos_generales.php',
+        'empresa_maquirenta.valorizaciones' => 'modulos/empresa_maquirenta/valorizaciones.php',
         'empresa_maquirenta.documentos' => 'modulos/empresa_maquirenta/documentos.php',
         'empresa_maquirenta.seguridad' => 'modulos/empresa_maquirenta/seguridad.php',
         'empresa_maquirenta.formatos' => 'modulos/empresa_maquirenta/formatos.php',
