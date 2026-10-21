@@ -69,14 +69,16 @@ require __DIR__ . '/../../includes/header.php';
 .valuation-money{white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:700}
 .valuation-supervisor-cost{text-align:center;border-left:1px solid #d4e3f1;border-right:1px solid #d4e3f1}
 .valuation-table [data-day-total]{font-size:.98rem;font-weight:800;text-align:center}
-.valuation-table .valuation-group-blue.valuation-date-row td{background:#eaf2ff;color:#17427e}
-.valuation-table .valuation-group-blue.valuation-equipment td{background:#eaf2ff}
-.valuation-table .valuation-group-blue .valuation-supervisor-cost{background:#eaf2ff!important}
-.valuation-table .valuation-group-blue [data-day-total]{background:#eaf2ff!important;color:#1552a0}
-.valuation-table .valuation-group-mint.valuation-date-row td{background:#e4f5ef;color:#17634b}
-.valuation-table .valuation-group-mint.valuation-equipment td{background:#e4f5ef}
-.valuation-table .valuation-group-mint .valuation-supervisor-cost{background:#e4f5ef!important}
-.valuation-table .valuation-group-mint [data-day-total]{background:#e4f5ef!important;color:#17634b}
+.valuation-group-blue{--group-bg:#eaf2ff;--group-ink:#17427e}
+.valuation-group-mint{--group-bg:#e4f5ef;--group-ink:#17634b}
+.valuation-group-amber{--group-bg:#fff4df;--group-ink:#805600}
+.valuation-group-violet{--group-bg:#f0ebff;--group-ink:#5b3a9d}
+.valuation-group-rose{--group-bg:#fff0f1;--group-ink:#9a3652}
+.valuation-group-cyan{--group-bg:#e8f7fa;--group-ink:#17677b}
+.valuation-table .valuation-date-row td,.valuation-table .valuation-equipment td{background:var(--group-bg)}
+.valuation-table .valuation-date-row td{color:var(--group-ink)}
+.valuation-table .valuation-equipment .valuation-supervisor-cost{background:var(--group-bg)!important}
+.valuation-table .valuation-equipment [data-day-total]{background:var(--group-bg)!important;color:var(--group-ink)}
 .valuation-total{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1rem 1.2rem;border:1px solid #cbdcf4;border-radius:14px;background:linear-gradient(110deg,#f8fbff,#edf5ff);box-shadow:0 3px 12px rgba(30,64,175,.05);color:#143b6c}
 .valuation-total-label{font-size:.96rem;font-weight:750;color:#153d70}
 .valuation-total-amount{font-size:1.55rem;line-height:1.15;font-weight:800;font-variant-numeric:tabular-nums;color:#103e7d}
@@ -100,7 +102,19 @@ require __DIR__ . '/../../includes/header.php';
     <div class="valuation-table-wrap"><table class="table valuation-table">
         <thead><tr><th>Fecha</th><th>Equipo</th><th>Registrado por</th><th>Horas de trabajo</th><th>Costo por hora del equipo</th><th>Costo hora supervisor + RT</th><th>Costo por día del equipo</th><th>Costo día supervisor + RT</th><th>Total</th></tr></thead>
         <tbody>
-        <?php $groupIndex = 0; foreach ($groups as $groupKey => $records): $displayDate = (new DateTimeImmutable($records[0]['fecha']))->format('d/m/Y'); $groupTone = ($groupIndex++ % 2 === 0) ? 'blue' : 'mint'; ?>
+        <?php
+        $groupTones = ['blue', 'mint', 'amber', 'violet', 'rose', 'cyan'];
+        $dayIndex = -1;
+        $previousDate = null;
+        foreach ($groups as $groupKey => $records):
+            $date = (string) $records[0]['fecha'];
+            if ($date !== $previousDate) {
+                $dayIndex++;
+                $previousDate = $date;
+            }
+            $displayDate = (new DateTimeImmutable($date))->format('d/m/Y');
+            $groupTone = $groupTones[$dayIndex % count($groupTones)];
+        ?>
             <tr class="valuation-date-row valuation-group-<?= $groupTone ?>" data-valuation-date="<?= e($groupKey) ?>"><td colspan="9"><div class="valuation-date-label"><i class="fa-regular fa-calendar" aria-hidden="true"></i><span><?= e($displayDate) ?></span><?php if ($site === 'consolidado'): ?><span class="valuation-count"><?= e($records[0]['central']) ?></span><?php endif; ?><span class="valuation-count"><?= count($records) ?> <?= count($records) === 1 ? 'equipo' : 'equipos' ?></span></div></td></tr>
             <?php foreach ($records as $index => $record):
                 $equipmentName = mb_strtolower(trim((string) $record['equipo']), 'UTF-8');
