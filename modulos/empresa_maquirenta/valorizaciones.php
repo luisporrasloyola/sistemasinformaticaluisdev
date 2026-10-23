@@ -303,7 +303,7 @@ require __DIR__ . '/../../includes/header.php';
             if (!response.ok || !result.ok) throw new Error(result.message || 'No se pudieron guardar los cambios.');
             inputs.forEach(input => setIncluded(input.closest('.valuation-equipment'), included));
             update();
-            saveStatus.textContent = included ? 'Todos los registros visibles están incluidos.' : 'Todos los registros visibles están excluidos.';
+            saveStatus.textContent = '';
         } catch (error) {
             syncCountAll();
             saveStatus.textContent = error.message || 'No se pudieron guardar los cambios.';
