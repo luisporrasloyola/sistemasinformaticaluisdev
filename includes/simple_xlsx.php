@@ -54,7 +54,7 @@ function xlsx_zip(array $files): string
     return $data . $central . pack('VvvvvVVv', 0x06054b50, 0, 0, $count, $count, strlen($central), $offset, 0);
 }
 
-function xlsx_package(string $sheet, string $sheetName = 'Reporte de asistencia'): string
+function xlsx_package(string $sheet, string $sheetName = 'Reporte de asistencia', bool $wrapHeaders = false, bool $outlineTitle = false): string
 {
     $types = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>';
     $rels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>';
@@ -82,6 +82,16 @@ function xlsx_package(string $sheet, string $sheetName = 'Reporte de asistencia'
         ],
         $styles
     );
+    if ($wrapHeaders) {
+        $styles = str_replace(
+            '<xf fontId="1" fillId="2" borderId="0" applyAlignment="1"><alignment vertical="center"/></xf>',
+            '<xf fontId="1" fillId="2" borderId="0" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>',
+            $styles
+        );
+    }
+    if ($outlineTitle) {
+        $styles = str_replace('<xf fontId="2" fillId="0" borderId="0"/>', '<xf fontId="2" fillId="0" borderId="1"/>', $styles);
+    }
     return xlsx_zip(['[Content_Types].xml' => $types, '_rels/.rels' => $rels, 'xl/workbook.xml' => $workbook,
         'xl/_rels/workbook.xml.rels' => $workbookRels, 'xl/styles.xml' => $styles,
         'xl/worksheets/sheet1.xml' => $sheet]);
