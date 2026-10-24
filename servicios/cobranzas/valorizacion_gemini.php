@@ -15,15 +15,25 @@ function gemini_reply(int $status, string $message, ?array $fields = null): neve
 if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !csrf_is_valid($_POST['csrf_token'] ?? null)) gemini_reply(403, 'Solicitud no autorizada.');
 $key = trim((string) (getenv('GEMINI_API_KEY') ?: ''));
 if ($key === '') {
-    $keyFile = trim((string) (getenv('GEMINI_API_KEY_FILE') ?: ''));
-    if ($keyFile === '') {
+    $keyFiles = [];
+    $configuredFile = trim((string) (getenv('GEMINI_API_KEY_FILE') ?: ''));
+    if ($configuredFile !== '') {
+        $keyFiles[] = $configuredFile;
+    } else {
         $home = trim((string) (getenv('HOME') ?: ''));
         if ($home !== '') {
-            $keyFile = rtrim($home, '/\\') . DIRECTORY_SEPARATOR . 'lifemaquinarias_gemini.key';
+            $keyFiles[] = rtrim($home, '/\\') . DIRECTORY_SEPARATOR . 'lifemaquinarias_gemini.key';
+        }
+        $appRoot = dirname(__DIR__, 2);
+        if (basename($appRoot) === 'public_html') {
+            $keyFiles[] = dirname($appRoot) . DIRECTORY_SEPARATOR . 'lifemaquinarias_gemini.key';
         }
     }
-    if ($keyFile !== '' && is_file($keyFile) && is_readable($keyFile)) {
-        $key = trim((string) file_get_contents($keyFile));
+    foreach (array_unique($keyFiles) as $keyFile) {
+        if (is_file($keyFile) && is_readable($keyFile)) {
+            $key = trim((string) file_get_contents($keyFile));
+            if ($key !== '') break;
+        }
     }
 }
 if ($key === '') gemini_reply(503, 'Gemini no está configurado en este servidor.');

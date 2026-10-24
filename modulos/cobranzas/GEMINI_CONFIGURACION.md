@@ -7,7 +7,7 @@ En Cobranzas → Valorización, la carga se realiza desde la página. Tras selec
 La clave de Gemini no se guarda en el código ni en Git. Configure una de estas opciones en el servidor:
 
 1. Defina la variable de entorno `GEMINI_API_KEY` con la clave nueva. Tiene prioridad sobre cualquier archivo.
-2. Guarde únicamente la clave nueva en un archivo de texto fuera del directorio público y del repositorio, y defina `GEMINI_API_KEY_FILE` con su ruta absoluta. En cPanel, por ejemplo, el archivo puede estar en `/home/USUARIO/lifemaquinarias_gemini.key`, fuera de `public_html`. Si la variable `HOME` de PHP apunta a `/home/USUARIO`, se busca ese archivo automáticamente sin configurar `GEMINI_API_KEY_FILE`. Restrinja su lectura a la cuenta del sitio (permisos 600 cuando el hosting lo permita).
+2. Guarde únicamente la clave nueva en un archivo de texto fuera del directorio público y del repositorio, y defina `GEMINI_API_KEY_FILE` con su ruta absoluta. En cPanel, por ejemplo, el archivo puede estar en `/home2/USUARIO/lifemaquinarias_gemini.key`, fuera de `public_html`. Si el proyecto está directamente en `public_html`, también se busca ese archivo automáticamente en la carpeta superior, aunque PHP no entregue la variable `HOME`. Restrinja su lectura a la cuenta del sitio (permisos 600 cuando el hosting lo permita).
 
 No coloque la clave en `.htaccess`, JavaScript ni archivos publicados. Si no se configura, la lectura automática devuelve un error de configuración y el ingreso manual sigue disponible. Antes de publicar este cambio, revoque la clave expuesta y genere otra en Google; una clave retirada del código puede seguir visible en commits anteriores.
 
