@@ -42,6 +42,7 @@ $client = null;
 $commercialContact = null;
 $serviceLocation = '';
 $headerEquipment = '';
+$headerCapacity = '';
 $headerPeriod = '';
 $headerPeriodFrom = '';
 $headerPeriodTo = '';
@@ -80,19 +81,20 @@ if ($clientId) {
     $contactStmt->execute([$clientId]);
     $commercialContact = $contactStmt->fetch() ?: null;
     try {
-        $locationStmt = db()->prepare('SELECT lugar_servicio, equipo, periodo FROM cobranzas_valorizacion_datos_cliente WHERE client_id = ?');
+        $locationStmt = db()->prepare('SELECT lugar_servicio, equipo, capacidad, periodo FROM cobranzas_valorizacion_datos_cliente WHERE client_id = ?');
         $locationStmt->execute([$clientId]);
         $headerData = $locationStmt->fetch() ?: [];
         $serviceLocation = (string) ($headerData['lugar_servicio'] ?? '');
         $headerEquipment = (string) ($headerData['equipo'] ?? '');
+        $headerCapacity = (string) ($headerData['capacidad'] ?? '');
         $headerPeriod = (string) ($headerData['periodo'] ?? '');
         if (preg_match('/^(\d{4}-\d{2}-\d{2})\|(\d{4}-\d{2}-\d{2})$/D', $headerPeriod, $headerPeriodMatch)) {
             $headerPeriodFrom = $headerPeriodMatch[1];
             $headerPeriodTo = $headerPeriodMatch[2];
         }
     } catch (PDOException $exception) {
-        error_log('Error al cargar lugar de servicio: ' . $exception->getMessage());
-        $error = 'No se pudo cargar el lugar de servicio. Ejecute database/cobranzas_valorizacion_datos_cliente.sql.';
+        error_log('Error al cargar datos de cabecera de valorización: ' . $exception->getMessage());
+        $error = 'No se pudo cargar la cabecera. Si la tabla ya existe, ejecute database/cobranzas_valorizacion_capacidad.sql.';
     }
     $periodQuery = ['cliente_id' => $clientId, 'moneda' => $currency];
     if ($period['mode'] === 'mes') $periodQuery += ['periodo' => 'mes', 'mes' => $period['month']];
@@ -254,6 +256,9 @@ require __DIR__ . '/../../includes/header.php';
 .cv-client-panel .cv-client-supplier .cv-client-row{grid-template-columns:100px minmax(0,1fr);min-height:36px;margin-bottom:5px}
 .cv-client-panel .cv-client-supplier .cv-client-row+.cv-client-row{padding:0;border:0}
 .cv-client-panel .cv-client-supplier .cv-client-detail-value{overflow-wrap:anywhere}
+.cv-client-panel .cv-equipment-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;align-items:end}
+.cv-client-panel .cv-equipment-fields>div{min-width:0}
+.cv-client-panel .cv-capacity-field label{display:block;margin:0 0 3px;font-size:.75rem;line-height:1.2}
 .cv-upload.work-panel{background:linear-gradient(115deg,#fbfaf7 0%,#f4f2ed 100%)!important}
 .cv-upload #cvUploadTitle{color:#172b4d;font-weight:750}
 .cv-upload .text-muted{color:#586d8a!important}
@@ -265,6 +270,7 @@ require __DIR__ . '/../../includes/header.php';
 .cv-upload-title{display:flex;align-items:center;gap:8px}.cv-upload-title h2{margin:0!important}.cv-info-button{display:inline-grid;place-items:center;flex:0 0 26px;width:26px;height:26px;padding:0;border:1px solid #bdd2f4;border-radius:50%;background:#eef5ff;color:#2563eb;cursor:pointer;transition:background-color .15s,border-color .15s}.cv-info-button:hover{background:#dfeeff;border-color:#8fb3ed}.cv-info-button:focus-visible{outline:3px solid #93b4ff;outline-offset:2px}.cv-info-button i{font-size:14px}.cv-model-example{display:block;width:auto;max-width:100%;max-height:65vh;margin:0 auto;border:1px solid #d9e3ef;border-radius:8px;object-fit:contain}
 @media(max-width:900px){.cv-client-panel .cv-client-layout{grid-template-columns:1fr;gap:12px}.cv-client-panel .cv-client-supplier{padding:10px 0 0;border:0;border-top:1px solid #dedbd4}.cv-client-panel .cv-client-supplier .cv-client-row{grid-template-columns:124px minmax(0,1fr)}}
 @media(max-width:600px){.cv-client-panel .cv-client-row,.cv-client-panel .cv-client-supplier .cv-client-row{grid-template-columns:1fr;gap:3px}.cv-upload .d-flex>label.btn-primary{width:100%;margin-top:6px}.cv-upload .d-flex>div{width:100%}}
+@media(max-width:600px){.cv-client-panel .cv-equipment-fields{grid-template-columns:1fr;gap:8px}}
 </style>
 <div class="page-title"><div><h1>Valorización</h1><p>Cobranzas por cliente.</p></div></div>
 <section class="work-panel cv-panel cv-client-panel"><div class="cv-client-layout<?= $client ? '' : ' cv-client-layout-empty' ?>">
@@ -274,7 +280,7 @@ require __DIR__ . '/../../includes/header.php';
 <div class="cv-client-row"><label for="cvServiceLocation">Lugar de servicio</label><div class="cv-client-row-value"><input class="form-control" id="cvServiceLocation" type="text" value="<?= e($serviceLocation) ?>" maxlength="200" placeholder="Ingrese el lugar de servicio" data-client-id="<?= (int) $clientId ?>" data-csrf="<?= e(csrf_token()) ?>" data-endpoint="<?= e(APP_URL . '/servicios/cobranzas/valorizacion_lugar.php') ?>"><span class="cv-detail-error" id="cvLocationError" role="alert"></span></div></div>
 <div class="cv-client-row"><span class="cv-client-detail-label">RUC - Cliente</span><div class="cv-client-row-value cv-client-detail-value"><?= e($client['ruc']) ?></div></div>
 <div class="cv-client-row"><span class="cv-client-detail-label">Contacto</span><div class="cv-client-row-value cv-client-detail-value"><?= $commercialContact ? e($commercialContact['name'] . ' · ' . $commercialContact['phone']) : 'Sin contacto comercial' ?></div></div>
-<div class="cv-client-row"><label for="cvHeaderEquipment">Equipo</label><div class="cv-client-row-value"><input class="form-control cv-header-input" id="cvHeaderEquipment" type="text" value="<?= e($headerEquipment) ?>" maxlength="150" placeholder="Ingrese el equipo" data-field="equipo" data-client-id="<?= (int) $clientId ?>" data-csrf="<?= e(csrf_token()) ?>" data-endpoint="<?= e(APP_URL . '/servicios/cobranzas/valorizacion_cabecera.php') ?>"><span class="cv-detail-error" role="alert"></span></div></div>
+<div class="cv-client-row cv-client-row-equipment"><label for="cvHeaderEquipment">Equipo</label><div class="cv-client-row-value cv-equipment-fields"><div><input class="form-control cv-header-input" id="cvHeaderEquipment" type="text" value="<?= e($headerEquipment) ?>" maxlength="150" placeholder="Ingrese el equipo" data-field="equipo" data-client-id="<?= (int) $clientId ?>" data-csrf="<?= e(csrf_token()) ?>" data-endpoint="<?= e(APP_URL . '/servicios/cobranzas/valorizacion_cabecera.php') ?>"><span class="cv-detail-error" role="alert"></span></div><div class="cv-capacity-field"><label for="cvHeaderCapacity">Capacidad</label><input class="form-control cv-header-input" id="cvHeaderCapacity" type="text" value="<?= e($headerCapacity) ?>" maxlength="100" placeholder="Ingrese la capacidad" data-field="capacidad" data-client-id="<?= (int) $clientId ?>" data-csrf="<?= e(csrf_token()) ?>" data-endpoint="<?= e(APP_URL . '/servicios/cobranzas/valorizacion_cabecera.php') ?>"><span class="cv-detail-error" role="alert"></span></div></div></div>
 <div class="cv-client-row"><span class="cv-client-detail-label">Periodo</span><div class="cv-client-row-value"><div class="cv-header-period" data-client-id="<?= (int) $clientId ?>" data-csrf="<?= e(csrf_token()) ?>" data-endpoint="<?= e(APP_URL . '/servicios/cobranzas/valorizacion_cabecera.php') ?>"><label for="cvHeaderPeriodFrom">Desde<input class="form-control" id="cvHeaderPeriodFrom" type="date" value="<?= e($headerPeriodFrom) ?>"></label><label for="cvHeaderPeriodTo">Hasta<input class="form-control" id="cvHeaderPeriodTo" type="date" value="<?= e($headerPeriodTo) ?>"></label></div><span class="cv-detail-error" id="cvHeaderPeriodError" role="alert"></span></div></div>
 <?php endif; ?>
 </div>
@@ -291,7 +297,7 @@ require __DIR__ . '/../../includes/header.php';
 </section>
 <div class="modal fade" id="cvModelInfoModal" tabindex="-1" aria-labelledby="cvModelInfoTitle" aria-hidden="true"><div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h2 class="modal-title h5" id="cvModelInfoTitle">Modelo de parte diario</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div><div class="modal-body"><p class="mb-3">Sube una foto nítida o un PDF de este modelo para que la IA lea automáticamente el equipo, la fecha y las horas.</p><img class="cv-model-example" src="<?= e(APP_URL . '/img/parte2.jpg') ?>" alt="Ejemplo del modelo de parte diario requerido" loading="lazy"><div class="text-center mt-2"><a href="<?= e(APP_URL . '/img/parte2.jpg') ?>" target="_blank" rel="noopener noreferrer">Ver imagen en tamaño completo</a></div></div></div></div></div>
 <?php require __DIR__ . '/valorizacion_form.php'; ?>
-<section class="work-panel cv-panel"><div class="mb-3"><h2 class="h5 mb-0">Registros de valorización</h2></div><div class="cv-period-actions mb-3"><form class="cv-period-tools" id="cvPeriodForm" method="get" action="<?= e(APP_URL . '/modulos/cobranzas/valorizacion.php') ?>"><input type="hidden" name="cliente_id" value="<?= (int) $clientId ?>"><div class="cv-period-field"><label for="cvPeriodMode">Periodo</label><select class="form-select form-select-sm" id="cvPeriodMode" name="periodo"><option value="mes" <?= $period['mode'] === 'mes' ? 'selected' : '' ?>>Por mes</option><option value="fechas" <?= $period['mode'] === 'fechas' ? 'selected' : '' ?>>Entre fechas</option></select></div><div class="cv-period-field" id="cvPeriodMonthField" <?= $period['mode'] !== 'mes' ? 'hidden' : '' ?>><label for="cvPeriodMonth">Mes</label><input class="form-control form-control-sm" id="cvPeriodMonth" name="mes" type="month" value="<?= e($period['month']) ?>" <?= $period['mode'] === 'mes' ? 'required' : 'disabled' ?>></div><div class="cv-period-field" id="cvPeriodFromField" <?= $period['mode'] !== 'fechas' ? 'hidden' : '' ?>><label for="cvPeriodFrom">Desde</label><input class="form-control form-control-sm" id="cvPeriodFrom" name="desde" type="date" value="<?= e($period['from']) ?>" <?= $period['mode'] === 'fechas' ? 'required' : 'disabled' ?>></div><div class="cv-period-field" id="cvPeriodToField" <?= $period['mode'] !== 'fechas' ? 'hidden' : '' ?>><label for="cvPeriodTo">Hasta</label><input class="form-control form-control-sm" id="cvPeriodTo" name="hasta" type="date" value="<?= e($period['to']) ?>" <?= $period['mode'] === 'fechas' ? 'required' : 'disabled' ?>></div><button class="btn btn-outline-primary" type="submit">Ver</button></form><button class="btn btn-outline-danger" id="cvExportPdf" type="button" data-url="<?= e(APP_URL . '/servicios/cobranzas/valorizacion_reporte_datos.php?' . http_build_query($periodQuery)) ?>" <?= $totalMinutes <= 0 ? 'disabled' : '' ?>><i class="fa-solid fa-file-pdf me-1" aria-hidden="true"></i>PDF</button><div class="cv-period-field"><label for="cvCurrency">Moneda</label><select class="form-select form-select-sm" id="cvCurrency" name="moneda" form="cvPeriodForm"><option value="PEN" <?= $currency === 'PEN' ? 'selected' : '' ?>>Soles (S/.)</option><option value="USD" <?= $currency === 'USD' ? 'selected' : '' ?>>Dólares ($)</option></select></div></div>
+<section class="work-panel cv-panel"><div class="mb-3"><h2 class="h5 mb-0">Registros de valorización</h2></div><div class="cv-period-actions mb-3"><form class="cv-period-tools" id="cvPeriodForm" method="get" action="<?= e(APP_URL . '/modulos/cobranzas/valorizacion.php') ?>"><input type="hidden" name="cliente_id" value="<?= (int) $clientId ?>"><div class="cv-period-field"><label for="cvPeriodMode">Periodo</label><select class="form-select form-select-sm" id="cvPeriodMode" name="periodo"><option value="mes" <?= $period['mode'] === 'mes' ? 'selected' : '' ?>>Por mes</option><option value="fechas" <?= $period['mode'] === 'fechas' ? 'selected' : '' ?>>Entre fechas</option></select></div><div class="cv-period-field" id="cvPeriodMonthField" <?= $period['mode'] !== 'mes' ? 'hidden' : '' ?>><label for="cvPeriodMonth">Mes</label><input class="form-control form-control-sm" id="cvPeriodMonth" name="mes" type="month" value="<?= e($period['month']) ?>" <?= $period['mode'] === 'mes' ? 'required' : 'disabled' ?>></div><div class="cv-period-field" id="cvPeriodFromField" <?= $period['mode'] !== 'fechas' ? 'hidden' : '' ?>><label for="cvPeriodFrom">Desde</label><input class="form-control form-control-sm" id="cvPeriodFrom" name="desde" type="date" value="<?= e($period['from']) ?>" <?= $period['mode'] === 'fechas' ? 'required' : 'disabled' ?>></div><div class="cv-period-field" id="cvPeriodToField" <?= $period['mode'] !== 'fechas' ? 'hidden' : '' ?>><label for="cvPeriodTo">Hasta</label><input class="form-control form-control-sm" id="cvPeriodTo" name="hasta" type="date" value="<?= e($period['to']) ?>" <?= $period['mode'] === 'fechas' ? 'required' : 'disabled' ?>></div><button class="btn btn-outline-primary" type="submit">Ver</button></form><button class="btn btn-primary cv-export-pdf" id="cvExportPdf" type="button" data-url="<?= e(APP_URL . '/servicios/cobranzas/valorizacion_reporte_datos.php?' . http_build_query($periodQuery)) ?>" <?= $totalMinutes <= 0 ? 'disabled' : '' ?>><i class="fa-solid fa-file-pdf me-1" aria-hidden="true"></i>PDF Interno</button><button class="btn btn-danger cv-export-pdf" id="cvExportPdfCobranzas" type="button" data-mode="cobranzas" data-url="<?= e(APP_URL . '/servicios/cobranzas/valorizacion_reporte_datos.php?' . http_build_query($periodQuery)) ?>" <?= $totalMinutes <= 0 ? 'disabled' : '' ?>><i class="fa-solid fa-file-pdf me-1" aria-hidden="true"></i>PDF Cobranzas</button><div class="cv-period-field"><label for="cvCurrency">Moneda</label><select class="form-select form-select-sm" id="cvCurrency" name="moneda" form="cvPeriodForm"><option value="PEN" <?= $currency === 'PEN' ? 'selected' : '' ?>>Soles (S/.)</option><option value="USD" <?= $currency === 'USD' ? 'selected' : '' ?>>Dólares ($)</option></select></div></div>
 <?php if ($error !== '' && (($_POST['action'] ?? '') !== 'save' || ($_POST['inline_edit'] ?? '') === '1')): ?><div class="alert alert-danger py-2" role="alert"><?= e($error) ?></div><?php endif; ?>
 <div class="table-responsive border rounded"><table class="table table-hover align-middle mb-0 cv-table"><colgroup><col style="width:18%"><col style="width:14%"><col style="width:10%"><col style="width:8%"><col style="width:7%"><col style="width:9%"><col style="width:12%"><col style="width:10%"><col style="width:12%"></colgroup><thead><tr><th>Equipo</th><th>Operador</th><th>Fecha del servicio</th><th>Hora de inicio</th><th>Hora final</th><th>Horas en total</th><th>Observaciones</th><th>Registrado por</th><th>Acciones</th></tr></thead><tbody>
 <?php if (!$records): ?><tr><td colspan="9" class="text-center text-muted py-4">No hay registros en el periodo seleccionado.</td></tr><?php endif; ?>
@@ -312,7 +318,7 @@ require __DIR__ . '/../../includes/header.php';
 <?php endif; ?>
 <script type="module" src="<?= e(APP_URL . '/recursos/js/cobranzas_valorizacion_archivo.js?v=8') ?>"></script>
 <script type="module" src="<?= e(APP_URL . '/recursos/js/cobranzas_valorizacion_ocr.js?v=21') ?>"></script>
-<script type="module" src="<?= e(APP_URL . '/recursos/js/cobranzas_valorizacion_reporte.js?v=20') ?>"></script>
+<script type="module" src="<?= e(APP_URL . '/recursos/js/cobranzas_valorizacion_reporte.js?v=31') ?>"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     const periodMode = document.getElementById('cvPeriodMode');
@@ -320,12 +326,11 @@ document.addEventListener('DOMContentLoaded', () => {
     currencySelect?.addEventListener('change', () => {
         const symbol = currencySelect.value === 'USD' ? '$' : 'S/.';
         document.querySelectorAll('.cv-currency-symbol').forEach(item => { item.textContent = symbol; });
-        const exportButton = document.getElementById('cvExportPdf');
-        if (exportButton) {
+        document.querySelectorAll('.cv-export-pdf').forEach(exportButton => {
             const reportUrl = new URL(exportButton.dataset.url, window.location.href);
             reportUrl.searchParams.set('moneda', currencySelect.value);
             exportButton.dataset.url = reportUrl.toString();
-        }
+        });
     });
     if (periodMode) {
         const periodFields = [

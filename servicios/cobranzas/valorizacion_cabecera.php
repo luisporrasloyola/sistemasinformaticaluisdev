@@ -20,7 +20,7 @@ if (!csrf_is_valid($_POST['csrf_token'] ?? null)) cabecera_response(false, 'La s
 
 $clientId = filter_var($_POST['cliente_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
 $field = (string) ($_POST['campo'] ?? '');
-$limits = ['equipo' => 150, 'periodo' => 120];
+$limits = ['equipo' => 150, 'capacidad' => 100, 'periodo' => 120];
 $value = trim((string) ($_POST['valor'] ?? ''));
 if (!$clientId || !isset($limits[$field]) || mb_strlen($value, 'UTF-8') > $limits[$field]) {
     cabecera_response(false, 'Ingrese un dato válido.', 422);

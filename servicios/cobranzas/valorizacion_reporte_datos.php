@@ -53,16 +53,17 @@ try {
     $stmt->execute([$clientId]);
     $contact = $stmt->fetch() ?: null;
 
-    $stmt = db()->prepare('SELECT lugar_servicio, equipo, periodo FROM cobranzas_valorizacion_datos_cliente WHERE client_id = ?');
+    $stmt = db()->prepare('SELECT lugar_servicio, equipo, capacidad, periodo FROM cobranzas_valorizacion_datos_cliente WHERE client_id = ?');
     $stmt->execute([$clientId]);
     $headerData = $stmt->fetch() ?: [];
     $location = (string) ($headerData['lugar_servicio'] ?? '');
     $headerEquipment = (string) ($headerData['equipo'] ?? '');
+    $headerCapacity = (string) ($headerData['capacidad'] ?? '');
     $headerPeriod = (string) ($headerData['periodo'] ?? '');
     $periodDates = preg_match('/^(\d{4}-\d{2}-\d{2})\|(\d{4}-\d{2}-\d{2})$/D', $headerPeriod, $periodMatch)
         ? ['from' => $periodMatch[1], 'to' => $periodMatch[2]] : null;
 
-    $stmt = db()->prepare('SELECT id, equipo, placa_serie, operador, fecha_servicio, hora_inicio, hora_final, horas_total_minutos, observaciones FROM cobranzas_valorizacion_registros WHERE client_id = ?' . $periodWhere . ' ORDER BY fecha_servicio DESC, id DESC');
+    $stmt = db()->prepare('SELECT r.id, r.equipo, r.placa_serie, r.operador, r.fecha_servicio, r.hora_inicio, r.hora_final, r.horas_total_minutos, r.observaciones, COALESCE(u.name, \'\') AS registered_by FROM cobranzas_valorizacion_registros r LEFT JOIN users u ON u.id = r.registered_by_user_id WHERE r.client_id = ?' . $periodWhere . ' ORDER BY r.fecha_servicio DESC, r.id DESC');
     $stmt->execute(array_merge([$clientId], $periodParams));
     $records = [];
     $groups = [];
@@ -79,6 +80,7 @@ try {
         $records[] = [
             'equipment' => $equipment,
             'operator' => (string) ($row['operador'] ?? ''),
+            'registered_by' => (string) $row['registered_by'],
             'date' => (string) $row['fecha_servicio'],
             'start' => substr((string) $row['hora_inicio'], 0, 5),
             'end' => substr((string) $row['hora_final'], 0, 5),
@@ -100,7 +102,7 @@ try {
 
     json_response([
         'ok' => true,
-        'client' => ['name' => $client['business_name'], 'ruc' => $client['ruc'], 'location' => $location, 'contact' => $contact, 'equipment' => $headerEquipment, 'period' => $periodDates],
+        'client' => ['name' => $client['business_name'], 'ruc' => $client['ruc'], 'location' => $location, 'contact' => $contact, 'equipment' => $headerEquipment, 'capacity' => $headerCapacity, 'period' => $periodDates],
         'supplier' => ['name' => 'LIFE EQUIPOS INDUSTRIALES SAC', 'ruc' => '20603633441'],
         'records' => $records,
         'rates' => array_values($groups),
