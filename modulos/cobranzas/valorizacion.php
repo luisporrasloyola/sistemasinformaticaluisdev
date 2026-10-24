@@ -136,7 +136,11 @@ if ($clientId) {
                         db()->prepare('INSERT INTO cobranzas_valorizacion_registros (client_id, equipo, placa_serie, fecha_servicio, hora_inicio, hora_final, horas_total_minutos, observaciones, archivo_path, archivo_nombre_original) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
                             ->execute([$clientId, $equipment, $plate, $date, $start, $end, $minutes, $notes ?: null, $newPath, $file['name']]);
                     }
-                    redirect($pageUrl);
+                    redirect('modulos/cobranzas/valorizacion.php?' . http_build_query([
+                        'cliente_id' => $clientId,
+                        'periodo' => 'mes',
+                        'mes' => substr($date, 0, 7),
+                    ]));
                 } catch (Throwable $exception) {
                     if ($newPath) delete_uploaded_file($newPath);
                     $error = $exception instanceof RuntimeException ? $exception->getMessage() : 'No se pudo guardar el registro. Verifique la tabla SQL.';
