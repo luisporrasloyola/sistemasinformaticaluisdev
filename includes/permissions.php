@@ -54,6 +54,13 @@ function permission_modules_catalog(): array
                 'clientes.pmi' => 'PMI Clientes',
             ],
         ],
+        'cobranzas' => [
+            'label' => 'Cobranzas',
+            'children' => [
+                'cobranzas.parte_diario' => 'Parte diario',
+                'cobranzas.valorizacion' => 'Valorización',
+            ],
+        ],
         'empresa_maquirenta' => [
             'label' => 'Empresa Maquirenta',
             'children' => [

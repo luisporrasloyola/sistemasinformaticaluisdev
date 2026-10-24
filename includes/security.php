@@ -317,6 +317,8 @@ function default_user_landing_path(): string
         'empresa.medio_ambiente' => 'modulos/empresa/medio_ambiente.php',
         'clientes.informacion' => 'modulos/clientes/informacion.php',
         'clientes.pmi' => 'modulos/clientes/pmi.php',
+        'cobranzas.parte_diario' => 'modulos/cobranzas/parte_diario.php',
+        'cobranzas.valorizacion' => 'modulos/cobranzas/valorizacion.php',
         'empresa_maquirenta.dashboard' => 'modulos/empresa_maquirenta/dashboard.php',
         'empresa_maquirenta.datos_generales' => 'modulos/empresa_maquirenta/datos_generales.php',
         'empresa_maquirenta.valorizaciones' => 'modulos/empresa_maquirenta/valorizaciones.php',

@@ -9,6 +9,9 @@ $empresaOpen = str_contains($currentPath, '/modulos/empresa/');
 $clientesOpen = str_contains($currentPath, '/modulos/clientes/');
 $clientesInformacionOpen = str_ends_with($currentPath, '/modulos/clientes/informacion.php');
 $clientesPmiOpen = str_ends_with($currentPath, '/modulos/clientes/pmi.php');
+$cobranzasOpen = str_contains($currentPath, '/modulos/cobranzas/');
+$cobranzasParteDiarioOpen = str_ends_with($currentPath, '/modulos/cobranzas/parte_diario.php');
+$cobranzasValorizacionOpen = str_ends_with($currentPath, '/modulos/cobranzas/valorizacion.php');
 $empresaMaquirentaOpen = str_contains($currentPath, '/modulos/empresa_maquirenta/');
 $empresaMaquirentaDashboardOpen = str_ends_with($currentPath, '/modulos/empresa_maquirenta/dashboard.php');
 $valorizacionesOpen = str_ends_with($currentPath, '/modulos/empresa_maquirenta/valorizaciones.php');
@@ -144,6 +147,16 @@ $isAdmin = is_admin();
                 </div>
             </div>
 
+            <button class="nav-link nav-parent <?= $cobranzasOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#cobranzasMenu" aria-expanded="<?= $cobranzasOpen ? 'true' : 'false' ?>" aria-controls="cobranzasMenu">
+                <i class="fa-solid fa-money-bill-transfer"></i><span>Cobranzas</span><i class="fa-solid fa-chevron-down nav-caret"></i>
+            </button>
+            <div class="collapse <?= $cobranzasOpen ? 'show' : '' ?>" id="cobranzasMenu">
+                <div class="submenu">
+                    <a class="nav-link sub-link <?= $cobranzasParteDiarioOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/cobranzas/parte_diario.php"><i class="fa-solid fa-calendar-day"></i><span>Parte diario</span></a>
+                    <a class="nav-link sub-link <?= $cobranzasValorizacionOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/cobranzas/valorizacion.php"><i class="fa-solid fa-file-invoice-dollar"></i><span>Valorización</span></a>
+                </div>
+            </div>
+
             <button class="nav-link nav-parent <?= $empresaMaquirentaOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#empresaMaquirentaMenu" aria-expanded="<?= $empresaMaquirentaOpen ? 'true' : 'false' ?>" aria-controls="empresaMaquirentaMenu">
                 <i class="fa-solid fa-building-circle-check"></i><span>Empresa Maquirenta</span><i class="fa-solid fa-chevron-down nav-caret"></i>
             </button>
@@ -223,6 +236,13 @@ $isAdmin = is_admin();
                 <div class="collapse <?= $clientesOpen ? 'show' : '' ?>" id="clientesMenuGestor"><div class="submenu">
                     <?php if (current_user_can_module('clientes.informacion')): ?><a class="nav-link sub-link <?= $clientesInformacionOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/clientes/informacion.php"><i class="fa-solid fa-address-card"></i><span>Información de clientes</span></a><?php endif; ?>
                     <?php if (current_user_can_module('clientes.pmi')): ?><a class="nav-link sub-link <?= $clientesPmiOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/clientes/pmi.php"><i class="fa-solid fa-file-shield"></i><span>PMI Clientes</span></a><?php endif; ?>
+                </div></div>
+            <?php endif; ?>
+            <?php if (current_user_can_module('cobranzas') && (current_user_can_module('cobranzas.parte_diario') || current_user_can_module('cobranzas.valorizacion'))): ?>
+                <button class="nav-link nav-parent <?= $cobranzasOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#cobranzasMenuGestor" aria-expanded="<?= $cobranzasOpen ? 'true' : 'false' ?>" aria-controls="cobranzasMenuGestor"><i class="fa-solid fa-money-bill-transfer"></i><span>Cobranzas</span><i class="fa-solid fa-chevron-down nav-caret"></i></button>
+                <div class="collapse <?= $cobranzasOpen ? 'show' : '' ?>" id="cobranzasMenuGestor"><div class="submenu">
+                    <?php if (current_user_can_module('cobranzas.parte_diario')): ?><a class="nav-link sub-link <?= $cobranzasParteDiarioOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/cobranzas/parte_diario.php"><i class="fa-solid fa-calendar-day"></i><span>Parte diario</span></a><?php endif; ?>
+                    <?php if (current_user_can_module('cobranzas.valorizacion')): ?><a class="nav-link sub-link <?= $cobranzasValorizacionOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/cobranzas/valorizacion.php"><i class="fa-solid fa-file-invoice-dollar"></i><span>Valorización</span></a><?php endif; ?>
                 </div></div>
             <?php endif; ?>
             <?php if (current_user_can_module('empresa_maquirenta')): ?>

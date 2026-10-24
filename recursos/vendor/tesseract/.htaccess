@@ -1,0 +1,10 @@
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/javascript application/javascript application/wasm
+</IfModule>
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresDefault "access plus 1 day"
+</IfModule>
+<IfModule mod_headers.c>
+    Header set Cache-Control "public, max-age=86400"
+</IfModule>
