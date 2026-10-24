@@ -46,6 +46,8 @@ $totalMinutes = 0;
 $firstServiceDate = null;
 $lastServiceDate = null;
 $totalPriceCents = 0;
+$currency = ($_GET['moneda'] ?? 'PEN') === 'USD' ? 'USD' : 'PEN';
+$currencySymbol = $currency === 'USD' ? '$' : 'S/.';
 $equipmentRates = [];
 $error = '';
 $defaultMonth = null;
@@ -81,7 +83,7 @@ if ($clientId) {
         error_log('Error al cargar lugar de servicio: ' . $exception->getMessage());
         $error = 'No se pudo cargar el lugar de servicio. Ejecute database/cobranzas_valorizacion_datos_cliente.sql.';
     }
-    $periodQuery = ['cliente_id' => $clientId];
+    $periodQuery = ['cliente_id' => $clientId, 'moneda' => $currency];
     if ($period['mode'] === 'mes') $periodQuery += ['periodo' => 'mes', 'mes' => $period['month']];
     else $periodQuery += ['periodo' => 'fechas', 'desde' => $period['from'], 'hasta' => $period['to']];
     $pageUrl = 'modulos/cobranzas/valorizacion.php?' . http_build_query($periodQuery);
@@ -104,6 +106,7 @@ if ($clientId) {
             }
         } elseif ($action === 'save') {
             $equipment = trim((string) ($_POST['equipo'] ?? ''));
+            $operator = trim((string) ($_POST['operador'] ?? ''));
             // La placa/serie forma parte del único campo Equipo en esta pantalla.
             $plate = '';
             $date = (string) ($_POST['fecha_servicio'] ?? '');
@@ -114,6 +117,7 @@ if ($clientId) {
             $minutes = valor_minutes($start, $end);
             if (($_POST['record_id'] ?? '') !== '' && !$existing) $error = 'No se encontró el registro.';
             elseif ($equipment === '' || mb_strlen($equipment, 'UTF-8') > 120) $error = 'Ingrese el equipo con su placa o serie (máximo 120 caracteres).';
+            elseif (mb_strlen($operator, 'UTF-8') > 150) $error = 'El nombre del operador no puede superar 150 caracteres.';
             elseif (!$parsedDate || $parsedDate->format('Y-m-d') !== $date) $error = 'Seleccione una fecha válida.';
             elseif ($minutes === null) $error = 'Ingrese horas válidas: el turno debe durar más de una hora para descontar el refrigerio. Se admite cruzar la medianoche.';
             elseif (mb_strlen($notes, 'UTF-8') > 2000) $error = 'Las observaciones no pueden superar 2000 caracteres.';
@@ -125,16 +129,16 @@ if ($clientId) {
                     $file = upload_file($_FILES['adjunto'] ?? [], 'cobranzas_valorizacion', document_attachment_mimes());
                     $newPath = $file['path'];
                     if ($existing) {
-                        $sql = 'UPDATE cobranzas_valorizacion_registros SET equipo = ?, placa_serie = ?, fecha_servicio = ?, hora_inicio = ?, hora_final = ?, horas_total_minutos = ?, observaciones = ?';
-                        $values = [$equipment, $plate, $date, $start, $end, $minutes, $notes ?: null];
+                        $sql = 'UPDATE cobranzas_valorizacion_registros SET equipo = ?, placa_serie = ?, operador = ?, fecha_servicio = ?, hora_inicio = ?, hora_final = ?, horas_total_minutos = ?, observaciones = ?';
+                        $values = [$equipment, $plate, $operator ?: null, $date, $start, $end, $minutes, $notes ?: null];
                         if ($newPath) { $sql .= ', archivo_path = ?, archivo_nombre_original = ?'; array_push($values, $newPath, $file['name']); }
                         $sql .= ' WHERE id = ? AND client_id = ?';
                         array_push($values, $recordId, $clientId);
                         db()->prepare($sql)->execute($values);
                         if ($newPath) delete_uploaded_file($existing['archivo_path']);
                     } else {
-                        db()->prepare('INSERT INTO cobranzas_valorizacion_registros (client_id, equipo, placa_serie, fecha_servicio, hora_inicio, hora_final, horas_total_minutos, observaciones, archivo_path, archivo_nombre_original) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-                            ->execute([$clientId, $equipment, $plate, $date, $start, $end, $minutes, $notes ?: null, $newPath, $file['name']]);
+                        db()->prepare('INSERT INTO cobranzas_valorizacion_registros (client_id, equipo, placa_serie, operador, fecha_servicio, hora_inicio, hora_final, horas_total_minutos, observaciones, registered_by_user_id, archivo_path, archivo_nombre_original) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+                            ->execute([$clientId, $equipment, $plate, $operator ?: null, $date, $start, $end, $minutes, $notes ?: null, (int) (current_user()['id'] ?? 0) ?: null, $newPath, $file['name']]);
                     }
                     redirect('modulos/cobranzas/valorizacion.php?' . http_build_query([
                         'cliente_id' => $clientId,
@@ -151,7 +155,7 @@ if ($clientId) {
     }
     try {
         $offset = ($page - 1) * 25;
-        $stmt = db()->prepare('SELECT id, equipo, placa_serie, fecha_servicio, hora_inicio, hora_final, horas_total_minutos, observaciones, archivo_path FROM cobranzas_valorizacion_registros WHERE client_id = ?' . $periodWhere . ' ORDER BY fecha_servicio DESC, id DESC LIMIT 26 OFFSET ' . $offset);
+        $stmt = db()->prepare('SELECT r.id, r.equipo, r.placa_serie, r.operador, r.fecha_servicio, r.hora_inicio, r.hora_final, r.horas_total_minutos, r.observaciones, r.archivo_path, COALESCE(u.name, \'\') AS registrado_por FROM cobranzas_valorizacion_registros r LEFT JOIN users u ON u.id = r.registered_by_user_id WHERE r.client_id = ?' . $periodWhere . ' ORDER BY r.fecha_servicio DESC, r.id DESC LIMIT 26 OFFSET ' . $offset);
         $stmt->execute(array_merge([$clientId], $periodParams));
         $records = $stmt->fetchAll();
         $hasMore = count($records) > 25;
@@ -199,29 +203,30 @@ require __DIR__ . '/../../includes/header.php';
 ?>
 <style>
 .cv-panel.work-panel{padding:16px 18px!important;margin-bottom:12px!important}.cv-client-layout{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(260px,1fr);gap:24px}.cv-client-layout.cv-client-layout-empty{grid-template-columns:1fr}.cv-client-main,.cv-client-supplier{min-width:0}.cv-client-row{display:grid;grid-template-columns:124px minmax(0,1fr);align-items:center;gap:10px;min-height:38px;margin-bottom:8px}.cv-client-row:last-child{margin-bottom:0}.cv-client-row label,.cv-client-row .cv-client-detail-label{margin:0;color:#344761;font-size:.83rem;font-weight:700}.cv-client-row-value{min-width:0}.cv-client-row-value .select2-container{width:100%!important}.cv-client-row .form-control{height:38px}.cv-client-detail-value{display:block;min-width:0;overflow-wrap:anywhere;font-weight:600}.cv-detail-error{display:block;color:#b42318;font-size:.75rem;margin-top:3px}@media(max-width:900px){.cv-client-layout{grid-template-columns:1fr;gap:8px}.cv-client-supplier{padding-top:10px;border-top:1px solid #e2e8f0}}@media(max-width:600px){.cv-client-row{grid-template-columns:1fr;gap:3px;margin-bottom:12px}}
-.cv-table{min-width:0;width:100%;table-layout:fixed}.cv-table th{background:#f4f7fb;color:#415474;font-size:.72rem;text-transform:uppercase}.cv-table td,.cv-table th{padding:.6rem .5rem;vertical-align:middle;overflow-wrap:anywhere}.cv-preview{display:flex;align-items:center;justify-content:center;min-height:45vh;background:#f8fafc}.cv-preview img{max-width:100%;max-height:72vh;object-fit:contain}.cv-preview iframe{width:100%;height:72vh;border:0}@media(max-width:1100px){.cv-table{min-width:900px}}
+.cv-table{min-width:0;width:100%;table-layout:fixed}.cv-table th{background:#f4f7fb;color:#415474;font-size:.68rem;text-transform:uppercase}.cv-table td,.cv-table th{padding:.55rem .35rem;vertical-align:middle;overflow-wrap:anywhere}.cv-preview{display:flex;align-items:center;justify-content:center;min-height:45vh;background:#f8fafc}.cv-preview img{max-width:100%;max-height:72vh;object-fit:contain}.cv-preview iframe{width:100%;height:72vh;border:0}
 .cv-review-layout{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:16px;align-items:start}.cv-review-document,.cv-review-fields{min-width:0}.cv-review-document{position:sticky;top:0}.cv-review-document #cvPreviewContent{max-height:45vh;overflow:auto}.cv-review-document #cvPreviewContent canvas{max-width:100%}.cv-review-fields .row{--bs-gutter-y:.75rem;margin-left:0;margin-right:0}.cv-review-suggestion{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid #e2e8f0}.cv-review-suggestion:last-child{border-bottom:0}.cv-review-suggestion span{min-width:0;overflow-wrap:anywhere}.cv-review-fields .cv-field-state{font-size:.74rem;margin-top:3px}.cv-review-fields .cv-field-state.is-pending{color:#9a6700}.cv-review-fields .cv-field-state.is-ready{color:#08764d}@media(max-width:991px){.cv-review-layout{grid-template-columns:1fr}.cv-review-document{position:static}.cv-review-document #cvPreviewContent{max-height:34vh}}
 .cv-visual-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.cv-visual-card{min-width:0;padding:7px;background:#fff;border:1px solid #d9e3ef;border-radius:7px;cursor:text}.cv-visual-card span{display:block;margin-bottom:4px;color:#334155}.cv-visual-card canvas{display:block;width:100%;height:auto;max-height:96px;object-fit:contain;object-position:left center;background:#fff}.cv-visual-card:first-child{grid-column:1/-1}@media(max-width:575px){.cv-visual-grid{grid-template-columns:1fr}.cv-visual-card:first-child{grid-column:auto}}
 .cv-entry[hidden],.cv-upload #cvProgressBox[hidden]{display:none!important}.cv-hidden-source,#cvReviewSuggestions{display:none}.cv-entry.needs-file .cv-hidden-source,.cv-entry.editing .cv-hidden-source{display:block;margin-bottom:12px}.cv-entry.needs-file #cvPreviewHost,.cv-entry.editing #cvPreviewHost{display:none}.cv-entry .cv-review-fields .row{margin-left:0;margin-right:0}.cv-upload .progress{height:10px}.cv-entry{scroll-margin-top:20px}
 .cv-record .cv-input{display:none}.cv-record.cv-editing .cv-view{display:none}.cv-record.cv-editing .cv-input{display:block}.cv-record.cv-editing button.cv-input{display:inline-flex}.cv-record.cv-editing{background:#eef5ff}.cv-record .cv-row-actions{display:flex;align-items:center;gap:5px;white-space:nowrap}.cv-record .cv-inline-form{display:none}.cv-record .cv-inline-total{min-width:50px}.cv-record .form-control-sm{min-width:0;width:100%}
 .cv-table th:last-child,.cv-table td:last-child{text-align:center}
-.cv-table tfoot td{background:#f4f7fb;border-top:1px solid #d7e2f0;color:#0f172a;font-weight:800}.cv-table tfoot .cv-hours-label{font-size:.85rem;white-space:nowrap;font-weight:800}.cv-table tfoot .cv-hours-value{font-size:1.05rem;color:#0b3b80;font-weight:800}
-.cv-table tfoot .cv-rate-label{text-align:right;font-size:.85rem}.cv-table tfoot .cv-rate-input{width:100%;min-width:0;padding:.3rem .35rem;font-weight:700}.cv-table tfoot .cv-rate-status{font-size:.75rem;font-weight:600;color:#08764d}.cv-table tfoot .cv-rate-status.is-error{color:#b42318}
+.cv-table tfoot td{background:#f4f7fb;border-top:1px solid #d7e2f0;color:#0f172a;font-weight:800}.cv-table tfoot .cv-hours-label{text-align:right;font-size:.85rem;white-space:nowrap;font-weight:800}.cv-table tfoot .cv-hours-value{font-size:1.05rem;color:#0b3b80;font-weight:800}
+.cv-table tfoot .cv-rate-label{text-align:right;font-size:.85rem}.cv-table tfoot .input-group{flex-wrap:nowrap}.cv-table tfoot .cv-rate-input{flex:1 1 0;width:1%;min-width:0;padding:.3rem .35rem;font-weight:700}.cv-table tfoot .input-group-text{flex:0 0 auto;padding:.25rem .35rem}.cv-table tfoot .cv-rate-status{font-size:.75rem;font-weight:600;color:#08764d}.cv-table tfoot .cv-rate-status.is-error{color:#b42318}
 .cv-table tfoot .cv-period-label{text-align:right;font-size:.85rem;font-weight:800}.cv-table tfoot .cv-period-value{font-size:1.05rem;font-weight:800;color:#0b3b80;white-space:nowrap}
-.cv-record .cv-row-actions{justify-content:center;gap:7px}
-.cv-record .cv-row-actions .cvDelete{margin:0;padding:0;display:block;flex:0 0 38px;width:38px;height:38px}
-.cv-record .cv-row-actions .cv-action-btn{appearance:none;box-sizing:border-box;display:grid;place-items:center;flex:0 0 38px;width:38px;height:38px;min-width:38px;max-width:38px;min-height:38px;max-height:38px;margin:0;padding:0;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#2563eb;line-height:1;box-shadow:none;cursor:pointer;vertical-align:middle;transition:background-color .15s,border-color .15s}
-.cv-record .cv-row-actions .cv-action-btn i{display:block;font-size:17px;line-height:1}
+.cv-record .cv-row-actions{justify-content:center;gap:4px}
+.cv-record .cv-row-actions .cvDelete{margin:0;padding:0;display:block;flex:0 0 32px;width:32px;height:32px}
+.cv-record .cv-row-actions .cv-action-btn{appearance:none;box-sizing:border-box;display:grid;place-items:center;flex:0 0 32px;width:32px;height:32px;min-width:32px;max-width:32px;min-height:32px;max-height:32px;margin:0;padding:0;border:1px solid #cbd5e1;border-radius:7px;background:#fff;color:#2563eb;line-height:1;box-shadow:none;cursor:pointer;vertical-align:middle;transition:background-color .15s,border-color .15s}
+.cv-record .cv-row-actions .cv-action-btn i{display:block;font-size:15px;line-height:1}
 .cv-record .cv-row-actions .cv-action-edit{color:#0f172a}
 .cv-record .cv-row-actions .cv-action-file{color:#2563eb}
 .cv-record .cv-row-actions .cv-action-file-pdf{color:#dc3545}
-.cv-record .cv-row-actions .cv-action-file i{font-size:20px}
+.cv-record .cv-row-actions .cv-action-file i{font-size:17px}
 .cv-record .cv-row-actions .cv-action-btn:hover{background:#eff6ff;border-color:#93b4e9}
 .cv-record .cv-row-actions .cv-action-delete{color:#dc3545;border-color:#f3a7ad}
 .cv-record .cv-row-actions .cv-action-delete:hover{background:#fff1f2;border-color:#dc3545}
 .cv-record .cv-row-actions .cv-action-btn:focus-visible{outline:2px solid #2563eb;outline-offset:2px}
 .cv-record.cv-editing .cv-row-actions .cv-inline-edit,.cv-record.cv-editing .cv-row-actions .cvDelete{display:none}
 .cv-period-tools{display:flex;align-items:end;justify-content:flex-end;gap:8px;flex-wrap:wrap}.cv-period-tools .cv-period-field{min-width:140px}.cv-period-tools .cv-period-field label{display:block;margin-bottom:3px;color:#526b91;font-size:.7rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase}.cv-period-tools .form-control,.cv-period-tools .form-select{height:38px}.cv-period-tools [hidden]{display:none!important}@media(max-width:700px){.cv-period-tools{justify-content:flex-start}.cv-period-tools .cv-period-field{flex:1 1 140px}}
+.cv-period-actions{display:flex;align-items:end;gap:8px;flex-wrap:wrap}.cv-period-actions>.cv-period-field{min-width:140px;margin-left:auto}.cv-period-actions>.cv-period-field label{display:block;margin-bottom:3px;color:#526b91;font-size:.7rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase}.cv-period-actions>.cv-period-field .form-select{height:38px}.cv-period-actions>.btn{height:38px}@media(max-width:700px){.cv-period-actions>.cv-period-field{margin-left:0;flex:1 1 140px}}
 .cv-client-panel.work-panel,.cv-upload.work-panel{border:1px solid #dedbd4!important;border-radius:15px!important;box-shadow:0 5px 18px rgba(60,55,45,.055)!important}
 .cv-client-panel.work-panel{background:linear-gradient(115deg,#fbfaf7 0%,#f4f2ed 100%)!important}
 .cv-client-panel .cv-client-layout{grid-template-columns:minmax(0,1.7fr) minmax(255px,.95fr);gap:18px;align-items:center}
@@ -271,31 +276,42 @@ require __DIR__ . '/../../includes/header.php';
 </section>
 <div class="modal fade" id="cvModelInfoModal" tabindex="-1" aria-labelledby="cvModelInfoTitle" aria-hidden="true"><div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h2 class="modal-title h5" id="cvModelInfoTitle">Modelo de parte diario</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div><div class="modal-body"><p class="mb-3">Sube una foto nítida o un PDF de este modelo para que la IA lea automáticamente el equipo, la fecha y las horas.</p><img class="cv-model-example" src="<?= e(APP_URL . '/img/parte2.jpg') ?>" alt="Ejemplo del modelo de parte diario requerido" loading="lazy"><div class="text-center mt-2"><a href="<?= e(APP_URL . '/img/parte2.jpg') ?>" target="_blank" rel="noopener noreferrer">Ver imagen en tamaño completo</a></div></div></div></div></div>
 <?php require __DIR__ . '/valorizacion_form.php'; ?>
-<section class="work-panel cv-panel"><div class="d-flex align-items-end justify-content-between gap-3 flex-wrap mb-3"><h2 class="h5 mb-0">Registros de valorización</h2><div class="d-flex align-items-end gap-2 flex-wrap"><form class="cv-period-tools" id="cvPeriodForm" method="get" action="<?= e(APP_URL . '/modulos/cobranzas/valorizacion.php') ?>"><input type="hidden" name="cliente_id" value="<?= (int) $clientId ?>"><div class="cv-period-field"><label for="cvPeriodMode">Periodo</label><select class="form-select form-select-sm" id="cvPeriodMode" name="periodo"><option value="mes" <?= $period['mode'] === 'mes' ? 'selected' : '' ?>>Por mes</option><option value="fechas" <?= $period['mode'] === 'fechas' ? 'selected' : '' ?>>Entre fechas</option></select></div><div class="cv-period-field" id="cvPeriodMonthField" <?= $period['mode'] !== 'mes' ? 'hidden' : '' ?>><label for="cvPeriodMonth">Mes</label><input class="form-control form-control-sm" id="cvPeriodMonth" name="mes" type="month" value="<?= e($period['month']) ?>" <?= $period['mode'] === 'mes' ? 'required' : 'disabled' ?>></div><div class="cv-period-field" id="cvPeriodFromField" <?= $period['mode'] !== 'fechas' ? 'hidden' : '' ?>><label for="cvPeriodFrom">Desde</label><input class="form-control form-control-sm" id="cvPeriodFrom" name="desde" type="date" value="<?= e($period['from']) ?>" <?= $period['mode'] === 'fechas' ? 'required' : 'disabled' ?>></div><div class="cv-period-field" id="cvPeriodToField" <?= $period['mode'] !== 'fechas' ? 'hidden' : '' ?>><label for="cvPeriodTo">Hasta</label><input class="form-control form-control-sm" id="cvPeriodTo" name="hasta" type="date" value="<?= e($period['to']) ?>" <?= $period['mode'] === 'fechas' ? 'required' : 'disabled' ?>></div><button class="btn btn-outline-primary" type="submit">Ver</button></form><button class="btn btn-outline-danger" id="cvExportPdf" type="button" data-url="<?= e(APP_URL . '/servicios/cobranzas/valorizacion_reporte_datos.php?' . http_build_query($periodQuery)) ?>" <?= $totalMinutes <= 0 ? 'disabled' : '' ?>><i class="fa-solid fa-file-pdf me-1" aria-hidden="true"></i>PDF</button></div></div>
+<section class="work-panel cv-panel"><div class="mb-3"><h2 class="h5 mb-0">Registros de valorización</h2></div><div class="cv-period-actions mb-3"><form class="cv-period-tools" id="cvPeriodForm" method="get" action="<?= e(APP_URL . '/modulos/cobranzas/valorizacion.php') ?>"><input type="hidden" name="cliente_id" value="<?= (int) $clientId ?>"><div class="cv-period-field"><label for="cvPeriodMode">Periodo</label><select class="form-select form-select-sm" id="cvPeriodMode" name="periodo"><option value="mes" <?= $period['mode'] === 'mes' ? 'selected' : '' ?>>Por mes</option><option value="fechas" <?= $period['mode'] === 'fechas' ? 'selected' : '' ?>>Entre fechas</option></select></div><div class="cv-period-field" id="cvPeriodMonthField" <?= $period['mode'] !== 'mes' ? 'hidden' : '' ?>><label for="cvPeriodMonth">Mes</label><input class="form-control form-control-sm" id="cvPeriodMonth" name="mes" type="month" value="<?= e($period['month']) ?>" <?= $period['mode'] === 'mes' ? 'required' : 'disabled' ?>></div><div class="cv-period-field" id="cvPeriodFromField" <?= $period['mode'] !== 'fechas' ? 'hidden' : '' ?>><label for="cvPeriodFrom">Desde</label><input class="form-control form-control-sm" id="cvPeriodFrom" name="desde" type="date" value="<?= e($period['from']) ?>" <?= $period['mode'] === 'fechas' ? 'required' : 'disabled' ?>></div><div class="cv-period-field" id="cvPeriodToField" <?= $period['mode'] !== 'fechas' ? 'hidden' : '' ?>><label for="cvPeriodTo">Hasta</label><input class="form-control form-control-sm" id="cvPeriodTo" name="hasta" type="date" value="<?= e($period['to']) ?>" <?= $period['mode'] === 'fechas' ? 'required' : 'disabled' ?>></div><button class="btn btn-outline-primary" type="submit">Ver</button></form><button class="btn btn-outline-danger" id="cvExportPdf" type="button" data-url="<?= e(APP_URL . '/servicios/cobranzas/valorizacion_reporte_datos.php?' . http_build_query($periodQuery)) ?>" <?= $totalMinutes <= 0 ? 'disabled' : '' ?>><i class="fa-solid fa-file-pdf me-1" aria-hidden="true"></i>PDF</button><div class="cv-period-field"><label for="cvCurrency">Moneda</label><select class="form-select form-select-sm" id="cvCurrency" name="moneda" form="cvPeriodForm"><option value="PEN" <?= $currency === 'PEN' ? 'selected' : '' ?>>Soles (S/.)</option><option value="USD" <?= $currency === 'USD' ? 'selected' : '' ?>>Dólares ($)</option></select></div></div>
 <?php if ($error !== '' && (($_POST['action'] ?? '') !== 'save' || ($_POST['inline_edit'] ?? '') === '1')): ?><div class="alert alert-danger py-2" role="alert"><?= e($error) ?></div><?php endif; ?>
-<div class="table-responsive border rounded"><table class="table table-hover align-middle mb-0 cv-table"><colgroup><col style="width:22%"><col style="width:12%"><col style="width:10%"><col style="width:10%"><col style="width:15%"><col style="width:15%"><col style="width:16%"></colgroup><thead><tr><th>Equipo</th><th>Fecha del servicio</th><th>Hora de inicio</th><th>Hora final</th><th>Horas en total</th><th>Observaciones</th><th>Acciones</th></tr></thead><tbody>
-<?php if (!$records): ?><tr><td colspan="7" class="text-center text-muted py-4">No hay registros en el periodo seleccionado.</td></tr><?php endif; ?>
+<div class="table-responsive border rounded"><table class="table table-hover align-middle mb-0 cv-table"><colgroup><col style="width:18%"><col style="width:14%"><col style="width:10%"><col style="width:8%"><col style="width:7%"><col style="width:9%"><col style="width:12%"><col style="width:10%"><col style="width:12%"></colgroup><thead><tr><th>Equipo</th><th>Operador</th><th>Fecha del servicio</th><th>Hora de inicio</th><th>Hora final</th><th>Horas en total</th><th>Observaciones</th><th>Registrado por</th><th>Acciones</th></tr></thead><tbody>
+<?php if (!$records): ?><tr><td colspan="9" class="text-center text-muted py-4">No hay registros en el periodo seleccionado.</td></tr><?php endif; ?>
 <?php foreach ($records as $record): require __DIR__ . '/valorizacion_row.php'; endforeach; ?>
 </tbody><tfoot>
-<tr><td colspan="3"></td><td class="cv-hours-label">Horas totales:</td><td class="cv-hours-value"><?= sprintf('%02d:%02d', intdiv($totalMinutes, 60), $totalMinutes % 60) ?></td><td colspan="2"></td></tr>
+<tr><td colspan="5" class="cv-hours-label">Horas totales:</td><td colspan="2" class="cv-hours-value"><?= sprintf('%02d:%02d', intdiv($totalMinutes, 60), $totalMinutes % 60) ?></td><td colspan="2"></td></tr>
 <?php foreach ($equipmentRates as $equipmentKey => $rate): ?>
-<tr><td colspan="4" class="cv-rate-label">Precio por hora <?= e($rate['name']) ?>:</td><td><input class="form-control form-control-sm cv-rate-input" type="number" name="precio_hora" value="<?= e($rate['price']) ?>" data-minutes="<?= (int) $rate['minutes'] ?>" data-saved-price="<?= e($rate['price']) ?>" data-client-id="<?= (int) $clientId ?>" data-equipment-key="<?= e($equipmentKey) ?>" data-csrf="<?= e(csrf_token()) ?>" data-endpoint="<?= e(APP_URL . '/servicios/cobranzas/valorizacion_precio.php') ?>" min="0" max="9999999999.99" step="0.01" required aria-label="Precio por hora <?= e($rate['name']) ?>"></td><td><span class="cv-rate-status" role="status" aria-live="polite"></span></td><td></td></tr>
+<tr><td colspan="5" class="cv-rate-label">Precio por hora <?= e($rate['name']) ?>:</td><td colspan="2"><div class="input-group input-group-sm"><span class="input-group-text cv-currency-symbol"><?= e($currencySymbol) ?></span><input class="form-control form-control-sm cv-rate-input" type="number" name="precio_hora" value="<?= e($rate['price']) ?>" data-minutes="<?= (int) $rate['minutes'] ?>" data-saved-price="<?= e($rate['price']) ?>" data-client-id="<?= (int) $clientId ?>" data-equipment-key="<?= e($equipmentKey) ?>" data-csrf="<?= e(csrf_token()) ?>" data-endpoint="<?= e(APP_URL . '/servicios/cobranzas/valorizacion_precio.php') ?>" min="0" max="9999999999.99" step="0.01" required aria-label="Precio por hora <?= e($rate['name']) ?>"></div></td><td colspan="2"><span class="cv-rate-status" role="status" aria-live="polite"></span></td></tr>
 <?php endforeach; ?>
 <?php if ($firstServiceDate && $lastServiceDate): ?>
-<tr><td colspan="4" class="cv-period-label">Precio del <?= e(date('d/m/Y', strtotime($firstServiceDate))) ?> al <?= e(date('d/m/Y', strtotime($lastServiceDate))) ?>:</td><td class="cv-period-value" id="cvPeriodPrice"><?= number_format($totalPriceCents / 100, 2, '.', ',') ?></td><td colspan="2"></td></tr>
-<tr><td colspan="4" class="cv-period-label">IGV (18 %):</td><td class="cv-period-value" id="cvPeriodIgv"><?= number_format(round($totalPriceCents * 18 / 100) / 100, 2, '.', ',') ?></td><td colspan="2"></td></tr>
-<tr><td colspan="4" class="cv-period-label">Monto total:</td><td class="cv-period-value" id="cvGrandTotal"><?= number_format(($totalPriceCents + (int) round($totalPriceCents * 18 / 100)) / 100, 2, '.', ',') ?></td><td colspan="2"></td></tr>
+<tr><td colspan="5" class="cv-period-label">Precio del <?= e(date('d/m/Y', strtotime($firstServiceDate))) ?> al <?= e(date('d/m/Y', strtotime($lastServiceDate))) ?>:</td><td colspan="2" class="cv-period-value" id="cvPeriodPrice"><span class="cv-currency-symbol"><?= e($currencySymbol) ?></span> <span class="cv-money-amount"><?= number_format($totalPriceCents / 100, 2, '.', ',') ?></span></td><td colspan="2"></td></tr>
+<tr><td colspan="5" class="cv-period-label">IGV (18 %):</td><td colspan="2" class="cv-period-value" id="cvPeriodIgv"><span class="cv-currency-symbol"><?= e($currencySymbol) ?></span> <span class="cv-money-amount"><?= number_format(round($totalPriceCents * 18 / 100) / 100, 2, '.', ',') ?></span></td><td colspan="2"></td></tr>
+<tr><td colspan="5" class="cv-period-label">Monto total:</td><td colspan="2" class="cv-period-value" id="cvGrandTotal"><span class="cv-currency-symbol"><?= e($currencySymbol) ?></span> <span class="cv-money-amount"><?= number_format(($totalPriceCents + (int) round($totalPriceCents * 18 / 100)) / 100, 2, '.', ',') ?></span></td><td colspan="2"></td></tr>
 <?php endif; ?>
 </tfoot></table></div><?php if ($page > 1 || $hasMore): ?><nav class="d-flex justify-content-end gap-2 mt-3" aria-label="Páginas de registros"><?php if ($page > 1): ?><a class="btn btn-sm btn-outline-primary" href="<?= e(APP_URL . '/' . $pageUrl . '&pagina=' . ($page - 1)) ?>">Anterior</a><?php endif; ?><?php if ($hasMore): ?><a class="btn btn-sm btn-outline-primary" href="<?= e(APP_URL . '/' . $pageUrl . '&pagina=' . ($page + 1)) ?>">Siguiente</a><?php endif; ?></nav><?php endif; ?></section>
 
-<div class="modal fade" id="cvFileModal" tabindex="-1" aria-labelledby="cvFileTitle" aria-hidden="true"><div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h2 class="modal-title h5" id="cvFileTitle">Archivo original</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div><div class="modal-body cv-preview" id="cvFileBody"></div></div></div></div>
+<div class="modal fade" id="cvFileModal" tabindex="-1" aria-labelledby="cvFileTitle" aria-hidden="true"><div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h2 class="modal-title h5 me-auto" id="cvFileTitle">Archivo original</h2><a class="btn btn-primary btn-sm me-3" id="cvFileDownload" href="#"><i class="fa-solid fa-download me-1" aria-hidden="true"></i>Descargar</a><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div><div class="modal-body cv-preview" id="cvFileBody"></div></div></div></div>
 <?php endif; ?>
 <script type="module" src="<?= e(APP_URL . '/recursos/js/cobranzas_valorizacion_archivo.js?v=8') ?>"></script>
-<script type="module" src="<?= e(APP_URL . '/recursos/js/cobranzas_valorizacion_ocr.js?v=19') ?>"></script>
-<script type="module" src="<?= e(APP_URL . '/recursos/js/cobranzas_valorizacion_reporte.js?v=16') ?>"></script>
+<script type="module" src="<?= e(APP_URL . '/recursos/js/cobranzas_valorizacion_ocr.js?v=20') ?>"></script>
+<script type="module" src="<?= e(APP_URL . '/recursos/js/cobranzas_valorizacion_reporte.js?v=18') ?>"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     const periodMode = document.getElementById('cvPeriodMode');
+    const currencySelect = document.getElementById('cvCurrency');
+    currencySelect?.addEventListener('change', () => {
+        const symbol = currencySelect.value === 'USD' ? '$' : 'S/.';
+        document.querySelectorAll('.cv-currency-symbol').forEach(item => { item.textContent = symbol; });
+        const exportButton = document.getElementById('cvExportPdf');
+        if (exportButton) {
+            const reportUrl = new URL(exportButton.dataset.url, window.location.href);
+            reportUrl.searchParams.set('moneda', currencySelect.value);
+            exportButton.dataset.url = reportUrl.toString();
+        }
+    });
     if (periodMode) {
         const periodFields = [
             ['mes', document.getElementById('cvPeriodMonthField'), document.getElementById('cvPeriodMonth')],
@@ -358,7 +374,7 @@ document.addEventListener('DOMContentLoaded', () => {
         formElement.dispatchEvent(new Event('shown.bs.modal'));
         if (visible) formElement.scrollIntoView({behavior:'smooth', block:'start'});
     };
-    const fields = {id:document.getElementById('cvId'),equipo:document.getElementById('cvEquipment'),fecha_servicio:document.getElementById('cvDate'),hora_inicio:document.getElementById('cvStart'),hora_final:document.getElementById('cvEnd'),observaciones:document.getElementById('cvNotes')};
+    const fields = {id:document.getElementById('cvId'),equipo:document.getElementById('cvEquipment'),operador:document.getElementById('cvOperator'),fecha_servicio:document.getElementById('cvDate'),hora_inicio:document.getElementById('cvStart'),hora_final:document.getElementById('cvEnd'),observaciones:document.getElementById('cvNotes')};
     const updateTotal = () => {
         const start = fields.hora_inicio.value, end = fields.hora_final.value;
         const total = document.getElementById('cvTotal'), feedback = document.getElementById('cvTimeFeedback');
@@ -414,7 +430,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('cv:reading-complete', event => {
         const form = formElement.querySelector('form');
         const file = document.getElementById('cvFile').files[0];
-        const complete = event.detail?.count === 4 && file && file.size <= 5 * 1024 * 1024
+        const complete = event.detail?.count === 4 && fields.operador.value.trim() !== '' && file && file.size <= 5 * 1024 * 1024
             && document.getElementById('cvTotal').value !== '—' && form.checkValidity();
         if (complete && !autoSaving) {
             autoSaving = true;
@@ -442,7 +458,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.dispatchEvent(new CustomEvent('cv:source', {detail:null}));
     });
     const updatePeriodPrice = () => {
-        const periodPrice = document.getElementById('cvPeriodPrice');
+        const periodPrice = document.querySelector('#cvPeriodPrice .cv-money-amount');
         if (!periodPrice) return;
         let totalCents = 0;
         document.querySelectorAll('.cv-rate-input').forEach(input => {
@@ -451,10 +467,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         const moneyFormatter = new Intl.NumberFormat('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
         periodPrice.textContent = moneyFormatter.format(totalCents / 100);
-        const periodIgv = document.getElementById('cvPeriodIgv');
+        const periodIgv = document.querySelector('#cvPeriodIgv .cv-money-amount');
         const igvCents = Math.round(totalCents * 18 / 100);
         if (periodIgv) periodIgv.textContent = moneyFormatter.format(igvCents / 100);
-        const grandTotal = document.getElementById('cvGrandTotal');
+        const grandTotal = document.querySelector('#cvGrandTotal .cv-money-amount');
         if (grandTotal) grandTotal.textContent = moneyFormatter.format((totalCents + igvCents) / 100);
     };
     document.querySelectorAll('.cv-rate-input').forEach(priceInput => {
@@ -516,9 +532,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (row.classList.contains('cv-editing')) updateRowTotal();
     });
     document.querySelectorAll('.cvDelete').forEach(form=>form.addEventListener('submit',async event=>{event.preventDefault();const result=await Swal.fire({title:'¿Eliminar este registro?',text:'También se eliminará el archivo original. Esta acción no se puede deshacer.',icon:'warning',showCancelButton:true,confirmButtonText:'Sí, eliminar',cancelButtonText:'Cancelar',confirmButtonColor:'#dc3545',reverseButtons:true});if(result.isConfirmed)form.submit();}));
-    const fileModal=document.getElementById('cvFileModal'),fileBody=document.getElementById('cvFileBody');fileModal.addEventListener('hidden.bs.modal',()=>fileBody.replaceChildren());document.querySelectorAll('.cvOpenFile').forEach(button=>button.addEventListener('click',()=>{const preview=document.createElement(button.dataset.kind==='image'?'img':'iframe');preview.src=button.dataset.url;if(preview.tagName==='IMG')preview.alt='Archivo original';else preview.title='PDF original';fileBody.replaceChildren(preview);bootstrap.Modal.getOrCreateInstance(fileModal).show();}));
+    const fileModal=document.getElementById('cvFileModal'),fileBody=document.getElementById('cvFileBody'),fileDownload=document.getElementById('cvFileDownload');fileModal.addEventListener('hidden.bs.modal',()=>{fileBody.replaceChildren();fileDownload.removeAttribute('href')});document.querySelectorAll('.cvOpenFile').forEach(button=>button.addEventListener('click',()=>{const downloadUrl=new URL(button.dataset.url,window.location.href);downloadUrl.searchParams.set('download','1');fileDownload.href=downloadUrl.toString();const preview=document.createElement(button.dataset.kind==='image'?'img':'iframe');preview.src=button.dataset.url;if(preview.tagName==='IMG')preview.alt='Archivo original';else preview.title='PDF original';fileBody.replaceChildren(preview);bootstrap.Modal.getOrCreateInstance(fileModal).show();}));
     <?php if ($error !== '' && ($_POST['action'] ?? '') === 'save' && ($_POST['inline_edit'] ?? '') !== '1'): ?>
-    const attempted=<?= json_encode(['record_id'=>(string)($_POST['record_id']??''),'equipo'=>(string)($_POST['equipo']??''),'fecha_servicio'=>(string)($_POST['fecha_servicio']??''),'hora_inicio'=>(string)($_POST['hora_inicio']??''),'hora_final'=>(string)($_POST['hora_final']??''),'observaciones'=>(string)($_POST['observaciones']??'')],JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT) ?>;fields.id.value=attempted.record_id;for(const key of ['equipo','fecha_servicio','hora_inicio','hora_final','observaciones'])fields[key].value=attempted[key];document.getElementById('cvFile').required=!fields.id.value;if(!fields.id.value){formElement.classList.add('needs-file');document.getElementById('cvSelectedFile').textContent='Seleccione nuevamente el archivo para poder guardar.';}document.getElementById('cvFormTitle').textContent=fields.id.value?'Editar valorización':'Registrar valorización';updateTotal();openPanel();
+    const attempted=<?= json_encode(['record_id'=>(string)($_POST['record_id']??''),'equipo'=>(string)($_POST['equipo']??''),'operador'=>(string)($_POST['operador']??''),'fecha_servicio'=>(string)($_POST['fecha_servicio']??''),'hora_inicio'=>(string)($_POST['hora_inicio']??''),'hora_final'=>(string)($_POST['hora_final']??''),'observaciones'=>(string)($_POST['observaciones']??'')],JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT) ?>;fields.id.value=attempted.record_id;for(const key of ['equipo','operador','fecha_servicio','hora_inicio','hora_final','observaciones'])fields[key].value=attempted[key];document.getElementById('cvFile').required=!fields.id.value;if(!fields.id.value){formElement.classList.add('needs-file');document.getElementById('cvSelectedFile').textContent='Seleccione nuevamente el archivo para poder guardar.';}document.getElementById('cvFormTitle').textContent=fields.id.value?'Editar valorización':'Registrar valorización';updateTotal();openPanel();
     <?php endif; ?>
     <?php endif; ?>
 });

@@ -26,7 +26,7 @@ if (!in_array($mime, ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'
 $original = basename((string) $record['archivo_nombre_original']);
 $safeName = str_replace(['"', "\r", "\n"], '_', $original);
 header('Content-Type: ' . $mime);
-header('Content-Disposition: inline; filename="' . $safeName . '"');
+header('Content-Disposition: ' . (($_GET['download'] ?? '') === '1' ? 'attachment' : 'inline') . '; filename="' . $safeName . '"');
 header('Content-Length: ' . filesize($path));
 header('X-Content-Type-Options: nosniff');
 header('Cache-Control: private, no-store');

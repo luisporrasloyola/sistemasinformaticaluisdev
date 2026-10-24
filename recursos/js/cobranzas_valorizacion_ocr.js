@@ -57,8 +57,8 @@ document.addEventListener('DOMContentLoaded', () => {
     extracted.innerHTML = '<strong class="small">Lecturas candidatas</strong><div id="cvExtractedList" class="mt-1"></div><div class="small text-muted mt-1">Compare con el documento y pulse «Usar» solo si coincide.</div>';
     document.getElementById('cvReviewSuggestions').append(extracted);
     const extractedList = extracted.querySelector('#cvExtractedList');
-    const fieldIds = {equipo:'cvEquipment', fecha_servicio:'cvDate', hora_inicio:'cvStart', hora_final:'cvEnd'};
-    const fieldLabels = {equipo:'Equipo', placa_serie:'Placa/serie', fecha_servicio:'Fecha', hora_inicio:'Llegada', hora_final:'Salida'};
+    const fieldIds = {equipo:'cvEquipment', operador:'cvOperator', fecha_servicio:'cvDate', hora_inicio:'cvStart', hora_final:'cvEnd'};
+    const fieldLabels = {equipo:'Equipo', placa_serie:'Placa/serie', operador:'Operador (Elaborado por)', fecha_servicio:'Fecha', hora_inicio:'Llegada', hora_final:'Salida'};
     const fields = Object.fromEntries(Object.entries(fieldIds).map(([key, id]) => [key, document.getElementById(id)]));
     const visualReview = document.createElement('div');
     visualReview.className = 'cv-visual-review border rounded p-2 mb-3';
@@ -70,6 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('cvReviewSuggestions').append(visualReview);
     const visualZones = {
         equipo:{label:'Equipo y placa/serie',field:'equipo',x:.39,y:.19,width:.61,height:.06},
+        operador:{label:'Nombre bajo Elaborado por',field:'operador',x:.12,y:.87,width:.43,height:.11},
         fecha_servicio:{label:'Día / mes / año',field:'fecha_servicio',x:.75,y:.07,width:.25,height:.055},
         hora_inicio:{label:'Llegada a instalación',field:'hora_inicio',x:.41,y:.46,width:.21,height:.055},
         hora_final:{label:'Salida de instalación',field:'hora_final',x:.81,y:.46,width:.19,height:.055},
@@ -352,7 +353,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 fields[key].dispatchEvent(new Event('input', {bubbles:true}));
             }
             const count = [values.equipo && values.placa_serie, values.fecha_servicio, values.hora_inicio, values.hora_final].filter(Boolean).length;
-            ocrStatus.textContent = `${count} de 4 datos detectados. Compruebe equipo, placa, fecha y horas con el documento.`;
+            ocrStatus.textContent = `${count} de 4 datos principales detectados. Compruebe también el nombre del operador con el documento.`;
             fieldStatus.textContent = count ? 'Lectura completada. Corrija cualquier dato que no coincida con la foto; las horas totales se calculan automáticamente.' : 'No se identificaron datos seguros. Complete los campos manualmente.';
             document.dispatchEvent(new CustomEvent('cv:reading-complete', {detail: {count}}));
         } catch (error) {

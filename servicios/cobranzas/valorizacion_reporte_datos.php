@@ -23,6 +23,7 @@ try {
 }
 $periodWhere = ' AND fecha_servicio BETWEEN ? AND ?';
 $periodParams = [$period['start'], $period['end']];
+$currency = ($_GET['moneda'] ?? 'PEN') === 'USD' ? 'USD' : 'PEN';
 
 function reporte_equipo_completo(string $equipment, string $plate): string
 {
@@ -56,7 +57,7 @@ try {
     $stmt->execute([$clientId]);
     $location = (string) ($stmt->fetchColumn() ?: '');
 
-    $stmt = db()->prepare('SELECT id, equipo, placa_serie, fecha_servicio, hora_inicio, hora_final, horas_total_minutos, observaciones FROM cobranzas_valorizacion_registros WHERE client_id = ?' . $periodWhere . ' ORDER BY fecha_servicio DESC, id DESC');
+    $stmt = db()->prepare('SELECT id, equipo, placa_serie, operador, fecha_servicio, hora_inicio, hora_final, horas_total_minutos, observaciones FROM cobranzas_valorizacion_registros WHERE client_id = ?' . $periodWhere . ' ORDER BY fecha_servicio DESC, id DESC');
     $stmt->execute(array_merge([$clientId], $periodParams));
     $records = [];
     $groups = [];
@@ -72,6 +73,7 @@ try {
         }
         $records[] = [
             'equipment' => $equipment,
+            'operator' => (string) ($row['operador'] ?? ''),
             'date' => (string) $row['fecha_servicio'],
             'start' => substr((string) $row['hora_inicio'], 0, 5),
             'end' => substr((string) $row['hora_final'], 0, 5),
@@ -103,6 +105,7 @@ try {
         'subtotal_cents' => $subtotalCents,
         'igv_cents' => $igvCents,
         'total_cents' => $subtotalCents + $igvCents,
+        'currency' => $currency,
     ]);
 } catch (PDOException $exception) {
     error_log('Error al preparar PDF de valorización: ' . $exception->getMessage());

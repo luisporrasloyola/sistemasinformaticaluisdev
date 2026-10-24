@@ -100,8 +100,8 @@ if (exportButton) {
                 });
             });
         };
-        const widths = [146, 72, 77, 67, 49, tableWidth - 411];
-        const labels = ['Equipo', 'Fecha', 'Hora de inicio', 'Hora final', 'Horas', 'Observaciones'];
+        const widths = [104, 83, 60, 69, 59, 43, tableWidth - 418];
+        const labels = ['Equipo', 'Operador', 'Fecha', 'Hora de inicio', 'Hora final', 'Horas', 'Observaciones'];
         const columns = [left];
         widths.forEach(width => columns.push(columns[columns.length - 1] + width));
         let page;
@@ -152,7 +152,7 @@ if (exportButton) {
         addSummaryPage();
         for (let rowIndex = 0; rowIndex < data.records.length; rowIndex++) {
             const row = data.records[rowIndex];
-            const notes = wrapText(row.notes, regular, 8, widths[5] - 12);
+            const notes = wrapText(row.notes, regular, 8, widths[6] - 12);
             const remainingRows = data.records.length - rowIndex;
             const totalsHeight = 20 + (4 + data.rates.length) * 15;
             let noteIndex = 0;
@@ -169,10 +169,10 @@ if (exportButton) {
                 page.drawRectangle({x: left, y: y - rowHeight, width: tableWidth, height: rowHeight, borderColor: line, borderWidth: 0.5});
                 for (let i = 1; i < columns.length - 1; i++) drawLine(columns[i], y, columns[i], y - rowHeight);
                 const values = noteIndex === 0
-                    ? [row.equipment, dateText(row.date), row.start, row.end, hoursText(row.minutes)]
-                    : [`${row.equipment} (cont.)`, '', '', '', ''];
+                    ? [row.equipment, row.operator || '-', dateText(row.date), row.start, row.end, hoursText(row.minutes)]
+                    : [`${row.equipment} (cont.)`, '', '', '', '', ''];
                 values.forEach((value, index) => drawFitted(value, columns[index] + 6, y - 11, widths[index] - 12, 8, index === 0 ? bold : regular));
-                segment.forEach((note, index) => drawFitted(note, columns[5] + 6, y - 11 - index * 9, widths[5] - 12, 8));
+                segment.forEach((note, index) => drawFitted(note, columns[6] + 6, y - 11 - index * 9, widths[6] - 12, 8));
                 y -= rowHeight;
                 noteIndex += segment.length;
                 if (noteIndex < notes.length) addSummaryPage();
@@ -192,12 +192,14 @@ if (exportButton) {
             page.drawText(shown, {x: totalValueRight - font.widthOfTextAtSize(shown, size), y, size, font, color: emphasize ? blue : dark});
             y -= emphasize ? 18 : 15;
         }
+        const currencySymbol = data.currency === 'USD' ? '$' : 'S/.';
+        const moneyWithCurrency = cents => `${currencySymbol} ${money(cents)}`;
         drawTotal('Horas totales', hoursText(data.total_minutes));
-        data.rates.forEach(rate => drawTotal(`Precio por hora ${rate.name}`, money(Math.round(Number(rate.price) * 100))));
-        drawTotal(`Precio del ${dateText(data.first_date)} al ${dateText(data.last_date)}`, money(data.subtotal_cents));
-        drawTotal('IGV (18 %)', money(data.igv_cents));
+        data.rates.forEach(rate => drawTotal(`Precio por hora ${rate.name}`, moneyWithCurrency(Math.round(Number(rate.price) * 100))));
+        drawTotal(`Precio del ${dateText(data.first_date)} al ${dateText(data.last_date)}`, moneyWithCurrency(data.subtotal_cents));
+        drawTotal('IGV (18 %)', moneyWithCurrency(data.igv_cents));
         drawLine(totalLabelX, y + 12, totalValueRight, y + 12);
-        drawTotal('Monto total', money(data.total_cents), true);
+        drawTotal('Monto total', moneyWithCurrency(data.total_cents), true);
         page.drawImage(signatureImage, {x: A4[0] - left - signatureWidth, y: signatureY, width: signatureWidth, height: signatureHeight});
         progress(`Añadiendo adjuntos (0/${data.records.length})…`);
 

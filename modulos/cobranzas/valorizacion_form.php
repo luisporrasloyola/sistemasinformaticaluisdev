@@ -12,7 +12,8 @@
         <div class="cv-review-fields">
             <div id="cvReviewSuggestions"></div>
             <div class="row g-3">
-                <div class="col-md-6"><label class="form-label" for="cvEquipment">Equipo (equipo + placa/serie)</label><input class="form-control" id="cvEquipment" name="equipo" maxlength="120" required placeholder="Ejemplo: Camión Grúa D8X-884"></div>
+                <div class="col-md-3"><label class="form-label" for="cvEquipment">Equipo (equipo + placa/serie)</label><input class="form-control" id="cvEquipment" name="equipo" maxlength="120" required placeholder="Ejemplo: Camión Grúa D8X-884"></div>
+                <div class="col-md-3"><label class="form-label" for="cvOperator">Operador <span class="text-muted fw-normal">(Elaborado por)</span></label><input class="form-control" id="cvOperator" name="operador" maxlength="150" placeholder="Nombre del operador"></div>
                 <div class="col-md-3"><label class="form-label" for="cvDate">Fecha del servicio</label><input class="form-control" type="date" id="cvDate" name="fecha_servicio" required></div>
                 <div class="col-md-3"><label class="form-label" for="cvTotal">Horas en total</label><input class="form-control" id="cvTotal" readonly value="—"></div>
                 <div class="col-md-3"><label class="form-label" for="cvStart">Hora de inicio</label><input class="form-control" type="time" id="cvStart" name="hora_inicio" required></div>
