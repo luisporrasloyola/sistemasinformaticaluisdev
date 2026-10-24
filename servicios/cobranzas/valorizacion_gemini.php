@@ -54,7 +54,7 @@ $_SESSION['cv_gemini_last'] = time();
 session_write_close();
 $image = file_get_contents($path);
 if ($image === false) gemini_reply(400, 'No se pudo leer la imagen.');
-$prompt = 'Lee exclusivamente el formulario PARTE DIARIO de esta imagen. Devuelve JSON con estas claves exactas: equipo, placa_serie, operador, fecha_servicio, hora_inicio, hora_final. Equipo es el texto manuscrito de la casilla "Equipo"; placa_serie es el texto manuscrito de "Placa/Serie". Operador es el nombre manuscrito junto a la firma bajo "ELABORADO POR" (casilla "NOMBRE"), no el nombre de "APROBADO POR" ni la firma dibujada. Conserva las iniciales y el orden tal como aparecen; no inventes apellidos. Fecha de servicio son las casillas DÍA, MES y AÑO. Hora de inicio es "Llegada a instalación del cliente" y hora final es "Salida de instalación del Cliente". Copia literalmente lo visible; no uses otras horas ni inventes caracteres. Si un dato es ilegible o ambiguo devuelve null para ese dato. Fecha en DD/MM/AAAA y horas en HH:mm (24 horas) cuando sean inequívocas. No incluyas datos del cliente ni observaciones.';
+$prompt = 'Lee exclusivamente el formulario PARTE DIARIO de esta imagen. Devuelve JSON con estas claves exactas: equipo, operador, fecha_servicio, hora_inicio, hora_final. Equipo es únicamente el texto manuscrito de la casilla "Equipo"; ignora por completo la casilla "Placa/Serie" y no agregues su contenido al equipo. Operador es el nombre manuscrito junto a la firma bajo "ELABORADO POR" (casilla "NOMBRE"), no el nombre de "APROBADO POR" ni la firma dibujada. Conserva las iniciales y el orden tal como aparecen; no inventes apellidos. Fecha de servicio son las casillas DÍA, MES y AÑO. Hora de inicio es "Llegada a instalación del cliente" y hora final es "Salida de instalación del Cliente". Copia literalmente lo visible; no uses otras horas ni inventes caracteres. Si un dato es ilegible o ambiguo devuelve null para ese dato. Fecha en DD/MM/AAAA y horas en HH:mm (24 horas) cuando sean inequívocas. No incluyas datos del cliente ni observaciones.';
 $body = json_encode([
     'contents' => [['role' => 'user', 'parts' => [['text' => $prompt], ['inline_data' => ['mime_type' => $info['mime'], 'data' => base64_encode($image)]]]]],
     'generationConfig' => ['responseMimeType' => 'application/json', 'maxOutputTokens' => 2048, 'thinkingConfig' => ['thinkingLevel' => 'MINIMAL']],
@@ -76,7 +76,7 @@ $raw = implode('', array_column($payload['candidates'][0]['content']['parts'] ??
 $values = json_decode($raw, true);
 if (!is_array($values)) gemini_reply(503, 'La lectura no produjo datos utilizables.');
 $fields = [];
-foreach (['equipo', 'placa_serie', 'operador', 'fecha_servicio', 'hora_inicio', 'hora_final'] as $name) {
+foreach (['equipo', 'operador', 'fecha_servicio', 'hora_inicio', 'hora_final'] as $name) {
     $value = $values[$name] ?? null;
     $fields[$name] = is_string($value) ? mb_substr(trim($value), 0, 120) : null;
 }

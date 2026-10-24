@@ -53,9 +53,14 @@ try {
     $stmt->execute([$clientId]);
     $contact = $stmt->fetch() ?: null;
 
-    $stmt = db()->prepare('SELECT lugar_servicio FROM cobranzas_valorizacion_datos_cliente WHERE client_id = ?');
+    $stmt = db()->prepare('SELECT lugar_servicio, equipo, periodo FROM cobranzas_valorizacion_datos_cliente WHERE client_id = ?');
     $stmt->execute([$clientId]);
-    $location = (string) ($stmt->fetchColumn() ?: '');
+    $headerData = $stmt->fetch() ?: [];
+    $location = (string) ($headerData['lugar_servicio'] ?? '');
+    $headerEquipment = (string) ($headerData['equipo'] ?? '');
+    $headerPeriod = (string) ($headerData['periodo'] ?? '');
+    $periodDates = preg_match('/^(\d{4}-\d{2}-\d{2})\|(\d{4}-\d{2}-\d{2})$/D', $headerPeriod, $periodMatch)
+        ? ['from' => $periodMatch[1], 'to' => $periodMatch[2]] : null;
 
     $stmt = db()->prepare('SELECT id, equipo, placa_serie, operador, fecha_servicio, hora_inicio, hora_final, horas_total_minutos, observaciones FROM cobranzas_valorizacion_registros WHERE client_id = ?' . $periodWhere . ' ORDER BY fecha_servicio DESC, id DESC');
     $stmt->execute(array_merge([$clientId], $periodParams));
@@ -95,7 +100,7 @@ try {
 
     json_response([
         'ok' => true,
-        'client' => ['name' => $client['business_name'], 'ruc' => $client['ruc'], 'location' => $location, 'contact' => $contact],
+        'client' => ['name' => $client['business_name'], 'ruc' => $client['ruc'], 'location' => $location, 'contact' => $contact, 'equipment' => $headerEquipment, 'period' => $periodDates],
         'supplier' => ['name' => 'LIFE EQUIPOS INDUSTRIALES SAC', 'ruc' => '20603633441'],
         'records' => $records,
         'rates' => array_values($groups),

@@ -2,6 +2,8 @@
 CREATE TABLE IF NOT EXISTS cobranzas_valorizacion_datos_cliente (
     client_id INT UNSIGNED NOT NULL,
     lugar_servicio VARCHAR(200) NOT NULL DEFAULT '',
+    equipo VARCHAR(150) NOT NULL DEFAULT '',
+    periodo VARCHAR(120) NOT NULL DEFAULT '',
     actualizado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (client_id),
     CONSTRAINT fk_cobranzas_valorizacion_datos_cliente FOREIGN KEY (client_id)

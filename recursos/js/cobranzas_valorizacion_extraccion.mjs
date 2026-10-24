@@ -1,5 +1,5 @@
 // Lectura conservadora de los datos del formato "Parte diario".
-// Devuelve solo valores que superan validaciones de fecha, hora y placa.
+// Devuelve solo valores que superan validaciones de fecha y hora.
 const normalized = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\r/g, '');
 const tidy = value => String(value || '').replace(/\s+/g, ' ').trim();
 
@@ -55,7 +55,7 @@ export function parseEquipment(text, zone = false) {
 export function parseDocumentText(text) {
     const source = normalized(text);
     const lines = source.split('\n').map(tidy);
-    const result = {equipo: '', placa_serie: '', fecha_servicio: '', hora_inicio: '', hora_final: ''};
+    const result = {equipo: '', fecha_servicio: '', hora_inicio: '', hora_final: ''};
     // Evita proponer, por ejemplo, la fecha de emisión de una factura ajena al parte diario.
     const formSignals = [
         /\bequipo\b/i,
@@ -66,7 +66,6 @@ export function parseDocumentText(text) {
     ].filter(pattern => pattern.test(source)).length;
     if (!/\bparte\s+diario\b/i.test(source) && formSignals < 3) return result;
     result.equipo = parseEquipment(source);
-    result.placa_serie = parsePlate(source.match(/(?:placa\s*\/?\s*serie|placa|serie)[^\n]{0,35}/i)?.[0] || source.match(/\bequipo\b[^\n]{0,100}/i)?.[0] || '');
     const dateLine = lines.find(line => /\b(?:fecha|dia\s*[:.]?\s*\d{1,2}\s*mes)\b/i.test(line) && parseDate(line));
     // Una fecha aislada puede ser de emisión o impresión: exigir cabecera o etiqueta.
     result.fecha_servicio = dateLine ? parseDate(dateLine) : '';
@@ -87,15 +86,13 @@ export function parseDocumentText(text) {
 
 export const FOCUS_ZONES = Object.freeze({
     fecha_servicio: {x: 0.68, y: 0.025, width: 0.32, height: 0.13},
-    equipo: {x: 0.35, y: 0.14, width: 0.43, height: 0.14},
-    placa_serie: {x: 0.72, y: 0.14, width: 0.28, height: 0.14},
+    equipo: {x: 0.35, y: 0.14, width: 0.36, height: 0.14},
     hora_inicio: {x: 0.34, y: 0.40, width: 0.33, height: 0.19},
     hora_final: {x: 0.70, y: 0.40, width: 0.30, height: 0.19},
 });
 
 export function parseFocusedText(field, text) {
     if (field === 'equipo') return parseEquipment(text, true);
-    if (field === 'placa_serie') return parsePlate(text);
     if (field === 'fecha_servicio') return parseDate(text);
     if (field === 'hora_inicio' || field === 'hora_final') return parseTime(text);
     return '';

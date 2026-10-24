@@ -133,17 +133,20 @@ if (exportButton) {
             const heading = fitText(title, bold, titleSize, tableWidth);
             page.drawText(heading, {x: (A4[0] - bold.widthOfTextAtSize(heading, titleSize)) / 2, y: 698, size: titleSize, font: bold, color: dark});
             if (summaryPage === 1) {
-                page.drawRectangle({x: left, y: 631, width: tableWidth, height: 54, borderColor: line, borderWidth: 0.7});
-                drawLine(366, 631, 366, 685);
+                page.drawRectangle({x: left, y: 607, width: tableWidth, height: 78, borderColor: line, borderWidth: 0.7});
+                drawLine(366, 607, 366, 685);
                 drawInfo('Cliente', data.client.name, 32, 674, 105, 326);
                 drawInfo('Lugar de servicio', data.client.location || '-', 32, 662, 105, 326);
                 drawInfo('RUC - Cliente', data.client.ruc, 32, 650, 105, 326);
                 const contact = data.client.contact ? `${data.client.contact.name} · ${data.client.contact.phone}` : 'Sin contacto comercial';
                 drawInfo('Contacto', contact, 32, 638, 105, 326);
+                const period = data.client.period;
+                drawInfo('Equipo', data.client.equipment || '-', 32, 626, 105, 326);
+                drawInfo('Periodo', period ? `${dateText(period.from)} al ${dateText(period.to)}` : '-', 32, 614, 105, 326);
                 drawFitted('Proveedor', 374, 674, 190, 8.5, bold, muted);
                 drawFitted(data.supplier.name, 374, 662, 188, 8.2);
                 drawInfo('RUC', data.supplier.ruc, 374, 639, 34, 190);
-                y = drawTableHeader(625);
+                y = drawTableHeader(601);
             } else {
                 y = drawTableHeader(680);
             }

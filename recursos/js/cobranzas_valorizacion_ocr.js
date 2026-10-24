@@ -1,5 +1,5 @@
 // Edición visual y OCR en el navegador. El archivo adjunto original no se altera.
-import {parseDocumentText, parseFocusedText, FOCUS_ZONES} from './cobranzas_valorizacion_extraccion.mjs?v=3';
+import {parseDocumentText, parseFocusedText, FOCUS_ZONES} from './cobranzas_valorizacion_extraccion.mjs?v=4';
 document.addEventListener('DOMContentLoaded', () => {
     const previewContent = document.getElementById('cvPreviewContent');
     if (!previewContent) return;
@@ -58,7 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('cvReviewSuggestions').append(extracted);
     const extractedList = extracted.querySelector('#cvExtractedList');
     const fieldIds = {equipo:'cvEquipment', operador:'cvOperator', fecha_servicio:'cvDate', hora_inicio:'cvStart', hora_final:'cvEnd'};
-    const fieldLabels = {equipo:'Equipo', placa_serie:'Placa/serie', operador:'Operador (Elaborado por)', fecha_servicio:'Fecha', hora_inicio:'Llegada', hora_final:'Salida'};
+    const fieldLabels = {equipo:'Equipo', operador:'Operador (Elaborado por)', fecha_servicio:'Fecha', hora_inicio:'Llegada', hora_final:'Salida'};
     const fields = Object.fromEntries(Object.entries(fieldIds).map(([key, id]) => [key, document.getElementById(id)]));
     const visualReview = document.createElement('div');
     visualReview.className = 'cv-visual-review border rounded p-2 mb-3';
@@ -69,7 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
     visualReview.append(visualGrid);
     document.getElementById('cvReviewSuggestions').append(visualReview);
     const visualZones = {
-        equipo:{label:'Equipo y placa/serie',field:'equipo',x:.39,y:.19,width:.61,height:.06},
+        equipo:{label:'Equipo',field:'equipo',x:.39,y:.19,width:.33,height:.06},
         operador:{label:'Nombre bajo Elaborado por',field:'operador',x:.12,y:.87,width:.43,height:.11},
         fecha_servicio:{label:'Día / mes / año',field:'fecha_servicio',x:.75,y:.07,width:.25,height:.055},
         hora_inicio:{label:'Llegada a instalación',field:'hora_inicio',x:.41,y:.46,width:.21,height:.055},
@@ -135,9 +135,7 @@ document.addEventListener('DOMContentLoaded', () => {
         fields[key].focus();
     });
     function applySuggestions(values) {
-        const combined = values.equipo && values.placa_serie ? `${values.equipo} ${values.placa_serie}` : '';
-        const review = {...values, equipo:combined};
-        for (const [key, value] of Object.entries(review)) {
+        for (const [key, value] of Object.entries(values)) {
             if (!value || !fields[key]) continue;
             suggestions[key] = value;
         }
@@ -346,13 +344,12 @@ document.addEventListener('DOMContentLoaded', () => {
             } else values.fecha_servicio = null;
             for (const key of ['hora_inicio', 'hora_final']) if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(values[key] || '')) values[key] = null;
             applySuggestions(values);
-            const completed = {...values, equipo: values.equipo && values.placa_serie ? `${values.equipo} ${values.placa_serie}` : null};
-            for (const [key, value] of Object.entries(completed)) {
+            for (const [key, value] of Object.entries(values)) {
                 if (!fields[key] || !value || fields[key].value !== before[key]) continue;
                 fields[key].value = value;
                 fields[key].dispatchEvent(new Event('input', {bubbles:true}));
             }
-            const count = [values.equipo && values.placa_serie, values.fecha_servicio, values.hora_inicio, values.hora_final].filter(Boolean).length;
+            const count = [values.equipo, values.fecha_servicio, values.hora_inicio, values.hora_final].filter(Boolean).length;
             ocrStatus.textContent = `${count} de 4 datos principales detectados. Compruebe también el nombre del operador con el documento.`;
             fieldStatus.textContent = count ? 'Lectura completada. Corrija cualquier dato que no coincida con la foto; las horas totales se calculan automáticamente.' : 'No se identificaron datos seguros. Complete los campos manualmente.';
             document.dispatchEvent(new CustomEvent('cv:reading-complete', {detail: {count}}));
@@ -407,7 +404,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const formLikely = Object.values(values).some(Boolean) || /\b(?:parte\s+diario|control\s+de\s+tiempo|llegada\s+a\s+instalaci[oó]n|salida\s+de\s+instalaci[oó]n)\b/i.test(ocrText.value);
             if (!cropped && (formLikely || forceZones) && editorCanvas.height / editorCanvas.width >= 0.8 && editorCanvas.width >= 500) {
                 for (const [field, zone] of Object.entries(FOCUS_ZONES)) {
-                    const verifyIdentity = field === 'equipo' || field === 'placa_serie';
+                    const verifyIdentity = field === 'equipo';
                     if (values[field] && !verifyIdentity) continue;
                     if (currentGeneration !== generation) return;
                     ocrStatus.textContent = `Buscando ${fieldLabels[field].toLowerCase()} en el formato…`;
@@ -434,7 +431,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (currentGeneration !== generation) return;
             applySuggestions(values);
             const elapsed = ((performance.now() - startedAt) / 1000).toFixed(1);
-            const candidateCount = [values.equipo && values.placa_serie, values.fecha_servicio, values.hora_inicio, values.hora_final].filter(Boolean).length;
+            const candidateCount = [values.equipo, values.fecha_servicio, values.hora_inicio, values.hora_final].filter(Boolean).length;
             ocrStatus.textContent = `${candidateCount} de 4 lecturas candidatas en ${elapsed} s, procesadas en este dispositivo. ` +
                 (candidateCount ? 'Revise cada dato antes de usarlo; la letra borrosa puede producir errores.' : 'No se obtuvieron datos legibles. Ajuste la vista o complete los campos manualmente.');
         } catch (error) {

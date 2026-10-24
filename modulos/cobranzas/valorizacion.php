@@ -41,6 +41,10 @@ $clientId = filter_var($_GET['cliente_id'] ?? null, FILTER_VALIDATE_INT, ['optio
 $client = null;
 $commercialContact = null;
 $serviceLocation = '';
+$headerEquipment = '';
+$headerPeriod = '';
+$headerPeriodFrom = '';
+$headerPeriodTo = '';
 $records = [];
 $totalMinutes = 0;
 $firstServiceDate = null;
@@ -76,9 +80,16 @@ if ($clientId) {
     $contactStmt->execute([$clientId]);
     $commercialContact = $contactStmt->fetch() ?: null;
     try {
-        $locationStmt = db()->prepare('SELECT lugar_servicio FROM cobranzas_valorizacion_datos_cliente WHERE client_id = ?');
+        $locationStmt = db()->prepare('SELECT lugar_servicio, equipo, periodo FROM cobranzas_valorizacion_datos_cliente WHERE client_id = ?');
         $locationStmt->execute([$clientId]);
-        $serviceLocation = (string) ($locationStmt->fetchColumn() ?: '');
+        $headerData = $locationStmt->fetch() ?: [];
+        $serviceLocation = (string) ($headerData['lugar_servicio'] ?? '');
+        $headerEquipment = (string) ($headerData['equipo'] ?? '');
+        $headerPeriod = (string) ($headerData['periodo'] ?? '');
+        if (preg_match('/^(\d{4}-\d{2}-\d{2})\|(\d{4}-\d{2}-\d{2})$/D', $headerPeriod, $headerPeriodMatch)) {
+            $headerPeriodFrom = $headerPeriodMatch[1];
+            $headerPeriodTo = $headerPeriodMatch[2];
+        }
     } catch (PDOException $exception) {
         error_log('Error al cargar lugar de servicio: ' . $exception->getMessage());
         $error = 'No se pudo cargar el lugar de servicio. Ejecute database/cobranzas_valorizacion_datos_cliente.sql.';
@@ -107,7 +118,7 @@ if ($clientId) {
         } elseif ($action === 'save') {
             $equipment = trim((string) ($_POST['equipo'] ?? ''));
             $operator = trim((string) ($_POST['operador'] ?? ''));
-            // La placa/serie forma parte del único campo Equipo en esta pantalla.
+            // El campo heredado de placa/serie permanece vacío en nuevos registros.
             $plate = '';
             $date = (string) ($_POST['fecha_servicio'] ?? '');
             $start = (string) ($_POST['hora_inicio'] ?? '');
@@ -116,7 +127,7 @@ if ($clientId) {
             $parsedDate = preg_match('/^\d{4}-\d{2}-\d{2}$/D', $date) ? DateTimeImmutable::createFromFormat('!Y-m-d', $date) : false;
             $minutes = valor_minutes($start, $end);
             if (($_POST['record_id'] ?? '') !== '' && !$existing) $error = 'No se encontró el registro.';
-            elseif ($equipment === '' || mb_strlen($equipment, 'UTF-8') > 120) $error = 'Ingrese el equipo con su placa o serie (máximo 120 caracteres).';
+            elseif ($equipment === '' || mb_strlen($equipment, 'UTF-8') > 120) $error = 'Ingrese el equipo (máximo 120 caracteres).';
             elseif (mb_strlen($operator, 'UTF-8') > 150) $error = 'El nombre del operador no puede superar 150 caracteres.';
             elseif (!$parsedDate || $parsedDate->format('Y-m-d') !== $date) $error = 'Seleccione una fecha válida.';
             elseif ($minutes === null) $error = 'Ingrese horas válidas: el turno debe durar más de una hora para descontar el refrigerio. Se admite cruzar la medianoche.';
@@ -129,8 +140,8 @@ if ($clientId) {
                     $file = upload_file($_FILES['adjunto'] ?? [], 'cobranzas_valorizacion', document_attachment_mimes());
                     $newPath = $file['path'];
                     if ($existing) {
-                        $sql = 'UPDATE cobranzas_valorizacion_registros SET equipo = ?, placa_serie = ?, operador = ?, fecha_servicio = ?, hora_inicio = ?, hora_final = ?, horas_total_minutos = ?, observaciones = ?';
-                        $values = [$equipment, $plate, $operator ?: null, $date, $start, $end, $minutes, $notes ?: null];
+                        $sql = 'UPDATE cobranzas_valorizacion_registros SET equipo = ?, operador = ?, fecha_servicio = ?, hora_inicio = ?, hora_final = ?, horas_total_minutos = ?, observaciones = ?';
+                        $values = [$equipment, $operator ?: null, $date, $start, $end, $minutes, $notes ?: null];
                         if ($newPath) { $sql .= ', archivo_path = ?, archivo_nombre_original = ?'; array_push($values, $newPath, $file['name']); }
                         $sql .= ' WHERE id = ? AND client_id = ?';
                         array_push($values, $recordId, $clientId);
@@ -235,6 +246,7 @@ require __DIR__ . '/../../includes/header.php';
 .cv-client-panel .cv-client-row:last-child{margin-bottom:0}
 .cv-client-panel .cv-client-row label,.cv-client-panel .cv-client-detail-label{color:#455b79;font-weight:700}
 .cv-client-panel .cv-client-detail-value{color:#172b4d;font-weight:700}
+.cv-header-period{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.cv-header-period label{display:block;margin:0;font-size:.75rem;color:#455b79}.cv-header-period input{display:block;width:100%;margin-top:3px}@media(max-width:600px){.cv-header-period{grid-template-columns:1fr}}
 .cv-client-panel .form-control,.cv-client-panel .form-select{height:36px;border-color:#cbd9eb;border-radius:9px;background-color:#fff;box-shadow:none}
 .cv-client-panel .form-control:focus,.cv-client-panel .form-select:focus{border-color:#4f83e6;box-shadow:0 0 0 3px rgba(37,99,235,.12)}
 .cv-client-panel .cv-client-supplier{display:block;align-self:start;min-height:0;padding:0 0 0 16px;border:0;border-left:1px solid #dedbd4;border-radius:0;background:transparent}
@@ -261,6 +273,8 @@ require __DIR__ . '/../../includes/header.php';
 <div class="cv-client-row"><label for="cvServiceLocation">Lugar de servicio</label><div class="cv-client-row-value"><input class="form-control" id="cvServiceLocation" type="text" value="<?= e($serviceLocation) ?>" maxlength="200" placeholder="Ingrese el lugar de servicio" data-client-id="<?= (int) $clientId ?>" data-csrf="<?= e(csrf_token()) ?>" data-endpoint="<?= e(APP_URL . '/servicios/cobranzas/valorizacion_lugar.php') ?>"><span class="cv-detail-error" id="cvLocationError" role="alert"></span></div></div>
 <div class="cv-client-row"><span class="cv-client-detail-label">RUC - Cliente</span><div class="cv-client-row-value cv-client-detail-value"><?= e($client['ruc']) ?></div></div>
 <div class="cv-client-row"><span class="cv-client-detail-label">Contacto</span><div class="cv-client-row-value cv-client-detail-value"><?= $commercialContact ? e($commercialContact['name'] . ' · ' . $commercialContact['phone']) : 'Sin contacto comercial' ?></div></div>
+<div class="cv-client-row"><label for="cvHeaderEquipment">Equipo</label><div class="cv-client-row-value"><input class="form-control cv-header-input" id="cvHeaderEquipment" type="text" value="<?= e($headerEquipment) ?>" maxlength="150" placeholder="Ingrese el equipo" data-field="equipo" data-client-id="<?= (int) $clientId ?>" data-csrf="<?= e(csrf_token()) ?>" data-endpoint="<?= e(APP_URL . '/servicios/cobranzas/valorizacion_cabecera.php') ?>"><span class="cv-detail-error" role="alert"></span></div></div>
+<div class="cv-client-row"><span class="cv-client-detail-label">Periodo</span><div class="cv-client-row-value"><div class="cv-header-period" data-client-id="<?= (int) $clientId ?>" data-csrf="<?= e(csrf_token()) ?>" data-endpoint="<?= e(APP_URL . '/servicios/cobranzas/valorizacion_cabecera.php') ?>"><label for="cvHeaderPeriodFrom">Desde<input class="form-control" id="cvHeaderPeriodFrom" type="date" value="<?= e($headerPeriodFrom) ?>"></label><label for="cvHeaderPeriodTo">Hasta<input class="form-control" id="cvHeaderPeriodTo" type="date" value="<?= e($headerPeriodTo) ?>"></label></div><span class="cv-detail-error" id="cvHeaderPeriodError" role="alert"></span></div></div>
 <?php endif; ?>
 </div>
 <?php if ($client): ?><div class="cv-client-supplier">
@@ -296,8 +310,8 @@ require __DIR__ . '/../../includes/header.php';
 <div class="modal fade" id="cvFileModal" tabindex="-1" aria-labelledby="cvFileTitle" aria-hidden="true"><div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h2 class="modal-title h5 me-auto" id="cvFileTitle">Archivo original</h2><a class="btn btn-primary btn-sm me-3" id="cvFileDownload" href="#"><i class="fa-solid fa-download me-1" aria-hidden="true"></i>Descargar</a><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div><div class="modal-body cv-preview" id="cvFileBody"></div></div></div></div>
 <?php endif; ?>
 <script type="module" src="<?= e(APP_URL . '/recursos/js/cobranzas_valorizacion_archivo.js?v=8') ?>"></script>
-<script type="module" src="<?= e(APP_URL . '/recursos/js/cobranzas_valorizacion_ocr.js?v=20') ?>"></script>
-<script type="module" src="<?= e(APP_URL . '/recursos/js/cobranzas_valorizacion_reporte.js?v=18') ?>"></script>
+<script type="module" src="<?= e(APP_URL . '/recursos/js/cobranzas_valorizacion_ocr.js?v=21') ?>"></script>
+<script type="module" src="<?= e(APP_URL . '/recursos/js/cobranzas_valorizacion_reporte.js?v=20') ?>"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     const periodMode = document.getElementById('cvPeriodMode');
@@ -352,6 +366,62 @@ document.addEventListener('DOMContentLoaded', () => {
             serviceLocation.disabled = false;
         }
     });
+    document.querySelectorAll('.cv-header-input').forEach(input => input.addEventListener('change', async () => {
+        const error = input.nextElementSibling;
+        const data = new FormData();
+        data.set('csrf_token', input.dataset.csrf);
+        data.set('cliente_id', input.dataset.clientId);
+        data.set('campo', input.dataset.field);
+        data.set('valor', input.value.trim());
+        error.textContent = '';
+        input.disabled = true;
+        try {
+            const response = await fetch(input.dataset.endpoint, {method:'POST', body:data, credentials:'same-origin', headers:{Accept:'application/json'}});
+            if (!(response.headers.get('content-type') || '').includes('application/json')) throw new Error('La sesión venció. Actualice la página.');
+            const result = await response.json();
+            if (!response.ok || !result.ok) throw new Error(result.message || 'No se pudo guardar el dato.');
+            input.value = data.get('valor');
+        } catch (exception) {
+            error.textContent = exception.message || 'No se pudo guardar el dato.';
+        } finally {
+            input.disabled = false;
+        }
+    }));
+    const headerPeriod = document.querySelector('.cv-header-period');
+    if (headerPeriod) {
+        const from = document.getElementById('cvHeaderPeriodFrom');
+        const to = document.getElementById('cvHeaderPeriodTo');
+        const periodError = document.getElementById('cvHeaderPeriodError');
+        const savePeriod = async () => {
+            periodError.textContent = '';
+            if (from.value !== '' && to.value !== '' && from.value > to.value) {
+                periodError.textContent = 'La fecha Desde debe ser anterior o igual a Hasta.';
+                return;
+            }
+            if ((from.value === '') !== (to.value === '')) {
+                periodError.textContent = 'Seleccione ambas fechas para guardar el periodo.';
+                return;
+            }
+            const data = new FormData();
+            data.set('csrf_token', headerPeriod.dataset.csrf);
+            data.set('cliente_id', headerPeriod.dataset.clientId);
+            data.set('campo', 'periodo');
+            data.set('valor', from.value && to.value ? `${from.value}|${to.value}` : '');
+            from.disabled = to.disabled = true;
+            try {
+                const response = await fetch(headerPeriod.dataset.endpoint, {method:'POST', body:data, credentials:'same-origin', headers:{Accept:'application/json'}});
+                if (!(response.headers.get('content-type') || '').includes('application/json')) throw new Error('La sesión venció. Actualice la página.');
+                const result = await response.json();
+                if (!response.ok || !result.ok) throw new Error(result.message || 'No se pudo guardar el periodo.');
+            } catch (exception) {
+                periodError.textContent = exception.message || 'No se pudo guardar el periodo.';
+            } finally {
+                from.disabled = to.disabled = false;
+            }
+        };
+        from.addEventListener('change', savePeriod);
+        to.addEventListener('change', savePeriod);
+    }
     const formElement = document.getElementById('cvFormModal');
     const quickFile = document.getElementById('cvQuickFile');
     const progressBox = document.getElementById('cvProgressBox');
