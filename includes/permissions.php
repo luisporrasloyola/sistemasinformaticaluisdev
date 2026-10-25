@@ -57,7 +57,6 @@ function permission_modules_catalog(): array
         'cobranzas' => [
             'label' => 'Cobranzas',
             'children' => [
-                'cobranzas.parte_diario' => 'Parte diario',
                 'cobranzas.valorizacion' => 'Valorización',
             ],
         ],
@@ -198,6 +197,8 @@ function permission_default_modules_for_role(string $role): array
         return [
             'control_personal' => true,
             'control_personal.control_asistencia' => true,
+            'cobranzas' => true,
+            'cobranzas.valorizacion' => true,
             'control_personal.dashboard' => true,
             'control_personal.reporte_asistencias' => true,
             'requisitos' => true,
@@ -343,6 +344,11 @@ function permission_payload_for_user(int $userId, string $role): array
         }
     }
 
+    if ($role === 'Personal') {
+        $modulePermissions['cobranzas'] = true;
+        $modulePermissions['cobranzas.valorizacion'] = true;
+    }
+
     return [
         'modules' => array_keys(array_filter($modulePermissions)),
         'documents' => $documentPermissions,
@@ -361,6 +367,8 @@ function save_user_permissions(int $userId, string $role, array $post): void
         $selectedModules = array_values(array_intersect($selectedModules, $allowed));
         $selectedModules[] = 'control_personal';
         $selectedModules[] = 'control_personal.control_asistencia';
+        $selectedModules[] = 'cobranzas';
+        $selectedModules[] = 'cobranzas.valorizacion';
         if (array_intersect($selectedModules, ['control_personal.personal', 'requisitos.pmi_individual'])) $selectedModules[] = 'requisitos';
         if (array_intersect($selectedModules, ['empresa_maquirenta.personal', 'empresa_maquirenta.pmi_individual'])) $selectedModules[] = 'empresa_maquirenta';
         $selectedModules = array_values(array_unique($selectedModules));
@@ -369,7 +377,7 @@ function save_user_permissions(int $userId, string $role, array $post): void
     db()->prepare('DELETE FROM user_module_permissions WHERE user_id = :user_id')->execute(['user_id' => $userId]);
     if ($role === 'Personal') {
         $storedKeys = array_values(array_unique(array_merge(
-            ['control_personal', 'control_personal.control_asistencia', 'requisitos', 'empresa_maquirenta'],
+            ['control_personal', 'control_personal.control_asistencia', 'cobranzas', 'cobranzas.valorizacion', 'requisitos', 'empresa_maquirenta'],
             permission_personal_configurable_modules()
         )));
         $stmt = db()->prepare('INSERT INTO user_module_permissions (user_id, module_key, can_access) VALUES (:user_id, :module_key, :can_access)');

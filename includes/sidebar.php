@@ -10,7 +10,6 @@ $clientesOpen = str_contains($currentPath, '/modulos/clientes/');
 $clientesInformacionOpen = str_ends_with($currentPath, '/modulos/clientes/informacion.php');
 $clientesPmiOpen = str_ends_with($currentPath, '/modulos/clientes/pmi.php');
 $cobranzasOpen = str_contains($currentPath, '/modulos/cobranzas/');
-$cobranzasParteDiarioOpen = str_ends_with($currentPath, '/modulos/cobranzas/parte_diario.php');
 $cobranzasValorizacionOpen = str_ends_with($currentPath, '/modulos/cobranzas/valorizacion.php');
 $empresaMaquirentaOpen = str_contains($currentPath, '/modulos/empresa_maquirenta/');
 $empresaMaquirentaDashboardOpen = str_ends_with($currentPath, '/modulos/empresa_maquirenta/dashboard.php');
@@ -80,6 +79,12 @@ $isAdmin = is_admin();
         <?php endif; ?>
 
         <?php if (is_personal_role()): ?>
+            <button class="nav-link nav-parent <?= $cobranzasOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#cobranzasMenuPersonal" aria-expanded="<?= $cobranzasOpen ? 'true' : 'false' ?>" aria-controls="cobranzasMenuPersonal">
+                <i class="fa-solid fa-money-bill-transfer"></i><span>Cobranzas</span><i class="fa-solid fa-chevron-down nav-caret"></i>
+            </button>
+            <div class="collapse <?= $cobranzasOpen ? 'show' : '' ?>" id="cobranzasMenuPersonal"><div class="submenu">
+                <a class="nav-link sub-link <?= $cobranzasValorizacionOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/cobranzas/valorizacion.php"><i class="fa-solid fa-file-invoice-dollar"></i><span>Valorización</span></a>
+            </div></div>
             <?php if (current_user_can_module('requisitos')): ?>
                 <button class="nav-link nav-parent <?= $requisitosOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#requisitosMenuPersonal" aria-expanded="<?= $requisitosOpen ? 'true' : 'false' ?>">
                     <i class="fa-solid fa-folder-open"></i><span>Requisitos</span><i class="fa-solid fa-chevron-down nav-caret"></i>
@@ -152,7 +157,6 @@ $isAdmin = is_admin();
             </button>
             <div class="collapse <?= $cobranzasOpen ? 'show' : '' ?>" id="cobranzasMenu">
                 <div class="submenu">
-                    <a class="nav-link sub-link <?= $cobranzasParteDiarioOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/cobranzas/parte_diario.php"><i class="fa-solid fa-calendar-day"></i><span>Parte diario</span></a>
                     <a class="nav-link sub-link <?= $cobranzasValorizacionOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/cobranzas/valorizacion.php"><i class="fa-solid fa-file-invoice-dollar"></i><span>Valorización</span></a>
                 </div>
             </div>
@@ -238,10 +242,9 @@ $isAdmin = is_admin();
                     <?php if (current_user_can_module('clientes.pmi')): ?><a class="nav-link sub-link <?= $clientesPmiOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/clientes/pmi.php"><i class="fa-solid fa-file-shield"></i><span>PMI Clientes</span></a><?php endif; ?>
                 </div></div>
             <?php endif; ?>
-            <?php if (current_user_can_module('cobranzas') && (current_user_can_module('cobranzas.parte_diario') || current_user_can_module('cobranzas.valorizacion'))): ?>
+            <?php if (current_user_can_module('cobranzas') && current_user_can_module('cobranzas.valorizacion')): ?>
                 <button class="nav-link nav-parent <?= $cobranzasOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#cobranzasMenuGestor" aria-expanded="<?= $cobranzasOpen ? 'true' : 'false' ?>" aria-controls="cobranzasMenuGestor"><i class="fa-solid fa-money-bill-transfer"></i><span>Cobranzas</span><i class="fa-solid fa-chevron-down nav-caret"></i></button>
                 <div class="collapse <?= $cobranzasOpen ? 'show' : '' ?>" id="cobranzasMenuGestor"><div class="submenu">
-                    <?php if (current_user_can_module('cobranzas.parte_diario')): ?><a class="nav-link sub-link <?= $cobranzasParteDiarioOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/cobranzas/parte_diario.php"><i class="fa-solid fa-calendar-day"></i><span>Parte diario</span></a><?php endif; ?>
                     <?php if (current_user_can_module('cobranzas.valorizacion')): ?><a class="nav-link sub-link <?= $cobranzasValorizacionOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/cobranzas/valorizacion.php"><i class="fa-solid fa-file-invoice-dollar"></i><span>Valorización</span></a><?php endif; ?>
                 </div></div>
             <?php endif; ?>

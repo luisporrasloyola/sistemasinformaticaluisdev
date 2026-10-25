@@ -18,11 +18,11 @@ if (empty($_SESSION['user'])) cabecera_response(false, 'La sesión venció. Actu
 if (!current_user_can_module('cobranzas.valorizacion')) cabecera_response(false, 'No tiene permiso para editar valorizaciones.', 403);
 if (!csrf_is_valid($_POST['csrf_token'] ?? null)) cabecera_response(false, 'La sesión del formulario venció. Actualice la página.', 419);
 
-$clientId = filter_var($_POST['cliente_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+$valuationId = filter_var($_POST['valorizacion_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
 $field = (string) ($_POST['campo'] ?? '');
 $limits = ['equipo' => 150, 'capacidad' => 100, 'periodo' => 120];
 $value = trim((string) ($_POST['valor'] ?? ''));
-if (!$clientId || !isset($limits[$field]) || mb_strlen($value, 'UTF-8') > $limits[$field]) {
+if (!$valuationId || !isset($limits[$field]) || mb_strlen($value, 'UTF-8') > $limits[$field]) {
     cabecera_response(false, 'Ingrese un dato válido.', 422);
 }
 if ($field === 'periodo' && $value !== '') {
@@ -37,11 +37,8 @@ if ($field === 'periodo' && $value !== '') {
 }
 
 try {
-    $clientExists = db()->prepare('SELECT 1 FROM clients WHERE id = ?');
-    $clientExists->execute([$clientId]);
-    if (!$clientExists->fetchColumn()) cabecera_response(false, 'Cliente no encontrado.', 404);
-    $sql = "INSERT INTO cobranzas_valorizacion_datos_cliente (client_id, $field) VALUES (?, ?) ON DUPLICATE KEY UPDATE $field = VALUES($field)";
-    db()->prepare($sql)->execute([$clientId, $value]);
+    $sql = "UPDATE cobranzas_valorizaciones SET $field = ?, registered_by_user_id = COALESCE(registered_by_user_id, ?) WHERE id = ?";
+    db()->prepare($sql)->execute([$value, (int) (current_user()['id'] ?? 0) ?: null, $valuationId]);
     cabecera_response(true, 'Dato guardado.', 200);
 } catch (PDOException $exception) {
     error_log('Error al guardar cabecera de valorización: ' . $exception->getMessage());

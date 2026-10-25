@@ -5,15 +5,21 @@ require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/cobranzas_valorizacion_periodo.php';
 require_module_access('cobranzas.valorizacion');
+if (is_personal_role()) json_response(['ok' => false, 'message' => 'El rol Personal no puede generar PDF de valorizaciones.'], 403);
 
 header('Content-Type: application/json; charset=utf-8');
-$clientId = filter_var($_GET['cliente_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
-if (!$clientId) json_response(['ok' => false, 'message' => 'Seleccione un cliente válido.'], 422);
+$valuationId = filter_var($_GET['valorizacion_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+if (!$valuationId) json_response(['ok' => false, 'message' => 'Seleccione una valorización válida.'], 422);
+$valuationStmt = db()->prepare('SELECT client_id, lugar_servicio, equipo, capacidad, periodo FROM cobranzas_valorizaciones WHERE id = ?');
+$valuationStmt->execute([$valuationId]);
+$valuation = $valuationStmt->fetch();
+if (!$valuation) json_response(['ok' => false, 'message' => 'Valorización no encontrada.'], 404);
+$clientId = (int) $valuation['client_id'];
 try {
     $defaultMonth = null;
     if (!isset($_GET['mes']) && ($_GET['periodo'] ?? 'mes') !== 'fechas') {
-        $latestStmt = db()->prepare('SELECT MAX(fecha_servicio) FROM cobranzas_valorizacion_registros WHERE client_id = ?');
-        $latestStmt->execute([$clientId]);
+        $latestStmt = db()->prepare('SELECT MAX(fecha_servicio) FROM cobranzas_valorizacion_registros WHERE valorizacion_id = ?');
+        $latestStmt->execute([$valuationId]);
         $latestDate = $latestStmt->fetchColumn();
         if ($latestDate) $defaultMonth = substr((string) $latestDate, 0, 7);
     }
@@ -53,9 +59,7 @@ try {
     $stmt->execute([$clientId]);
     $contact = $stmt->fetch() ?: null;
 
-    $stmt = db()->prepare('SELECT lugar_servicio, equipo, capacidad, periodo FROM cobranzas_valorizacion_datos_cliente WHERE client_id = ?');
-    $stmt->execute([$clientId]);
-    $headerData = $stmt->fetch() ?: [];
+    $headerData = $valuation;
     $location = (string) ($headerData['lugar_servicio'] ?? '');
     $headerEquipment = (string) ($headerData['equipo'] ?? '');
     $headerCapacity = (string) ($headerData['capacidad'] ?? '');
@@ -63,8 +67,8 @@ try {
     $periodDates = preg_match('/^(\d{4}-\d{2}-\d{2})\|(\d{4}-\d{2}-\d{2})$/D', $headerPeriod, $periodMatch)
         ? ['from' => $periodMatch[1], 'to' => $periodMatch[2]] : null;
 
-    $stmt = db()->prepare('SELECT r.id, r.equipo, r.placa_serie, r.operador, r.fecha_servicio, r.hora_inicio, r.hora_final, r.horas_total_minutos, r.observaciones, COALESCE(u.name, \'\') AS registered_by FROM cobranzas_valorizacion_registros r LEFT JOIN users u ON u.id = r.registered_by_user_id WHERE r.client_id = ?' . $periodWhere . ' ORDER BY r.fecha_servicio DESC, r.id DESC');
-    $stmt->execute(array_merge([$clientId], $periodParams));
+    $stmt = db()->prepare('SELECT r.id, r.equipo, r.placa_serie, r.operador, r.fecha_servicio, r.hora_inicio, r.hora_final, r.horas_total_minutos, r.observaciones, COALESCE(u.name, \'\') AS registered_by FROM cobranzas_valorizacion_registros r LEFT JOIN users u ON u.id = r.registered_by_user_id WHERE r.valorizacion_id = ?' . $periodWhere . ' ORDER BY r.fecha_servicio DESC, r.id DESC');
+    $stmt->execute(array_merge([$valuationId], $periodParams));
     $records = [];
     $groups = [];
     $totalMinutes = 0;
@@ -91,8 +95,8 @@ try {
     }
     if (!$records) json_response(['ok' => false, 'message' => 'No hay registros para exportar en el periodo seleccionado.'], 422);
 
-    $stmt = db()->prepare('SELECT equipo_clave, precio_hora FROM cobranzas_valorizacion_precios_hora WHERE client_id = ?');
-    $stmt->execute([$clientId]);
+    $stmt = db()->prepare('SELECT equipo_clave, precio_hora FROM cobranzas_valorizacion_precios_valorizacion WHERE valorizacion_id = ?');
+    $stmt->execute([$valuationId]);
     foreach ($stmt as $rate) {
         if (isset($groups[$rate['equipo_clave']])) $groups[$rate['equipo_clave']]['price'] = number_format((float) $rate['precio_hora'], 2, '.', '');
     }

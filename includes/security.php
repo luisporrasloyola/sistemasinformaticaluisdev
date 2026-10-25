@@ -131,7 +131,7 @@ function current_user_can_module(string $moduleKey): bool
     }
 
     if (is_personal_role()) {
-        if (in_array($moduleKey, ['control_personal', 'control_personal.control_asistencia'], true)) return true;
+        if (in_array($moduleKey, ['control_personal', 'control_personal.control_asistencia', 'cobranzas', 'cobranzas.valorizacion'], true)) return true;
         require_once __DIR__ . '/../config/database.php';
         require_once __DIR__ . '/permissions.php';
         if (!in_array($moduleKey, array_merge(['requisitos', 'empresa_maquirenta'], permission_personal_configurable_modules()), true)) return false;

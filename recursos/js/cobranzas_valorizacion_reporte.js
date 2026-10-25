@@ -291,11 +291,11 @@ if (exportButtons.length) {
 
     exportButtons.forEach(exportButton => exportButton.addEventListener('click', async () => {
         if (exportButton.disabled) return;
-        const original = exportButton.innerHTML;
         const mode = exportButton.dataset.mode === 'cobranzas' ? 'cobranzas' : 'normal';
         const disabledBefore = exportButtons.map(button => button.disabled);
-        const progress = message => { exportButton.textContent = message; };
+        const progress = () => {};
         exportButtons.forEach(button => { button.disabled = true; });
+        exportButton.setAttribute('aria-busy', 'true');
         let downloadUrl;
         try {
             progress('Preparando PDF…');
@@ -318,7 +318,7 @@ if (exportButtons.length) {
             else alert(message);
         } finally {
             exportButtons.forEach((button, index) => { button.disabled = disabledBefore[index]; });
-            exportButton.innerHTML = original;
+            exportButton.removeAttribute('aria-busy');
             if (downloadUrl) setTimeout(() => URL.revokeObjectURL(downloadUrl), 60000);
         }
     }));

@@ -5351,7 +5351,7 @@ function initUsuariosModule() {
             return { modules: allModuleKeys, documents: buildAllDocumentPermissions() };
         }
         if (role === 'Personal') {
-            return { modules: ['control_personal', 'control_personal.control_asistencia', 'control_personal.dashboard', 'control_personal.reporte_asistencias', 'requisitos', 'control_personal.personal', 'requisitos.pmi_individual', 'empresa_maquirenta', 'empresa_maquirenta.personal', 'empresa_maquirenta.pmi_individual'], documents: buildPersonalDocumentPermissions() };
+            return { modules: ['control_personal', 'control_personal.control_asistencia', 'control_personal.dashboard', 'control_personal.reporte_asistencias', 'cobranzas', 'cobranzas.valorizacion', 'requisitos', 'control_personal.personal', 'requisitos.pmi_individual', 'empresa_maquirenta', 'empresa_maquirenta.personal', 'empresa_maquirenta.pmi_individual'], documents: buildPersonalDocumentPermissions() };
         }
         return { modules: [], documents: {} };
     }
@@ -5461,7 +5461,7 @@ function initUsuariosModule() {
         }
         if (role === 'Personal') {
             permissionNote.className = 'permission-role-note mb-3 alert alert-info';
-            permissionNote.textContent = 'Personal puede ver únicamente su propia información. Seleccione abajo los requisitos visibles en PMI Individual; no tendrá permisos para editar, subir ni eliminar.';
+            permissionNote.textContent = 'Personal tiene acceso completo a Cobranzas > Valorización. En los demás módulos se mantienen los permisos propios del rol; seleccione abajo los requisitos visibles en PMI Individual.';
             setPermissionsEnabled(false);
             const personalModules = new Set(['control_personal.dashboard', 'control_personal.reporte_asistencias', 'control_personal.personal', 'requisitos.pmi_individual', 'empresa_maquirenta.personal', 'empresa_maquirenta.pmi_individual']);
             moduleChecks.forEach((check) => { check.disabled = !personalModules.has(check.value); });
