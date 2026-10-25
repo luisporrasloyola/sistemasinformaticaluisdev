@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../includes/cobranzas_valorizacion_tarifa.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -37,16 +38,10 @@ function precio_equipo_clave(string $equipment, string $plate): string
 }
 
 try {
-    $stmt = db()->prepare('SELECT equipo, placa_serie FROM cobranzas_valorizacion_registros WHERE valorizacion_id = ?');
+    $stmt = db()->prepare('SELECT equipo FROM cobranzas_valorizaciones WHERE id = ?');
     $stmt->execute([$valuationId]);
-    $knownKey = false;
-    foreach ($stmt as $record) {
-        if (precio_equipo_clave((string) $record['equipo'], (string) $record['placa_serie']) === $rateKey) {
-            $knownKey = true;
-            break;
-        }
-    }
-    if (!$knownKey) precio_response(false, 'El equipo no pertenece a este cliente.', 422);
+    $headerEquipment = $stmt->fetchColumn();
+    if ($headerEquipment === false || valorizacion_clave_tarifa((string) $headerEquipment) !== $rateKey) precio_response(false, 'El equipo no pertenece a esta valorización.', 422);
 
     $price = number_format((float) $rateRaw, 2, '.', '');
     db()->prepare('INSERT INTO cobranzas_valorizacion_precios_valorizacion (valorizacion_id, equipo_clave, precio_hora) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE precio_hora = VALUES(precio_hora)')

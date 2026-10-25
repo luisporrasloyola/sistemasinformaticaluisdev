@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/cobranzas_valorizacion_periodo.php';
+require_once __DIR__ . '/../../includes/cobranzas_valorizacion_tarifa.php';
 require_module_access('cobranzas.valorizacion');
 if (is_personal_role()) json_response(['ok' => false, 'message' => 'El rol Personal no puede generar PDF de valorizaciones.'], 403);
 
@@ -74,13 +75,8 @@ try {
     $totalMinutes = 0;
     foreach ($stmt as $row) {
         $equipment = reporte_equipo_completo((string) $row['equipo'], (string) $row['placa_serie']);
-        $key = reporte_clave_equipo($equipment);
         $minutes = (int) $row['horas_total_minutos'];
         $totalMinutes += $minutes;
-        if ($key !== '') {
-            if (!isset($groups[$key])) $groups[$key] = ['name' => $key === 'camion grua' ? 'Camión Grúa' : reporte_tipo_equipo($equipment), 'minutes' => 0, 'price' => '37.50'];
-            $groups[$key]['minutes'] += $minutes;
-        }
         $records[] = [
             'equipment' => $equipment,
             'operator' => (string) ($row['operador'] ?? ''),
@@ -95,10 +91,13 @@ try {
     }
     if (!$records) json_response(['ok' => false, 'message' => 'No hay registros para exportar en el periodo seleccionado.'], 422);
 
-    $stmt = db()->prepare('SELECT equipo_clave, precio_hora FROM cobranzas_valorizacion_precios_valorizacion WHERE valorizacion_id = ?');
-    $stmt->execute([$valuationId]);
-    foreach ($stmt as $rate) {
-        if (isset($groups[$rate['equipo_clave']])) $groups[$rate['equipo_clave']]['price'] = number_format((float) $rate['precio_hora'], 2, '.', '');
+    $key = valorizacion_clave_tarifa($headerEquipment);
+    if ($key !== '') {
+        $groups[$key] = ['name' => valorizacion_nombre_tarifa($headerEquipment), 'minutes' => $totalMinutes, 'price' => '37.50'];
+        $stmt = db()->prepare('SELECT precio_hora FROM cobranzas_valorizacion_precios_valorizacion WHERE valorizacion_id = ? AND equipo_clave = ?');
+        $stmt->execute([$valuationId, $key]);
+        $savedPrice = $stmt->fetchColumn();
+        if ($savedPrice !== false) $groups[$key]['price'] = number_format((float) $savedPrice, 2, '.', '');
     }
     $subtotalCents = 0;
     foreach ($groups as $group) $subtotalCents += (int) round((float) $group['price'] * 100 * $group['minutes'] / 60);

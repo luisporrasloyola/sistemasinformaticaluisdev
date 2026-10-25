@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/upload.php';
 require_once __DIR__ . '/../../includes/cobranzas_valorizacion_periodo.php';
+require_once __DIR__ . '/../../includes/cobranzas_valorizacion_tarifa.php';
 require_module_access('cobranzas.valorizacion');
 
 function valor_minutes(string $start, string $end): ?int
@@ -203,27 +204,16 @@ if ($clientId) {
         $dates = $datesStmt->fetch();
         $firstServiceDate = $dates['first_date'] ?? null;
         $lastServiceDate = $dates['last_date'] ?? null;
-        $hoursStmt = db()->prepare('SELECT equipo, placa_serie, SUM(horas_total_minutos) AS total_minutos FROM cobranzas_valorizacion_registros WHERE valorizacion_id = ?' . $periodWhere . ' GROUP BY equipo, placa_serie');
+        $hoursStmt = db()->prepare('SELECT COALESCE(SUM(horas_total_minutos), 0) FROM cobranzas_valorizacion_registros WHERE valorizacion_id = ?' . $periodWhere);
         $hoursStmt->execute(array_merge([$valuationId], $periodParams));
-        foreach ($hoursStmt as $equipmentHours) {
-            $fullEquipment = valor_equipo_completo((string) $equipmentHours['equipo'], (string) $equipmentHours['placa_serie']);
-            $equipmentKey = valor_clave_equipo($fullEquipment);
-            $minutes = (int) $equipmentHours['total_minutos'];
-            $totalMinutes += $minutes;
-            if ($equipmentKey === '') continue;
-            if (!isset($equipmentRates[$equipmentKey])) {
-                $equipmentRates[$equipmentKey] = ['name' => $equipmentKey === 'camion grua' ? 'Camión Grúa' : valor_tipo_equipo($fullEquipment), 'price' => '37.50', 'minutes' => 0];
-            }
-            $equipmentRates[$equipmentKey]['minutes'] += $minutes;
-        }
-        if ($equipmentRates) {
-            $rateStmt = db()->prepare('SELECT equipo_clave, precio_hora FROM cobranzas_valorizacion_precios_valorizacion WHERE valorizacion_id = ?');
-            $rateStmt->execute([$valuationId]);
-            foreach ($rateStmt as $savedRate) {
-                if (isset($equipmentRates[$savedRate['equipo_clave']])) {
-                    $equipmentRates[$savedRate['equipo_clave']]['price'] = number_format((float) $savedRate['precio_hora'], 2, '.', '');
-                }
-            }
+        $totalMinutes = (int) $hoursStmt->fetchColumn();
+        $equipmentKey = valorizacion_clave_tarifa($headerEquipment);
+        if ($totalMinutes > 0 && $equipmentKey !== '') {
+            $equipmentRates[$equipmentKey] = ['name' => valorizacion_nombre_tarifa($headerEquipment), 'price' => '37.50', 'minutes' => $totalMinutes];
+            $rateStmt = db()->prepare('SELECT precio_hora FROM cobranzas_valorizacion_precios_valorizacion WHERE valorizacion_id = ? AND equipo_clave = ?');
+            $rateStmt->execute([$valuationId, $equipmentKey]);
+            $savedPrice = $rateStmt->fetchColumn();
+            if ($savedPrice !== false) $equipmentRates[$equipmentKey]['price'] = number_format((float) $savedPrice, 2, '.', '');
         }
         foreach ($equipmentRates as $rate) {
             $totalPriceCents += (int) round(((float) $rate['price']) * 100 * $rate['minutes'] / 60);
