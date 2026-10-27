@@ -180,6 +180,22 @@ require __DIR__ . '/../../includes/header.php';
 .habilitation-formats{margin:0 0 14px;border:0;border-radius:0;background:transparent}
 .habilitation-formats-title{margin:0;padding:9px 12px;border:0;background:transparent;color:#284672;font-size:.82rem;font-weight:750;letter-spacing:.035em}
 .habilitation-info-panel{margin:9px 13px 10px;padding:10px 12px;background:#eff8ff;border:1px solid #d8eafa;border-radius:9px}
+.habilitation-info-panel:has(.habilitation-info-side){display:grid;grid-template-columns:minmax(0,1fr) minmax(155px,190px);align-items:center;gap:12px}
+.habilitation-info-details{min-width:0}
+.habilitation-info-side{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:74px;padding-left:12px;border-left:1px solid #cbdff1}
+.habilitation-progress-item{display:flex;align-items:center;gap:8px;--ring-color:#e0a12a}
+.habilitation-progress-item[hidden]{display:none!important}
+.habilitation-progress-item.is-complete{--ring-color:#159461}
+.habilitation-progress-item.is-empty{--ring-color:#94a3b8}
+.habilitation-progress-ring{position:relative;display:grid;place-items:center;flex:none;width:58px;height:58px;border-radius:50%;background:conic-gradient(var(--ring-color) var(--progress),#dce7f0 0)}
+.habilitation-progress-ring:before{content:"";position:absolute;inset:6px;border-radius:50%;background:#fff}
+.habilitation-progress-ring span{position:relative;color:var(--ring-color);font-size:.92rem;font-weight:800}
+.habilitation-progress-caption{display:flex;flex-direction:column;gap:1px;color:#405a73;font-size:.72rem;line-height:1.2}
+.habilitation-progress-caption strong{color:var(--ring-color);font-size:.76rem}
+.habilitation-progress-caption small{font-size:.66rem}
+.habilitation-info-panel .habilitation-info-side .habilitation-pass-actions{justify-content:center;margin-top:0;flex-wrap:wrap}
+.habilitation-info-details>.habilitation-validity:first-child{margin-top:0;padding-top:0;border-top:0}
+@media(max-width:700px){.habilitation-info-panel:has(.habilitation-info-side){grid-template-columns:1fr}.habilitation-info-side{border-left:0;border-top:1px solid #cbdff1;padding:9px 0 0;flex-direction:row;justify-content:space-between;flex-wrap:wrap}}
 .habilitation-position-tabs{column-gap:6px!important;row-gap:6px!important}
 .habilitation-position-tabs .habilitation-position-tab{height:27px;min-height:27px;max-width:100%;padding:3px 8px!important;font-size:.7rem!important;font-weight:650!important;line-height:19px;white-space:nowrap;text-align:center;overflow:hidden;text-overflow:ellipsis;flex:0 0 auto}
 .habilitation-validity{display:flex;align-items:center;flex-wrap:wrap;column-gap:14px;row-gap:4px;margin-top:9px;padding-top:8px;border-top:1px solid #d8eafa;color:#526b83;font-size:.75rem;line-height:1.35}
@@ -216,14 +232,182 @@ require __DIR__ . '/../../includes/header.php';
 .habilitation-positions-select-all:hover{background:#eaf3ff}
 .habilitation-positions-select-all .form-check-input{margin:0;cursor:pointer}
 .habilitation-positions-list{display:flex;flex-wrap:wrap;gap:8px;min-height:36px;align-items:center;color:#6c7d95;font-size:.78rem}
+#habilitationMembersList{display:block;min-height:60px}
+.habilitation-member-card{padding:11px 12px;margin-bottom:8px;border:1px solid #d4e1f2;border-radius:9px;background:#fff}
+.habilitation-member-card:has(.member-check:checked){border-color:#74a8ed;background:#f5f9ff}
+.habilitation-member-name{display:flex;align-items:center;gap:9px;margin-bottom:8px;color:#183b69;font-size:.8rem;font-weight:700;cursor:pointer}
+.habilitation-member-name .form-check-input{flex:none;margin:0}
+.habilitation-member-positions{display:flex;flex-wrap:wrap;gap:6px;padding-left:23px;color:#8190a5;font-size:.73rem}
+.habilitation-member-positions .habilitation-position-option{padding:5px 8px;font-size:.72rem}
+.habilitation-member-unavailable{opacity:.68}
 .habilitation-position-option{display:inline-flex;align-items:center;gap:7px;max-width:100%;padding:8px 10px;border:1px solid #ccdaeb;border-radius:8px;background:#fff;color:#31445e;font-size:.77rem;font-weight:600;line-height:1.25;cursor:pointer;transition:background .15s,border-color .15s,box-shadow .15s}
 .habilitation-position-option:hover{border-color:#89b4ef;background:#f5f9ff}
 .habilitation-position-option:has(input:checked){border-color:#4387e8;background:#e9f2ff;color:#154684;box-shadow:0 0 0 1px rgba(67,135,232,.13)}
 .habilitation-position-option:has(input:focus-visible){outline:2px solid #2563eb;outline-offset:2px}
 .habilitation-position-option .form-check-input{flex:none;margin:0;cursor:pointer}
 .habilitation-positions-error{display:block;margin-top:9px;color:#b42332;font-size:.75rem;font-weight:600}
+.habilitation-form-modal .modal-dialog{max-width:720px}
+.habilitation-form-modal .modal-content{border-radius:16px;box-shadow:0 24px 70px rgba(13,33,65,.24)}
+.habilitation-form-modal .modal-header{padding:17px 24px;background:#fff}
+.habilitation-form-modal .modal-title{font-size:1.08rem;font-weight:800;color:#142c4d}
+.habilitation-form-modal .modal-body{padding:22px 24px 24px;background:#fff}
+.habilitation-form-modal .modal-body>.row{--bs-gutter-y:18px}
+.habilitation-form-modal .modal-footer{padding:14px 24px;background:#f7faff}
+.habilitation-form-modal .modal-footer .btn{min-height:38px;padding-inline:16px;font-weight:700}
+.habilitation-form-modal .form-label{font-size:.78rem;letter-spacing:.01em}
+.habilitation-form-modal .form-select,.habilitation-form-modal .form-control{min-height:38px;border-color:#cbd8e9;border-radius:8px}
+.habilitation-form-modal .form-select:focus,.habilitation-form-modal .form-control:focus{border-color:#5b95e8;box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+.habilitation-form-modal #habilitationSource{display:block;margin-top:6px;font-size:.72rem}
+.habilitation-form-modal .habilitation-positions-box{padding:16px;border-color:#d2e1f5;background:#f5f9ff;box-shadow:none}
+.habilitation-form-modal .habilitation-positions-heading{align-items:center;margin-bottom:14px}
+.habilitation-form-modal .habilitation-positions-heading p{margin:5px 0 0;font-size:.75rem}
+.habilitation-form-modal .habilitation-positions-select-all{min-height:32px;padding:6px 10px;border-radius:8px}
+.habilitation-form-modal .habilitation-positions-count{font-size:.7rem}
+.habilitation-form-modal #habilitationMembersSearch{margin-bottom:11px!important;background:#fff}
+.habilitation-form-modal #habilitationMembersList{display:grid;gap:8px;max-height:min(38vh,330px);min-height:50px;padding:2px 5px 2px 1px;overflow-y:auto;align-items:stretch;scrollbar-width:thin;scrollbar-color:#b8c9dd transparent}
+.habilitation-form-modal .habilitation-member-card{margin:0;padding:12px 13px;border-color:#d3dfed;border-radius:10px;box-shadow:0 1px 2px rgba(20,45,79,.04);transition:border-color .15s,background .15s,box-shadow .15s}
+.habilitation-form-modal .habilitation-member-card:hover{border-color:#8eb8ed}
+.habilitation-form-modal .habilitation-member-card:has(.member-check:checked){border-color:#4e91e8;background:#eef6ff;box-shadow:0 0 0 1px rgba(78,145,232,.12)}
+.habilitation-form-modal .habilitation-member-name{margin-bottom:9px;font-size:.82rem}
+.habilitation-form-modal .habilitation-member-positions{gap:7px;padding-left:24px}
+.habilitation-form-modal .habilitation-member-positions .habilitation-position-option{padding:6px 9px;border-radius:7px;font-size:.73rem}
+.habilitation-form-modal .habilitation-member-unavailable{background:#f9fbfd;opacity:.75}
+.habilitation-form-modal .habilitation-member-unavailable .habilitation-member-name{margin-bottom:3px}
+.habilitation-form-modal #habilitationPositionsList{align-items:stretch;min-height:34px}
+.habilitation-form-modal #habilitationPositionsList .habilitation-position-option{padding:8px 11px}
+.habilitation-form-modal #habilitationConditionsPanel>div{gap:10px!important;padding:14px 16px;border:1px solid #dce6f2;border-radius:10px;background:#fbfcff}
+.habilitation-form-modal #habilitationConditionsPanel>div>div{min-height:28px;gap:8px!important}
+.habilitation-form-modal #habilitationConditionsPanel>div>div>span{min-width:120px!important;color:#254364;font-size:.78rem}
+.habilitation-form-modal #habilitationConditionsPanel label{justify-content:center;min-width:55px;padding:5px 9px;border:1px solid #d3deeb;border-radius:7px;background:#fff;color:#415772;font-size:.75rem;cursor:pointer}
+.habilitation-form-modal #habilitationConditionsPanel label:has(input:checked){border-color:#4c8ee3;background:#eaf3ff;color:#174b91;font-weight:700}
+.habilitation-form-modal #habilitationConditionsPanel .form-check-input{order:-1;cursor:pointer}
+.habilitation-form-modal .habilitation-dates-heading{padding-top:2px;border-top:1px solid #e4ebf4;color:#1d3d66;font-size:.85rem}
+.habilitation-form-modal .habilitation-dates-heading strong{display:block;padding-top:16px}
+.habilitation-form-modal .modal-dialog{width:min(960px,calc(100vw - 36px));max-width:960px}
+.habilitation-form-modal .modal-body{padding:20px 24px}
+.habilitation-main-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(285px,.75fr);align-items:start;gap:22px}
+.habilitation-main-left,.habilitation-main-right{display:flex;flex-direction:column;gap:16px;min-width:0}
+.habilitation-main-left>.col-12,.habilitation-main-right>.col-12,.habilitation-main-right>.col-md-4{width:100%;padding:0}
+.habilitation-main-right{padding:16px;border:1px solid #dce6f2;border-radius:12px;background:#f8fbff}
+.habilitation-main-right #habilitationConditionsPanel>div{padding:0;border:0;background:transparent}
+.habilitation-main-right .habilitation-dates-heading{margin-top:3px;padding-top:0;border-top:1px solid #dce6f2}
+.habilitation-main-right .habilitation-dates-heading strong{padding-top:17px}
+.habilitation-main-right .form-control{background:#fff}
+.habilitation-main-grid.is-equipment{grid-template-columns:1fr}
+.habilitation-main-grid.is-equipment .habilitation-main-right{padding:0;border:0;background:transparent}
+.habilitation-form-modal #habilitationMembersList{max-height:min(45vh,410px)}
+.habilitation-form-modal .habilitation-member-card{padding:11px 13px}
+.habilitation-form-modal .habilitation-positions-heading{gap:8px}
+.habilitation-form-modal .modal-content{border-color:#b9d0f0;box-shadow:0 28px 75px rgba(9,33,84,.3)}
+.habilitation-form-modal .modal-header{background:linear-gradient(105deg,#123d83 0%,#245ed4 62%,#417df0 100%);border-bottom:0}
+.habilitation-form-modal .modal-title{color:#fff;letter-spacing:.01em}
+.habilitation-form-modal .modal-header .btn-close{filter:brightness(0) invert(1);opacity:.9}
+.habilitation-form-modal .modal-header .btn-close:hover{opacity:1}
+.habilitation-form-modal .modal-body{background:linear-gradient(135deg,#f5f9ff 0%,#fff 54%,#f5f8ff 100%)}
+.habilitation-form-modal .habilitation-main-left{padding:17px;border:1px solid #d9e5f5;border-radius:12px;background:rgba(255,255,255,.88);box-shadow:0 5px 18px rgba(35,86,164,.06)}
+.habilitation-form-modal #habilitationTypePanel{padding:11px 12px;border:1px solid #ded6fa;border-radius:9px;background:linear-gradient(90deg,#f5f1ff,#fff)}
+.habilitation-form-modal #habilitationTypePanel .form-label{color:#6546aa}
+.habilitation-form-modal .form-label{color:#24456e}
+.habilitation-form-modal .form-select,.habilitation-form-modal .form-control{background-color:#fff}
+.habilitation-form-modal .habilitation-positions-box{border-color:#bbd4fc;background:linear-gradient(145deg,#eaf3ff,#f5f9ff 72%);box-shadow:inset 3px 0 0 #4b8df2}
+.habilitation-form-modal .habilitation-positions-title{color:#174a93}
+.habilitation-form-modal .habilitation-positions-title i{background:#cfe3ff;color:#1355b8}
+.habilitation-form-modal .habilitation-positions-count{background:#d9e9ff;color:#1955aa}
+.habilitation-form-modal .habilitation-positions-select-all{border-color:#9bc3fa;color:#1c59af}
+.habilitation-form-modal .habilitation-positions-select-all:has(input:checked){background:#ddecff;border-color:#3f84e6}
+.habilitation-form-modal .habilitation-position-option:has(input:checked){background:#dcecff;border-color:#3581e7;color:#144a97}
+.habilitation-form-modal .habilitation-member-card{border-color:#c9dcf2}
+.habilitation-form-modal .habilitation-member-card:has(.member-check:checked){background:linear-gradient(90deg,#e6f2ff,#f7fbff);border-color:#367fe4;box-shadow:inset 3px 0 0 #367fe4,0 2px 9px rgba(34,99,190,.1)}
+.habilitation-form-modal .habilitation-member-unavailable{background:#f3f6fa;border-color:#e2e9f2}
+.habilitation-form-modal .habilitation-main-right{border-color:#baded8;background:linear-gradient(155deg,#eefaf7,#f6fbff 68%);box-shadow:inset 3px 0 0 #26a68c}
+.habilitation-form-modal .habilitation-main-right .habilitation-dates-heading{border-top-color:#cbe5de;color:#126654}
+.habilitation-form-modal #habilitationConditionsPanel>div>div>span{color:#176754}
+.habilitation-form-modal #habilitationConditionsPanel label{border-color:#bdded4}
+.habilitation-form-modal #habilitationConditionsPanel label:has(input:checked){border-color:#159874;background:#dff7ee;color:#0b7155}
+.habilitation-form-modal .modal-footer{background:linear-gradient(90deg,#eef4ff,#f8fbff);border-top-color:#d8e4f4}
+.habilitation-form-modal .modal-footer .btn-primary{border-color:#1d5fd7;background:linear-gradient(105deg,#1e64df,#347af2);box-shadow:0 4px 12px rgba(30,100,223,.2)}
+.habilitation-form-modal .modal-footer .btn-primary:hover{background:linear-gradient(105deg,#1957c9,#266de5)}
+.habilitation-form-modal .habilitation-main-grid.is-equipment .habilitation-main-right{padding:16px;border:1px solid #baded8;border-radius:10px;background:#eefaf7}
+@media(max-width:800px){.habilitation-form-modal .modal-dialog{width:min(600px,calc(100vw - 24px));max-width:600px}.habilitation-main-grid{grid-template-columns:1fr;gap:18px}.habilitation-main-right{padding:15px}.habilitation-form-modal #habilitationMembersList{max-height:260px}}
+@media(max-width:680px){.habilitation-form-modal .modal-dialog{max-width:none}.habilitation-form-modal .modal-header,.habilitation-form-modal .modal-body,.habilitation-form-modal .modal-footer{padding-inline:16px}.habilitation-form-modal #habilitationMembersList{max-height:32vh}.habilitation-form-modal .habilitation-positions-heading{align-items:flex-start}.habilitation-form-modal #habilitationConditionsPanel>div>div>span{min-width:102px!important}}
 @media(max-width:680px){.habilitation-form-modal .modal-body{padding:16px}.habilitation-positions-box{padding:12px}.habilitation-positions-heading{align-items:stretch}.habilitation-positions-select-all{width:max-content}}
 @media(max-width:680px){.work-panel .client-pmi-base-section .client-pmi-habilitation-heading{flex-wrap:wrap}.habilitation-heading-actions{width:100%;justify-content:space-between}.habilitation-search{flex:1;min-width:0}.habilitation-search .form-control{width:100%}}
+.habilitation-form-modal .modal-dialog{width:min(1080px,calc(100vw - 36px));max-width:1080px}
+.habilitation-form-modal .habilitation-main-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:18px;row-gap:20px;align-items:start}
+.habilitation-form-modal .habilitation-main-left{display:contents}
+.habilitation-form-modal #habilitationTypePanel{grid-column:1;grid-row:1;padding:0;border:0;background:transparent}
+.habilitation-form-modal #habilitationAreaPanel{grid-column:2;grid-row:1}
+.habilitation-form-modal #habilitationSubjectPanel{grid-column:3;grid-row:1}
+.habilitation-form-modal #habilitationMembersPanel,.habilitation-form-modal #habilitationPositionsPanel{grid-column:1 / span 2;grid-row:2;min-width:0}
+.habilitation-form-modal .habilitation-main-right{grid-column:3;grid-row:2;min-width:0;box-shadow:none}
+.habilitation-form-modal .habilitation-positions-box{box-shadow:none}
+.habilitation-form-modal .habilitation-member-card:has(.member-check:checked){box-shadow:0 2px 9px rgba(34,99,190,.1)}
+.habilitation-form-modal .habilitation-main-grid:has(#habilitationSubjectPanel[hidden]) #habilitationAreaPanel{grid-column:2 / span 2}
+.habilitation-form-modal .habilitation-main-grid.is-equipment{grid-template-columns:repeat(3,minmax(0,1fr))}
+.habilitation-form-modal .habilitation-main-grid.is-equipment #habilitationAreaPanel{grid-column:1}
+.habilitation-form-modal .habilitation-main-grid.is-equipment #habilitationSubjectPanel{grid-column:2 / span 2}
+.habilitation-form-modal .habilitation-main-grid.is-equipment .habilitation-main-right{grid-column:1 / -1;grid-row:2;box-shadow:none}
+@media(max-width:850px){.habilitation-form-modal .modal-dialog{width:min(620px,calc(100vw - 24px));max-width:620px}.habilitation-form-modal .habilitation-main-grid,.habilitation-form-modal .habilitation-main-grid.is-equipment{display:grid;grid-template-columns:1fr;gap:16px}.habilitation-form-modal .habilitation-main-left{display:flex;flex-direction:column;gap:16px;padding:0;border:0;background:transparent;box-shadow:none}.habilitation-form-modal #habilitationTypePanel,.habilitation-form-modal #habilitationAreaPanel,.habilitation-form-modal #habilitationSubjectPanel,.habilitation-form-modal #habilitationMembersPanel,.habilitation-form-modal #habilitationPositionsPanel,.habilitation-form-modal .habilitation-main-grid:has(#habilitationSubjectPanel[hidden]) #habilitationAreaPanel,.habilitation-form-modal .habilitation-main-grid.is-equipment #habilitationAreaPanel,.habilitation-form-modal .habilitation-main-grid.is-equipment #habilitationSubjectPanel{grid-column:auto;grid-row:auto}.habilitation-form-modal .habilitation-main-right,.habilitation-form-modal .habilitation-main-grid.is-equipment .habilitation-main-right{grid-column:1;grid-row:2}.habilitation-form-modal #habilitationMembersList{max-height:260px}}
+.habilitation-form-modal .habilitation-main-grid{grid-template-columns:minmax(0,1.8fr) minmax(300px,1fr);gap:18px}
+.habilitation-form-modal .habilitation-fields-card{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-column:1 / -1;grid-row:1;gap:16px;padding:17px 18px;border:1px solid #d7e3f3;border-radius:12px;background:#fff;box-shadow:0 4px 14px rgba(35,86,164,.05)}
+.habilitation-form-modal .habilitation-fields-card>#habilitationTypePanel,.habilitation-form-modal .habilitation-fields-card>#habilitationAreaPanel,.habilitation-form-modal .habilitation-fields-card>#habilitationSubjectPanel{grid-column:auto;grid-row:auto;min-width:0}
+.habilitation-form-modal .habilitation-fields-card>#habilitationTypePanel{padding:0;border:0;background:transparent}
+.habilitation-form-modal .habilitation-fields-card:has(#habilitationSubjectPanel[hidden])>#habilitationAreaPanel{grid-column:2 / span 2}
+.habilitation-form-modal .habilitation-main-left{display:flex;grid-column:1;grid-row:2;flex-direction:column;gap:16px;padding:0;border:0;background:transparent;box-shadow:none}
+.habilitation-form-modal .habilitation-main-right{grid-column:2;grid-row:2;box-shadow:none}
+.habilitation-form-modal .habilitation-main-grid.is-equipment{grid-template-columns:1fr}
+.habilitation-form-modal .habilitation-main-grid.is-equipment .habilitation-fields-card{grid-column:1;grid-template-columns:repeat(2,minmax(0,1fr))}
+.habilitation-form-modal .habilitation-main-grid.is-equipment .habilitation-main-left{display:none}
+.habilitation-form-modal .habilitation-main-grid.is-equipment .habilitation-main-right{grid-column:1;grid-row:2}
+@media(max-width:850px){.habilitation-form-modal .habilitation-main-grid,.habilitation-form-modal .habilitation-main-grid.is-equipment{grid-template-columns:1fr}.habilitation-form-modal .habilitation-fields-card{grid-column:1;grid-template-columns:1fr;gap:14px;padding:15px}.habilitation-form-modal .habilitation-fields-card:has(#habilitationSubjectPanel[hidden])>#habilitationAreaPanel{grid-column:1}.habilitation-form-modal .habilitation-main-left,.habilitation-form-modal .habilitation-main-right,.habilitation-form-modal .habilitation-main-grid.is-equipment .habilitation-main-right{grid-column:1;grid-row:auto}.habilitation-form-modal .habilitation-main-grid.is-equipment .habilitation-fields-card{grid-template-columns:1fr}}
+.habilitation-form-modal .habilitation-main-grid,.habilitation-form-modal .habilitation-main-grid.is-equipment{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(310px,1fr);gap:18px;align-items:start}
+.habilitation-form-modal .habilitation-main-left,.habilitation-form-modal .habilitation-main-grid.is-equipment .habilitation-main-left{display:flex;grid-column:1;grid-row:1;flex-direction:column;gap:18px;min-width:0;padding:18px;border:1px solid #d7e3f3;border-radius:12px;background:#fff;box-shadow:0 4px 14px rgba(35,86,164,.05)}
+.habilitation-form-modal .habilitation-fields-card,.habilitation-form-modal .habilitation-main-grid.is-equipment .habilitation-fields-card{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-column:auto;grid-row:auto;gap:12px;min-width:0;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
+.habilitation-form-modal .habilitation-fields-card>#habilitationTypePanel,.habilitation-form-modal .habilitation-fields-card>#habilitationAreaPanel,.habilitation-form-modal .habilitation-fields-card>#habilitationSubjectPanel{grid-column:auto;grid-row:auto;min-width:0}
+.habilitation-form-modal .habilitation-fields-card:has(#habilitationSubjectPanel[hidden])>#habilitationAreaPanel{grid-column:2 / span 2}
+.habilitation-form-modal .habilitation-main-grid.is-equipment .habilitation-fields-card>#habilitationAreaPanel{grid-column:1}
+.habilitation-form-modal .habilitation-main-grid.is-equipment .habilitation-fields-card>#habilitationSubjectPanel{grid-column:2 / span 2}
+.habilitation-form-modal .habilitation-main-right,.habilitation-form-modal .habilitation-main-grid.is-equipment .habilitation-main-right{grid-column:2;grid-row:1;box-shadow:none}
+@media(max-width:850px){.habilitation-form-modal .habilitation-main-grid,.habilitation-form-modal .habilitation-main-grid.is-equipment{grid-template-columns:1fr}.habilitation-form-modal .habilitation-main-left,.habilitation-form-modal .habilitation-main-grid.is-equipment .habilitation-main-left{grid-column:1;grid-row:1;padding:15px}.habilitation-form-modal .habilitation-main-right,.habilitation-form-modal .habilitation-main-grid.is-equipment .habilitation-main-right{grid-column:1;grid-row:2}.habilitation-form-modal .habilitation-fields-card,.habilitation-form-modal .habilitation-main-grid.is-equipment .habilitation-fields-card{grid-template-columns:1fr;gap:14px}.habilitation-form-modal .habilitation-fields-card:has(#habilitationSubjectPanel[hidden])>#habilitationAreaPanel,.habilitation-form-modal .habilitation-main-grid.is-equipment .habilitation-fields-card>#habilitationAreaPanel,.habilitation-form-modal .habilitation-main-grid.is-equipment .habilitation-fields-card>#habilitationSubjectPanel{grid-column:1}}
+.habilitation-form-modal .habilitation-member-tools{display:flex;align-items:center;gap:9px;margin-bottom:9px}
+.habilitation-form-modal .habilitation-member-tools .form-control{flex:1;min-width:0}
+.habilitation-form-modal .habilitation-member-filter{display:flex;align-items:center;gap:6px;flex:none;margin:0;color:#2e5d91;font-size:.72rem;font-weight:700;white-space:nowrap;cursor:pointer}
+.habilitation-form-modal .habilitation-member-filter .form-check-input{margin:0;cursor:pointer}
+.habilitation-form-modal.is-group .modal-dialog{height:calc(100dvh - 24px);max-height:calc(100dvh - 24px);margin:12px auto}
+.habilitation-form-modal.is-group .modal-content{height:100%;max-height:100%}
+.habilitation-form-modal.is-group .modal-header,.habilitation-form-modal.is-group .modal-footer{flex:none}
+.habilitation-form-modal.is-group .modal-body{flex:1;min-height:0;overflow:hidden}
+.habilitation-form-modal.is-group .habilitation-main-grid{height:100%;min-height:0;align-items:stretch}
+.habilitation-form-modal.is-group .habilitation-main-left{min-height:0}
+.habilitation-form-modal.is-group #habilitationMembersPanel{display:flex;flex:1;min-height:0}
+.habilitation-form-modal.is-group #habilitationMembersPanel .habilitation-positions-box{display:flex;flex:1;flex-direction:column;min-height:0}
+.habilitation-form-modal.is-group #habilitationMembersList{display:block;flex:1;min-height:0;max-height:none;overflow-y:auto}
+.habilitation-form-modal.is-group .habilitation-member-card{display:grid;grid-template-columns:minmax(145px,175px) minmax(0,1fr);align-items:center;gap:8px;margin-bottom:6px;padding:8px 10px}
+.habilitation-form-modal.is-group .habilitation-member-name{margin:0;font-size:.78rem}
+.habilitation-form-modal.is-group .habilitation-member-positions{padding:0;gap:5px}
+.habilitation-form-modal.is-group .habilitation-member-positions .habilitation-position-option{padding:5px 7px;font-size:.7rem}
+.habilitation-form-modal.is-group .habilitation-member-unavailable{min-height:42px}
+@media(max-width:850px){.habilitation-form-modal.is-group .modal-body{overflow-y:auto}.habilitation-form-modal.is-group .habilitation-main-grid{height:auto}.habilitation-form-modal.is-group #habilitationMembersPanel,.habilitation-form-modal.is-group #habilitationMembersPanel .habilitation-positions-box{display:block}.habilitation-form-modal.is-group #habilitationMembersList{max-height:42vh}.habilitation-form-modal.is-group .habilitation-member-card{grid-template-columns:1fr;gap:5px}.habilitation-form-modal.is-group .habilitation-member-positions{padding-left:24px}}
+@media(max-height:650px){.habilitation-form-modal.is-group .modal-body{overflow-y:auto}.habilitation-form-modal.is-group .habilitation-main-grid{height:auto}.habilitation-form-modal.is-group #habilitationMembersPanel,.habilitation-form-modal.is-group #habilitationMembersPanel .habilitation-positions-box{display:block}.habilitation-form-modal.is-group #habilitationMembersList{max-height:230px}}
+.habilitation-form-modal .habilitation-fields-card>#habilitationAreaPanel{grid-column:1}
+.habilitation-form-modal .habilitation-fields-card>#habilitationTypePanel{grid-column:2}
+.habilitation-form-modal .habilitation-fields-card>#habilitationSubjectPanel{grid-column:3}
+.habilitation-form-modal .habilitation-fields-card:has(#habilitationSubjectPanel[hidden])>#habilitationAreaPanel{grid-column:1}
+.habilitation-form-modal .habilitation-fields-card:has(#habilitationSubjectPanel[hidden])>#habilitationTypePanel{grid-column:2 / span 2}
+.habilitation-form-modal .habilitation-main-grid.is-equipment .habilitation-fields-card>#habilitationSubjectPanel{grid-column:2 / span 2}
+@media(max-width:850px){.habilitation-form-modal .habilitation-fields-card>#habilitationAreaPanel,.habilitation-form-modal .habilitation-fields-card>#habilitationTypePanel,.habilitation-form-modal .habilitation-fields-card>#habilitationSubjectPanel,.habilitation-form-modal .habilitation-fields-card:has(#habilitationSubjectPanel[hidden])>#habilitationTypePanel,.habilitation-form-modal .habilitation-main-grid.is-equipment .habilitation-fields-card>#habilitationSubjectPanel{grid-column:1}}
+.habilitation-pass-actions{display:flex;align-items:center;gap:5px;margin-left:auto}
+.habilitation-pass-form{margin:0}
+.habilitation-pass-actions .btn{min-height:29px;padding:4px 10px;border-radius:7px;font-size:.73rem;font-weight:700;white-space:nowrap}
+.habilitation-pass-missing{border:1px solid #e2a331;background:#fff1cf;color:#805100}
+.habilitation-pass-missing:hover{border-color:#c58110;background:#ffdf94;color:#5e3b00}
+.habilitation-pass-ready{border:1px solid #18946b;background:#d9f7e9;color:#086b4b}
+.habilitation-pass-ready:hover{border-color:#087755;background:#bbefd7;color:#07543d}
+.habilitation-pass-open{border:1px solid #83bfa7;background:#fff;color:#087755}
+.habilitation-pass-open:hover{background:#e4f8ef;color:#07543d}
+.habilitation-info-panel .habilitation-pass-actions{justify-content:flex-end;margin-top:7px}
+.habilitation-no-validity{margin-top:8px;padding-top:8px;border-top:1px solid #d8eafa;color:#526b83;font-size:.75rem}
+.habilitation-no-validity b{color:#31475e}
 </style>
 <div class="page-title"><div><h1>Requisitos PMI Clientes</h1><p>Control documentario por cliente.</p></div></div>
 <div class="work-panel mb-3">

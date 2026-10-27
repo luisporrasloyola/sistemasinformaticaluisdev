@@ -63,6 +63,19 @@ if ($clientId) {
                 $workerDocs->execute(['client_id' => $clientId, 'subject_id' => $habilitation['subject_id'], 'position_id' => $position['id']]);
                 $habilitation['documents_by_position'][(int) $position['id']] = $workerDocs->fetchAll();
             }
+            $habilitation['progress_by_position'] = [];
+            foreach ($habilitation['documents_by_position'] as $positionId => $documents) {
+                $total = count($documents);
+                $complete = 0;
+                foreach ($documents as $document) {
+                    if (!empty($document['end_date'])) { ++$complete; }
+                }
+                $habilitation['progress_by_position'][(int) $positionId] = [
+                    'total' => $total,
+                    'complete' => $complete,
+                    'percent' => $total ? (int) round($complete * 100 / $total) : 0,
+                ];
+            }
             $habilitation['documents'] = $habilitation['positions'] ? $habilitation['documents_by_position'][(int) $habilitation['positions'][0]['id']] : [];
         } else {
             $machineDocs->execute(['client_id' => $clientId, 'subject_id' => $habilitation['subject_id']]);
