@@ -1,6 +1,6 @@
 <div class="modal fade habilitation-form-modal" id="habilitationModal" tabindex="-1" aria-labelledby="habilitationModalTitle" aria-hidden="true"><div class="modal-dialog modal-lg modal-dialog-scrollable"><form class="modal-content" method="post" action="<?= APP_URL ?>/modulos/clientes/pmi_habilitaciones_guardar.php" id="habilitationForm">
     <div class="modal-header"><h2 class="modal-title h5" id="habilitationModalTitle">Nueva habilitación</h2><button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
-    <div class="modal-body"><input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>"><input type="hidden" name="client_id" value="<?= $clientId ?>"><input type="hidden" name="action" value="save"><input type="hidden" name="id" id="habilitationId">
+    <div class="modal-body"><input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>"><input type="hidden" name="client_id" value="<?= $clientId ?>"><input type="hidden" name="habilitacion_area" value="<?= e($habilitationArea) ?>"><input type="hidden" name="action" value="save"><input type="hidden" name="id" id="habilitationId">
         <div class="habilitation-main-grid"><div class="habilitation-main-left"><div class="habilitation-fields-card"><div class="col-12" id="habilitationAreaPanel"><label class="form-label" for="habilitationArea">Área de habilitación</label><select class="form-select" name="area" id="habilitationArea" required><option value="personal">Personal</option><option value="equipo">Equipo</option></select></div><div class="col-12" id="habilitationTypePanel"><label class="form-label" for="habilitationType">Tipo de habilitación</label><select class="form-select" name="habilitation_type" id="habilitationType" required><option value="individual">Individual</option><option value="grupal">Grupal</option></select></div>
         <div class="col-12" id="habilitationSubjectPanel"><label class="form-label" for="habilitationSubject">Nombre</label><select class="form-select" name="subject_id" id="habilitationSubject" required><option value="">Seleccione personal</option></select><small class="text-muted" id="habilitationSource">Personal de Requisitos - Personal</small></div>
         </div><div class="col-12" id="habilitationMembersPanel" hidden><div class="habilitation-positions-box"><div class="habilitation-positions-heading"><div><div class="habilitation-positions-title"><i class="fa-solid fa-people-group" aria-hidden="true"></i><strong>Integrantes</strong><span class="habilitation-positions-count" id="habilitationMembersCount">0 seleccionados</span></div><p>Seleccione una persona y marque los puestos que necesita.</p></div><label class="habilitation-positions-select-all"><input class="form-check-input" type="checkbox" id="habilitationMembersAll"><span>Seleccionar todos</span></label></div><div class="habilitation-member-tools"><input class="form-control form-control-sm" type="search" id="habilitationMembersSearch" placeholder="Buscar por nombre" aria-label="Buscar integrantes"><label class="habilitation-member-filter"><input class="form-check-input" type="checkbox" id="habilitationOnlyEligible" checked> Solo con puestos</label></div><div id="habilitationMembersList" class="habilitation-positions-list" aria-live="polite"></div><small class="habilitation-positions-error d-none" id="habilitationMembersError">Seleccione al menos un integrante con puestos para este cliente.</small></div></div><div class="col-12" id="habilitationPositionsPanel" hidden><div class="habilitation-positions-box"><div class="habilitation-positions-heading"><div><div class="habilitation-positions-title"><i class="fa-solid fa-briefcase" aria-hidden="true"></i><strong>Puestos</strong><span class="habilitation-positions-count" id="habilitationPositionsCount">0 seleccionados</span></div><p>Elige los puestos que aparecerán en esta habilitación.</p></div><label class="habilitation-positions-select-all" for="habilitationPositionsAll"><input class="form-check-input" type="checkbox" id="habilitationPositionsAll"><span>Seleccionar todo</span></label></div><div id="habilitationPositionsList" class="habilitation-positions-list" aria-live="polite">Seleccione primero un trabajador.</div><small class="habilitation-positions-error d-none" id="habilitationPositionsError"><i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i> Seleccione al menos un puesto.</small></div></div>
@@ -10,7 +10,7 @@
 </form></div></div>
 <div class="modal fade" id="personalFormatModal" tabindex="-1" aria-labelledby="personalFormatModalTitle" aria-hidden="true"><div class="modal-dialog modal-lg modal-dialog-scrollable"><form class="modal-content" method="post" action="<?= APP_URL ?>/modulos/clientes/pmi_habilitaciones_formato_guardar.php" enctype="multipart/form-data" id="personalFormatForm">
     <div class="modal-header"><h2 class="modal-title h5" id="personalFormatModalTitle">Formato de personal</h2><button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
-    <div class="modal-body"><input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>"><input type="hidden" name="client_id" value="<?= (int) $clientId ?>"><input type="hidden" name="habilitation_id" id="personalFormatHabilitation"><input type="hidden" name="catalog_id" id="personalFormatCatalog"><input type="hidden" name="habilitation_buscar" value="<?= e($habilitationSearch) ?>"><input type="hidden" name="habilitation_pagina" value="<?= (int) $habilitationPage ?>">
+    <div class="modal-body"><input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>"><input type="hidden" name="client_id" value="<?= (int) $clientId ?>"><input type="hidden" name="habilitation_id" id="personalFormatHabilitation"><input type="hidden" name="catalog_id" id="personalFormatCatalog"><input type="hidden" name="habilitacion_area" value="<?= e($habilitationArea) ?>"><input type="hidden" name="habilitation_buscar" value="<?= e($habilitationSearch) ?>"><input type="hidden" name="habilitation_pagina" value="<?= (int) $habilitationPage ?>">
         <p class="small text-muted">Las fechas y el archivo de este formato pertenecen solo a esta habilitación de personal.</p>
         <div class="row g-3"><div class="col-md-4"><label class="form-label" for="personalFormatRegistration">F. Registro</label><input class="form-control" type="date" name="registration_date" id="personalFormatRegistration" required></div><div class="col-md-4"><label class="form-label" for="personalFormatStart">F. Inicio</label><input class="form-control" type="date" name="start_date" id="personalFormatStart"></div><div class="col-md-4"><label class="form-label" for="personalFormatEnd">F. Fin</label><input class="form-control" type="date" name="end_date" id="personalFormatEnd"></div></div>
         <div class="mt-3"><label class="form-label" for="personalFormatFile">Archivo (PDF o imagen)</label><input class="form-control" type="file" name="file" id="personalFormatFile" accept="application/pdf,image/jpeg,image/png,image/webp"><small class="text-muted" id="personalFormatFileHelp">Formatos permitidos: PDF, JPG, PNG y WEBP. Máximo 10 MB.</small></div>
@@ -19,6 +19,17 @@
 <div class="modal fade" id="habilitationPreview" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-xl modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h2 class="modal-title h5" id="habilitationPreviewTitle">Vista previa</h2><button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Cerrar"></button></div><div class="modal-body client-pmi-preview-body" id="habilitationPreviewBody"></div></div></div></div>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.habilitation-toggle').forEach(button => button.addEventListener('click', () => {
+        const records = document.getElementById(button.getAttribute('aria-controls'));
+        if (!records) return;
+        records.hidden = !records.hidden;
+        const expanded = !records.hidden;
+        button.setAttribute('aria-expanded', String(expanded));
+        button.setAttribute('aria-label', (expanded ? 'Ocultar' : 'Mostrar') + ' registros de ' + button.closest('.habilitation-card').querySelector('.habilitation-card-header strong').textContent.trim());
+        button.title = expanded ? 'Ocultar registros' : 'Mostrar registros';
+        button.querySelector('i').classList.toggle('fa-chevron-up', expanded);
+        button.querySelector('i').classList.toggle('fa-chevron-down', !expanded);
+    }));
     document.querySelectorAll('.habilitation-pass-form').forEach(passForm => {
         const file = passForm.querySelector('.habilitation-pass-file');
         const button = passForm.querySelector('.habilitation-pass-select');
@@ -286,6 +297,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     positionsList.addEventListener('change', updatePositionSelection);
     form.addEventListener('submit', event => {
+        form.querySelector('input[name="habilitacion_area"]').value = area.value;
         if (area.value === 'personal' && type.value === 'grupal') {
             if (membersList.querySelector('input[name="member_ids[]"]:checked')) return;
             event.preventDefault(); membersError.classList.remove('d-none'); membersPanel.scrollIntoView({block: 'nearest'}); return;
@@ -314,7 +326,7 @@ document.addEventListener('DOMContentLoaded', () => {
     type.addEventListener('change', () => { updateHabilitationMode(); loadPositions(); });
     document.getElementById('newHabilitation')?.addEventListener('click', () => {
         form.reset(); document.getElementById('habilitationId').value = ''; membersLoaded = false; document.getElementById('habilitationModalTitle').textContent = 'Nueva habilitación';
-        area.value = 'personal'; populate();
+        area.value = <?= json_encode($habilitationArea) ?>; populate();
         const now = new Date(), today = [now.getFullYear(), String(now.getMonth()+1).padStart(2,'0'), String(now.getDate()).padStart(2,'0')].join('-');
         document.getElementById('habilitationRegistration').value = today;
         bootstrap.Modal.getOrCreateInstance(modal).show();

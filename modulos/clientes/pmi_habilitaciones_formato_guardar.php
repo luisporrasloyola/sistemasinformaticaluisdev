@@ -14,6 +14,7 @@ $catalogId = max(0, (int) ($_POST['catalog_id'] ?? 0));
 $search = trim((string) ($_POST['habilitation_buscar'] ?? ''));
 $page = max(1, (int) ($_POST['habilitation_pagina'] ?? 1));
 $target = 'modulos/clientes/pmi.php?' . http_build_query(['cliente_id' => $clientId, 'tab' => 'personal',
+    'habilitacion_area' => (($_POST['habilitacion_area'] ?? 'personal') === 'equipo' ? 'equipo' : 'personal'),
     'habilitacion_buscar' => mb_substr($search, 0, 100), 'habilitacion_pagina' => $page]);
 $registration = trim((string) ($_POST['registration_date'] ?? ''));
 $start = trim((string) ($_POST['start_date'] ?? ''));

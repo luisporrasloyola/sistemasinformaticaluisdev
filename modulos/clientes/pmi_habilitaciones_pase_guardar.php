@@ -14,7 +14,7 @@ $search = trim((string) ($_POST['habilitation_buscar'] ?? ''));
 $search = function_exists('mb_substr') ? mb_substr($search, 0, 100) : substr($search, 0, 100);
 $page = max(1, (int) ($_POST['habilitation_pagina'] ?? 1));
 $target = 'modulos/clientes/pmi.php?' . http_build_query([
-    'cliente_id' => $clientId, 'tab' => 'personal', 'habilitacion_buscar' => $search, 'habilitacion_pagina' => $page,
+    'cliente_id' => $clientId, 'tab' => 'personal', 'habilitacion_area' => (($_POST['habilitacion_area'] ?? 'personal') === 'equipo' ? 'equipo' : 'personal'), 'habilitacion_buscar' => $search, 'habilitacion_pagina' => $page,
 ]);
 $newFile = null;
 $oldFile = null;

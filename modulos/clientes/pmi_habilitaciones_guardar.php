@@ -7,6 +7,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') { redirect('modulos/clientes/pmi.php'
 verify_csrf($_POST['csrf_token'] ?? null);
 $clientId = max(0, (int) ($_POST['client_id'] ?? 0));
 $target = 'modulos/clientes/pmi.php?cliente_id=' . $clientId . '&tab=personal';
+$target .= '&habilitacion_area=' . (($_POST['habilitacion_area'] ?? 'personal') === 'equipo' ? 'equipo' : 'personal');
 try {
     $check = db()->prepare('SELECT 1 FROM clients WHERE id = ?');
     $check->execute([$clientId]);

@@ -169,6 +169,9 @@ require __DIR__ . '/../../includes/header.php';
 .habilitation-card-tone-2{--habilitation-bg:#f2faf6;--habilitation-header:#e3f4eb;--habilitation-border:#cde8da}
 .habilitation-card-tone-3{--habilitation-bg:#fff9f2;--habilitation-header:#fff0e1;--habilitation-border:#f1ddca}
 .habilitation-card-header{background:var(--habilitation-header)}
+.habilitation-records[hidden]{display:none!important}
+.habilitation-toggle{min-width:30px}
+.habilitation-toggle[aria-expanded="true"]{background:#e6f0ff;color:#1755a8}
 .habilitation-card .habilitation-info-panel{background:rgba(255,255,255,.66);border-color:var(--habilitation-border)}
 .habilitation-card .habilitation-download-toolbar{background:transparent;border-top-color:var(--habilitation-border)}
 .habilitation-card .habilitation-doc-table{--bs-table-bg:var(--habilitation-bg);--bs-table-hover-bg:rgba(255,255,255,.8);table-layout:fixed;min-width:760px}
@@ -210,6 +213,11 @@ require __DIR__ . '/../../includes/header.php';
 .client-pmi-habilitation-heading .btn{min-height:27px;padding:3px 9px;font-size:.72rem;line-height:19px;letter-spacing:0;white-space:nowrap}
 .habilitation-heading-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;min-width:0;margin-left:auto}
 .habilitation-search{display:flex;align-items:center;height:27px;margin:0;border:1px solid #2563eb;border-radius:6px;overflow:hidden;background:#fff}
+.habilitation-area-filters{display:flex;align-items:center;gap:7px;padding:10px 12px 3px}
+.habilitation-area-chip{display:inline-flex;align-items:center;justify-content:center;min-width:82px;min-height:28px;padding:4px 13px;border:1px solid #8dacf0;border-radius:999px;background:#fff;color:#2455aa;font-size:.76rem;font-weight:700;text-decoration:none;transition:background .15s,color .15s,box-shadow .15s}
+.habilitation-area-chip:hover{background:#eaf2ff;color:#17458e}
+.habilitation-area-chip.is-active{border-color:#176aaf;background:#2264cf;color:#fff;box-shadow:0 2px 6px rgba(34,100,207,.2)}
+.habilitation-area-chip:focus-visible{outline:2px solid #17458e;outline-offset:2px}
 .habilitation-search button{display:grid;place-items:center;flex:0 0 29px;width:29px;height:25px;padding:0;border:0;background:#eaf2ff;color:#3265ad}
 .habilitation-search button:hover{color:#194da0;background:#dceaff}
 .habilitation-search button:focus-visible{outline:2px solid #2563eb;outline-offset:1px}
@@ -443,7 +451,7 @@ require __DIR__ . '/../../includes/header.php';
             <div class="client-pmi-tabs" role="tablist" aria-label="Secciones PMI del cliente">
                 <button type="button" class="<?= $activeTab === 'requisitos' ? 'active' : '' ?>" data-tab="requisitos" role="tab" aria-selected="<?= $activeTab === 'requisitos' ? 'true' : 'false' ?>">REQUISITOS</button>
                 <button type="button" class="<?= $activeTab === 'formatos' ? 'active' : '' ?>" data-tab="formatos" role="tab" aria-selected="<?= $activeTab === 'formatos' ? 'true' : 'false' ?>">FORMATOS</button>
-                <button type="button" class="<?= $activeTab === 'personal' ? 'active' : '' ?>" data-tab="personal" role="tab" aria-selected="<?= $activeTab === 'personal' ? 'true' : 'false' ?>">PERSONAL HABILITADO</button>
+                <button type="button" class="<?= $activeTab === 'personal' ? 'active' : '' ?>" data-tab="personal" role="tab" aria-selected="<?= $activeTab === 'personal' ? 'true' : 'false' ?>">HABILITACIONES</button>
             </div>
             <?php if ($activeTab === 'requisitos'): ?>
             <section class="client-pmi-view" data-view="requisitos">

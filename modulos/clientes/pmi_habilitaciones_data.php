@@ -3,6 +3,7 @@ $habilitations = [];
 $habilitationSearch = trim((string) ($_GET['habilitacion_buscar'] ?? ''));
 $habilitationSearch = function_exists('mb_substr') ? mb_substr($habilitationSearch, 0, 100) : substr($habilitationSearch, 0, 100);
 $habilitationPage = max(1, (int) ($_GET['habilitacion_pagina'] ?? 1));
+$habilitationArea = ($_GET['habilitacion_area'] ?? 'personal') === 'equipo' ? 'equipo' : 'personal';
 $habilitationPageSize = 5;
 $habilitationTotal = 0;
 $habilitationPages = 1;
@@ -11,8 +12,8 @@ if ($clientId) {
         LEFT JOIN workers w ON h.area = 'personal' AND w.id = h.subject_id
         LEFT JOIN maquinarias m ON h.area = 'equipo' AND m.id = h.subject_id
         LEFT JOIN users u ON u.id = h.registered_by_user_id
-        WHERE h.client_id = :client_id";
-    $habilitationParams = ['client_id' => $clientId];
+        WHERE h.client_id = :client_id AND h.area = :area";
+    $habilitationParams = ['client_id' => $clientId, 'area' => $habilitationArea];
     if ($habilitationSearch !== '') {
         $habilitationFrom .= " AND (w.full_name LIKE :worker_name OR w.document_number LIKE :worker_detail OR m.equipo LIKE :machine_name OR m.serie_placa LIKE :machine_detail)";
         $term = '%' . $habilitationSearch . '%';
