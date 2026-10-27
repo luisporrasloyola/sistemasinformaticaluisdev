@@ -4,13 +4,14 @@ $formId = 'cvInline' . $recordId;
 $isImage = (bool) preg_match('/\.(jpg|jpeg|png|webp)$/i', (string) $record['archivo_path']);
 $startValue = substr((string) $record['hora_inicio'], 0, 5);
 $endValue = substr((string) $record['hora_final'], 0, 5);
-$displayMinutes = valor_minutes($startValue, $endValue);
+$displayMinutes = (int) $record['horas_total_minutos'];
 $editingFailure = $error !== '' && ($_POST['action'] ?? '') === 'save' && ($_POST['inline_edit'] ?? '') === '1' && (int) ($_POST['record_id'] ?? 0) === $recordId;
 $rowEquipment = $editingFailure ? (string) ($_POST['equipo'] ?? '') : (string) $record['equipo_completo'];
 $rowOperator = $editingFailure ? (string) ($_POST['operador'] ?? '') : (string) ($record['operador'] ?? '');
 $rowDate = $editingFailure ? (string) ($_POST['fecha_servicio'] ?? '') : (string) $record['fecha_servicio'];
 $rowStart = $editingFailure ? (string) ($_POST['hora_inicio'] ?? '') : $startValue;
 $rowEnd = $editingFailure ? (string) ($_POST['hora_final'] ?? '') : $endValue;
+$rowTotal = $editingFailure ? (string) ($_POST['horas_total'] ?? '') : sprintf('%02d:%02d', intdiv($displayMinutes, 60), $displayMinutes % 60);
 $rowNotes = $editingFailure ? (string) ($_POST['observaciones'] ?? '') : (string) ($record['observaciones'] ?? '');
 ?>
 <tr class="cv-record<?= $editingFailure ? ' cv-editing' : '' ?>">
@@ -19,7 +20,7 @@ $rowNotes = $editingFailure ? (string) ($_POST['observaciones'] ?? '') : (string
     <td><span class="cv-view"><?= e(date('d/m/Y', strtotime((string) $record['fecha_servicio']))) ?></span><input class="form-control form-control-sm cv-input" form="<?= $formId ?>" type="date" name="fecha_servicio" value="<?= e($rowDate) ?>" required aria-label="Fecha del servicio"></td>
     <td><span class="cv-view"><?= e($startValue) ?></span><input class="form-control form-control-sm cv-input cv-inline-time" form="<?= $formId ?>" type="time" name="hora_inicio" value="<?= e($rowStart) ?>" required aria-label="Hora de inicio"></td>
     <td><span class="cv-view"><?= e($endValue) ?></span><input class="form-control form-control-sm cv-input cv-inline-time" form="<?= $formId ?>" type="time" name="hora_final" value="<?= e($rowEnd) ?>" required aria-label="Hora final"></td>
-    <td class="fw-semibold"><span class="cv-view"><?= $displayMinutes === null ? '<span class="text-warning">Revisar horas</span>' : sprintf('%02d:%02d', intdiv($displayMinutes, 60), $displayMinutes % 60) ?></span><output class="cv-input cv-inline-total">—</output></td>
+    <td class="fw-semibold"><span class="cv-view"><?= $displayMinutes > 0 ? sprintf('%02d:%02d', intdiv($displayMinutes, 60), $displayMinutes % 60) : '<span class="text-warning">Revisar horas</span>' ?></span><input class="form-control form-control-sm cv-input cv-inline-total" form="<?= $formId ?>" type="text" name="horas_total" value="<?= e($rowTotal) ?>" inputmode="numeric" maxlength="5" placeholder="HH:MM" required aria-label="Horas en total"></td>
     <td><span class="cv-view"><?= $record['observaciones'] ? nl2br(e((string) $record['observaciones'])) : '<span class="text-muted">—</span>' ?></span><textarea class="form-control form-control-sm cv-input" form="<?= $formId ?>" name="observaciones" rows="2" maxlength="2000" aria-label="Observaciones"><?= e($rowNotes) ?></textarea></td>
     <td><?= $record['registrado_por'] !== '' ? e((string) $record['registrado_por']) : '<span class="text-muted">—</span>' ?></td>
     <td><div class="cv-row-actions">

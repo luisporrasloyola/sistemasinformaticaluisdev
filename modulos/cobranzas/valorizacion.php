@@ -148,15 +148,24 @@ if ($clientId) {
             $notes = trim((string) ($_POST['observaciones'] ?? ''));
             $parsedDate = preg_match('/^\d{4}-\d{2}-\d{2}$/D', $date) ? DateTimeImmutable::createFromFormat('!Y-m-d', $date) : false;
             $minutes = valor_minutes($start, $end);
+            $inlineEdit = $existing && ($_POST['inline_edit'] ?? '') === '1';
+            $manualTotal = trim((string) ($_POST['horas_total'] ?? ''));
+            $manualMinutes = null;
+            if ($inlineEdit && preg_match('/^([01]\d|2[0-3]):([0-5]\d)$/D', $manualTotal, $totalParts)) {
+                $manualMinutes = (int) $totalParts[1] * 60 + (int) $totalParts[2];
+            }
+            $elapsedMinutes = $minutes === null ? null : $minutes + 60;
             if (($_POST['record_id'] ?? '') !== '' && !$existing) $error = 'No se encontró el registro.';
             elseif ($equipment === '' || mb_strlen($equipment, 'UTF-8') > 120) $error = 'Ingrese el equipo (máximo 120 caracteres).';
             elseif (mb_strlen($operator, 'UTF-8') > 150) $error = 'El nombre del operador no puede superar 150 caracteres.';
             elseif (!$parsedDate || $parsedDate->format('Y-m-d') !== $date) $error = 'Seleccione una fecha válida.';
             elseif ($minutes === null) $error = 'Ingrese horas válidas: el turno debe durar más de una hora para descontar el refrigerio. Se admite cruzar la medianoche.';
+            elseif ($inlineEdit && ($manualMinutes === null || $manualMinutes < 1 || $manualMinutes > $elapsedMinutes)) $error = 'Ingrese las horas totales en formato HH:MM, mayores que cero y sin superar el tiempo entre inicio y fin.';
             elseif (mb_strlen($notes, 'UTF-8') > 2000) $error = 'Las observaciones no pueden superar 2000 caracteres.';
             elseif (!$existing && ($_FILES['adjunto']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) $error = 'Adjunte la imagen o PDF original.';
             elseif (($_FILES['adjunto']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK && (int) ($_FILES['adjunto']['size'] ?? 0) > 5 * 1024 * 1024) $error = 'El archivo supera 5 MB. Reduzca la imagen o seleccione un PDF más pequeño.';
             else {
+                if ($inlineEdit) $minutes = $manualMinutes;
                 $newPath = null;
                 try {
                     $file = upload_file($_FILES['adjunto'] ?? [], 'cobranzas_valorizacion', document_attachment_mimes());
@@ -228,6 +237,8 @@ require __DIR__ . '/../../includes/header.php';
 <style>
 .cv-panel.work-panel{padding:16px 18px!important;margin-bottom:12px!important}.cv-client-layout{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(260px,1fr);gap:24px}.cv-client-layout.cv-client-layout-empty{grid-template-columns:1fr}.cv-client-main,.cv-client-supplier{min-width:0}.cv-client-row{display:grid;grid-template-columns:124px minmax(0,1fr);align-items:center;gap:10px;min-height:38px;margin-bottom:8px}.cv-client-row:last-child{margin-bottom:0}.cv-client-row label,.cv-client-row .cv-client-detail-label{margin:0;color:#344761;font-size:.83rem;font-weight:700}.cv-client-row-value{min-width:0}.cv-client-row-value .select2-container{width:100%!important}.cv-client-row .form-control{height:38px}.cv-client-detail-value{display:block;min-width:0;overflow-wrap:anywhere;font-weight:600}.cv-detail-error{display:block;color:#b42318;font-size:.75rem;margin-top:3px}@media(max-width:900px){.cv-client-layout{grid-template-columns:1fr;gap:8px}.cv-client-supplier{padding-top:10px;border-top:1px solid #e2e8f0}}@media(max-width:600px){.cv-client-row{grid-template-columns:1fr;gap:3px;margin-bottom:12px}}
 .cv-table{min-width:0;width:100%;table-layout:fixed}.cv-table th{background:#f4f7fb;color:#415474;font-size:.68rem;text-transform:uppercase}.cv-table td,.cv-table th{padding:.55rem .35rem;vertical-align:middle;overflow-wrap:anywhere}.cv-preview{display:flex;align-items:center;justify-content:center;min-height:45vh;background:#f8fafc}.cv-preview img{max-width:100%;max-height:72vh;object-fit:contain}.cv-preview iframe{width:100%;height:72vh;border:0}
+.cv-preview.cv-preview-image{display:block;overflow:auto;max-height:72vh;text-align:center}.cv-preview.cv-preview-image img{display:block;width:auto;height:auto;max-width:100%;max-height:68vh;margin:auto;object-fit:contain}.cv-preview.cv-preview-image img.is-zoomed{max-width:none;max-height:none;margin:0 auto}.cv-zoom-tools[hidden]{display:none!important}
+@media(max-width:575px){#cvFileModal .modal-header{flex-wrap:wrap;gap:8px}#cvFileModal .modal-header .btn-close{margin-left:auto}#cvFileDownload{margin-right:0!important}}
 @media(max-width:767px){.cv-table{min-width:1000px}.cv-table td,.cv-table th{overflow-wrap:normal;word-break:normal}.cv-table tbody td{white-space:nowrap}.cv-table tbody td:nth-child(2),.cv-table tbody td:nth-child(7),.cv-table tbody td:nth-child(8){white-space:normal;overflow-wrap:anywhere}.cv-panel .table-responsive{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}}
 .cv-review-layout{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:16px;align-items:start}.cv-review-document,.cv-review-fields{min-width:0}.cv-review-document{position:sticky;top:0}.cv-review-document #cvPreviewContent{max-height:45vh;overflow:auto}.cv-review-document #cvPreviewContent canvas{max-width:100%}.cv-review-fields .row{--bs-gutter-y:.75rem;margin-left:0;margin-right:0}.cv-review-suggestion{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid #e2e8f0}.cv-review-suggestion:last-child{border-bottom:0}.cv-review-suggestion span{min-width:0;overflow-wrap:anywhere}.cv-review-fields .cv-field-state{font-size:.74rem;margin-top:3px}.cv-review-fields .cv-field-state.is-pending{color:#9a6700}.cv-review-fields .cv-field-state.is-ready{color:#08764d}@media(max-width:991px){.cv-review-layout{grid-template-columns:1fr}.cv-review-document{position:static}.cv-review-document #cvPreviewContent{max-height:34vh}}
 .cv-visual-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.cv-visual-card{min-width:0;padding:7px;background:#fff;border:1px solid #d9e3ef;border-radius:7px;cursor:text}.cv-visual-card span{display:block;margin-bottom:4px;color:#334155}.cv-visual-card canvas{display:block;width:100%;height:auto;max-height:96px;object-fit:contain;object-position:left center;background:#fff}.cv-visual-card:first-child{grid-column:1/-1}@media(max-width:575px){.cv-visual-grid{grid-template-columns:1fr}.cv-visual-card:first-child{grid-column:auto}}
@@ -327,7 +338,7 @@ require __DIR__ . '/../../includes/header.php';
 <?php endif; ?>
 </tfoot></table></div><?php if ($page > 1 || $hasMore): ?><nav class="d-flex justify-content-end gap-2 mt-3" aria-label="Páginas de registros"><?php if ($page > 1): ?><a class="btn btn-sm btn-outline-primary" href="<?= e(APP_URL . '/' . $pageUrl . '&pagina=' . ($page - 1)) ?>">Anterior</a><?php endif; ?><?php if ($hasMore): ?><a class="btn btn-sm btn-outline-primary" href="<?= e(APP_URL . '/' . $pageUrl . '&pagina=' . ($page + 1)) ?>">Siguiente</a><?php endif; ?></nav><?php endif; ?></section>
 
-<div class="modal fade" id="cvFileModal" tabindex="-1" aria-labelledby="cvFileTitle" aria-hidden="true"><div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h2 class="modal-title h5 me-auto" id="cvFileTitle">Archivo original</h2><a class="btn btn-primary btn-sm me-3" id="cvFileDownload" href="#"><i class="fa-solid fa-download me-1" aria-hidden="true"></i>Descargar</a><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div><div class="modal-body cv-preview" id="cvFileBody"></div></div></div></div>
+<div class="modal fade" id="cvFileModal" tabindex="-1" aria-labelledby="cvFileTitle" aria-hidden="true"><div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h2 class="modal-title h5 me-auto" id="cvFileTitle">Archivo original</h2><div class="btn-group btn-group-sm cv-zoom-tools me-2" id="cvZoomTools" role="group" aria-label="Zoom de la imagen" hidden><button class="btn btn-outline-secondary" type="button" id="cvZoomOut" aria-label="Alejar imagen" title="Alejar"><i class="fa-solid fa-minus" aria-hidden="true"></i></button><button class="btn btn-outline-secondary" type="button" id="cvZoomReset" title="Restablecer zoom">100 %</button><button class="btn btn-outline-secondary" type="button" id="cvZoomIn" aria-label="Acercar imagen" title="Acercar"><i class="fa-solid fa-plus" aria-hidden="true"></i></button></div><a class="btn btn-primary btn-sm me-3" id="cvFileDownload" href="#"><i class="fa-solid fa-download me-1" aria-hidden="true"></i>Descargar</a><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div><div class="modal-body cv-preview" id="cvFileBody"></div></div></div></div>
 <?php endif; ?>
 <script type="module" src="<?= e(APP_URL . '/recursos/js/cobranzas_valorizacion_archivo.js?v=8') ?>"></script>
 <script type="module" src="<?= e(APP_URL . '/recursos/js/cobranzas_valorizacion_ocr.js?v=21') ?>"></script>
@@ -597,17 +608,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const end = row.querySelector('[name="hora_final"]');
         const total = row.querySelector('.cv-inline-total');
         const save = row.querySelector('.cv-inline-save');
-        const updateRowTotal = () => {
+        const updateRowTotal = (recalculate = false) => {
             const validTime = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
             let minutes = null;
+            let elapsed = null;
             if (validTime.test(start.value) && validTime.test(end.value)) {
                 const [h1,m1] = start.value.split(':').map(Number), [h2,m2] = end.value.split(':').map(Number);
-                const elapsed = (h2*60+m2-h1*60-m1+1440)%1440;
+                elapsed = (h2*60+m2-h1*60-m1+1440)%1440;
                 if (elapsed > 60) minutes = elapsed - 60;
             }
-            total.textContent = minutes === null ? 'Revisar horas' : String(Math.floor(minutes/60)).padStart(2,'0') + ':' + String(minutes%60).padStart(2,'0');
+            if (recalculate) total.value = minutes === null ? '' : String(Math.floor(minutes/60)).padStart(2,'0') + ':' + String(minutes%60).padStart(2,'0');
+            const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(total.value);
+            const entered = match ? Number(match[1])*60 + Number(match[2]) : 0;
+            const validTotal = minutes !== null && entered > 0 && entered <= elapsed;
             end.setCustomValidity(minutes === null ? 'El turno debe durar más de una hora.' : '');
-            save.disabled = minutes === null;
+            total.setCustomValidity(validTotal ? '' : 'Ingrese HH:MM, mayor que cero y sin superar el turno.');
+            save.disabled = !validTotal;
         };
         row.querySelector('.cv-inline-edit').addEventListener('click', () => {
             document.querySelectorAll('.cv-record.cv-editing').forEach(other => {if (other !== row) other.querySelector('.cv-inline-cancel').click();});
@@ -616,12 +632,39 @@ document.addEventListener('DOMContentLoaded', () => {
             row.querySelector('[name="equipo"]').focus();
         });
         row.querySelector('.cv-inline-cancel').addEventListener('click', () => {form.reset();row.classList.remove('cv-editing');updateRowTotal();});
-        start.addEventListener('input', updateRowTotal);
-        end.addEventListener('input', updateRowTotal);
+        start.addEventListener('input', () => updateRowTotal(true));
+        end.addEventListener('input', () => updateRowTotal(true));
+        total.addEventListener('input', () => updateRowTotal());
         if (row.classList.contains('cv-editing')) updateRowTotal();
     });
     document.querySelectorAll('.cvDelete').forEach(form=>form.addEventListener('submit',async event=>{event.preventDefault();const result=await Swal.fire({title:'¿Eliminar este registro?',text:'También se eliminará el archivo original. Esta acción no se puede deshacer.',icon:'warning',showCancelButton:true,confirmButtonText:'Sí, eliminar',cancelButtonText:'Cancelar',confirmButtonColor:'#dc3545',reverseButtons:true});if(result.isConfirmed)form.submit();}));
-    const fileModal=document.getElementById('cvFileModal'),fileBody=document.getElementById('cvFileBody'),fileDownload=document.getElementById('cvFileDownload');fileModal.addEventListener('hidden.bs.modal',()=>{fileBody.replaceChildren();fileDownload.removeAttribute('href')});document.querySelectorAll('.cvOpenFile').forEach(button=>button.addEventListener('click',()=>{const downloadUrl=new URL(button.dataset.url,window.location.href);downloadUrl.searchParams.set('download','1');fileDownload.href=downloadUrl.toString();const preview=document.createElement(button.dataset.kind==='image'?'img':'iframe');preview.src=button.dataset.url;if(preview.tagName==='IMG')preview.alt='Archivo original';else preview.title='PDF original';fileBody.replaceChildren(preview);bootstrap.Modal.getOrCreateInstance(fileModal).show();}));
+    const fileModal=document.getElementById('cvFileModal'),fileBody=document.getElementById('cvFileBody'),fileDownload=document.getElementById('cvFileDownload');
+    const zoomTools=document.getElementById('cvZoomTools'),zoomOut=document.getElementById('cvZoomOut'),zoomReset=document.getElementById('cvZoomReset'),zoomIn=document.getElementById('cvZoomIn');
+    let zoom=1,baseImageWidth=0;
+    const updateImageZoom=()=>{
+        const image=fileBody.querySelector('img');
+        if(!image||!baseImageWidth)return;
+        image.classList.toggle('is-zoomed',zoom!==1);
+        if(zoom===1){image.style.width='';image.style.height='';}
+        else{image.style.width=Math.round(baseImageWidth*zoom)+'px';image.style.height='auto';}
+        zoomReset.textContent=Math.round(zoom*100)+' %';
+        zoomOut.disabled=zoom<=1;zoomIn.disabled=zoom>=4;
+    };
+    zoomOut.addEventListener('click',()=>{zoom=Math.max(1,Math.round((zoom-.25)*100)/100);updateImageZoom();});
+    zoomIn.addEventListener('click',()=>{zoom=Math.min(4,Math.round((zoom+.25)*100)/100);updateImageZoom();});
+    zoomReset.addEventListener('click',()=>{zoom=1;updateImageZoom();});
+    fileModal.addEventListener('shown.bs.modal',()=>{const image=fileBody.querySelector('img');if(image&&image.complete){baseImageWidth=image.getBoundingClientRect().width;updateImageZoom();}});
+    fileModal.addEventListener('hidden.bs.modal',()=>{fileBody.replaceChildren();fileBody.classList.remove('cv-preview-image');zoomTools.hidden=true;fileDownload.removeAttribute('href');zoom=1;baseImageWidth=0;});
+    document.querySelectorAll('.cvOpenFile').forEach(button=>button.addEventListener('click',()=>{
+        const downloadUrl=new URL(button.dataset.url,window.location.href);downloadUrl.searchParams.set('download','1');fileDownload.href=downloadUrl.toString();
+        const isImage=button.dataset.kind==='image',preview=document.createElement(isImage?'img':'iframe');
+        preview.src=button.dataset.url;
+        if(isImage){preview.alt='Archivo original';preview.addEventListener('load',()=>{baseImageWidth=preview.getBoundingClientRect().width;updateImageZoom();},{once:true});}
+        else preview.title='PDF original';
+        zoom=1;baseImageWidth=0;zoomReset.textContent='100 %';zoomOut.disabled=true;zoomIn.disabled=false;
+        zoomTools.hidden=!isImage;fileBody.classList.toggle('cv-preview-image',isImage);fileBody.replaceChildren(preview);
+        bootstrap.Modal.getOrCreateInstance(fileModal).show();
+    }));
     <?php if ($error !== '' && ($_POST['action'] ?? '') === 'save' && ($_POST['inline_edit'] ?? '') !== '1'): ?>
     const attempted=<?= json_encode(['record_id'=>(string)($_POST['record_id']??''),'equipo'=>(string)($_POST['equipo']??''),'operador'=>(string)($_POST['operador']??''),'fecha_servicio'=>(string)($_POST['fecha_servicio']??''),'hora_inicio'=>(string)($_POST['hora_inicio']??''),'hora_final'=>(string)($_POST['hora_final']??''),'observaciones'=>(string)($_POST['observaciones']??'')],JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT) ?>;fields.id.value=attempted.record_id;for(const key of ['equipo','operador','fecha_servicio','hora_inicio','hora_final','observaciones'])fields[key].value=attempted[key];document.getElementById('cvFile').required=!fields.id.value;if(!fields.id.value){formElement.classList.add('needs-file');document.getElementById('cvSelectedFile').textContent='Seleccione nuevamente el archivo para poder guardar.';}document.getElementById('cvFormTitle').textContent=fields.id.value?'Editar valorización':'Registrar valorización';updateTotal();openPanel();
     <?php endif; ?>
