@@ -16,8 +16,9 @@ $stmt = db()->prepare('SELECT w.id, w.full_name, p.id AS position_id, p.name AS 
     LEFT JOIN worker_positions wp ON wp.worker_id = w.id
     LEFT JOIN client_pmi_general_positions gp ON gp.position_id = wp.position_id AND gp.client_id = ?
     LEFT JOIN positions p ON p.id = gp.position_id
+    WHERE NOT EXISTS (SELECT 1 FROM client_pmi_habilitations h WHERE h.client_id = ? AND h.area = \'personal\' AND h.subject_id = w.id AND h.id <> ?)
     ORDER BY w.full_name, w.id, p.name');
-$stmt->execute([$clientId]);
+$stmt->execute([$clientId, $clientId, max(0, (int) ($_GET['edit_id'] ?? 0))]);
 $workers = [];
 foreach ($stmt as $row) {
     $id = (int) $row['id'];

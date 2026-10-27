@@ -130,7 +130,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!membersLoaded) {
             membersList.textContent = 'Cargando personal…';
             try {
-                const response = await fetch(<?= json_encode(APP_URL . '/modulos/clientes/pmi_habilitaciones_integrantes.php') ?> + '?client_id=<?= (int) $clientId ?>', {credentials: 'same-origin'});
+                const response = await fetch(<?= json_encode(APP_URL . '/modulos/clientes/pmi_habilitaciones_integrantes.php') ?> + '?client_id=<?= (int) $clientId ?>&edit_id=' + encodeURIComponent(document.getElementById('habilitationId').value || 0), {credentials: 'same-origin'});
                 if (!response.ok) throw new Error('No se pudo cargar el personal.');
                 const data = await response.json();
                 membersList.replaceChildren();
@@ -295,7 +295,7 @@ document.addEventListener('DOMContentLoaded', () => {
         event.preventDefault(); form.dataset.positionValidationAttempted = '1'; positionsError.classList.remove('d-none'); positionsPanel.scrollIntoView({block: 'nearest'});
     });
     const searchableSubject = window.jQuery && jQuery.fn.select2 ? jQuery(subject) : null;
-    if (searchableSubject) searchableSubject.select2({theme:'bootstrap4', width:'100%', dropdownParent:jQuery(modal), placeholder:'Buscar por nombre o documento', ajax:{url:<?= json_encode(APP_URL . '/modulos/clientes/pmi_habilitaciones_buscar.php') ?>, dataType:'json', delay:350, data:params=>({area:area.value,q:params.term||''}), processResults:data=>({results:data.results||[]})}, language:{noResults:()=> 'No se encontraron resultados', searching:()=> 'Buscando…'}});
+    if (searchableSubject) searchableSubject.select2({theme:'bootstrap4', width:'100%', dropdownParent:jQuery(modal), placeholder:'Buscar por nombre o documento', ajax:{url:<?= json_encode(APP_URL . '/modulos/clientes/pmi_habilitaciones_buscar.php') ?>, dataType:'json', delay:350, data:params=>({area:area.value,client_id:<?= (int) $clientId ?>,edit_id:document.getElementById('habilitationId').value||0,q:params.term||''}), processResults:data=>({results:data.results||[]})}, language:{noResults:()=> 'No hay personal disponible', searching:()=> 'Buscando…'}});
     let changingSubjectProgrammatically = false;
     const subjectChanged = () => { if (!changingSubjectProgrammatically) loadPositions(); };
     if (searchableSubject) searchableSubject.on('change', subjectChanged);
@@ -313,7 +313,7 @@ document.addEventListener('DOMContentLoaded', () => {
     area.addEventListener('change', () => populate());
     type.addEventListener('change', () => { updateHabilitationMode(); loadPositions(); });
     document.getElementById('newHabilitation')?.addEventListener('click', () => {
-        form.reset(); document.getElementById('habilitationId').value = ''; document.getElementById('habilitationModalTitle').textContent = 'Nueva habilitación';
+        form.reset(); document.getElementById('habilitationId').value = ''; membersLoaded = false; document.getElementById('habilitationModalTitle').textContent = 'Nueva habilitación';
         area.value = 'personal'; populate();
         const now = new Date(), today = [now.getFullYear(), String(now.getMonth()+1).padStart(2,'0'), String(now.getDate()).padStart(2,'0')].join('-');
         document.getElementById('habilitationRegistration').value = today;
@@ -321,7 +321,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     document.querySelectorAll('.edit-habilitation').forEach(button => button.addEventListener('click', () => {
         const row = JSON.parse(button.dataset.record);
-        form.reset();
+        form.reset(); membersLoaded = false;
         document.getElementById('habilitationId').value = row.id; area.value = row.area; populate(row);
         document.getElementById('habilitationType').value = row.habilitation_type || 'individual';
         updateHabilitationMode(row.subject_id, row.position_ids || []);
