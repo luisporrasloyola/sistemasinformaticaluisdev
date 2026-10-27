@@ -21,17 +21,48 @@ try {
         $ids = $_POST['source_ids'] ?? [];
         if (!is_array($ids)) { throw new DomainException('Selección inválida.'); }
         $ids = array_values(array_unique(array_filter(array_map('intval', $ids), static fn(int $id): bool => $id > 0)));
-        $sourceTable = $category === 'personal' ? 'requirements_catalog' : 'maquinaria_documentos_catalogo';
+        $sourceTable = $category === 'personal' ? 'positions' : 'maquinaria_documentos_catalogo';
         $statusColumn = $category === 'personal' ? 'status' : 'estado';
         db()->beginTransaction();
-        db()->prepare('DELETE FROM client_pmi_general_items WHERE client_id = :client_id AND category = :category')->execute(['client_id' => $clientId, 'category' => $category]);
+        if ($category === 'personal') {
+            $current = db()->prepare('SELECT position_id FROM client_pmi_general_positions WHERE client_id = ? FOR UPDATE');
+            $current->execute([$clientId]);
+            $previousIds = array_map('intval', $current->fetchAll(PDO::FETCH_COLUMN));
+            $remove = db()->prepare('DELETE FROM client_pmi_general_positions WHERE client_id = ? AND position_id = ?');
+            foreach (array_diff($previousIds, $ids) as $removedId) $remove->execute([$clientId, $removedId]);
+            $insert = db()->prepare('INSERT INTO client_pmi_general_positions (client_id, position_id) VALUES (:client_id, :source_id)');
+        } else {
+            db()->prepare('DELETE FROM client_pmi_general_items WHERE client_id = :client_id AND category = :category')->execute(['client_id' => $clientId, 'category' => $category]);
+            $insert = db()->prepare('INSERT INTO client_pmi_general_items (client_id, category, source_id) VALUES (:client_id, :category, :source_id)');
+        }
         $exists = db()->prepare("SELECT 1 FROM {$sourceTable} WHERE id = :id AND {$statusColumn} = 1");
-        $insert = db()->prepare('INSERT INTO client_pmi_general_items (client_id, category, source_id) VALUES (:client_id, :category, :source_id)');
         foreach ($ids as $id) {
             $exists->execute(['id' => $id]);
             if (!$exists->fetchColumn()) { throw new DomainException('Hay elementos que ya no están disponibles. Actualice la lista.'); }
-            $insert->execute(['client_id' => $clientId, 'category' => $category, 'source_id' => $id]);
+            if ($category === 'personal' && in_array($id, $previousIds, true)) continue;
+            $params = ['client_id' => $clientId, 'source_id' => $id];
+            if ($category === 'equipos') $params['category'] = $category;
+            $insert->execute($params);
         }
+        db()->commit();
+    } elseif ($action === 'save_position_requirements') {
+        $positionId = (int) ($_POST['position_id'] ?? 0);
+        if ($positionId > 0) $target .= '&puesto_id=' . $positionId;
+        $ids = $_POST['source_ids'] ?? [];
+        if ($positionId < 1 || !is_array($ids)) { throw new DomainException('Seleccione un puesto y requisitos válidos.'); }
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids), static fn(int $id): bool => $id > 0)));
+        db()->beginTransaction();
+        $position = db()->prepare('SELECT 1 FROM client_pmi_general_positions WHERE client_id = ? AND position_id = ? FOR UPDATE');
+        $position->execute([$clientId, $positionId]);
+        if (!$position->fetchColumn()) { throw new DomainException('El puesto no pertenece a este cliente.'); }
+        $exists = db()->prepare('SELECT 1 FROM requirements_catalog WHERE id = ? AND status = 1');
+        foreach ($ids as $id) {
+            $exists->execute([$id]);
+            if (!$exists->fetchColumn()) { throw new DomainException('Hay requisitos que ya no están disponibles.'); }
+        }
+        db()->prepare('DELETE FROM client_pmi_general_position_requirements WHERE client_id = ? AND position_id = ?')->execute([$clientId, $positionId]);
+        $insert = db()->prepare('INSERT INTO client_pmi_general_position_requirements (client_id, position_id, requirement_id) VALUES (?, ?, ?)');
+        foreach ($ids as $id) $insert->execute([$clientId, $positionId, $id]);
         db()->commit();
     } elseif ($action === 'save_base') {
         $id = max(0, (int) ($_POST['document_id'] ?? 0));

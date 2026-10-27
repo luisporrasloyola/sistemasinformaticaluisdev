@@ -22,15 +22,15 @@ $habilitation = $stmt->fetch();
 if (!$habilitation) { http_response_code(404); exit('Habilitación no encontrada.'); }
 $positionName = '';
 if ($habilitation['area'] === 'personal') {
-    $check = db()->prepare('SELECT p.name FROM client_pmi_habilitation_positions hp JOIN worker_positions wp ON wp.worker_id = ? AND wp.position_id = hp.position_id JOIN positions p ON p.id = hp.position_id WHERE hp.habilitation_id = ? AND hp.position_id = ?');
-    $check->execute([$habilitation['subject_id'], $habilitationId, $positionId]);
+    $check = db()->prepare('SELECT p.name FROM client_pmi_habilitation_positions hp JOIN worker_positions wp ON wp.worker_id = ? AND wp.position_id = hp.position_id JOIN client_pmi_general_positions gp ON gp.client_id = ? AND gp.position_id = hp.position_id JOIN positions p ON p.id = hp.position_id WHERE hp.habilitation_id = ? AND hp.position_id = ?');
+    $check->execute([$habilitation['subject_id'], $clientId, $habilitationId, $positionId]);
     $positionName = (string) $check->fetchColumn();
     if ($positionName === '' && ($positionId > 0 || $ids)) { http_response_code(400); exit('Puesto inválido.'); }
-    $stmt = db()->prepare("SELECT wr.id, rc.name, wr.file_path FROM client_pmi_general_items gi JOIN requirements_catalog rc ON rc.id = gi.source_id
+    $stmt = db()->prepare("SELECT wr.id, rc.name, wr.file_path FROM client_pmi_general_position_requirements pr JOIN requirements_catalog rc ON rc.id = pr.requirement_id
         JOIN worker_requirements wr ON wr.id = (
-            SELECT latest.id FROM worker_requirements latest WHERE latest.worker_id = :subject_id AND latest.position_id = :position_id AND latest.requirement_id = gi.source_id
+            SELECT latest.id FROM worker_requirements latest WHERE latest.worker_id = :subject_id AND latest.position_id = pr.position_id AND latest.requirement_id = pr.requirement_id
             ORDER BY latest.registration_date DESC, latest.id DESC LIMIT 1
-        ) WHERE gi.client_id = :client_id AND gi.category = 'personal' AND wr.file_path IS NOT NULL ORDER BY rc.name LIMIT 101");
+        ) WHERE pr.client_id = :client_id AND pr.position_id = :position_id AND wr.file_path IS NOT NULL ORDER BY rc.name LIMIT 101");
     $stmt->execute(['subject_id' => $habilitation['subject_id'], 'position_id' => $positionId, 'client_id' => $clientId]);
 } else {
     $stmt = db()->prepare("SELECT md.id, dc.nombre AS name, md.archivo_path AS file_path

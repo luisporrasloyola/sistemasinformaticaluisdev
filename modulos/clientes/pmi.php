@@ -10,6 +10,8 @@ $activeTab = in_array($requestedTab, ['requisitos', 'formatos', 'personal'], tru
 $client = null;
 $contacts = [];
 $general = ['personal' => [], 'equipos' => []];
+$positionRequirements = [];
+$activePositionId = 0;
 $activeGeneralCategory = ($_GET['categoria'] ?? '') === 'equipos' ? 'equipos' : 'personal';
 $baseDocuments = [];
 $baseFolders = [];
@@ -25,14 +27,21 @@ if ($clientId) {
     $stmt->execute(['id' => $clientId]);
     $contacts = $stmt->fetchAll();
     if ($activeTab === 'requisitos') {
-    $stmt = db()->prepare("SELECT gi.category, gi.source_id, rc.name AS personal_name, dc.nombre AS equipment_document_name
+    $stmt = db()->prepare('SELECT gp.position_id AS source_id, p.name AS personal_name FROM client_pmi_general_positions gp JOIN positions p ON p.id = gp.position_id WHERE gp.client_id = :id ORDER BY p.name, p.id');
+    $stmt->execute(['id' => $clientId]);
+    $general['personal'] = $stmt->fetchAll();
+    $availablePositionIds = array_map('intval', array_column($general['personal'], 'source_id'));
+    $requestedPositionId = (int) ($_GET['puesto_id'] ?? 0);
+    $activePositionId = in_array($requestedPositionId, $availablePositionIds, true) ? $requestedPositionId : ($availablePositionIds[0] ?? 0);
+    $stmt = db()->prepare('SELECT pr.position_id, pr.requirement_id, rc.name FROM client_pmi_general_position_requirements pr JOIN requirements_catalog rc ON rc.id = pr.requirement_id WHERE pr.client_id = :id ORDER BY rc.name, rc.id');
+    $stmt->execute(['id' => $clientId]);
+    foreach ($stmt as $row) $positionRequirements[(int) $row['position_id']][] = $row;
+    $stmt = db()->prepare("SELECT gi.category, gi.source_id, dc.nombre AS equipment_document_name
         FROM client_pmi_general_items gi
-        LEFT JOIN requirements_catalog rc ON gi.category = 'personal' AND rc.id = gi.source_id
-        LEFT JOIN maquinaria_documentos_catalogo dc ON gi.category = 'equipos' AND dc.id = gi.source_id
-        WHERE gi.client_id = :id ORDER BY gi.category, COALESCE(rc.name, dc.nombre), gi.source_id");
+        JOIN maquinaria_documentos_catalogo dc ON dc.id = gi.source_id
+        WHERE gi.client_id = :id AND gi.category = 'equipos' ORDER BY dc.nombre, gi.source_id");
     $stmt->execute(['id' => $clientId]);
     foreach ($stmt->fetchAll() as $row) {
-        if ($row['category'] === 'personal' && $row['personal_name'] !== null) { $general['personal'][] = $row; }
         if ($row['category'] === 'equipos' && $row['equipment_document_name'] !== null) { $general['equipos'][] = $row; }
     }
     $stmt = db()->prepare('SELECT d.id, d.name, bc.id AS catalog_id, d.registration_date, d.start_date, d.end_date, d.file_path, d.created_at, COALESCE(u.name, \'—\') AS registered_by, fi.folder_id FROM client_pmi_base_documents d LEFT JOIN users u ON u.id = d.registered_by_user_id LEFT JOIN client_pmi_base_folder_items fi ON fi.document_id = d.id LEFT JOIN client_pmi_base_catalog bc ON bc.client_id = d.client_id AND bc.name = d.name WHERE d.client_id = :id ORDER BY d.name, d.id');
@@ -106,6 +115,20 @@ require __DIR__ . '/../../includes/header.php';
 .client-pmi-general-content li::before{content:"";width:6px;height:6px;flex:0 0 6px;border-radius:50%;background:#8c78a3;margin-top:.42em}
 .client-pmi-general-content[data-category-body="equipos"] li::before{background:#e6a86f}
 .client-pmi-general-content[hidden],.client-pmi-view[hidden]{display:none!important}
+.client-pmi-position-list{display:flex;align-items:flex-start;flex-wrap:wrap;gap:12px;padding:8px 0}
+.client-pmi-position{min-width:0;max-width:100%}
+.client-pmi-position-group{display:inline-flex;align-items:stretch;max-width:100%;border:1.5px solid #8c78a3;border-radius:18px;overflow:hidden;background:#f1edf6;color:#67547d}
+.client-pmi-position-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:8px 13px;font-size:.78rem;font-weight:700;line-height:1.2}
+.client-pmi-position-add{flex:none;padding:8px 11px;border:0;border-left:1px solid currentColor;background:transparent;color:inherit;font-size:.78rem;line-height:1.2}
+.client-pmi-position-add:hover{background:rgba(100,82,157,.09)}
+.client-pmi-position-add:focus-visible{outline:2px solid #2563eb;outline-offset:-2px}
+.client-pmi-position-requirements{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+.client-pmi-position-group.is-active{background:#7853ad;border-color:#7853ad;color:#fff}
+.client-pmi-position-group.is-active .client-pmi-position-add{border-left-color:rgba(255,255,255,.7)}
+.client-pmi-position-group.is-active .client-pmi-position-add:hover,.client-pmi-position-group.is-active .client-pmi-position-tab:hover{background:rgba(255,255,255,.14)}
+.client-pmi-position-tab{min-width:0;padding:8px 13px;border:0;background:transparent;color:inherit;font-size:.78rem;font-weight:700;line-height:1.2;text-align:left}
+.client-pmi-position-panel{padding:5px 0 3px}
+.client-pmi-position-panel[hidden]{display:none!important}
 .client-pmi-pick-list{max-height:360px;overflow:auto}.client-pmi-pick-row{display:flex;gap:9px;align-items:center;padding:8px 10px;border-bottom:1px solid #edf1f7;cursor:pointer}
 .client-pmi-pick-row[hidden]{display:none}
 .client-pmi-folder-dialog{max-width:600px}
@@ -254,7 +277,18 @@ require __DIR__ . '/../../includes/header.php';
                 <div class="client-pmi-general-panel">
                 <?php foreach (['personal' => 'Personal', 'equipos' => 'Equipos'] as $category => $label): ?>
                     <div class="client-pmi-general-content" data-category-body="<?= $category ?>" <?= $activeGeneralCategory === $category ? '' : 'hidden' ?>>
-                        <?php if ($general[$category]): ?><ul><?php foreach ($general[$category] as $item): ?><li><?= e($category === 'personal' ? $item['personal_name'] : $item['equipment_document_name']) ?></li><?php endforeach; ?></ul><?php else: ?><p class="text-muted small mb-0 py-3">Aún no hay <?= $category === 'personal' ? 'requisitos de personal' : 'documentos de equipos' ?> seleccionados. Usa el botón + para agregarlos.</p><?php endif; ?>
+                        <?php if ($general[$category]): ?>
+                            <?php if ($category === 'personal'): ?>
+                                <div class="client-pmi-position-list">
+                                <?php foreach ($general['personal'] as $item): ?>
+                                    <div class="client-pmi-position-group <?= $activePositionId === (int) $item['source_id'] ? 'is-active' : '' ?>" data-position-group="<?= (int) $item['source_id'] ?>"><button class="client-pmi-position-tab" type="button" data-position-tab="<?= (int) $item['source_id'] ?>" aria-pressed="<?= $activePositionId === (int) $item['source_id'] ? 'true' : 'false' ?>"><?= e($item['personal_name']) ?></button><button class="client-pmi-position-add" type="button" data-position-requirements="<?= (int) $item['source_id'] ?>" data-position-name="<?= e($item['personal_name']) ?>" aria-label="Agregar requisitos a <?= e($item['personal_name']) ?>" title="Agregar requisitos"><i class="fa-solid fa-plus" aria-hidden="true"></i></button></div>
+                                <?php endforeach; ?>
+                                </div>
+                                <?php foreach ($general['personal'] as $item): ?><div class="client-pmi-position-panel" data-position-panel="<?= (int) $item['source_id'] ?>" <?= $activePositionId === (int) $item['source_id'] ? '' : 'hidden' ?>>
+                                    <?php if (!empty($positionRequirements[(int) $item['source_id']])): ?><div class="client-pmi-position-requirements"><?php foreach ($positionRequirements[(int) $item['source_id']] as $requirement): ?><span class="badge rounded-pill bg-light text-dark border"><?= e($requirement['name']) ?></span><?php endforeach; ?></div><?php else: ?><p class="small text-muted mb-0">Aún no hay requisitos seleccionados para este puesto.</p><?php endif; ?>
+                                </div><?php endforeach; ?>
+                            <?php else: ?><ul><?php foreach ($general['equipos'] as $item): ?><li><?= e($item['equipment_document_name']) ?></li><?php endforeach; ?></ul><?php endif; ?>
+                        <?php else: ?><p class="text-muted small mb-0 py-3">Aún no hay <?= $category === 'personal' ? 'puestos de trabajo' : 'documentos de equipos' ?> seleccionados. Usa el botón + para agregarlos.</p><?php endif; ?>
                     </div>
                 <?php endforeach; ?>
                 </div>
@@ -291,6 +325,7 @@ require __DIR__ . '/../../includes/header.php';
 </div>
 <?php if ($activeTab === 'requisitos'): ?>
 <div class="modal fade" id="generalPickerModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-dialog-scrollable"><form class="modal-content" method="post" action="<?= APP_URL ?>/modulos/clientes/pmi_guardar.php"><div class="modal-header"><h2 class="modal-title h5" id="generalPickerTitle">Seleccionar requisitos</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div><div class="modal-body"><input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="save_general"><input type="hidden" name="client_id" value="<?= $clientId ?>"><input type="hidden" name="category" id="pickerCategory"><input class="form-control mb-3" id="pickerSearch" placeholder="Buscar en la lista" aria-label="Buscar requisito"><label class="form-check mb-2"><input class="form-check-input" type="checkbox" id="pickerSelectAll"><span class="form-check-label">Seleccionar todos los visibles</span></label><div class="client-pmi-pick-list" id="pickerList"></div></div><div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-primary" type="submit">Guardar selección</button></div></form></div></div>
+<div class="modal fade" id="positionRequirementsModal" tabindex="-1" aria-labelledby="positionRequirementsTitle" aria-hidden="true"><div class="modal-dialog modal-dialog-scrollable"><form class="modal-content" method="post" action="<?= e(APP_URL . '/modulos/clientes/pmi_guardar.php') ?>"><div class="modal-header"><h2 class="modal-title h5" id="positionRequirementsTitle">Seleccionar requisitos</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div><div class="modal-body"><input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="save_position_requirements"><input type="hidden" name="client_id" value="<?= (int) $clientId ?>"><input type="hidden" name="position_id" id="positionRequirementsId"><input class="form-control mb-3" id="positionRequirementsSearch" type="search" placeholder="Buscar requisito" aria-label="Buscar requisito"><div class="client-pmi-pick-list" id="positionRequirementsList"></div></div><div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-primary" type="submit">Guardar selección</button></div></form></div></div>
 <?php require __DIR__ . '/pmi_base_modal.php'; ?>
 <?php elseif ($activeTab === 'personal'): require __DIR__ . '/pmi_habilitaciones_modal.php'; ?>
 <?php else: $renderFormatModals = true; require __DIR__ . '/pmi_formatos_view.php'; endif; ?>
@@ -418,9 +453,55 @@ document.addEventListener('DOMContentLoaded', () => {
     pickerSearch.addEventListener('input',filterPicker);
     selectAll.addEventListener('change',()=>pickerList.querySelectorAll('.client-pmi-pick-row:not([hidden]) input').forEach(input=>{input.checked=selectAll.checked}));
     document.querySelectorAll('[data-open-picker]').forEach(button=>button.addEventListener('click',async()=>{
-        const category=button.dataset.openPicker;showGeneralCategory(category);document.getElementById('pickerCategory').value=category;document.getElementById('generalPickerTitle').textContent='Seleccionar '+(category==='personal'?'requisitos de Personal':'documentos de Equipos');pickerSearch.value='';pickerList.textContent='Cargando…';selectAll.checked=false;
+        const category=button.dataset.openPicker;showGeneralCategory(category);document.getElementById('pickerCategory').value=category;document.getElementById('generalPickerTitle').textContent='Seleccionar '+(category==='personal'?'puestos de trabajo':'documentos de Equipos');pickerSearch.value='';pickerList.textContent='Cargando…';selectAll.checked=false;
         bootstrap.Modal.getOrCreateInstance(pickerModal).show();
         try{const response=await fetch('<?= APP_URL ?>/modulos/clientes/pmi_catalogo.php?categoria='+category);if(!response.ok)throw new Error('No se pudo cargar el catálogo.');const data=await response.json();pickerList.replaceChildren();if(!data.items.length){pickerList.textContent='No hay registros disponibles.';return}data.items.forEach(item=>{const label=document.createElement('label');label.className='client-pmi-pick-row';const input=document.createElement('input');input.type='checkbox';input.className='form-check-input';input.name='source_ids[]';input.value=item.id;input.checked=selected[category].has(Number(item.id));const span=document.createElement('span');span.textContent=item.text;label.append(input,span);pickerList.append(label)})}catch(error){pickerList.textContent=error.message}
+    }));
+    const positionModal = document.getElementById('positionRequirementsModal');
+    const positionList = document.getElementById('positionRequirementsList');
+    const positionSearch = document.getElementById('positionRequirementsSearch');
+    const positionSave = positionModal.querySelector('button[type="submit"]');
+    const selectedPositionRequirements = <?= json_encode(array_map(static fn(array $rows): array => array_map('intval', array_column($rows, 'requirement_id')), $positionRequirements)) ?>;
+    function showPosition(positionId) {
+        document.querySelectorAll('[data-position-group]').forEach(group => group.classList.toggle('is-active', group.dataset.positionGroup === positionId));
+        document.querySelectorAll('[data-position-tab]').forEach(tab => tab.setAttribute('aria-pressed', tab.dataset.positionTab === positionId ? 'true' : 'false'));
+        document.querySelectorAll('[data-position-panel]').forEach(panel => { panel.hidden = panel.dataset.positionPanel !== positionId; });
+        const url = new URL(window.location.href);
+        url.searchParams.set('puesto_id', positionId);
+        window.history.replaceState(null, '', url);
+    }
+    document.querySelectorAll('[data-position-tab]').forEach(button => button.addEventListener('click', () => showPosition(button.dataset.positionTab)));
+    positionSearch.addEventListener('input', () => {
+        const term = positionSearch.value.toLocaleLowerCase();
+        positionList.querySelectorAll('.client-pmi-pick-row').forEach(row => { row.hidden = !row.textContent.toLocaleLowerCase().includes(term); });
+    });
+    document.querySelectorAll('[data-position-requirements]').forEach(button => button.addEventListener('click', async () => {
+        const positionId = button.dataset.positionRequirements;
+        showPosition(positionId);
+        document.getElementById('positionRequirementsId').value = positionId;
+        document.getElementById('positionRequirementsTitle').textContent = 'Requisitos de ' + button.dataset.positionName;
+        positionSearch.value = '';
+        positionList.textContent = 'Cargando…';
+        positionSave.disabled = true;
+        bootstrap.Modal.getOrCreateInstance(positionModal).show();
+        try {
+            const response = await fetch('<?= APP_URL ?>/modulos/clientes/pmi_catalogo.php?categoria=requisitos');
+            if (!response.ok) throw new Error('No se pudo cargar el catálogo de requisitos.');
+            const data = await response.json();
+            positionList.replaceChildren();
+            if (!data.items.length) { positionList.textContent = 'No hay requisitos disponibles.'; return; }
+            const selected = new Set(selectedPositionRequirements[positionId] || []);
+            data.items.forEach(item => {
+                const label = document.createElement('label');
+                label.className = 'client-pmi-pick-row';
+                const input = document.createElement('input');
+                input.type = 'checkbox'; input.className = 'form-check-input'; input.name = 'source_ids[]'; input.value = item.id;
+                input.checked = selected.has(Number(item.id));
+                const name = document.createElement('span'); name.textContent = item.text;
+                label.append(input, name); positionList.append(label);
+            });
+            positionSave.disabled = false;
+        } catch (error) { positionList.textContent = error.message; }
     }));
     const baseModal = document.getElementById('baseDocumentModal');
     const baseForm = baseModal.querySelector('form');

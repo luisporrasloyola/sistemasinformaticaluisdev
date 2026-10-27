@@ -110,7 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
         positionsList.textContent = 'Cargando puestos…';
         positionsAll.disabled = true;
         try {
-            const url = <?= json_encode(APP_URL . '/modulos/clientes/pmi_habilitaciones_puestos.php') ?> + '?worker_id=' + encodeURIComponent(subject.value);
+            const url = <?= json_encode(APP_URL . '/modulos/clientes/pmi_habilitaciones_puestos.php') ?> + '?worker_id=' + encodeURIComponent(subject.value) + '&client_id=<?= (int) $clientId ?>';
             const response = await fetch(url, {credentials: 'same-origin'});
             if (!response.ok) throw new Error('No se pudieron cargar los puestos.');
             const data = await response.json();
@@ -128,7 +128,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 label.append(check, name);
                 positionsList.append(label);
             }
-            if (!positionsList.children.length) positionsList.textContent = 'Este trabajador no tiene puestos asignados.';
+            if (!positionsList.children.length) positionsList.textContent = 'Este trabajador no tiene puestos habilitados para este cliente en Documentos generales > Personal.';
             updatePositionSelection();
         } catch (error) {
             if (request === positionRequest) positionsList.textContent = error.message;

@@ -34,9 +34,9 @@
                         <?php else: ?><button class="btn btn-sm btn-outline-secondary" disabled title="Sin archivo"><i class="fa-solid fa-eye"></i></button><button class="btn btn-sm btn-outline-success" disabled title="Sin archivo"><i class="fa-solid fa-download"></i></button><?php endif; ?>
                     </td></tr>
                     <?php endforeach; ?>
-                    <?php if (!$documents): ?><tr class="habilitation-position-row" data-position-id="<?= (int) $positionId ?>" <?= (int) $positionId !== $firstPosition ? 'hidden' : '' ?>><td colspan="8" class="text-muted text-center py-3">No hay <?= $h['area'] === 'personal' ? 'requisitos seleccionados en Documentos generales - Personal.' : 'documentos seleccionados en Documentos generales - Equipos.' ?></td></tr><?php endif; ?>
+                    <?php if (!$documents): ?><tr class="habilitation-position-row" data-position-id="<?= (int) $positionId ?>" <?= (int) $positionId !== $firstPosition ? 'hidden' : '' ?>><td colspan="8" class="text-muted text-center py-3">No hay <?= $h['area'] === 'personal' ? 'requisitos seleccionados para este puesto en Documentos generales - Personal.' : 'documentos seleccionados en Documentos generales - Equipos.' ?></td></tr><?php endif; ?>
                     <?php endforeach; ?>
-                    <?php if (!$positionGroups): ?><tr><td colspan="8" class="text-muted text-center py-3">Este trabajador no tiene puestos asignados.</td></tr><?php endif; ?>
+                    <?php if (!$positionGroups): ?><tr><td colspan="8" class="text-muted text-center py-3">No hay puestos de esta habilitación seleccionados en Documentos generales - Personal.</td></tr><?php endif; ?>
                 </tbody></table></div>
                 <?php if ($h['area'] === 'personal'): ?>
                 <section class="habilitation-formats" aria-label="Formatos de <?= e($h['subject_name']) ?>">

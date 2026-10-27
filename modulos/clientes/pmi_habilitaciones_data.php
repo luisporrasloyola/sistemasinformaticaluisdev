@@ -29,19 +29,19 @@ if ($clientId) {
         ORDER BY FIELD(h.area, 'personal', 'equipo'), subject_name, h.id LIMIT " . $habilitationPageSize . " OFFSET " . (($habilitationPage - 1) * $habilitationPageSize));
     $stmt->execute($habilitationParams);
     $habilitations = $stmt->fetchAll();
-    $workerPositions = db()->prepare('SELECT p.id, p.name FROM client_pmi_habilitation_positions hp JOIN worker_positions wp ON wp.worker_id = ? AND wp.position_id = hp.position_id JOIN positions p ON p.id = hp.position_id WHERE hp.habilitation_id = ? ORDER BY p.name, p.id');
-    // El catálogo del cliente define las filas; el registro más reciente aporta sus datos.
-    $workerDocs = db()->prepare("SELECT wr.id, wr.position_id, rc.name, rc.id AS catalog_id,
+    $workerPositions = db()->prepare('SELECT p.id, p.name FROM client_pmi_habilitation_positions hp JOIN worker_positions wp ON wp.worker_id = ? AND wp.position_id = hp.position_id JOIN client_pmi_general_positions gp ON gp.client_id = ? AND gp.position_id = hp.position_id JOIN positions p ON p.id = hp.position_id WHERE hp.habilitation_id = ? ORDER BY p.name, p.id');
+    // Los requisitos se definen por cliente y puesto; el último registro del trabajador aporta sus datos.
+    $workerDocs = db()->prepare("SELECT wr.id, pr.position_id, rc.name, rc.id AS catalog_id,
         wr.registration_date, wr.start_date, wr.end_date, wr.file_path, COALESCE(u.name, '-') AS registered_by
-        FROM client_pmi_general_items gi
-        JOIN requirements_catalog rc ON rc.id = gi.source_id
+        FROM client_pmi_general_position_requirements pr
+        JOIN requirements_catalog rc ON rc.id = pr.requirement_id
         LEFT JOIN worker_requirements wr ON wr.id = (
             SELECT latest.id FROM worker_requirements latest
-            WHERE latest.worker_id = :subject_id AND latest.position_id = :position_id AND latest.requirement_id = gi.source_id
+            WHERE latest.worker_id = :subject_id AND latest.position_id = pr.position_id AND latest.requirement_id = pr.requirement_id
             ORDER BY latest.registration_date DESC, latest.id DESC LIMIT 1
         )
         LEFT JOIN users u ON u.id = wr.registered_by_user_id
-        WHERE gi.client_id = :client_id AND gi.category = 'personal' ORDER BY rc.name");
+        WHERE pr.client_id = :client_id AND pr.position_id = :position_id ORDER BY rc.name");
     $machineDocs = db()->prepare("SELECT md.id, dc.nombre AS name, dc.id AS catalog_id,
         md.fecha_registro AS registration_date, md.fecha_inicio AS start_date, md.fecha_fin AS end_date,
         md.archivo_path AS file_path, COALESCE(u.name, '-') AS registered_by
@@ -56,7 +56,7 @@ if ($clientId) {
         ORDER BY dc.nombre");
     foreach ($habilitations as &$habilitation) {
         if ($habilitation['area'] === 'personal') {
-            $workerPositions->execute([$habilitation['subject_id'], $habilitation['id']]);
+            $workerPositions->execute([$habilitation['subject_id'], $clientId, $habilitation['id']]);
             $habilitation['positions'] = $workerPositions->fetchAll();
             $habilitation['documents_by_position'] = [];
             foreach ($habilitation['positions'] as $position) {

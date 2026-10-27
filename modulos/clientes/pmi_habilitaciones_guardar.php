@@ -29,9 +29,9 @@ try {
             $positionIds = array_values(array_unique(array_filter(array_map('intval', $submitted), static fn(int $value): bool => $value > 0)));
             if (!$positionIds) { throw new DomainException('Seleccione al menos un puesto.'); }
             $placeholders = implode(',', array_fill(0, count($positionIds), '?'));
-            $validPositions = db()->prepare("SELECT COUNT(*) FROM worker_positions WHERE worker_id = ? AND position_id IN ($placeholders)");
-            $validPositions->execute(array_merge([$subjectId], $positionIds));
-            if ((int) $validPositions->fetchColumn() !== count($positionIds)) { throw new DomainException('Uno de los puestos seleccionados ya no pertenece al trabajador.'); }
+            $validPositions = db()->prepare("SELECT COUNT(*) FROM worker_positions wp JOIN client_pmi_general_positions gp ON gp.position_id = wp.position_id AND gp.client_id = ? WHERE wp.worker_id = ? AND wp.position_id IN ($placeholders)");
+            $validPositions->execute(array_merge([$clientId, $subjectId], $positionIds));
+            if ((int) $validPositions->fetchColumn() !== count($positionIds)) { throw new DomainException('Seleccione solo puestos del trabajador habilitados para este cliente.'); }
         }
         $dates = [];
         foreach (['registration_date', 'start_date', 'end_date'] as $field) {
