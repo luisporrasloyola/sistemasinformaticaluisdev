@@ -126,4 +126,27 @@ if ($clientId) {
             }
         }
     }
+    // El avance corresponde a todas las filas mostradas: requisitos del puesto y formatos.
+    foreach ($habilitationCards as &$card) {
+        foreach ($card['members'] as &$member) {
+            if ($member['area'] !== 'personal') continue;
+            $formatTotal = count($personalFormats);
+            $formatComplete = 0;
+            foreach ($personalFormats as $format) {
+                $savedFormat = $personalFormatRecords[(int) $member['id']][(int) $format['id']] ?? null;
+                if (!empty($savedFormat['end_date'])) ++$formatComplete;
+            }
+            if (!$member['progress_by_position']) {
+                $member['progress_by_position'][0] = ['total' => 0, 'complete' => 0, 'percent' => 0];
+            }
+            foreach ($member['progress_by_position'] as &$progress) {
+                $progress['total'] += $formatTotal;
+                $progress['complete'] += $formatComplete;
+                $progress['percent'] = $progress['total'] ? (int) round($progress['complete'] * 100 / $progress['total']) : 0;
+            }
+            unset($progress);
+        }
+        unset($member);
+    }
+    unset($card);
 }
