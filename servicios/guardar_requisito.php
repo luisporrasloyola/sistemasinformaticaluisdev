@@ -132,7 +132,14 @@ try {
             $params['observations'] = $postedObservation;
         }
         if ($pdf['path']) {
-            if (!empty($current['file_path'])) $oldFiles[] = (string) $current['file_path'];
+            $previousPrimaryIsImage = !empty($current['file_path']) && preg_match('/\.(?:jpe?g|png|webp)$/i', (string) $current['file_path']);
+            if ($previousPrimaryIsImage && empty($current['image_file_path'])) {
+                $sql .= ', image_file_path=:previous_image_path, image_original_file_name=:previous_image_name';
+                $params['previous_image_path'] = $current['file_path'];
+                $params['previous_image_name'] = $current['original_file_name'];
+            } elseif (!empty($current['file_path'])) {
+                $oldFiles[] = (string) $current['file_path'];
+            }
             $sql .= ', file_path=:file_path, original_file_name=:original_file_name';
             $params['file_path'] = $pdf['path'];
             $params['original_file_name'] = $pdf['name'];
@@ -239,7 +246,14 @@ try {
             $primarySourcePath = $pdf['path'] ?: (!empty($current['file_path']) && empty($duplicate['file_path']) ? $current['file_path'] : null);
             if ($primarySourcePath) {
                 $targetPath = pmi_requirement_copy_file($primarySourcePath, $newFiles);
-                if (!empty($duplicate['file_path'])) $oldFiles[] = (string) $duplicate['file_path'];
+                $duplicatePrimaryIsImage = !empty($duplicate['file_path']) && preg_match('/\.(?:jpe?g|png|webp)$/i', (string) $duplicate['file_path']);
+                if ($pdf['path'] && $duplicatePrimaryIsImage && empty($duplicate['image_file_path'])) {
+                    $targetSql .= ', image_file_path=:previous_image_path, image_original_file_name=:previous_image_name';
+                    $targetParams['previous_image_path'] = $duplicate['file_path'];
+                    $targetParams['previous_image_name'] = $duplicate['original_file_name'];
+                } elseif (!empty($duplicate['file_path'])) {
+                    $oldFiles[] = (string) $duplicate['file_path'];
+                }
                 $targetSql .= ', file_path=:file_path, original_file_name=:original_file_name';
                 $targetParams['file_path'] = $targetPath;
                 $targetParams['original_file_name'] = $pdf['name'] ?: $current['original_file_name'];
