@@ -2176,6 +2176,7 @@ function openAddRequirement() {
     canObserveCurrentRequirement = window.canManageRequirementObservations === true;
     const form = document.getElementById('requirementForm');
     form.reset();
+    document.getElementById('requirementDocumentType').querySelector('option[value="legacy"]')?.remove();
     ['pdfInput', 'wordInput'].forEach(inputId => { document.getElementById(inputId).dataset.existing = '0'; });
     updateRequirementDocumentFields();
     resetRequirementFileInput();
@@ -2285,7 +2286,12 @@ async function fillRequirementModal(id) {
     document.getElementById('endDate').value = row.end_date;
     document.getElementById('pdfInput').dataset.existing = row.file_path && /\.pdf$/i.test(row.file_path) ? 'pdf' : (row.file_path ? 'legacy' : '0');
     document.getElementById('wordInput').dataset.existing = row.word_file_path ? '1' : '0';
-    document.getElementById('requirementDocumentType').value = row.document_type === 'pdf_word_image' ? 'pdf_word' : (row.document_type || 'legacy');
+    const documentTypeSelect = document.getElementById('requirementDocumentType');
+    documentTypeSelect.querySelector('option[value="legacy"]')?.remove();
+    if (!row.document_type || row.document_type === 'legacy') {
+        documentTypeSelect.add(new Option('Adjunto anterior (PDF o imagen)', 'legacy'), 0);
+    }
+    documentTypeSelect.value = row.document_type === 'pdf_word_image' ? 'pdf_word' : (row.document_type || 'legacy');
     updateRequirementDocumentFields();
     document.getElementById('observations').value = '';
     const option = new Option(row.requirement, row.requirement_id, true, true);

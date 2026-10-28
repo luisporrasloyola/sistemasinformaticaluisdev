@@ -158,14 +158,13 @@ require __DIR__ . '/../../includes/header.php';
                     <div class="col-md-12">
                         <label class="form-label" for="requirementDocumentType">Tipo de documento</label>
                         <select class="form-select" name="document_type" id="requirementDocumentType">
-                            <option value="legacy">Adjunto (PDF o imagen)</option>
                             <option value="pdf">PDF</option>
                             <option value="pdf_word">PDF y Word</option>
                         </select>
                     </div>
                     <div class="col-md-12" id="requirementPdfBlock">
-                        <label class="form-label visually-hidden" for="pdfInput" id="requirementPrimaryFileLabel">Adjunto (PDF o imagen)</label>
-                        <input class="form-control" type="file" name="pdf" id="pdfInput" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp">
+                        <label class="form-label" for="pdfInput" id="requirementPrimaryFileLabel">Archivo PDF</label>
+                        <input class="form-control" type="file" name="pdf" id="pdfInput" accept=".pdf,application/pdf">
                     </div>
                     <div class="col-md-12 d-none" id="requirementWordBlock">
                         <label class="form-label" for="wordInput">Archivo Word</label>
