@@ -16,7 +16,7 @@ $workerId = (int) ($_GET['trabajador_id'] ?? 0);
 $positionId = (int) ($_GET['puesto_id'] ?? 0);
 require_personal_own_worker($workerId, false);
 
-$stmt = db()->prepare("SELECT wr.*, rc.name AS requirement, COALESCE(u.name, '') AS registered_by, fi.folder_id
+$stmt = db()->prepare("SELECT wr.*, rc.name AS requirement, COALESCE(u.name, '') AS registered_by, fi.folder_id, fi.sort_order AS folder_item_order
     FROM worker_requirements wr
     JOIN requirements_catalog rc ON rc.id = wr.requirement_id
     LEFT JOIN users u ON u.id = wr.registered_by_user_id
@@ -31,6 +31,8 @@ foreach ($rows as &$row) {
     $row['can_modify'] = !is_personal_role() && current_user_can_document('requisitos.pmi_individual', (int) $row['requirement_id'], 'upload');
 }
 
-$foldersStmt = db()->prepare('SELECT id, name FROM pmi_requirement_folders WHERE worker_id = ? AND position_id = ? ORDER BY name');
+$foldersStmt = db()->prepare('SELECT id, name, sort_order FROM pmi_requirement_folders WHERE worker_id = ? AND position_id = ? ORDER BY CASE WHEN sort_order = 0 THEN 2147483647 ELSE sort_order END, name');
 $foldersStmt->execute([$workerId, $positionId]);
-json_response(['ok' => true, 'rows' => $rows, 'folders' => $foldersStmt->fetchAll()]);
+$separatorsStmt = db()->prepare('SELECT id, scope_type, scope_id, after_item_id FROM pmi_requirement_separators WHERE worker_id = ? AND position_id = ?');
+$separatorsStmt->execute([$workerId, $positionId]);
+json_response(['ok' => true, 'rows' => $rows, 'folders' => $foldersStmt->fetchAll(), 'separators' => $separatorsStmt->fetchAll()]);

@@ -24,6 +24,7 @@ $workerId = filter_var($_POST['worker_id'] ?? null, FILTER_VALIDATE_INT, ['optio
 $sourcePositionId = filter_var($_POST['source_position_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
 $requirementIds = selected_ids($_POST['requirement_ids'] ?? null);
 $targetIds = selected_ids($_POST['target_position_ids'] ?? null);
+$folderId = filter_var($_POST['folder_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: 0;
 if (!$workerId || !$sourcePositionId || !$requirementIds || !$targetIds || count($requirementIds) > 100 || count($targetIds) > 30 || count($requirementIds) * count($targetIds) > 1000 || in_array($sourcePositionId, $targetIds, true)) {
     json_response(['ok' => false, 'message' => 'Seleccione entre 1 y 100 requisitos y hasta 30 puestos válidos (máximo 1000 réplicas).'], 422);
 }
@@ -45,6 +46,30 @@ try {
     $sources = $sourceStmt->fetchAll();
     if (count($sources) !== count($requirementIds)) throw new RuntimeException('Alguno de los requisitos ya no pertenece al puesto actual. Actualice la página.');
 
+    $folder = null;
+    $targetFolders = [];
+    if ($folderId) {
+        $folderStmt = $pdo->prepare('SELECT name FROM pmi_requirement_folders WHERE id = ? AND worker_id = ? AND position_id = ? FOR UPDATE');
+        $folderStmt->execute([$folderId, $workerId, $sourcePositionId]);
+        $folder = $folderStmt->fetch();
+        if (!$folder) throw new RuntimeException('La carpeta ya no pertenece al puesto actual.');
+        $folderItemsStmt = $pdo->prepare('SELECT requirement_record_id FROM pmi_requirement_folder_items WHERE folder_id = ?');
+        $folderItemsStmt->execute([$folderId]);
+        if (array_diff($requirementIds, array_map('intval', $folderItemsStmt->fetchAll(PDO::FETCH_COLUMN)))) throw new RuntimeException('Uno de los requisitos ya no pertenece a la carpeta.');
+        $findFolder = $pdo->prepare('SELECT id FROM pmi_requirement_folders WHERE worker_id = ? AND position_id = ? AND name = ?');
+        $createFolder = $pdo->prepare('INSERT INTO pmi_requirement_folders (worker_id, position_id, name, created_by_user_id) VALUES (?, ?, ?, ?)');
+        foreach ($targetIds as $targetId) {
+            $findFolder->execute([$workerId, $targetId, $folder['name']]);
+            $targetFolderId = $findFolder->fetchColumn();
+            if (!$targetFolderId) {
+                $createFolder->execute([$workerId, $targetId, $folder['name'], current_user()['id'] ?? null]);
+                $targetFolderId = $pdo->lastInsertId();
+            }
+            $targetFolders[$targetId] = (int) $targetFolderId;
+        }
+    }
+    $linkFolder = $folder ? $pdo->prepare('INSERT IGNORE INTO pmi_requirement_folder_items (requirement_record_id, folder_id) VALUES (?, ?)') : null;
+    $linked = 0;
     $check = $pdo->prepare('SELECT id FROM worker_requirements WHERE worker_id = ? AND position_id = ? AND requirement_id = ?');
     $insert = $pdo->prepare('INSERT INTO worker_requirements (worker_id,position_id,requirement_id,registration_date,start_date,end_date,observations,observation_status,observation_by_user_id,observation_at,observation_resolved_by_user_id,observation_resolved_at,file_path,original_file_name,document_type,word_file_path,word_original_file_name,image_file_path,image_original_file_name,registered_by_user_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
     $log = $pdo->prepare('INSERT INTO worker_requirement_activity_log (worker_requirement_id,user_id,action_type,description) VALUES (?,?,?,?)');
@@ -54,7 +79,12 @@ try {
     foreach ($sources as $source) {
         foreach ($targetIds as $targetId) {
             $check->execute([$workerId, $targetId, $source['requirement_id']]);
-            if ($check->fetchColumn()) { $skipped++; continue; }
+            $existingId = $check->fetchColumn();
+            if ($existingId) {
+                if ($linkFolder) { $linkFolder->execute([(int) $existingId, $targetFolders[$targetId]]); $linked += $linkFolder->rowCount(); }
+                $skipped++;
+                continue;
+            }
             $newPath = null;
             if (!empty($source['file_path'])) {
                 $relative = preg_replace('#^archivos[/\\\\]#', '', (string) $source['file_path']);
@@ -75,12 +105,14 @@ try {
             $newWordPath = pmi_requirement_copy_file($source['word_file_path'], $createdFiles);
             $newImagePath = pmi_requirement_copy_file($source['image_file_path'], $createdFiles);
             $insert->execute([$workerId,$targetId,$source['requirement_id'],$source['registration_date'],$source['start_date'],$source['end_date'],$source['observations'],$source['observation_status'],$source['observation_by_user_id'],$source['observation_at'],$source['observation_resolved_by_user_id'],$source['observation_resolved_at'],$newPath,$source['original_file_name'],$source['document_type'],$newWordPath,$source['word_original_file_name'],$newImagePath,$source['image_original_file_name'],$userId]);
-            $log->execute([(int) $pdo->lastInsertId(),$userId,'requisito_replicado','Replicó el requisito desde el puesto original hacia ' . $positions[$targetId]['name'] . '.']);
+            $newRecordId = (int) $pdo->lastInsertId();
+            if ($linkFolder) { $linkFolder->execute([$newRecordId, $targetFolders[$targetId]]); $linked += $linkFolder->rowCount(); }
+            $log->execute([$newRecordId,$userId,'requisito_replicado','Replicó el requisito desde el puesto original hacia ' . $positions[$targetId]['name'] . '.']);
             $created++;
         }
     }
     $pdo->commit();
-    json_response(['ok' => true, 'created' => $created, 'skipped' => $skipped]);
+    json_response(['ok' => true, 'created' => $created, 'skipped' => $skipped, 'linked' => $linked]);
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) $pdo->rollBack();
     foreach ($createdFiles as $path) delete_uploaded_file($path);

@@ -72,6 +72,8 @@ require __DIR__ . '/../../includes/header.php';
                         <button class="btn btn-primary <?= $personalView ? 'd-none' : '' ?>" type="button" id="addRequirementBtn"><i class="fa-solid fa-plus me-2"></i>Agregar Requisito</button>
                     </div>
                     <div class="d-flex gap-2 flex-wrap justify-content-end">
+                        <button class="btn btn-outline-secondary btn-sm <?= $personalView ? 'd-none' : '' ?>" type="button" id="addRequirementSeparatorBtn" title="Agregar una línea entre registros"><i class="fa-solid fa-minus me-1"></i>Separador</button>
+                        <button class="btn btn-success btn-sm d-none" type="button" id="saveRequirementSeparatorsBtn" disabled><i class="fa-solid fa-check me-1"></i>Guardar separadores</button>
                         <?php if (is_admin()): ?><button class="btn btn-outline-info" type="button" id="replicateAllRequirementsBtn" disabled><i class="fa-solid fa-copy me-2"></i>Replicar todo</button><?php endif; ?>
                         <?php if (!$personalView): ?><button class="btn btn-outline-danger" type="button" id="deleteAllRequirementsBtn" disabled><i class="fa-solid fa-trash me-2"></i>Borrar todo</button><?php endif; ?>
                     </div>
@@ -250,10 +252,14 @@ require __DIR__ . '/../../includes/header.php';
 #requirementsWorkspace .requirement-word-file-btn{color:#2563eb!important;border-color:#93c5fd!important}
 #requirementsWorkspace .requirement-word-file-btn i{color:inherit!important}
 #requirementsWorkspace .requirement-word-file-btn:hover,#requirementsWorkspace .requirement-word-file-btn:focus-visible{background:#2563eb!important;border-color:#2563eb!important;color:#fff!important}
-.requirement-folder-header .requirement-folder-heading{text-align:left!important;width:auto!important;background:#e8f1ff!important;padding:.6rem .85rem!important;border-left:4px solid #3b6fec;border-top:1px solid #cbdcff;border-right:1px solid #cbdcff;border-bottom:1px solid #cbdcff}
+.requirement-folder-header .requirement-folder-heading{text-align:left!important;width:auto!important;background:#e8f1ff!important;padding:.6rem .85rem!important;border-left:0!important;border-top:1px solid #cbdcff;border-right:1px solid #cbdcff;border-bottom:1px solid #cbdcff}
 .requirement-folder-header:not(.is-open) .requirement-folder-heading{border-radius:.6rem}
 .requirement-folder-header.is-open .requirement-folder-heading{border-radius:.6rem .6rem 0 0;border-bottom-color:#dce8fb}
-.requirement-folder-header .btn-sm{background:#fff}
+.requirement-folder-header .btn-sm:not(:hover):not(:focus-visible){background:#fff}
+.requirement-folder-header .btn-outline-success:hover,.requirement-folder-header .btn-outline-success:focus-visible{background:#198754;color:#fff}
+.requirement-folder-header .btn-outline-danger:hover,.requirement-folder-header .btn-outline-danger:focus-visible{background:#dc3545;color:#fff}
+.requirement-folder-header .btn-outline-success:hover i,.requirement-folder-header .btn-outline-success:focus-visible i,.requirement-folder-header .btn-outline-danger:hover i,.requirement-folder-header .btn-outline-danger:focus-visible i{color:inherit}
+.requirement-order-buttons{display:inline-flex;align-items:center;gap:2px;vertical-align:middle;margin-right:4px}.requirement-order-buttons .btn{min-width:23px!important;width:23px!important;height:26px!important;padding:2px!important}.requirement-order-buttons .btn:disabled{opacity:.32}.requirement-folder-header .requirement-order-buttons .btn:hover,.requirement-folder-header .requirement-order-buttons .btn:focus-visible{background:#6c757d;color:#fff}
 .requirement-folder-toggle{display:inline-flex;align-items:center;gap:.65rem;padding:.1rem 0;border:0;background:transparent;color:#173b7a;text-align:left;cursor:pointer}
 .requirement-folder-icon{display:inline-grid;place-items:center;flex:none;width:2rem;height:2rem;border-radius:.45rem;background:#d5e4ff;color:#2459bf}
 .requirement-folder-label{display:flex;flex-direction:column;gap:.05rem}
@@ -263,13 +269,16 @@ require __DIR__ . '/../../includes/header.php';
 .requirement-folder-toggle:focus-visible{outline:2px solid #2563eb;outline-offset:3px;border-radius:3px}
 .requirement-folder-item>td{background:#f6f9ff!important;border-bottom-color:#dce8fb!important}
 .requirement-folder-item:hover>td{background:#edf4ff!important}
-.requirement-folder-item>td:first-child{border-left:4px solid #3b6fec}
+.requirement-folder-item>td:first-child{border-left:0}
 .requirement-folder-item>td:last-child{border-right:1px solid #cbdcff}
 .requirement-folder-item>td:nth-child(2){padding-left:1.1rem!important;font-weight:600;color:#234a83}
 .requirement-folder-item.is-last>td{border-bottom:1px solid #cbdcff!important}
 .requirement-folder-item.is-last>td:first-child{border-bottom-left-radius:.6rem}
 .requirement-folder-item.is-last>td:last-child{border-bottom-right-radius:.6rem}
-.requirement-folder-gap>td{height:.65rem;padding:0!important;border:0!important;background:#fff!important}
+.requirement-folder-gap>td{height:.3rem;padding:0!important;border:0!important;background:#fff!important}
+.requirement-before-separator>td{border-bottom:0!important}.requirement-separator>td{padding:0 .45rem!important;height:15px;border:0!important;background:#fff!important}.requirement-separator-line{display:flex;align-items:center;gap:.35rem;min-height:15px}.requirement-separator-rule{display:block;flex:1;height:8px;padding:0;border:0;border-bottom:4px solid #2f3338;background:transparent}.requirement-separator-move{cursor:pointer}.requirement-separator-move:hover,.requirement-separator-move:focus-visible{border-bottom-color:#111827;outline:0}.requirement-separator-delete.btn{width:16px;height:16px;min-height:16px;padding:0!important;font-size:.6rem;line-height:1}
+.requirement-separator-placement>td{padding:.12rem .45rem!important;border:0!important;background:#fff!important}.requirement-separator-place{display:block;width:100%;padding:.16rem;border:1px dashed #f59e0b;border-radius:.3rem;background:#fff4d6;color:#92400e;font-size:.72rem}.requirement-separator-place:hover,.requirement-separator-place:focus-visible{background:#fde68a;color:#78350f}
+.requirement-separator-place.is-selected{background:#198754;border-color:#146c43;color:#fff}.requirement-separator-place.is-selected:hover,.requirement-separator-place.is-selected:focus-visible{background:#157347;color:#fff}
 .requirement-ungrouped-item:first-of-type>td{border-top-color:#e2e8f0}
 .requirement-file-preview-body{min-height:260px;background:#f4f7fb;text-align:center}.requirement-file-preview-body iframe{display:block;width:100%;height:min(72vh,850px);border:0;background:#fff}.requirement-file-preview-body img{display:block;max-width:100%;max-height:72vh;margin:auto;object-fit:contain}
 .replicate-record-summary{padding:.75rem .9rem;border:1px solid #cfe0ff;border-radius:.65rem;background:#f3f7ff}.replicate-record-summary strong{display:block;color:#173b7a}.replicate-position-list{display:grid;gap:.5rem}.replicate-position-option{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.7rem .8rem;border:1px solid #d9e2ef;border-radius:.6rem;background:#fff}.replicate-position-option:has(input:checked){border-color:#4d83f3;background:#eef4ff}.replicate-position-option.is-disabled{background:#f5f6f8;color:#7b8492}.replicate-position-option label{display:flex;align-items:center;gap:.6rem;margin:0;cursor:pointer;flex:1}

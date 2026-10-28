@@ -156,6 +156,9 @@ let replicateAllExistingPairs = new Set();
 let requirementRows = [];
 let requirementFolders = [];
 let openRequirementFolders = new Set();
+let requirementSeparators = [];
+let separatorPlacementId = null;
+let selectedSeparatorSlots = new Set();
 
 function localDateValue(date = new Date()) {
     const year = date.getFullYear();
@@ -1901,7 +1904,26 @@ function initRequirementsModule() {
     document.getElementById('downloadSelectedRequirementsBtn')?.addEventListener('click', downloadSelectedRequirementsBundle);
     document.getElementById('deleteAllRequirementsBtn')?.addEventListener('click', deleteAllRequirements);
     document.getElementById('createRequirementFolderBtn')?.addEventListener('click', createRequirementFolderWithSelection);
+    document.getElementById('addRequirementSeparatorBtn')?.addEventListener('click', () => {
+        if (separatorPlacementId !== null) { separatorPlacementId = null; selectedSeparatorSlots.clear(); renderRequirements(); return; }
+        startRequirementSeparatorPlacement(0);
+    });
+    document.getElementById('saveRequirementSeparatorsBtn')?.addEventListener('click', saveSelectedRequirementSeparators);
     document.querySelector('#requirementsTable tbody')?.addEventListener('click', (event) => {
+        const place = event.target.closest('.requirement-separator-place');
+        if (place) {
+            if (separatorPlacementId) saveRequirementSeparatorPlacement(separatorPlacementId, place.dataset.scopeType, Number(place.dataset.scopeId), Number(place.dataset.afterItemId));
+            else {
+                const key = `${place.dataset.scopeType}:${Number(place.dataset.scopeId)}:${Number(place.dataset.afterItemId)}`;
+                if (selectedSeparatorSlots.has(key)) selectedSeparatorSlots.delete(key); else selectedSeparatorSlots.add(key);
+                renderRequirements();
+            }
+            return;
+        }
+        const moveSeparator = event.target.closest('.requirement-separator-move');
+        if (moveSeparator) { startRequirementSeparatorPlacement(Number(moveSeparator.dataset.separatorId)); return; }
+        const deleteSeparator = event.target.closest('.requirement-separator-delete');
+        if (deleteSeparator) { deleteRequirementSeparator(Number(deleteSeparator.dataset.separatorId)); return; }
         const toggle = event.target.closest('.requirement-folder-toggle');
         if (!toggle) return;
         const id = String(toggle.dataset.folderId);
@@ -1930,6 +1952,8 @@ function initRequirementsModule() {
 
 async function loadWorker(id) {
     currentWorkerId = id;
+    separatorPlacementId = null;
+    selectedSeparatorSlots.clear();
     const replicateAllButton = document.getElementById('replicateAllRequirementsBtn');
     if (replicateAllButton) replicateAllButton.disabled = true;
     const deleteAllButton = document.getElementById('deleteAllRequirementsBtn');
@@ -2002,21 +2026,52 @@ async function loadRequirements() {
     const deleteAllButton = document.getElementById('deleteAllRequirementsBtn');
     if (deleteAllButton) deleteAllButton.disabled = !requirementRows.length || !requirementRows.every(row => row.can_modify === true);
     requirementFolders = data.folders || [];
+    requirementSeparators = data.separators || [];
     const validFolderIds = new Set(requirementFolders.map(folder => String(folder.id)));
     openRequirementFolders.forEach(id => { if (!validFolderIds.has(id)) openRequirementFolders.delete(id); });
     renderRequirements();
 }
 
 function renderRequirements() {
+    const separatorButton = document.getElementById('addRequirementSeparatorBtn');
+    if (separatorButton) separatorButton.innerHTML = separatorPlacementId !== null ? '<i class="fa-solid fa-xmark me-1"></i>Cancelar' : '<i class="fa-solid fa-minus me-1"></i>Separador';
+    const saveSeparatorsButton = document.getElementById('saveRequirementSeparatorsBtn');
+    if (saveSeparatorsButton) {
+        saveSeparatorsButton.classList.toggle('d-none', separatorPlacementId !== 0);
+        saveSeparatorsButton.disabled = selectedSeparatorSlots.size === 0;
+        saveSeparatorsButton.innerHTML = `<i class="fa-solid fa-check me-1"></i>Guardar ${selectedSeparatorSlots.size || ''} separador${selectedSeparatorSlots.size === 1 ? '' : 'es'}`;
+    }
     const selectAllRequirements = document.getElementById('selectAllRequirements');
     if (selectAllRequirements) selectAllRequirements.checked = false;
     const tbody = document.querySelector('#requirementsTable tbody');
     tbody.innerHTML = '';
-    const groupHeader = (folder, count) => {
-        const expanded = openRequirementFolders.has(String(folder.id));
-        tbody.insertAdjacentHTML('beforeend', `<tr class="requirement-folder-header ${expanded ? 'is-open' : ''}"><td colspan="8" class="requirement-folder-heading"><div class="d-flex align-items-center justify-content-between gap-2 flex-wrap"><button class="requirement-folder-toggle" type="button" data-folder-id="${Number(folder.id)}" aria-expanded="${expanded}"><span class="requirement-folder-icon"><i class="fa-solid fa-${expanded ? 'folder-open' : 'folder-closed'}"></i></span><span class="requirement-folder-label"><strong>${escapeHtml(folder.name)}</strong><small>${count} requisito${count === 1 ? '' : 's'} dentro de la carpeta</small></span><i class="fa-solid fa-chevron-${expanded ? 'up' : 'down'} ms-2" aria-hidden="true"></i></button>${window.pmiPersonalReadOnly === true ? '' : `<span class="d-flex gap-2"><button class="btn btn-sm btn-outline-primary" type="button" onclick="editRequirementFolder(${Number(folder.id)})" title="Modificar registros de la carpeta"><i class="fa-solid fa-pen"></i></button><button class="btn btn-sm btn-outline-danger" type="button" onclick="deleteRequirementFolder(${Number(folder.id)})" title="Eliminar carpeta"><i class="fa-solid fa-trash"></i></button></span>`}</div></td></tr>`);
+    const orderCompare = (left, right, field) => {
+        const leftOrder = Number(left[field]) || Number.MAX_SAFE_INTEGER;
+        const rightOrder = Number(right[field]) || Number.MAX_SAFE_INTEGER;
+        return leftOrder - rightOrder || String(left.requirement || left.name).localeCompare(String(right.requirement || right.name), 'es') || Number(left.id) - Number(right.id);
     };
-    const renderRow = (row, inFolder = false, isLast = false) => {
+    const orderButtons = (kind, id, index, length) => window.pmiCanReplicateRequirement === true && length > 1
+        ? `<span class="requirement-order-buttons"><button class="btn btn-sm btn-outline-secondary" type="button" onclick="moveRequirementOrder('${kind}', ${Number(id)}, 'up')" ${index === 0 ? 'disabled' : ''} title="Subir" aria-label="Subir"><i class="fa-solid fa-arrow-up"></i></button><button class="btn btn-sm btn-outline-secondary" type="button" onclick="moveRequirementOrder('${kind}', ${Number(id)}, 'down')" ${index === length - 1 ? 'disabled' : ''} title="Bajar" aria-label="Bajar"><i class="fa-solid fa-arrow-down"></i></button></span>`
+        : '';
+    const visibleFolders = requirementFolders.filter(folder => requirementRows.some(row => String(row.folder_id) === String(folder.id))).sort((a, b) => orderCompare(a, b, 'sort_order'));
+    const renderSeparatorSlot = (scopeType, scopeId, afterItemId, showPlacement = true) => {
+        const existing = requirementSeparators.find(item => item.scope_type === scopeType && Number(item.scope_id) === Number(scopeId) && Number(item.after_item_id) === Number(afterItemId));
+        if (existing && (separatorPlacementId === null || Number(existing.id) !== Number(separatorPlacementId))) {
+            tbody.lastElementChild?.classList.add('requirement-before-separator');
+            tbody.insertAdjacentHTML('beforeend', `<tr class="requirement-separator"><td colspan="8"><div class="requirement-separator-line">${window.pmiPersonalReadOnly === true ? '<span class="requirement-separator-rule"></span>' : `<button class="requirement-separator-rule requirement-separator-move" type="button" data-separator-id="${Number(existing.id)}" title="Mover separador" aria-label="Mover separador"></button><button class="btn btn-outline-danger requirement-separator-delete" type="button" data-separator-id="${Number(existing.id)}" title="Eliminar separador" aria-label="Eliminar separador"><i class="fa-solid fa-trash"></i></button>`}</div></td></tr>`);
+        }
+        if (separatorPlacementId !== null && showPlacement && !existing) {
+            const key = `${scopeType}:${Number(scopeId)}:${Number(afterItemId)}`;
+            const selected = selectedSeparatorSlots.has(key);
+            tbody.insertAdjacentHTML('beforeend', `<tr class="requirement-separator-placement"><td colspan="8"><button class="requirement-separator-place${selected ? ' is-selected' : ''}" type="button" data-scope-type="${scopeType}" data-scope-id="${Number(scopeId)}" data-after-item-id="${Number(afterItemId)}" aria-pressed="${selected}"><i class="fa-solid fa-${selected ? 'check' : 'plus'} me-1"></i>${selected ? 'Seleccionado' : 'Colocar separador aquí'}</button></td></tr>`);
+        }
+    };
+    const groupHeader = (folder, count, index) => {
+        const expanded = openRequirementFolders.has(String(folder.id));
+        tbody.insertAdjacentHTML('beforeend', `<tr class="requirement-folder-header ${expanded ? 'is-open' : ''}"><td colspan="8" class="requirement-folder-heading"><div class="d-flex align-items-center justify-content-between gap-2 flex-wrap"><button class="requirement-folder-toggle" type="button" data-folder-id="${Number(folder.id)}" aria-expanded="${expanded}"><span class="requirement-folder-icon"><i class="fa-solid fa-${expanded ? 'folder-open' : 'folder-closed'}"></i></span><span class="requirement-folder-label"><strong>${escapeHtml(folder.name)}</strong><small>${count} requisito${count === 1 ? '' : 's'} dentro de la carpeta</small></span><i class="fa-solid fa-chevron-${expanded ? 'up' : 'down'} ms-2" aria-hidden="true"></i></button>${window.pmiPersonalReadOnly === true ? '' : `<span class="d-flex gap-2">${window.pmiCanReplicateRequirement === true && count ? `<button class="btn btn-sm btn-outline-success" type="button" onclick="replicateRequirementFolder(${Number(folder.id)})" title="Replicar carpeta y requisitos" aria-label="Replicar carpeta y requisitos"><i class="fa-solid fa-copy"></i></button>` : ''}<button class="btn btn-sm btn-outline-primary" type="button" onclick="editRequirementFolder(${Number(folder.id)})" title="Modificar registros de la carpeta"><i class="fa-solid fa-pen"></i></button><button class="btn btn-sm btn-outline-danger" type="button" onclick="deleteRequirementFolder(${Number(folder.id)})" title="Eliminar carpeta"><i class="fa-solid fa-trash"></i></button></span>`}</div></td></tr>`);
+        tbody.lastElementChild.querySelector('span.d-flex.gap-2')?.insertAdjacentHTML('afterbegin', orderButtons('folder', folder.id, index, visibleFolders.length));
+    };
+    const renderRow = (row, inFolder = false, isLast = false, index = 0, groupLength = 1) => {
         const hasAttachment = !!(row.file_path || row.word_file_path || row.image_file_path);
         const fileButtons = [
             { path: row.file_path, label: /\.(?:jpe?g|png|webp)$/i.test(row.file_path || '') ? 'imagen' : 'PDF', icon: /\.(?:jpe?g|png|webp)$/i.test(row.file_path || '') ? 'fa-file-image' : 'fa-file-pdf', color: /\.(?:jpe?g|png|webp)$/i.test(row.file_path || '') ? 'primary' : 'danger' },
@@ -2045,6 +2100,7 @@ function renderRequirements() {
                 <td><span class="badge ${row.status.class}">${row.status.label}</span></td>
                 <td>${escapeHtml(row.registered_by || '')}</td>
                 <td class="text-nowrap">
+                    ${orderButtons('record', row.id, index, groupLength)}
                     ${editButton}
                     ${viewButton}
                     ${fileButtons}
@@ -2055,18 +2111,94 @@ function renderRequirements() {
             </tr>
         `);
     };
-    requirementFolders.forEach(folder => {
-        const rows = requirementRows.filter(row => String(row.folder_id) === String(folder.id));
+    if (visibleFolders.length) renderSeparatorSlot('folders', 0, 0, false);
+    visibleFolders.forEach((folder, folderIndex) => {
+        const rows = requirementRows.filter(row => String(row.folder_id) === String(folder.id)).sort((a, b) => orderCompare(a, b, 'folder_item_order'));
         if (!rows.length) return;
-        groupHeader(folder, rows.length);
-        if (openRequirementFolders.has(String(folder.id))) rows.forEach((row, index) => renderRow(row, true, index === rows.length - 1));
+        groupHeader(folder, rows.length, folderIndex);
+        if (openRequirementFolders.has(String(folder.id))) {
+            renderSeparatorSlot('folder', folder.id, 0);
+            rows.forEach((row, index) => { renderRow(row, true, index === rows.length - 1, index, rows.length); renderSeparatorSlot('folder', folder.id, row.id, index < rows.length - 1); });
+        }
         tbody.insertAdjacentHTML('beforeend', '<tr class="requirement-folder-gap" aria-hidden="true"><td colspan="8"></td></tr>');
+        renderSeparatorSlot('folders', 0, folder.id, folderIndex < visibleFolders.length - 1 || requirementRows.some(row => !row.folder_id));
     });
-    const ungrouped = requirementRows.filter(row => !row.folder_id);
+    const ungrouped = requirementRows.filter(row => !row.folder_id).sort((a, b) => orderCompare(a, b, 'sort_order'));
     if (ungrouped.length) {
-        ungrouped.forEach(row => renderRow(row));
+        renderSeparatorSlot('ungrouped', 0, 0, !visibleFolders.length);
+        ungrouped.forEach((row, index) => { renderRow(row, false, false, index, ungrouped.length); renderSeparatorSlot('ungrouped', 0, row.id, index < ungrouped.length - 1); });
     }
     if (!requirementRows.length && !requirementFolders.length) tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No hay requisitos registrados para este puesto.</td></tr>';
+}
+
+function startRequirementSeparatorPlacement(separatorId = 0) {
+    if (!requirementRows.length) { Swal.fire('Sin registros', 'Agregue un requisito antes de colocar el separador.', 'info'); return; }
+    separatorPlacementId = Number(separatorId);
+    selectedSeparatorSlots.clear();
+    requirementFolders.forEach(folder => openRequirementFolders.add(String(folder.id)));
+    renderRequirements();
+}
+
+async function saveSelectedRequirementSeparators() {
+    if (separatorPlacementId !== 0 || !selectedSeparatorSlots.size) return;
+    const button = document.getElementById('saveRequirementSeparatorsBtn');
+    const body = new FormData();
+    body.append('csrf_token', csrf);
+    body.append('worker_id', currentWorkerId);
+    body.append('position_id', currentPositionId);
+    selectedSeparatorSlots.forEach(key => body.append('positions[]', key));
+    button.disabled = true;
+    try {
+        const response = await fetch(`${BASE_URL}/servicios/guardar_separadores_requisito.php`, { method: 'POST', body });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudieron guardar los separadores.');
+        separatorPlacementId = null;
+        selectedSeparatorSlots.clear();
+        await loadRequirements();
+    } catch (error) {
+        Swal.fire('Atención', error.message, 'warning');
+        button.disabled = false;
+    }
+}
+
+async function saveRequirementSeparatorPlacement(separatorId, scopeType, scopeId, afterItemId) {
+    const body = new FormData();
+    body.append('csrf_token', csrf);
+    body.append('worker_id', currentWorkerId);
+    body.append('position_id', currentPositionId);
+    body.append('action', separatorId ? 'move' : 'create');
+    if (separatorId) body.append('separator_id', separatorId);
+    body.append('scope_type', scopeType);
+    body.append('scope_id', scopeId);
+    body.append('after_item_id', afterItemId);
+    try {
+        const response = await fetch(`${BASE_URL}/servicios/gestionar_separadores_requisito.php`, { method: 'POST', body });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo guardar el separador.');
+        separatorPlacementId = null;
+        await loadRequirements();
+    } catch (error) {
+        Swal.fire('Atención', error.message, 'warning');
+    }
+}
+
+async function deleteRequirementSeparator(separatorId) {
+    const answer = await Swal.fire({ title: '¿Eliminar separador?', icon: 'question', showCancelButton: true, confirmButtonText: 'Eliminar', cancelButtonText: 'Cancelar', confirmButtonColor: '#dc3545' });
+    if (!answer.isConfirmed) return;
+    const body = new FormData();
+    body.append('csrf_token', csrf);
+    body.append('worker_id', currentWorkerId);
+    body.append('position_id', currentPositionId);
+    body.append('action', 'delete');
+    body.append('separator_id', separatorId);
+    try {
+        const response = await fetch(`${BASE_URL}/servicios/gestionar_separadores_requisito.php`, { method: 'POST', body });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo eliminar el separador.');
+        await loadRequirements();
+    } catch (error) {
+        Swal.fire('Atención', error.message, 'warning');
+    }
 }
 
 function requirementAttachmentDownloadName(row, path, label = '') {
@@ -2774,6 +2906,96 @@ async function uploadQuickPhoto(event) {
         setWorkerImageDownload('downloadWorkerPhoto', currentWorkerId, 'foto', true);
     } else {
         Swal.fire('Atención', data.message || 'No se pudo cambiar la foto.', 'warning');
+    }
+}
+
+async function moveRequirementOrder(kind, recordId, direction) {
+    const workerId = currentWorkerId;
+    const positionId = currentPositionId;
+    const body = new FormData();
+    body.append('csrf_token', csrf);
+    body.append('worker_id', workerId);
+    body.append('position_id', positionId);
+    body.append('record_id', recordId);
+    body.append('kind', kind);
+    body.append('direction', direction);
+    try {
+        const response = await fetch(`${BASE_URL}/servicios/ordenar_requisitos_pmi.php`, { method: 'POST', body });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo cambiar el orden.');
+        if (Number(currentWorkerId) === Number(workerId) && Number(currentPositionId) === Number(positionId)) await loadRequirements();
+    } catch (error) {
+        Swal.fire('Atención', error.message, 'warning');
+    }
+}
+
+async function replicateRequirementFolder(folderId) {
+    const folder = requirementFolders.find(item => Number(item.id) === Number(folderId));
+    const records = requirementRows.filter(row => Number(row.folder_id) === Number(folderId));
+    const targets = currentWorkerPositions.filter(position => Number(position.id) !== Number(currentPositionId));
+    if (!folder || !records.length) return;
+    if (!targets.length) {
+        Swal.fire('Sin puestos de destino', 'El trabajador no tiene otros puestos.', 'info');
+        return;
+    }
+    if (records.length > 100 || targets.length > 30 || records.length * targets.length > 1000) {
+        Swal.fire('Carpeta demasiado grande', 'El límite es de 100 requisitos, 30 puestos y 1000 combinaciones por operación.', 'warning');
+        return;
+    }
+    const workerId = currentWorkerId;
+    const positionId = currentPositionId;
+    let pendingTargets;
+    try {
+        const response = await fetch(`${BASE_URL}/servicios/obtener_replicas_requisitos_puesto.php?worker_id=${encodeURIComponent(workerId)}&source_position_id=${encodeURIComponent(positionId)}&folder_id=${encodeURIComponent(folderId)}`);
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudieron consultar los puestos de destino.');
+        const pendingIds = new Set((data.pending_positions || []).map(Number));
+        pendingTargets = targets.filter(position => pendingIds.has(Number(position.id)));
+    } catch (error) {
+        Swal.fire('Atención', error.message, 'warning');
+        return;
+    }
+    if (!pendingTargets.length) {
+        Swal.fire('Carpeta al día', 'Todos sus requisitos ya están registrados u organizados en los otros puestos.', 'info');
+        return;
+    }
+    const answer = await Swal.fire({
+        title: `Replicar carpeta: ${escapeHtml(folder.name)}`,
+        html: `<p class="text-start small">Se copiará la carpeta con sus ${records.length} requisito${records.length === 1 ? '' : 's'}. Los requisitos existentes se conservarán; si no están en otra carpeta, se agregarán a esta.</p><div class="text-start fw-semibold mb-2">Puestos de destino pendientes</div><div class="replicate-position-list" style="max-height:50vh;overflow-y:auto">${pendingTargets.map(position => `<label class="replicate-position-option"><span><input class="form-check-input me-2 replicate-folder-target" type="checkbox" value="${Number(position.id)}" checked>${escapeHtml(position.name)}</span></label>`).join('')}</div>`,
+        showCancelButton: true,
+        confirmButtonText: 'Replicar carpeta',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#198754',
+        preConfirm: () => {
+            const ids = [...Swal.getPopup().querySelectorAll('.replicate-folder-target:checked')].map(input => input.value);
+            if (!ids.length) { Swal.showValidationMessage('Seleccione al menos un puesto.'); return false; }
+            return ids;
+        }
+    });
+    if (!answer.isConfirmed || Number(currentWorkerId) !== Number(workerId) || Number(currentPositionId) !== Number(positionId)) return;
+    const body = new FormData();
+    body.append('csrf_token', csrf);
+    body.append('worker_id', workerId);
+    body.append('source_position_id', positionId);
+    body.append('folder_id', folderId);
+    records.forEach(row => body.append('requirement_ids[]', row.id));
+    answer.value.forEach(id => body.append('target_position_ids[]', id));
+    try {
+        const response = await fetch(`${BASE_URL}/servicios/replicar_requisitos_puesto.php`, { method: 'POST', body });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo replicar la carpeta.');
+        const created = Number(data.created) || 0;
+        const linked = Number(data.linked) || 0;
+        const skipped = Number(data.skipped) || 0;
+        const message = created === 0
+            ? linked > 0
+                ? `${linked} requisito${linked === 1 ? '' : 's'} existente${linked === 1 ? '' : 's'} ${linked === 1 ? 'se incorporó' : 'se incorporaron'} a la carpeta.`
+                : 'La carpeta ya estaba organizada en los puestos seleccionados. No se duplicó ningún requisito.'
+            : `${created} requisito${created === 1 ? '' : 's'} copiado${created === 1 ? '' : 's'} en la carpeta.${linked ? ` ${linked} existente${linked === 1 ? '' : 's'} ${linked === 1 ? 'se incorporó' : 'se incorporaron'} a ella.` : ''}${skipped > linked ? ` ${skipped - linked} ya estaba${skipped - linked === 1 ? '' : 'n'} registrado${skipped - linked === 1 ? '' : 's'} en otra carpeta.` : ''}`;
+        await Swal.fire({ icon: 'success', title: created === 0 && linked > 0 ? 'Solo se replicó la carpeta' : 'Carpeta replicada', text: message, confirmButtonText: 'Aceptar' });
+        await loadRequirements();
+    } catch (error) {
+        Swal.fire('Atención', error.message, 'warning');
     }
 }
 
