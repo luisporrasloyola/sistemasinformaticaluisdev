@@ -134,7 +134,7 @@ require __DIR__ . '/../../includes/header.php';
 .client-pmi-position-add{flex:none;padding:8px 11px;border:0;border-left:1px solid currentColor;background:transparent;color:inherit;font-size:.78rem;line-height:1.2}
 .client-pmi-position-add:hover{background:rgba(100,82,157,.09)}
 .client-pmi-position-add:focus-visible{outline:2px solid #2563eb;outline-offset:-2px}
-.client-pmi-position-requirements{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+.client-pmi-position-requirements{display:flex;flex-direction:column;align-items:flex-start;gap:5px;margin-top:7px}
 .client-pmi-position-requirements .client-pmi-draggable-requirement{cursor:grab;user-select:none}.client-pmi-position-requirements .client-pmi-draggable-requirement:active{cursor:grabbing}.client-pmi-draggable-requirement.is-dragging{opacity:.4}.client-pmi-draggable-requirement.is-drop-target{outline:2px solid #8353ee;outline-offset:2px}
 .client-pmi-position-group.is-active{background:#7853ad;border-color:#7853ad;color:#fff}
 .client-pmi-position-group.is-active .client-pmi-position-add{border-left-color:rgba(255,255,255,.7)}
