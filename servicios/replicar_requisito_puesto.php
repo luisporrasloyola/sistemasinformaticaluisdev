@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../includes/security.php';
 require_once __DIR__ . '/../includes/upload.php';
+require_once __DIR__ . '/../includes/pmi_requirement_files.php';
 require_once __DIR__ . '/../config/database.php';
 require_role('Administrador');
 
@@ -36,8 +37,10 @@ try{
     $newPath='archivos/'.$targetRelative; $createdFiles[]=$newPath;
    }
   }
-  $insert=$pdo->prepare('INSERT INTO worker_requirements (worker_id,position_id,requirement_id,registration_date,start_date,end_date,observations,observation_status,observation_by_user_id,observation_at,observation_resolved_by_user_id,observation_resolved_at,file_path,original_file_name,registered_by_user_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
-  $insert->execute([(int)$source['worker_id'],(int)$target['id'],(int)$source['requirement_id'],$source['registration_date'],$source['start_date'],$source['end_date'],$source['observations'],$source['observation_status'],$source['observation_by_user_id'],$source['observation_at'],$source['observation_resolved_by_user_id'],$source['observation_resolved_at'],$newPath,$newOriginal,current_user()['id']??null]);
+  $newWordPath=pmi_requirement_copy_file($source['word_file_path'],$createdFiles);
+  $newImagePath=pmi_requirement_copy_file($source['image_file_path'],$createdFiles);
+  $insert=$pdo->prepare('INSERT INTO worker_requirements (worker_id,position_id,requirement_id,registration_date,start_date,end_date,observations,observation_status,observation_by_user_id,observation_at,observation_resolved_by_user_id,observation_resolved_at,file_path,original_file_name,document_type,word_file_path,word_original_file_name,image_file_path,image_original_file_name,registered_by_user_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+  $insert->execute([(int)$source['worker_id'],(int)$target['id'],(int)$source['requirement_id'],$source['registration_date'],$source['start_date'],$source['end_date'],$source['observations'],$source['observation_status'],$source['observation_by_user_id'],$source['observation_at'],$source['observation_resolved_by_user_id'],$source['observation_resolved_at'],$newPath,$newOriginal,$source['document_type'],$newWordPath,$source['word_original_file_name'],$newImagePath,$source['image_original_file_name'],current_user()['id']??null]);
   $newId=(int)$pdo->lastInsertId();
   $log=$pdo->prepare('INSERT INTO worker_requirement_activity_log (worker_requirement_id,user_id,action_type,description) VALUES (?,?,?,?)');
   $log->execute([$newId,current_user()['id']??null,'requisito_replicado','Replicó el requisito desde el puesto original hacia '.$target['name'].'.']);

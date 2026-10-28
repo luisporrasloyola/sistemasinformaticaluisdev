@@ -151,6 +151,8 @@ let readOnlyMode = false;
 let canObserveCurrentRequirement = true;
 let currentWorkerPositions = [];
 let replicateRequirementModal = null;
+let replicateAllRequirementsModal = null;
+let replicateAllExistingPairs = new Set();
 let requirementRows = [];
 let requirementFolders = [];
 let openRequirementFolders = new Set();
@@ -1848,6 +1850,19 @@ function initRequirementsModule() {
         replicateRequirementModal = new bootstrap.Modal(replicateModalElement);
         document.getElementById('confirmReplicateRequirementBtn')?.addEventListener('click', confirmReplicateRequirement);
     }
+    const replicateAllModalElement = document.getElementById('replicateAllRequirementsModal');
+    if (replicateAllModalElement) {
+        replicateAllRequirementsModal = new bootstrap.Modal(replicateAllModalElement);
+        document.getElementById('replicateAllRequirementsBtn').addEventListener('click', openReplicateAllRequirements);
+        document.getElementById('confirmReplicateAllRequirementsBtn').addEventListener('click', confirmReplicateAllRequirements);
+        ['replicateAllSourceList', 'replicateAllTargetList'].forEach(id => document.getElementById(id).addEventListener('change', updateReplicateAllSelection));
+        [['replicateAllSourceSelect', '.replicate-all-source'], ['replicateAllTargetSelect', '.replicate-all-target']].forEach(([id, selector]) => {
+            document.getElementById(id).addEventListener('change', event => {
+                document.querySelectorAll(selector).forEach(input => { input.checked = event.target.checked; });
+                updateReplicateAllSelection();
+            });
+        });
+    }
 
     workerSearch.select2({
         theme: 'bootstrap4',
@@ -1884,6 +1899,7 @@ function initRequirementsModule() {
     document.getElementById('addRequirementBtn').addEventListener('click', openAddRequirement);
     document.getElementById('downloadRequirementsBtn').addEventListener('click', downloadRequirementsBundle);
     document.getElementById('downloadSelectedRequirementsBtn')?.addEventListener('click', downloadSelectedRequirementsBundle);
+    document.getElementById('deleteAllRequirementsBtn')?.addEventListener('click', deleteAllRequirements);
     document.getElementById('createRequirementFolderBtn')?.addEventListener('click', createRequirementFolderWithSelection);
     document.querySelector('#requirementsTable tbody')?.addEventListener('click', (event) => {
         const toggle = event.target.closest('.requirement-folder-toggle');
@@ -1897,6 +1913,7 @@ function initRequirementsModule() {
         document.querySelectorAll('.requirement-download-check').forEach((input) => { input.checked = event.target.checked; });
     });
     document.getElementById('requirementForm').addEventListener('submit', saveRequirement);
+    document.getElementById('requirementDocumentType')?.addEventListener('change', updateRequirementDocumentFields);
     document.getElementById('requirementDuplicateSelectAll')?.addEventListener('change', (event) => {
         document.querySelectorAll('.requirement-duplicate-check').forEach((input) => { input.checked = event.target.checked; });
     });
@@ -1913,6 +1930,11 @@ function initRequirementsModule() {
 
 async function loadWorker(id) {
     currentWorkerId = id;
+    const replicateAllButton = document.getElementById('replicateAllRequirementsBtn');
+    if (replicateAllButton) replicateAllButton.disabled = true;
+    const deleteAllButton = document.getElementById('deleteAllRequirementsBtn');
+    if (deleteAllButton) deleteAllButton.disabled = true;
+    requirementRows = [];
     openRequirementFolders.clear();
     const response = await fetch(`${personalServiceUrl('perfil_personal.php')}?id=${id}`);
     const data = await response.json();
@@ -1921,8 +1943,16 @@ async function loadWorker(id) {
     const worker = data.worker;
     document.getElementById('requirementsWorkspace').classList.remove('d-none');
     document.getElementById('workerPhoto').src = worker.photo_path ? `${BASE_URL}/${worker.photo_path}` : `${BASE_URL}/recursos/imagen_referencial.php`;
+    setWorkerImageDownload('downloadWorkerPhoto', id, 'foto', Boolean(worker.photo_path));
+    setWorkerImageDownload('downloadWorkerSignature', id, 'firma', Boolean(worker.signature_path));
     document.getElementById('workerDocument').textContent = `${worker.document_type}: ${worker.document_number}`;
     document.getElementById('workerName').textContent = worker.full_name;
+    document.getElementById('workerBloodType').textContent = worker.blood_type || '—';
+    document.getElementById('workerPhone').textContent = worker.phone || '—';
+    document.getElementById('workerAddress').textContent = worker.address || '—';
+    document.getElementById('workerEmail').textContent = worker.email || '—';
+    const birthDate = worker.birth_date && /^\d{4}-\d{2}-\d{2}$/.test(worker.birth_date) ? worker.birth_date.split('-').reverse().join('/') : '—';
+    document.getElementById('workerBirthDate').textContent = birthDate;
     document.getElementById('workerCompany').textContent = worker.company || '';
     document.getElementById('workerPositions').textContent = data.positions.map((p) => p.name).join(', ');
     currentWorkerPositions = data.positions || [];
@@ -1948,6 +1978,16 @@ async function loadWorker(id) {
     }
 }
 
+function setWorkerImageDownload(elementId, workerId, type, available) {
+    const link = document.getElementById(elementId);
+    if (!link) return;
+    link.href = available ? `${personalServiceUrl('descargar_archivo_personal.php')}?worker_id=${encodeURIComponent(workerId)}&tipo=${type}` : '#';
+    link.classList.toggle('disabled', !available);
+    link.setAttribute('aria-disabled', available ? 'false' : 'true');
+    link.tabIndex = available ? 0 : -1;
+    link.title = available ? `Descargar ${type}` : `No hay ${type} disponible`;
+}
+
 async function loadRequirements() {
     if (!currentWorkerId || !currentPositionId) return;
     const response = await fetch(`${personalServiceUrl('listar_requisitos.php')}?trabajador_id=${currentWorkerId}&puesto_id=${currentPositionId}&t=${Date.now()}`);
@@ -1957,6 +1997,10 @@ async function loadRequirements() {
         return;
     }
     requirementRows = data.rows || [];
+    const replicateAllButton = document.getElementById('replicateAllRequirementsBtn');
+    if (replicateAllButton) replicateAllButton.disabled = !requirementRows.some(row => row.can_modify === true) || !currentWorkerPositions.some(position => Number(position.id) !== Number(currentPositionId));
+    const deleteAllButton = document.getElementById('deleteAllRequirementsBtn');
+    if (deleteAllButton) deleteAllButton.disabled = !requirementRows.length || !requirementRows.every(row => row.can_modify === true);
     requirementFolders = data.folders || [];
     const validFolderIds = new Set(requirementFolders.map(folder => String(folder.id)));
     openRequirementFolders.forEach(id => { if (!validFolderIds.has(id)) openRequirementFolders.delete(id); });
@@ -1973,17 +2017,19 @@ function renderRequirements() {
         tbody.insertAdjacentHTML('beforeend', `<tr class="requirement-folder-header ${expanded ? 'is-open' : ''}"><td colspan="8" class="requirement-folder-heading"><div class="d-flex align-items-center justify-content-between gap-2 flex-wrap"><button class="requirement-folder-toggle" type="button" data-folder-id="${Number(folder.id)}" aria-expanded="${expanded}"><span class="requirement-folder-icon"><i class="fa-solid fa-${expanded ? 'folder-open' : 'folder-closed'}"></i></span><span class="requirement-folder-label"><strong>${escapeHtml(folder.name)}</strong><small>${count} requisito${count === 1 ? '' : 's'} dentro de la carpeta</small></span><i class="fa-solid fa-chevron-${expanded ? 'up' : 'down'} ms-2" aria-hidden="true"></i></button>${window.pmiPersonalReadOnly === true ? '' : `<span class="d-flex gap-2"><button class="btn btn-sm btn-outline-primary" type="button" onclick="editRequirementFolder(${Number(folder.id)})" title="Modificar registros de la carpeta"><i class="fa-solid fa-pen"></i></button><button class="btn btn-sm btn-outline-danger" type="button" onclick="deleteRequirementFolder(${Number(folder.id)})" title="Eliminar carpeta"><i class="fa-solid fa-trash"></i></button></span>`}</div></td></tr>`);
     };
     const renderRow = (row, inFolder = false, isLast = false) => {
-        const hasAttachment = !!row.file_path;
-        const downloadName = escapeHtml(requirementDownloadName(row));
-        const downloadButton = hasAttachment
-            ? `<a class="btn btn-sm btn-outline-success" href="${BASE_URL}/${row.file_path}" download="${downloadName}" title="Descargar documento"><i class="fa-solid fa-download"></i></a>`
-            : '';
+        const hasAttachment = !!(row.file_path || row.word_file_path || row.image_file_path);
+        const fileButtons = [
+            { path: row.file_path, label: /\.(?:jpe?g|png|webp)$/i.test(row.file_path || '') ? 'imagen' : 'PDF', icon: /\.(?:jpe?g|png|webp)$/i.test(row.file_path || '') ? 'fa-file-image' : 'fa-file-pdf', color: /\.(?:jpe?g|png|webp)$/i.test(row.file_path || '') ? 'primary' : 'danger' },
+            { path: row.word_file_path, label: 'Word', icon: 'fa-file-word', color: 'primary' },
+            { path: row.image_file_path, label: 'imagen', icon: 'fa-file-image', color: 'primary' },
+        ].filter(file => file.path).map(file => `<a class="btn btn-sm btn-outline-${file.color}${file.label === 'Word' ? ' requirement-word-file-btn' : ''}" href="${BASE_URL}/${encodeURI(file.path)}" download="${escapeHtml(requirementAttachmentDownloadName(row, file.path, file.label))}" title="Descargar ${file.label}" aria-label="Descargar ${file.label}"><i class="fa-solid ${file.icon}" aria-hidden="true"></i></a>`).join('');
         const personalReadOnly = window.pmiPersonalReadOnly === true;
-        const editButton = personalReadOnly ? '' : `<button class="btn btn-sm btn-outline-primary" onclick="openEditRequirement(${row.id})"><i class="fa-solid fa-pen"></i></button>`;
+        const canModify = !personalReadOnly && row.can_modify === true;
+        const editButton = canModify ? `<button class="btn btn-sm btn-outline-primary" onclick="openEditRequirement(${row.id})"><i class="fa-solid fa-pen"></i></button>` : '';
         const viewButton = `<button class="btn btn-sm btn-outline-secondary" type="button" onclick="openViewRequirement(${row.id})" ${hasAttachment ? '' : 'disabled'} title="${hasAttachment ? 'Vista previa del archivo' : 'Sin archivo adjunto'}" aria-label="${hasAttachment ? 'Vista previa del archivo' : 'Sin archivo adjunto'}"><i class="fa-solid fa-eye"></i></button>`;
-        const deleteButton = personalReadOnly ? '' : `<button class="btn btn-sm btn-outline-danger" onclick="deleteRequirement(${row.id})" title="Eliminar requisito y archivo" aria-label="Eliminar requisito y archivo"><i class="fa-solid fa-trash"></i></button>`;
-        const replicateEnabled = !personalReadOnly && currentWorkerPositions.length > 1;
-        const replicateButton = !personalReadOnly && document.getElementById('replicateRequirementModal')
+        const deleteButton = canModify ? `<button class="btn btn-sm btn-outline-danger" onclick="deleteRequirement(${row.id})" title="Eliminar requisito y archivo" aria-label="Eliminar requisito y archivo"><i class="fa-solid fa-trash"></i></button>` : '';
+        const replicateEnabled = canModify && currentWorkerPositions.length > 1;
+        const replicateButton = window.pmiCanReplicateRequirement === true && canModify && document.getElementById('replicateRequirementModal')
             ? `<button class="btn btn-sm btn-outline-info" type="button" onclick="openReplicateRequirement(${row.id})" ${replicateEnabled ? '' : 'disabled'} title="${replicateEnabled ? 'Replicar a otro puesto' : 'El trabajador no tiene otro puesto'}"><i class="fa-solid fa-copy"></i></button>`
             : '';
         const removeFromFolderButton = !personalReadOnly && row.folder_id ? `<button class="btn btn-sm btn-outline-warning" type="button" onclick="removeRequirementFromFolder(${Number(row.id)})" title="Quitar de la carpeta sin borrar el requisito"><i class="fa-solid fa-folder-minus"></i></button>` : '';
@@ -2001,9 +2047,9 @@ function renderRequirements() {
                 <td class="text-nowrap">
                     ${editButton}
                     ${viewButton}
+                    ${fileButtons}
                     ${deleteButton}
                     ${removeFromFolderButton}
-                    ${downloadButton}
                     ${replicateButton}
                 </td>
             </tr>
@@ -2023,12 +2069,13 @@ function renderRequirements() {
     if (!requirementRows.length && !requirementFolders.length) tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No hay requisitos registrados para este puesto.</td></tr>';
 }
 
-function requirementDownloadName(row) {
+function requirementAttachmentDownloadName(row, path, label = '') {
     const worker = document.getElementById('workerName')?.textContent?.trim() || 'Trabajador';
     const requirement = String(row.requirement || 'Requisito').trim();
-    const extension = String(row.file_path || '').match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase() || 'pdf';
-    const base = `${worker} - ${requirement}`.replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').replace(/\s+/g, ' ').trim();
-    return `${base}.${extension}`;
+    const extension = String(path || '').match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase() || 'bin';
+    const suffix = row.image_file_path && path === row.image_file_path && row.file_path ? ' - Imagen' : '';
+    const name = `${worker} - ${requirement}${suffix}`.replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').replace(/\s+/g, ' ').trim();
+    return `${name}.${extension}`;
 }
 
 async function postRequirementFolder(action, values = {}) {
@@ -2129,6 +2176,8 @@ function openAddRequirement() {
     canObserveCurrentRequirement = window.canManageRequirementObservations === true;
     const form = document.getElementById('requirementForm');
     form.reset();
+    ['pdfInput', 'wordInput'].forEach(inputId => { document.getElementById(inputId).dataset.existing = '0'; });
+    updateRequirementDocumentFields();
     resetRequirementFileInput();
     form.classList.remove('was-validated');
     setRequirementReadonly(false);
@@ -2161,8 +2210,12 @@ async function openViewRequirement(id) {
         const data = await response.json();
         if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo consultar el requisito.');
         const row = data.row;
-        const path = String(row.file_path || '').replace(/\\/g, '/');
-        if (!path) {
+        const attachments = [
+            { path: row.file_path, name: row.original_file_name, label: /\.(?:jpe?g|png|webp)$/i.test(row.file_path || '') ? 'Imagen' : 'PDF' },
+            { path: row.word_file_path, name: row.word_original_file_name, label: 'Word' },
+            { path: row.image_file_path, name: row.image_original_file_name, label: 'Imagen' },
+        ].filter(item => item.path);
+        if (!attachments.length) {
             readOnlyMode = true;
             await fillRequirementModal(id);
             setRequirementReadonly(true);
@@ -2171,24 +2224,45 @@ async function openViewRequirement(id) {
             requirementModal.show();
             return;
         }
-        if (!/^archivos\/[A-Za-z0-9_./-]+\.(?:pdf|jpe?g|png|webp)$/i.test(path) || path.includes('..')) {
-            throw new Error('La ruta del archivo no es válida para la vista previa.');
-        }
-        const url = `${BASE_URL}/${path.split('/').map(encodeURIComponent).join('/')}`;
-        const fileName = row.original_file_name || path.split('/').pop();
-        const isPdf = /\.pdf$/i.test(path);
         const body = document.getElementById('requirementFilePreviewBody');
-        const preview = document.createElement(isPdf ? 'iframe' : 'img');
-        preview.src = url;
-        preview.title = `Vista previa de ${row.requirement}`;
-        if (!isPdf) preview.alt = `Archivo adjunto de ${row.requirement}`;
-        body.replaceChildren(preview);
         document.getElementById('requirementFilePreviewTitle').textContent = row.requirement || 'Vista previa del archivo';
-        document.getElementById('requirementFilePreviewName').textContent = fileName;
-        document.getElementById('requirementFilePreviewOpen').href = url;
-        const download = document.getElementById('requirementFilePreviewDownload');
-        download.href = url;
-        download.download = requirementDownloadName(row);
+        const selector = document.createElement('div');
+        selector.className = 'd-flex gap-2 flex-wrap p-2 border-bottom';
+        const previewArea = document.createElement('div');
+        body.replaceChildren(selector, previewArea);
+        const showAttachment = (attachment, button) => {
+            const path = String(attachment.path).replace(/\\/g, '/');
+            if (!/^archivos\/[A-Za-z0-9_./-]+\.(?:pdf|docx?|jpe?g|png|webp)$/i.test(path) || path.includes('..')) throw new Error('La ruta del archivo no es válida.');
+            const url = `${BASE_URL}/${path.split('/').map(encodeURIComponent).join('/')}`;
+            selector.querySelectorAll('button').forEach(item => item.classList.toggle('btn-primary', item === button));
+            document.getElementById('requirementFilePreviewName').textContent = attachment.name || path.split('/').pop();
+            document.getElementById('requirementFilePreviewOpen').href = url;
+            const download = document.getElementById('requirementFilePreviewDownload');
+            download.href = url;
+            download.download = requirementAttachmentDownloadName(row, path, attachment.label);
+            previewArea.replaceChildren();
+            if (/\.pdf$/i.test(path) || /\.(?:jpe?g|png|webp)$/i.test(path)) {
+                const preview = document.createElement(/\.pdf$/i.test(path) ? 'iframe' : 'img');
+                preview.src = url;
+                preview.title = `Vista previa de ${attachment.label}`;
+                if (preview.tagName === 'IMG') preview.alt = `Imagen adjunta de ${row.requirement}`;
+                previewArea.append(preview);
+            } else {
+                const message = document.createElement('p');
+                message.className = 'text-muted p-4 mb-0';
+                message.textContent = 'El archivo Word se abre o descarga desde los botones inferiores.';
+                previewArea.append(message);
+            }
+        };
+        attachments.forEach((attachment, index) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'btn btn-sm btn-outline-primary';
+            button.textContent = attachment.label;
+            button.addEventListener('click', () => showAttachment(attachment, button));
+            selector.append(button);
+            if (index === 0) showAttachment(attachment, button);
+        });
         const modalElement = document.getElementById('requirementFilePreviewModal');
         modalElement.addEventListener('hidden.bs.modal', () => body.replaceChildren(), { once: true });
         bootstrap.Modal.getOrCreateInstance(modalElement).show();
@@ -2209,6 +2283,10 @@ async function fillRequirementModal(id) {
     document.getElementById('registrationDate').value = row.registration_date;
     document.getElementById('startDate').value = row.start_date;
     document.getElementById('endDate').value = row.end_date;
+    document.getElementById('pdfInput').dataset.existing = row.file_path && /\.pdf$/i.test(row.file_path) ? 'pdf' : (row.file_path ? 'legacy' : '0');
+    document.getElementById('wordInput').dataset.existing = row.word_file_path ? '1' : '0';
+    document.getElementById('requirementDocumentType').value = row.document_type === 'pdf_word_image' ? 'pdf_word' : (row.document_type || 'legacy');
+    updateRequirementDocumentFields();
     document.getElementById('observations').value = '';
     const option = new Option(row.requirement, row.requirement_id, true, true);
     $('#requirementSelect').append(option).trigger('change');
@@ -2234,8 +2312,22 @@ function renderRequirementDuplicatePositions(positions) {
 }
 
 function resetRequirementFileInput() {
-    const input = document.getElementById('pdfInput');
-    if (input) input.value = '';
+    ['pdfInput', 'wordInput'].forEach(id => {
+        const input = document.getElementById(id);
+        if (input) input.value = '';
+    });
+}
+
+function updateRequirementDocumentFields() {
+    const type = document.getElementById('requirementDocumentType')?.value || 'legacy';
+    document.getElementById('requirementWordBlock').classList.toggle('d-none', type !== 'pdf_word');
+    const primaryLabel = document.getElementById('requirementPrimaryFileLabel');
+    primaryLabel.textContent = type === 'legacy' ? 'Adjunto (PDF o imagen)' : 'Archivo PDF';
+    primaryLabel.classList.toggle('visually-hidden', type === 'legacy');
+    document.getElementById('pdfInput').accept = type === 'legacy' ? '.pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp' : '.pdf,application/pdf';
+    document.getElementById('pdfInput').required = type !== 'legacy' && document.getElementById('pdfInput').dataset.existing !== 'pdf';
+    document.getElementById('wordInput').required = type === 'pdf_word' && document.getElementById('wordInput').dataset.existing !== '1';
+    if (type !== 'pdf_word') document.getElementById('wordInput').value = '';
 }
 
 function renderRequirementAudit(row, activity) {
@@ -2331,26 +2423,18 @@ function normalizeAuditActivityText(value) {
 
 function renderCurrentPdf(row) {
     const box = document.getElementById('currentPdf');
-    if (!row || !row.file_path) {
+    if (!row || ![row.file_path, row.word_file_path, row.image_file_path].some(Boolean)) {
         box.classList.add('d-none');
         box.innerHTML = '';
         return;
     }
-    const fileName = row.original_file_name || row.file_path || 'archivo';
-    const isImage = /\.(?:jpe?g|png|webp)$/i.test(fileName);
-    const icon = isImage ? 'fa-file-image text-primary' : 'fa-file-pdf text-danger';
-    const preview = isImage
-        ? `<a class="requirement-image-preview" target="_blank" href="${BASE_URL}/${row.file_path}"><img src="${BASE_URL}/${row.file_path}" alt="Vista previa del adjunto"></a>`
-        : '';
+    const attachments = [
+        { kind: 'primary', path: row.file_path, name: row.original_file_name, label: /\.(?:jpe?g|png|webp)$/i.test(row.file_path || '') ? 'Imagen existente' : 'PDF / adjunto' },
+        { kind: 'word', path: row.word_file_path, name: row.word_original_file_name, label: 'Word' },
+        { kind: 'image', path: row.image_file_path, name: row.image_original_file_name, label: 'Imagen' },
+    ].filter(file => file.path);
     box.classList.remove('d-none');
-    box.innerHTML = `
-        ${preview}
-        <i class="fa-solid ${icon} me-2"></i>
-        <strong>${escapeHtml(fileName)}</strong>
-        <div class="d-flex gap-2 mt-2">
-            <a class="btn btn-sm btn-outline-primary" target="_blank" href="${BASE_URL}/${row.file_path}"><i class="fa-solid fa-up-right-from-square me-1"></i>Abrir</a>
-            <button class="btn btn-sm btn-outline-danger" type="button" onclick="deleteRequirementPdf(${row.id})"><i class="fa-solid fa-trash me-1"></i>Eliminar</button>
-        </div>`;
+    box.innerHTML = attachments.map(file => `<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2"><span><strong>${file.label}:</strong> ${escapeHtml(file.name || file.path)}</span><span class="d-flex gap-1"><a class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener" href="${BASE_URL}/${encodeURI(file.path)}">Abrir</a><a class="btn btn-sm btn-outline-success" href="${BASE_URL}/${encodeURI(file.path)}" download="${escapeHtml(requirementAttachmentDownloadName(row, file.path, file.label))}">Descargar</a>${readOnlyMode || window.pmiPersonalReadOnly === true ? '' : `<button class="btn btn-sm btn-outline-danger" type="button" onclick="deleteRequirementPdf(${Number(row.id)}, '${file.kind}')">Eliminar</button>`}</span></div>`).join('');
 }
 
 function setRequirementReadonly(state) {
@@ -2359,7 +2443,10 @@ function setRequirementReadonly(state) {
         el.disabled = state;
     });
     document.querySelector('#requirementForm button[type="submit"]').classList.toggle('d-none', state);
-    document.getElementById('pdfInput').classList.toggle('d-none', state);
+    ['requirementPdfBlock', 'requirementWordBlock'].forEach(id => {
+        if (state) document.getElementById(id).classList.add('d-none');
+    });
+    if (!state) updateRequirementDocumentFields();
     document.getElementById('newCatalogRequirementBtn')?.classList.toggle('d-none', state);
     document.getElementById('deleteCatalogRequirementBtn')?.classList.toggle('d-none', state);
     document.getElementById('requirementDuplicatePositionsBlock')?.classList.toggle('d-none', state || !document.querySelector('.requirement-duplicate-check'));
@@ -2423,7 +2510,7 @@ async function saveRequirementLegacy(event) {
 async function saveRequirement(event) {
     event.preventDefault();
     const form = event.currentTarget;
-    if (readOnlyMode || !form.checkValidity()) return;
+    if (readOnlyMode || !form.reportValidity()) return;
 
     const submitButton = form.querySelector('button[type="submit"]');
     const progressBox = document.getElementById('requirementUploadProgress');
@@ -2468,28 +2555,69 @@ async function saveRequirement(event) {
     }
 }
 
+async function deleteAllRequirements() {
+    if (!currentWorkerId || !currentPositionId || !requirementRows.length || !requirementRows.every(row => row.can_modify === true)) return;
+    const workerId = currentWorkerId;
+    const positionId = currentPositionId;
+    const count = requirementRows.length;
+    const positionName = document.getElementById('positionSelect')?.selectedOptions[0]?.textContent?.trim() || 'este puesto';
+    const result = await Swal.fire({
+        icon: 'warning',
+        title: `¿Borrar ${count} requisito${count === 1 ? '' : 's'}?`,
+        html: `Se eliminarán los registros del puesto <strong>${escapeHtml(positionName)}</strong>, incluidos los que estén en carpetas. Las copias en otros puestos permanecerán intactas.`,
+        showCancelButton: true,
+        confirmButtonText: `Sí, borrar ${count}`,
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#dc3545'
+    });
+    if (!result.isConfirmed || Number(currentWorkerId) !== Number(workerId) || Number(currentPositionId) !== Number(positionId)) return;
+    const button = document.getElementById('deleteAllRequirementsBtn');
+    const body = new FormData();
+    body.append('csrf_token', csrf);
+    body.append('worker_id', workerId);
+    body.append('position_id', positionId);
+    body.append('expected_count', count);
+    button.disabled = true;
+    try {
+        const response = await fetch(personalServiceUrl('eliminar_requisitos_puesto.php'), { method: 'POST', body });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudieron borrar los requisitos.');
+        await loadRequirements();
+        Swal.fire({ icon: 'success', title: 'Requisitos eliminados', text: `Se borraron ${data.deleted} registros de ${positionName}.`, timer: 2200, showConfirmButton: false });
+    } catch (error) {
+        Swal.fire('Atención', error.message || 'No se pudieron borrar los requisitos.', 'warning');
+        button.disabled = false;
+    }
+}
+
 async function deleteRequirement(id) {
     const ok = await confirmAction('¿Eliminar requisito?');
     if (!ok) return;
     const form = new FormData();
     form.append('csrf_token', csrf);
     form.append('id', id);
-    const response = await fetch(personalServiceUrl('eliminar_requisito.php'), { method: 'POST', body: form });
-    const data = await response.json();
-    if (data.ok) loadRequirements();
+    try {
+        const response = await fetch(personalServiceUrl('eliminar_requisito.php'), { method: 'POST', body: form });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo eliminar el requisito.');
+        await loadRequirements();
+    } catch (error) {
+        Swal.fire('Atención', error.message || 'No se pudo eliminar el requisito.', 'warning');
+    }
 }
 
-async function deleteRequirementPdf(id) {
+async function deleteRequirementPdf(id, kind = 'primary') {
     const ok = await confirmAction('¿Eliminar PDF?');
     if (!ok) return;
     const form = new FormData();
     form.append('csrf_token', csrf);
     form.append('id', id);
+    form.append('kind', kind);
     const response = await fetch(personalServiceUrl('eliminar_pdf_requisito.php'), { method: 'POST', body: form });
     const data = await response.json();
     if (data.ok) {
         resetRequirementFileInput();
-        renderCurrentPdf(null);
+        await fillRequirementModal(id);
         loadRequirements();
     }
 }
@@ -2637,8 +2765,96 @@ async function uploadQuickPhoto(event) {
     const data = await response.json();
     if (data.ok) {
         document.getElementById('workerPhoto').src = data.path;
+        setWorkerImageDownload('downloadWorkerPhoto', currentWorkerId, 'foto', true);
     } else {
         Swal.fire('Atención', data.message || 'No se pudo cambiar la foto.', 'warning');
+    }
+}
+
+async function openReplicateAllRequirements() {
+    if (!replicateAllRequirementsModal || !currentWorkerId || !currentPositionId) return;
+    const sources = requirementRows.filter(row => row.can_modify === true);
+    const targets = currentWorkerPositions.filter(position => Number(position.id) !== Number(currentPositionId));
+    if (!sources.length || !targets.length) return;
+    const workerId = currentWorkerId;
+    const positionId = currentPositionId;
+    const sourceList = document.getElementById('replicateAllSourceList');
+    const targetList = document.getElementById('replicateAllTargetList');
+    sourceList.innerHTML = '<div class="text-muted p-2">Consultando requisitos pendientes...</div>';
+    targetList.innerHTML = '';
+    document.getElementById('confirmReplicateAllRequirementsBtn').disabled = true;
+    replicateAllRequirementsModal.show();
+    try {
+        const response = await fetch(`${BASE_URL}/servicios/obtener_replicas_requisitos_puesto.php?worker_id=${encodeURIComponent(workerId)}&source_position_id=${encodeURIComponent(positionId)}`);
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudieron consultar los registros ya replicados.');
+        if (Number(currentWorkerId) !== Number(workerId) || Number(currentPositionId) !== Number(positionId)) return;
+        replicateAllExistingPairs = new Set(data.existing.map(pair => `${Number(pair.source_id)}:${Number(pair.target_position_id)}`));
+        const pendingSources = sources.filter(row => targets.some(position => !replicateAllExistingPairs.has(`${Number(row.id)}:${Number(position.id)}`)));
+        const pendingTargets = targets.filter(position => pendingSources.some(row => !replicateAllExistingPairs.has(`${Number(row.id)}:${Number(position.id)}`)));
+        sourceList.innerHTML = pendingSources.length
+            ? pendingSources.map(row => `<label class="replicate-position-option"><input class="form-check-input replicate-all-source" type="checkbox" value="${Number(row.id)}" checked><span>${escapeHtml(row.requirement)}</span></label>`).join('')
+            : '<div class="alert alert-success mb-0">Todos los requisitos ya están registrados en los demás puestos.</div>';
+        targetList.innerHTML = pendingTargets.map(position => `<label class="replicate-position-option"><input class="form-check-input replicate-all-target" type="checkbox" value="${Number(position.id)}" checked><span><strong>${escapeHtml(position.name)}</strong><small class="replicate-target-detail"></small></span></label>`).join('');
+        updateReplicateAllSelection();
+    } catch (error) {
+        sourceList.innerHTML = `<div class="alert alert-danger mb-0">${escapeHtml(error.message)}</div>`;
+    }
+}
+
+function updateReplicateAllSelection() {
+    const sources = [...document.querySelectorAll('.replicate-all-source')];
+    const targets = [...document.querySelectorAll('.replicate-all-target')];
+    const checkedSources = sources.filter(input => input.checked);
+    let copies = 0;
+    targets.forEach(input => {
+        const pending = checkedSources.filter(source => !replicateAllExistingPairs.has(`${source.value}:${input.value}`));
+        const hasPending = !checkedSources.length || pending.length > 0;
+        input.closest('.replicate-position-option').classList.toggle('d-none', !hasPending);
+        if (!hasPending) input.checked = false;
+        const detail = input.closest('.replicate-position-option').querySelector('.replicate-target-detail');
+        if (detail) {
+            const names = pending.map(source => source.closest('label').querySelector('span').textContent.trim());
+            detail.textContent = pending.length ? `${pending.length} pendiente${pending.length === 1 ? '' : 's'}: ${names.join(' · ')}` : 'Seleccione requisitos para ver los pendientes';
+            detail.title = names.join(', ');
+        }
+        if (input.checked) copies += pending.length;
+    });
+    const visibleTargets = targets.filter(input => !input.closest('.replicate-position-option').classList.contains('d-none'));
+    document.getElementById('replicateAllSourceSelect').checked = sources.length > 0 && sources.every(input => input.checked);
+    document.getElementById('replicateAllTargetSelect').checked = visibleTargets.length > 0 && visibleTargets.every(input => input.checked);
+    const confirm = document.getElementById('confirmReplicateAllRequirementsBtn');
+    confirm.disabled = !copies;
+    confirm.innerHTML = `<i class="fa-solid fa-copy me-2"></i>Replicar ${copies} registro${copies === 1 ? '' : 's'}`;
+}
+
+async function confirmReplicateAllRequirements() {
+    const sources = [...document.querySelectorAll('.replicate-all-source:checked')].map(input => input.value);
+    const targets = [...document.querySelectorAll('.replicate-all-target:checked')].map(input => input.value);
+    if (!sources.length || !targets.length) return;
+    if (sources.length > 100 || targets.length > 30 || sources.length * targets.length > 1000) {
+        Swal.fire('Selección demasiado grande', 'Seleccione hasta 100 requisitos, 30 puestos y 1000 combinaciones por operación.', 'warning');
+        return;
+    }
+    const button = document.getElementById('confirmReplicateAllRequirementsBtn');
+    const body = new FormData();
+    body.append('csrf_token', csrf);
+    body.append('worker_id', currentWorkerId);
+    body.append('source_position_id', currentPositionId);
+    sources.forEach(id => body.append('requirement_ids[]', id));
+    targets.forEach(id => body.append('target_position_ids[]', id));
+    button.disabled = true;
+    try {
+        const response = await fetch(`${BASE_URL}/servicios/replicar_requisitos_puesto.php`, { method: 'POST', body });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudieron replicar los requisitos.');
+        replicateAllRequirementsModal.hide();
+        await Swal.fire({ icon: 'success', title: 'Réplica terminada', text: `${data.created} registro(s) creados; ${data.skipped} ya existían.`, confirmButtonText: 'Aceptar' });
+        await loadRequirements();
+    } catch (error) {
+        Swal.fire('Atención', error.message, 'warning');
+    } finally {
+        updateReplicateAllSelection();
     }
 }
 

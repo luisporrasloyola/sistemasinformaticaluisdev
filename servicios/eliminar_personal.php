@@ -31,10 +31,10 @@ try {
         $files[] = $worker['signature_path'];
     }
 
-    $stmt = db()->prepare("SELECT file_path FROM worker_requirements WHERE worker_id = :id AND file_path IS NOT NULL AND file_path <> ''");
+    $stmt = db()->prepare('SELECT file_path, word_file_path, image_file_path FROM worker_requirements WHERE worker_id = :id');
     $stmt->execute(['id' => $id]);
     foreach ($stmt->fetchAll() as $row) {
-        $files[] = $row['file_path'];
+        foreach (['file_path', 'word_file_path', 'image_file_path'] as $column) if (!empty($row[$column])) $files[] = $row[$column];
     }
 
     db()->prepare('DELETE FROM workers WHERE id = :id')->execute(['id' => $id]);

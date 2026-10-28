@@ -34,10 +34,23 @@ require __DIR__ . '/../../includes/header.php';
                     Clic para cambiar foto
                     <input class="d-none" id="quickPhotoInput" type="file" accept="image/png,image/jpeg,image/webp">
                 </label>
+                <div class="d-flex justify-content-center gap-2 mt-2 flex-wrap" aria-label="Descargas del trabajador">
+                    <a class="btn btn-sm worker-download-btn disabled" id="downloadWorkerPhoto" href="#" aria-disabled="true" tabindex="-1" title="No hay foto disponible"><i class="fa-solid fa-download me-1" aria-hidden="true"></i>Foto</a>
+                    <a class="btn btn-sm worker-download-btn disabled" id="downloadWorkerSignature" href="#" aria-disabled="true" tabindex="-1" title="No hay firma disponible"><i class="fa-solid fa-download me-1" aria-hidden="true"></i>Firma</a>
+                </div>
+            </div>
+            <div class="mt-3">
+                <label class="form-label" for="positionSelect">Puesto de trabajo</label>
+                <select class="form-select" id="positionSelect"></select>
             </div>
             <dl class="info-list mt-3">
                 <dt>Documento</dt><dd id="workerDocument"></dd>
                 <dt>Trabajador</dt><dd id="workerName"></dd>
+                <dt>Tipo de sangre</dt><dd id="workerBloodType"></dd>
+                <dt>Celular</dt><dd id="workerPhone"></dd>
+                <dt>Dirección</dt><dd id="workerAddress"></dd>
+                <dt>Correo</dt><dd id="workerEmail"></dd>
+                <dt>Fecha de nacimiento</dt><dd id="workerBirthDate"></dd>
                 <dt>Empresa</dt><dd id="workerCompany"></dd>
                 <dt>Puesto de trabajo</dt><dd id="workerPositions"></dd>
             </dl>
@@ -45,19 +58,23 @@ require __DIR__ . '/../../includes/header.php';
                 <input class="form-check-input" type="checkbox" id="workerActive" disabled>
                 <label class="form-check-label" for="workerActive">Activo</label>
             </div>
-            <label class="form-label">Select de Puesto de Trabajo</label>
-            <select class="form-select" id="positionSelect"></select>
         </div>
     </div>
     <div class="col-lg-9 col-xl-9 requirements-table-col">
         <div class="work-panel h-100">
-            <div class="d-flex justify-content-between align-items-center gap-2 mb-3 flex-wrap">
+            <div class="d-flex justify-content-between align-items-start gap-2 mb-3 flex-wrap">
                 <h2 class="mb-0">Requisitos</h2>
-                <div class="d-flex gap-2 flex-wrap">
-                    <button class="btn btn-outline-primary" type="button" id="downloadSelectedRequirementsBtn"><i class="fa-solid fa-file-zipper me-2"></i>Descargar seleccionados</button>
-                    <button class="btn btn-outline-primary" type="button" id="downloadRequirementsBtn"><i class="fa-solid fa-download me-2"></i>Descargar todo</button>
-                    <button class="btn btn-outline-primary <?= $personalView ? 'd-none' : '' ?>" type="button" id="createRequirementFolderBtn"><i class="fa-solid fa-folder-plus me-2"></i>Crear carpeta</button>
-                    <button class="btn btn-primary <?= $personalView ? 'd-none' : '' ?>" type="button" id="addRequirementBtn"><i class="fa-solid fa-plus me-2"></i>Agregar Requisito</button>
+                <div class="d-flex flex-column align-items-end gap-2">
+                    <div class="d-flex gap-2 flex-wrap justify-content-end">
+                        <button class="btn btn-outline-primary" type="button" id="downloadSelectedRequirementsBtn"><i class="fa-solid fa-file-zipper me-2"></i>Descargar seleccionados</button>
+                        <button class="btn btn-outline-primary" type="button" id="downloadRequirementsBtn"><i class="fa-solid fa-download me-2"></i>Descargar todo</button>
+                        <button class="btn btn-outline-primary <?= $personalView ? 'd-none' : '' ?>" type="button" id="createRequirementFolderBtn"><i class="fa-solid fa-folder-plus me-2"></i>Crear carpeta</button>
+                        <button class="btn btn-primary <?= $personalView ? 'd-none' : '' ?>" type="button" id="addRequirementBtn"><i class="fa-solid fa-plus me-2"></i>Agregar Requisito</button>
+                    </div>
+                    <div class="d-flex gap-2 flex-wrap justify-content-end">
+                        <?php if (is_admin()): ?><button class="btn btn-outline-info" type="button" id="replicateAllRequirementsBtn" disabled><i class="fa-solid fa-copy me-2"></i>Replicar todo</button><?php endif; ?>
+                        <?php if (!$personalView): ?><button class="btn btn-outline-danger" type="button" id="deleteAllRequirementsBtn" disabled><i class="fa-solid fa-trash me-2"></i>Borrar todo</button><?php endif; ?>
+                    </div>
                 </div>
             </div>
             <div class="table-responsive">
@@ -139,9 +156,22 @@ require __DIR__ . '/../../includes/header.php';
                         </div>
                     </div>
                     <div class="col-md-12">
-                        <label class="form-label">Adjunto (PDF o imagen)</label>
-                        <input class="form-control" type="file" name="pdf" id="pdfInput" accept="application/pdf,image/jpeg,image/png,image/webp">
-                        <small class="text-muted d-block mt-1">Formatos permitidos: PDF, JPG, PNG y WEBP.</small>
+                        <label class="form-label" for="requirementDocumentType">Tipo de documento</label>
+                        <select class="form-select" name="document_type" id="requirementDocumentType">
+                            <option value="legacy">Adjunto (PDF o imagen)</option>
+                            <option value="pdf">PDF</option>
+                            <option value="pdf_word">PDF y Word</option>
+                        </select>
+                    </div>
+                    <div class="col-md-12" id="requirementPdfBlock">
+                        <label class="form-label visually-hidden" for="pdfInput" id="requirementPrimaryFileLabel">Adjunto (PDF o imagen)</label>
+                        <input class="form-control" type="file" name="pdf" id="pdfInput" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp">
+                    </div>
+                    <div class="col-md-12 d-none" id="requirementWordBlock">
+                        <label class="form-label" for="wordInput">Archivo Word</label>
+                        <input class="form-control" type="file" name="word" id="wordInput" accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
+                    </div>
+                    <div class="col-md-12">
                         <div class="file-current mt-2 d-none" id="currentPdf"></div>
                         <div class="upload-progress mt-2 d-none" id="requirementUploadProgress">
                             <div class="progress progress-thin">
@@ -196,7 +226,31 @@ require __DIR__ . '/../../includes/header.php';
         </div>
     </div>
 </div>
+<?php if (is_admin()): ?>
+<div class="modal fade" id="replicateAllRequirementsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered replicate-bulk-dialog"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title"><i class="fa-solid fa-copy me-2 text-info"></i>Replicar requisitos</h5><button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+        <div class="modal-body"><div class="row g-3">
+            <div class="col-md-6"><div class="d-flex align-items-center gap-2 mb-2"><strong>1. Requisitos que desea copiar</strong><label class="small mb-0"><input class="form-check-input me-1" type="checkbox" id="replicateAllSourceSelect">Todos</label></div><div class="replicate-position-list replicate-bulk-list" id="replicateAllSourceList"></div></div>
+            <div class="col-md-6"><div class="d-flex align-items-center gap-2 mb-2"><strong>2. Puestos que los recibirán</strong><label class="small mb-0"><input class="form-check-input me-1" type="checkbox" id="replicateAllTargetSelect">Todos</label></div><div class="replicate-position-list replicate-bulk-list" id="replicateAllTargetList"></div></div>
+        </div></div>
+        <div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-success text-white" type="button" id="confirmReplicateAllRequirementsBtn" disabled><i class="fa-solid fa-copy me-2"></i>Replicar requisitos</button></div>
+    </div></div>
+</div>
+<?php endif; ?>
 <style>
+#requirementsWorkspace .worker-card .worker-download-btn{border:1px solid transparent!important;color:#fff!important;font-weight:700;box-shadow:0 2px 5px rgba(15,23,42,.13);transition:filter .15s ease,transform .15s ease,box-shadow .15s ease}
+#requirementsWorkspace .worker-card #downloadWorkerPhoto{background:#2563eb!important;border-color:#1d4ed8!important}
+#requirementsWorkspace .worker-card #downloadWorkerSignature{background:#0d9488!important;border-color:#0f766e!important}
+#requirementsWorkspace .worker-card .worker-download-btn:not(.disabled):hover{filter:brightness(.9);transform:translateY(-1px);box-shadow:0 4px 9px rgba(15,23,42,.18)}
+#requirementsWorkspace .worker-card .worker-download-btn:focus-visible{outline:3px solid #93c5fd;outline-offset:2px}
+#requirementsWorkspace .worker-card .worker-download-btn.disabled{opacity:.5!important;box-shadow:none;cursor:not-allowed}
+#requirementsWorkspace .requirements-profile-col,#requirementsWorkspace .requirements-profile-col .work-panel{min-width:0}
+#requirementsWorkspace .requirements-profile-col .info-list{max-width:100%;grid-template-columns:minmax(0,96px) minmax(0,1fr)}
+#requirementsWorkspace .requirements-profile-col .info-list dt,#requirementsWorkspace .requirements-profile-col .info-list dd{min-width:0;overflow-wrap:anywhere;word-break:break-word}
+#requirementsWorkspace .requirement-word-file-btn{color:#2563eb!important;border-color:#93c5fd!important}
+#requirementsWorkspace .requirement-word-file-btn i{color:inherit!important}
+#requirementsWorkspace .requirement-word-file-btn:hover,#requirementsWorkspace .requirement-word-file-btn:focus-visible{background:#2563eb!important;border-color:#2563eb!important;color:#fff!important}
 .requirement-folder-header .requirement-folder-heading{text-align:left!important;width:auto!important;background:#e8f1ff!important;padding:.6rem .85rem!important;border-left:4px solid #3b6fec;border-top:1px solid #cbdcff;border-right:1px solid #cbdcff;border-bottom:1px solid #cbdcff}
 .requirement-folder-header:not(.is-open) .requirement-folder-heading{border-radius:.6rem}
 .requirement-folder-header.is-open .requirement-folder-heading{border-radius:.6rem .6rem 0 0;border-bottom-color:#dce8fb}
@@ -220,9 +274,15 @@ require __DIR__ . '/../../includes/header.php';
 .requirement-ungrouped-item:first-of-type>td{border-top-color:#e2e8f0}
 .requirement-file-preview-body{min-height:260px;background:#f4f7fb;text-align:center}.requirement-file-preview-body iframe{display:block;width:100%;height:min(72vh,850px);border:0;background:#fff}.requirement-file-preview-body img{display:block;max-width:100%;max-height:72vh;margin:auto;object-fit:contain}
 .replicate-record-summary{padding:.75rem .9rem;border:1px solid #cfe0ff;border-radius:.65rem;background:#f3f7ff}.replicate-record-summary strong{display:block;color:#173b7a}.replicate-position-list{display:grid;gap:.5rem}.replicate-position-option{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.7rem .8rem;border:1px solid #d9e2ef;border-radius:.6rem;background:#fff}.replicate-position-option:has(input:checked){border-color:#4d83f3;background:#eef4ff}.replicate-position-option.is-disabled{background:#f5f6f8;color:#7b8492}.replicate-position-option label{display:flex;align-items:center;gap:.6rem;margin:0;cursor:pointer;flex:1}
+.replicate-bulk-dialog{max-width:880px}.replicate-bulk-dialog .modal-header{padding:.5rem .8rem}.replicate-bulk-dialog .modal-header .modal-title{font-size:1.05rem}.replicate-bulk-dialog .modal-body{padding:.55rem .8rem}.replicate-bulk-dialog .modal-body .row{--bs-gutter-y:.35rem}.replicate-bulk-dialog .modal-body .d-flex.mb-2{margin-bottom:.35rem!important}.replicate-bulk-dialog .modal-footer{padding:.18rem .65rem;gap:.35rem;min-height:0}.replicate-bulk-dialog .modal-footer .btn{min-height:28px;padding:.2rem .55rem;font-size:.76rem;line-height:1.2;gap:.2rem}.replicate-bulk-dialog .modal-footer .btn i{margin-right:.2rem!important}.replicate-bulk-dialog .modal-body strong{font-size:.84rem}
+.replicate-bulk-dialog .modal-body .row>.col-md-6+.col-md-6{border-left:1px solid #cbd5e1;padding-left:1rem}.replicate-bulk-dialog #confirmReplicateAllRequirementsBtn{background:#198754;border-color:#198754}.replicate-bulk-dialog #confirmReplicateAllRequirementsBtn:hover{background:#157347;border-color:#146c43}
+@media(max-width:767.98px){.replicate-bulk-dialog .modal-body .row>.col-md-6+.col-md-6{border-left:0;border-top:1px solid #cbd5e1;padding-left:calc(var(--bs-gutter-x)*.5);padding-top:.6rem}}
+.replicate-bulk-list{height:clamp(330px,65dvh,640px);max-height:calc(100dvh - 145px);overflow-y:auto;align-content:start;gap:.25rem}.replicate-bulk-list .replicate-position-option{justify-content:flex-start;align-items:flex-start;cursor:pointer;gap:.45rem;padding:.3rem .5rem;font-size:.82rem;line-height:1.25;border-radius:.45rem}.replicate-bulk-list .replicate-position-option .form-check-input{flex:none;margin-top:.05rem}.replicate-bulk-list .replicate-position-option>span{min-width:0;overflow-wrap:anywhere}.replicate-bulk-list .replicate-target-detail{display:block;color:#52627a;font-size:.72rem;margin-top:.08rem;line-height:1.25;font-weight:400;white-space:normal;overflow-wrap:anywhere}
+@media(max-height:450px){.replicate-bulk-list{max-height:calc(100dvh - 160px)}}
 </style>
 <script>
 window.pmiPersonalReadOnly = <?= $personalView ? 'true' : 'false' ?>;
+window.pmiCanReplicateRequirement = <?= is_admin() ? 'true' : 'false' ?>;
 window.pmiPersonalWorkerId = <?= $pmiWorkerId ?>;
 window.canManageRequirementObservations = <?= (is_admin() || is_gestor_role()) ? 'true' : 'false' ?>;
 </script>

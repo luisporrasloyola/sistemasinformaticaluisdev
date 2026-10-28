@@ -28,6 +28,7 @@ $rows = filter_allowed_documents('requisitos.pmi_individual', $stmt->fetchAll(),
 
 foreach ($rows as &$row) {
     $row['status'] = requirement_status($row['end_date'], $row['start_date'], (int) $row['requirement_id']);
+    $row['can_modify'] = !is_personal_role() && current_user_can_document('requisitos.pmi_individual', (int) $row['requirement_id'], 'upload');
 }
 
 $foldersStmt = db()->prepare('SELECT id, name FROM pmi_requirement_folders WHERE worker_id = ? AND position_id = ? ORDER BY name');

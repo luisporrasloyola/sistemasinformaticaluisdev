@@ -20,15 +20,14 @@ if ((int) $assigned->fetchColumn() === 0) {
     json_response(['ok' => false, 'message' => 'El puesto seleccionado no pertenece al trabajador.'], 403);
 }
 
-$sql = "SELECT wr.id, wr.requirement_id, wr.file_path, wr.original_file_name, rc.name AS requirement, w.full_name, w.document_number, p.name AS position_name
+$sql = "SELECT wr.id, wr.requirement_id, wr.file_path, wr.original_file_name, wr.word_file_path, wr.word_original_file_name, wr.image_file_path, wr.image_original_file_name, rc.name AS requirement, w.full_name, w.document_number, p.name AS position_name
     FROM worker_requirements wr
     JOIN requirements_catalog rc ON rc.id = wr.requirement_id
     JOIN workers w ON w.id = wr.worker_id
     JOIN positions p ON p.id = wr.position_id
     WHERE wr.worker_id = :worker_id
       AND wr.position_id = :position_id
-      AND wr.file_path IS NOT NULL
-      AND wr.file_path <> ''";
+      AND (wr.file_path IS NOT NULL OR wr.word_file_path IS NOT NULL OR wr.image_file_path IS NOT NULL)";
 $params = ['worker_id' => $workerId, 'position_id' => $positionId];
 
 if ($selectedIds) {
@@ -50,25 +49,25 @@ $files = [];
 $archivosRoot = realpath(UPLOAD_PATH);
 
 foreach ($rows as $row) {
-    $fullPath = realpath(dirname(__DIR__) . DIRECTORY_SEPARATOR . $row['file_path']);
-    if (!$fullPath || !$archivosRoot || !str_starts_with($fullPath, $archivosRoot) || !is_file($fullPath)) {
-        continue;
-    }
-
     $baseName = sanitize_download_name($row['full_name'] . ' - ' . $row['requirement']);
-    $original = (string) ($row['original_file_name'] ?: basename($fullPath));
-    $extension = strtolower(pathinfo($original, PATHINFO_EXTENSION)) ?: 'pdf';
-    $files[] = [
-        'path' => $fullPath,
-        'name' => $baseName . '.' . $extension,
-        'worker' => $row['full_name'],
-        'document' => $row['document_number'],
-        'position' => $row['position_name'],
-    ];
+    foreach ([['file_path', 'original_file_name', 'Adjunto'], ['word_file_path', 'word_original_file_name', 'Word'], ['image_file_path', 'image_original_file_name', 'Imagen']] as [$pathColumn, $nameColumn, $label]) {
+        if (empty($row[$pathColumn])) continue;
+        $fullPath = realpath(dirname(__DIR__) . DIRECTORY_SEPARATOR . $row[$pathColumn]);
+        if (!$fullPath || !$archivosRoot || !str_starts_with($fullPath, $archivosRoot . DIRECTORY_SEPARATOR) || !is_file($fullPath)) continue;
+        $original = (string) ($row[$nameColumn] ?: basename($fullPath));
+        $extension = strtolower(pathinfo($original, PATHINFO_EXTENSION)) ?: strtolower(pathinfo($fullPath, PATHINFO_EXTENSION));
+        $files[] = [
+            'path' => $fullPath,
+            'name' => $baseName . '_' . $row['id'] . '_' . $label . '.' . $extension,
+            'worker' => $row['full_name'],
+            'document' => $row['document_number'],
+            'position' => $row['position_name'],
+        ];
+    }
 }
 
 if (!$files) {
-    json_response(['ok' => false, 'message' => $selectedIds ? 'No hay documentos PDF subidos para los registros seleccionados.' : 'No hay documentos PDF subidos para el puesto seleccionado.'], 404);
+    json_response(['ok' => false, 'message' => $selectedIds ? 'No hay archivos subidos para los registros seleccionados.' : 'No hay archivos subidos para el puesto seleccionado.'], 404);
 }
 
 $zipName = sanitize_download_name($files[0]['document'] . '_' . $files[0]['position']) . '_documentos.zip';

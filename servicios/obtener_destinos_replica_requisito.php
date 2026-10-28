@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../includes/security.php';
 require_once __DIR__ . '/../config/database.php';
-require_module_access('requisitos.pmi_individual');
+require_role('Administrador');
 
 $id = (int) ($_GET['id'] ?? 0);
 $stmt = db()->prepare('SELECT wr.id, wr.worker_id, wr.position_id, wr.requirement_id, rc.name AS requirement, p.name AS source_position FROM worker_requirements wr JOIN requirements_catalog rc ON rc.id=wr.requirement_id JOIN positions p ON p.id=wr.position_id WHERE wr.id=?');

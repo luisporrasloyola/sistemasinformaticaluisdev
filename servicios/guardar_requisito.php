@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/security.php';
 require_once __DIR__ . '/../includes/upload.php';
+require_once __DIR__ . '/../includes/pmi_requirement_files.php';
 require_once __DIR__ . '/../config/database.php';
 require_login();
 if (is_personal_role()) json_response(['ok' => false, 'message' => 'El rol Personal solo puede visualizar sus requisitos.'], 403);
@@ -14,6 +15,10 @@ $requirementId = (int) ($_POST['requirement_id'] ?? 0);
 $registrationDate = (string) ($_POST['registration_date'] ?? '');
 $startDate = (string) ($_POST['start_date'] ?? '');
 $endDate = (string) ($_POST['end_date'] ?? '');
+$documentType = (string) ($_POST['document_type'] ?? 'legacy');
+if (!in_array($documentType, ['legacy', 'pdf', 'pdf_word'], true)) json_response(['ok' => false, 'message' => 'Tipo de documento inválido.'], 422);
+if (($_FILES['image']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) json_response(['ok' => false, 'message' => 'La opción de imagen adicional ya no está disponible.'], 422);
+if ($documentType !== 'pdf_word' && (($_FILES['word']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE)) json_response(['ok' => false, 'message' => 'El archivo Word no corresponde al tipo de documento seleccionado.'], 422);
 $duplicateIdsRaw = (array) ($_POST['duplicate_requirement_ids'] ?? []);
 $duplicateIds = array_values(array_unique(array_filter(array_map('intval', $duplicateIdsRaw), static fn(int $value): bool => $value > 0)));
 if (count($duplicateIds) !== count($duplicateIdsRaw) || count($duplicateIds) > 100 || ($id <= 0 && $duplicateIds)) {
@@ -96,8 +101,11 @@ try {
                 }
             }
         }
-        $pdf = upload_file($_FILES['pdf'] ?? [], 'requisitos', document_attachment_mimes());
-        if ($pdf['path']) $newFiles[] = $pdf['path'];
+        $pdf = pmi_requirement_upload('pdf', $documentType === 'legacy' ? 'legacy' : 'pdf', $newFiles);
+        $word = $documentType === 'pdf_word' ? pmi_requirement_upload('word', 'word', $newFiles) : ['path' => null, 'name' => null];
+        $image = ['path' => null, 'name' => null];
+        if ($documentType !== 'legacy' && !$pdf['path'] && (empty($current['file_path']) || !preg_match('/\.pdf$/i', (string) $current['file_path']))) throw new RuntimeException('Adjunte el archivo PDF para esta opción.');
+        if ($documentType === 'pdf_word' && !$word['path'] && empty($current['word_file_path'])) throw new RuntimeException('Adjunte el archivo Word.');
 
         $sql = 'UPDATE worker_requirements SET requirement_id=:requirement_id, registration_date=:registration_date,
             start_date=:start_date, end_date=:end_date';
@@ -108,6 +116,17 @@ try {
             'end_date' => $endDate,
             'id' => $id,
         ];
+        $sql .= ', document_type=:document_type';
+        $params['document_type'] = $documentType;
+        foreach (['word' => $word, 'image' => $image] as $kind => $file) {
+            [$pathColumn, $nameColumn] = pmi_requirement_file_columns()[$kind];
+            if ($file['path']) {
+                if (!empty($current[$pathColumn])) $oldFiles[] = (string) $current[$pathColumn];
+                $sql .= ", $pathColumn=:$pathColumn, $nameColumn=:$nameColumn";
+                $params[$pathColumn] = $file['path'];
+                $params[$nameColumn] = $file['name'];
+            }
+        }
         if ($canEditObservations && $hasNewObservation) {
             $sql .= ', observations=:observations';
             $params['observations'] = $postedObservation;
@@ -139,6 +158,9 @@ try {
         if ($pdf['path']) {
             $changes[] = 'subió un nuevo archivo adjunto: ' . (string) $pdf['name'];
         }
+        if ($word['path']) $changes[] = 'subió un nuevo archivo Word: ' . (string) $word['name'];
+        if ($image['path']) $changes[] = 'subió una nueva imagen: ' . (string) $image['name'];
+        if ((string) ($current['document_type'] ?? 'legacy') !== $documentType) $changes[] = 'cambió el tipo de documento';
 
         $currentObservationStatus = (string) ($current['observation_status'] ?? 'none');
         if ($canEditObservations && $observationChanged) {
@@ -189,7 +211,7 @@ try {
             $log->execute([
                 'worker_requirement_id' => $id,
                 'user_id' => $currentUserId,
-                'action_type' => $pdf['path'] ? 'documento_actualizado' : 'registro_editado',
+                'action_type' => ($pdf['path'] || $word['path'] || $image['path']) ? 'documento_actualizado' : 'registro_editado',
                 'description' => ucfirst(implode('; ', $changes)) . '.',
             ]);
         }
@@ -212,19 +234,26 @@ try {
             } elseif ($changes && in_array((string) ($duplicate['observation_status'] ?? ''), ['observed', 'corrected'], true)) {
                 $targetSql .= ", observation_status='observed'";
             }
-            if ($pdf['path']) {
-                $sourceFile = realpath(dirname(__DIR__) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $pdf['path']));
-                if (!$sourceFile || !is_file($sourceFile)) throw new RuntimeException('No se pudo preparar el adjunto para los otros puestos.');
-                $extension = pathinfo($sourceFile, PATHINFO_EXTENSION);
-                $targetFileName = bin2hex(random_bytes(16)) . ($extension !== '' ? '.' . $extension : '');
-                $targetAbsolute = dirname($sourceFile) . DIRECTORY_SEPARATOR . $targetFileName;
-                if (!copy($sourceFile, $targetAbsolute)) throw new RuntimeException('No se pudo copiar el adjunto para uno de los puestos.');
-                $targetPath = 'archivos/requisitos/' . $targetFileName;
-                $newFiles[] = $targetPath;
+            $targetSql .= ', document_type=:document_type';
+            $targetParams['document_type'] = $documentType;
+            $primarySourcePath = $pdf['path'] ?: (!empty($current['file_path']) && empty($duplicate['file_path']) ? $current['file_path'] : null);
+            if ($primarySourcePath) {
+                $targetPath = pmi_requirement_copy_file($primarySourcePath, $newFiles);
                 if (!empty($duplicate['file_path'])) $oldFiles[] = (string) $duplicate['file_path'];
                 $targetSql .= ', file_path=:file_path, original_file_name=:original_file_name';
                 $targetParams['file_path'] = $targetPath;
-                $targetParams['original_file_name'] = $pdf['name'];
+                $targetParams['original_file_name'] = $pdf['name'] ?: $current['original_file_name'];
+            }
+            foreach (['word' => $word, 'image' => $image] as $kind => $file) {
+                if ($kind === 'word' && $documentType !== 'pdf_word') continue;
+                if ($kind === 'image') continue;
+                [$pathColumn, $nameColumn] = pmi_requirement_file_columns()[$kind];
+                $sourcePath = $file['path'] ?: (!empty($current[$pathColumn]) && empty($duplicate[$pathColumn]) ? $current[$pathColumn] : null);
+                if (!$sourcePath) continue;
+                if (!empty($duplicate[$pathColumn])) $oldFiles[] = (string) $duplicate[$pathColumn];
+                $targetSql .= ", $pathColumn=:$pathColumn, $nameColumn=:$nameColumn";
+                $targetParams[$pathColumn] = pmi_requirement_copy_file($sourcePath, $newFiles);
+                $targetParams[$nameColumn] = $file['name'] ?: $current[$nameColumn];
             }
             $targetSql .= ' WHERE id=:id';
             $pdo->prepare($targetSql)->execute($targetParams);
@@ -234,7 +263,7 @@ try {
                 VALUES (:id, :user, :action, :description)');
             $targetLog->execute([
                 'id' => $targetId, 'user' => $currentUserId,
-                'action' => $pdf['path'] ? 'documento_actualizado' : 'registro_editado',
+                'action' => ($pdf['path'] || $word['path'] || $image['path']) ? 'documento_actualizado' : 'registro_editado',
                 'description' => 'Cambios aplicados desde el registro del puesto de origen.',
             ]);
             if ($hasNewObservation) {
@@ -261,15 +290,18 @@ try {
             }
         }
     } else {
-        $pdf = upload_file($_FILES['pdf'] ?? [], 'requisitos', document_attachment_mimes());
-        if ($pdf['path']) $newFiles[] = $pdf['path'];
+        $pdf = pmi_requirement_upload('pdf', $documentType === 'legacy' ? 'legacy' : 'pdf', $newFiles);
+        $word = $documentType === 'pdf_word' ? pmi_requirement_upload('word', 'word', $newFiles) : ['path' => null, 'name' => null];
+        $image = ['path' => null, 'name' => null];
+        if ($documentType !== 'legacy' && !$pdf['path']) throw new RuntimeException('Adjunte el archivo PDF.');
+        if ($documentType === 'pdf_word' && !$word['path']) throw new RuntimeException('Adjunte el archivo Word.');
         $pdo->beginTransaction();
         $initialObservation = $cleanObservation((string) ($_POST['observations'] ?? ''));
         $hasInitialObservation = $initialObservation !== '';
         $stmt = $pdo->prepare('INSERT INTO worker_requirements
-            (worker_id, position_id, requirement_id, registration_date, start_date, end_date, observations, file_path, original_file_name, registered_by_user_id,
+            (worker_id, position_id, requirement_id, registration_date, start_date, end_date, observations, file_path, original_file_name, document_type, word_file_path, word_original_file_name, image_file_path, image_original_file_name, registered_by_user_id,
                 observation_status, observation_by_user_id, observation_at)
-            VALUES (:worker_id, :position_id, :requirement_id, :registration_date, :start_date, :end_date, :observations, :file_path, :original_file_name, :registered_by_user_id,
+            VALUES (:worker_id, :position_id, :requirement_id, :registration_date, :start_date, :end_date, :observations, :file_path, :original_file_name, :document_type, :word_file_path, :word_original_file_name, :image_file_path, :image_original_file_name, :registered_by_user_id,
                 :observation_status, :observation_by_user_id, :observation_at)');
         $stmt->execute([
             'worker_id' => $workerId,
@@ -281,6 +313,11 @@ try {
             'observations' => $initialObservation,
             'file_path' => $pdf['path'],
             'original_file_name' => $pdf['name'],
+            'document_type' => $documentType,
+            'word_file_path' => $word['path'],
+            'word_original_file_name' => $word['name'],
+            'image_file_path' => $image['path'],
+            'image_original_file_name' => $image['name'],
             'registered_by_user_id' => $currentUserId,
             'observation_status' => $hasInitialObservation ? 'observed' : 'none',
             'observation_by_user_id' => $hasInitialObservation ? $currentUserId : null,
@@ -305,15 +342,7 @@ try {
         }
     }
     $pdo->commit();
-    foreach (array_unique($oldFiles) as $oldFile) {
-        try {
-            $reference = $pdo->prepare('SELECT COUNT(*) FROM worker_requirements WHERE file_path = :path');
-            $reference->execute(['path' => $oldFile]);
-            if ((int) $reference->fetchColumn() === 0) delete_uploaded_file($oldFile);
-        } catch (Throwable $cleanupError) {
-            error_log('No se pudo limpiar un adjunto reemplazado: ' . $cleanupError->getMessage());
-        }
-    }
+    pmi_requirement_delete_unreferenced($pdo, $oldFiles);
     json_response(['ok' => true, 'updated_duplicates' => count($duplicates ?? [])]);
 } catch (PDOException $e) {
     if (isset($pdo) && $pdo->inTransaction()) $pdo->rollBack();
