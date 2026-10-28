@@ -84,11 +84,12 @@ require __DIR__ . '/../../includes/header.php';
 .client-pmi-heading{background:#f3f6fb;color:#284672;font-size:.82rem;font-weight:750;letter-spacing:.045em;padding:11px 14px;border-left:3px solid #9bb7e8;border-radius:7px;margin:20px 0 12px}
 .client-pmi-profile{min-width:0;overflow:hidden}
 .client-pmi-profile-photo{display:block;width:auto;height:auto;max-width:100%;max-height:150px;margin-inline:auto;object-fit:contain;border-radius:10px;border:1px solid #d1dbea;background:#eef2f8}
+.client-pmi-photo-actions{display:flex;flex-direction:column;align-items:center;gap:.4rem;margin:.5rem 0 .9rem}.client-pmi-photo-actions .btn{font-size:.78rem;font-weight:700}.client-pmi-photo-actions .btn-primary{background:#2563eb;border-color:#2563eb}.client-pmi-photo-actions .btn-primary:hover{background:#1d4ed8;border-color:#1d4ed8}
 .client-pmi-details{margin:0;display:grid;gap:11px}
 .client-pmi-details>div{min-width:0;display:grid;grid-template-columns:minmax(82px,41%) minmax(0,1fr);align-items:start;gap:8px}
 .client-pmi-details dt{min-width:0;color:#536783;font-size:.77rem;font-weight:650;line-height:1.38}
 .client-pmi-details dd{min-width:0;margin:0;color:#142742;font-size:.8rem;font-weight:700;line-height:1.38;overflow-wrap:anywhere}
-.client-pmi-project-field{margin-top:15px}
+.client-pmi-project-field{margin-top:15px;margin-bottom:16px}
 .client-pmi-project-field .form-label{margin-bottom:5px;color:#536783;font-size:.77rem;font-weight:700}
 .client-pmi-project-field .form-select{min-height:34px;font-size:.8rem;color:#142742}
 .client-pmi-contacts-section{margin-top:17px;padding-top:14px;border-top:1px solid #dfe8f3}
@@ -440,9 +441,14 @@ require __DIR__ . '/../../includes/header.php';
 <div class="row g-3">
     <div class="col-lg-3">
         <div class="work-panel h-100 client-pmi-profile">
-            <div class="text-center mb-3"><img class="client-pmi-profile-photo" src="<?= $client['photo_path'] ? APP_URL . '/' . e($client['photo_path']) : APP_URL . '/recursos/imagen_referencial.php' ?>" alt="Foto del cliente"></div>
-            <dl class="client-pmi-details"><div><dt>Razón social</dt><dd><?= e($client['business_name']) ?></dd></div><div><dt>RUC</dt><dd><?= e($client['ruc']) ?></dd></div></dl>
+            <div class="text-center"><img class="client-pmi-profile-photo" id="clientPmiPhoto" src="<?= $client['photo_path'] ? e(APP_URL . '/' . $client['photo_path']) : APP_URL . '/recursos/imagen_referencial.php' ?>" alt="Foto del cliente"></div>
+            <div class="client-pmi-photo-actions">
+                <button class="btn btn-sm btn-outline-secondary" type="button" id="changeClientPmiPhotoBtn">Clic para cambiar foto</button>
+                <a class="btn btn-sm btn-primary <?= $client['photo_path'] ? '' : 'disabled' ?>" id="downloadClientPmiPhoto" href="<?= $client['photo_path'] ? e(APP_URL . '/' . $client['photo_path']) : '#' ?>" download="<?= e($client['business_name'] . ' - Foto.' . ($client['photo_path'] ? pathinfo($client['photo_path'], PATHINFO_EXTENSION) : 'jpg')) ?>" <?= $client['photo_path'] ? '' : 'aria-disabled="true"' ?>><i class="fa-solid fa-download me-1" aria-hidden="true"></i>Foto</a>
+                <input class="d-none" type="file" id="clientPmiPhotoInput" accept="image/jpeg,image/png,image/webp" aria-label="Seleccionar foto del cliente">
+            </div>
             <div class="client-pmi-project-field"><label class="form-label" for="clientProjectSelect">Proyecto</label><select class="form-select" id="clientProjectSelect"><option value="0" <?= $projectId === 0 ? 'selected' : '' ?>>Sin proyecto (registros anteriores)</option><?php foreach ($clientProjects as $project): ?><option value="<?= (int) $project['id'] ?>" <?= $projectId === (int) $project['id'] ? 'selected' : '' ?>><?= e($project['name']) ?></option><?php endforeach; ?></select></div>
+            <dl class="client-pmi-details"><div><dt>Razón social</dt><dd><?= e($client['business_name']) ?></dd></div><div><dt>RUC</dt><dd><?= e($client['ruc']) ?></dd></div></dl>
             <div class="client-pmi-contacts-section">
                 <dl class="client-pmi-details"><div class="client-pmi-contacts-label"><dt>Contactos</dt></div></dl>
                 <div class="client-pmi-contact-list">
@@ -574,6 +580,35 @@ require __DIR__ . '/../../includes/header.php';
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     const pmiProject = <?= (int) $projectId ?>;
+    const photoInput = document.getElementById('clientPmiPhotoInput');
+    const changePhotoButton = document.getElementById('changeClientPmiPhotoBtn');
+    const downloadPhotoButton = document.getElementById('downloadClientPmiPhoto');
+    changePhotoButton?.addEventListener('click', () => photoInput.click());
+    photoInput?.addEventListener('change', async () => {
+        const file = photoInput.files?.[0];
+        if (!file) return;
+        const body = new FormData();
+        body.set('csrf_token', <?= json_encode(csrf_token()) ?>);
+        body.set('client_id', <?= json_encode((string) $clientId) ?>);
+        body.set('photo', file);
+        changePhotoButton.disabled = true;
+        try {
+            const response = await fetch(<?= json_encode(APP_URL . '/modulos/clientes/pmi_foto.php') ?>, { method: 'POST', body });
+            const result = await response.json();
+            if (!response.ok || !result.ok) throw new Error(result.message || 'No se pudo cambiar la foto.');
+            const url = <?= json_encode(APP_URL . '/') ?> + result.path;
+            document.getElementById('clientPmiPhoto').src = url + '?v=' + Date.now();
+            downloadPhotoButton.href = url;
+            downloadPhotoButton.download = <?= json_encode($client ? $client['business_name'] . ' - Foto.' : '') ?> + result.path.split('.').pop();
+            downloadPhotoButton.classList.remove('disabled');
+            downloadPhotoButton.removeAttribute('aria-disabled');
+        } catch (error) {
+            Swal.fire('Atención', error.message, 'warning');
+        } finally {
+            changePhotoButton.disabled = false;
+            photoInput.value = '';
+        }
+    });
     document.getElementById('clientProjectSelect')?.addEventListener('change', event => {
         const url = new URL(window.location.href);
         url.searchParams.set('proyecto_id', event.target.value);
