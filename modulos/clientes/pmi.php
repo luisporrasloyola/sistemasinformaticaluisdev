@@ -41,7 +41,7 @@ if ($clientId) {
     $availablePositionIds = array_map('intval', array_column($general['personal'], 'source_id'));
     $requestedPositionId = (int) ($_GET['puesto_id'] ?? 0);
     $activePositionId = in_array($requestedPositionId, $availablePositionIds, true) ? $requestedPositionId : ($availablePositionIds[0] ?? 0);
-    $stmt = db()->prepare('SELECT pr.position_id, pr.requirement_id, rc.name FROM client_pmi_general_position_requirements pr JOIN requirements_catalog rc ON rc.id = pr.requirement_id WHERE pr.client_id = :id AND pr.project_id = :project_id ORDER BY rc.name, rc.id');
+    $stmt = db()->prepare('SELECT pr.position_id, pr.requirement_id, rc.name FROM client_pmi_general_position_requirements pr JOIN requirements_catalog rc ON rc.id = pr.requirement_id WHERE pr.client_id = :id AND pr.project_id = :project_id ORDER BY pr.position_id, CASE WHEN pr.sort_order = 0 THEN 2147483647 ELSE pr.sort_order END, rc.name, rc.id');
     $stmt->execute(['id' => $clientId, 'project_id' => $projectId]);
     foreach ($stmt as $row) $positionRequirements[(int) $row['position_id']][] = $row;
     $stmt = db()->prepare("SELECT gi.category, gi.source_id, dc.nombre AS equipment_document_name
@@ -135,6 +135,7 @@ require __DIR__ . '/../../includes/header.php';
 .client-pmi-position-add:hover{background:rgba(100,82,157,.09)}
 .client-pmi-position-add:focus-visible{outline:2px solid #2563eb;outline-offset:-2px}
 .client-pmi-position-requirements{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+.client-pmi-position-requirements .client-pmi-draggable-requirement{cursor:grab;user-select:none}.client-pmi-position-requirements .client-pmi-draggable-requirement:active{cursor:grabbing}.client-pmi-draggable-requirement.is-dragging{opacity:.4}.client-pmi-draggable-requirement.is-drop-target{outline:2px solid #8353ee;outline-offset:2px}
 .client-pmi-position-group.is-active{background:#7853ad;border-color:#7853ad;color:#fff}
 .client-pmi-position-group.is-active .client-pmi-position-add{border-left-color:rgba(255,255,255,.7)}
 .client-pmi-position-group.is-active .client-pmi-position-add:hover,.client-pmi-position-group.is-active .client-pmi-position-tab:hover{background:rgba(255,255,255,.14)}
@@ -495,7 +496,7 @@ require __DIR__ . '/../../includes/header.php';
                                 <?php endforeach; ?>
                                 </div>
                                 <?php foreach ($general['personal'] as $item): ?><div class="client-pmi-position-panel" data-position-panel="<?= (int) $item['source_id'] ?>" <?= $activePositionId === (int) $item['source_id'] ? '' : 'hidden' ?>>
-                                    <?php if (!empty($positionRequirements[(int) $item['source_id']])): ?><div class="client-pmi-position-requirements"><?php foreach ($positionRequirements[(int) $item['source_id']] as $requirement): ?><span class="badge rounded-pill bg-light text-dark border"><?= e($requirement['name']) ?></span><?php endforeach; ?></div><?php else: ?><p class="small text-muted mb-0">Aún no hay requisitos seleccionados para este puesto.</p><?php endif; ?>
+                                    <?php if (!empty($positionRequirements[(int) $item['source_id']])): ?><div class="client-pmi-position-requirements" data-sort-position-id="<?= (int) $item['source_id'] ?>"><?php foreach ($positionRequirements[(int) $item['source_id']] as $requirement): ?><span class="badge rounded-pill bg-light text-dark border client-pmi-draggable-requirement" draggable="true" data-requirement-id="<?= (int) $requirement['requirement_id'] ?>" title="Arrastrar para ordenar"><?= e($requirement['name']) ?></span><?php endforeach; ?></div><?php else: ?><p class="small text-muted mb-0">Aún no hay requisitos seleccionados para este puesto.</p><?php endif; ?>
                                 </div><?php endforeach; ?>
                             <?php else: ?><ul><?php foreach ($general['equipos'] as $item): ?><li><?= e($item['equipment_document_name']) ?></li><?php endforeach; ?></ul><?php endif; ?>
                         <?php else: ?><p class="text-muted small mb-0 py-3">Aún no hay <?= $category === 'personal' ? 'puestos de trabajo' : 'documentos de equipos' ?> seleccionados. Usa el botón + para agregarlos.</p><?php endif; ?>
@@ -580,6 +581,54 @@ require __DIR__ . '/../../includes/header.php';
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     const pmiProject = <?= (int) $projectId ?>;
+    document.querySelectorAll('[data-sort-position-id]').forEach(list => {
+        let dragging = null;
+        let originalOrder = [];
+        list.addEventListener('dragstart', event => {
+            const chip = event.target.closest('.client-pmi-draggable-requirement');
+            if (!chip) return;
+            dragging = chip;
+            originalOrder = Array.from(list.children);
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', chip.dataset.requirementId);
+            requestAnimationFrame(() => chip.classList.add('is-dragging'));
+        });
+        list.addEventListener('dragover', event => {
+            if (!dragging) return;
+            event.preventDefault();
+            const target = event.target.closest('.client-pmi-draggable-requirement');
+            list.querySelectorAll('.is-drop-target').forEach(chip => chip.classList.remove('is-drop-target'));
+            if (target && target !== dragging) target.classList.add('is-drop-target');
+        });
+        list.addEventListener('drop', async event => {
+            if (!dragging) return;
+            event.preventDefault();
+            const target = event.target.closest('.client-pmi-draggable-requirement');
+            if (!target || target === dragging) return;
+            const before = event.clientX < target.getBoundingClientRect().left + target.offsetWidth / 2;
+            list.insertBefore(dragging, before ? target : target.nextSibling);
+            const ids = Array.from(list.children, chip => chip.dataset.requirementId);
+            const body = new FormData();
+            body.set('csrf_token', <?= json_encode(csrf_token()) ?>);
+            body.set('client_id', <?= json_encode((string) $clientId) ?>);
+            body.set('project_id', String(pmiProject));
+            body.set('position_id', list.dataset.sortPositionId);
+            ids.forEach(id => body.append('requirement_ids[]', id));
+            try {
+                const response = await fetch(<?= json_encode(APP_URL . '/modulos/clientes/pmi_orden_requisitos.php') ?>, { method: 'POST', body });
+                const result = await response.json();
+                if (!response.ok || !result.ok) throw new Error(result.message || 'No se pudo guardar el orden.');
+            } catch (error) {
+                originalOrder.forEach(chip => list.append(chip));
+                Swal.fire('Atención', error.message, 'warning');
+            }
+        });
+        list.addEventListener('dragend', () => {
+            dragging?.classList.remove('is-dragging');
+            list.querySelectorAll('.is-drop-target').forEach(chip => chip.classList.remove('is-drop-target'));
+            dragging = null;
+        });
+    });
     const photoInput = document.getElementById('clientPmiPhotoInput');
     const changePhotoButton = document.getElementById('changeClientPmiPhotoBtn');
     const downloadPhotoButton = document.getElementById('downloadClientPmiPhoto');

@@ -63,9 +63,14 @@ try {
             $exists->execute([$id]);
             if (!$exists->fetchColumn()) { throw new DomainException('Hay requisitos que ya no están disponibles.'); }
         }
+        $currentOrder = db()->prepare('SELECT pr.requirement_id FROM client_pmi_general_position_requirements pr JOIN requirements_catalog rc ON rc.id = pr.requirement_id WHERE pr.client_id = ? AND pr.project_id = ? AND pr.position_id = ? ORDER BY CASE WHEN pr.sort_order = 0 THEN 2147483647 ELSE pr.sort_order END, rc.name, pr.requirement_id FOR UPDATE');
+        $currentOrder->execute([$clientId, $projectId, $positionId]);
+        $previousIds = array_map('intval', $currentOrder->fetchAll(PDO::FETCH_COLUMN));
+        $orderedIds = array_values(array_intersect($previousIds, $ids));
+        foreach ($ids as $id) if (!in_array($id, $orderedIds, true)) $orderedIds[] = $id;
         db()->prepare('DELETE FROM client_pmi_general_position_requirements WHERE client_id = ? AND project_id = ? AND position_id = ?')->execute([$clientId, $projectId, $positionId]);
-        $insert = db()->prepare('INSERT INTO client_pmi_general_position_requirements (client_id, project_id, position_id, requirement_id) VALUES (?, ?, ?, ?)');
-        foreach ($ids as $id) $insert->execute([$clientId, $projectId, $positionId, $id]);
+        $insert = db()->prepare('INSERT INTO client_pmi_general_position_requirements (client_id, project_id, position_id, requirement_id, sort_order) VALUES (?, ?, ?, ?, ?)');
+        foreach ($orderedIds as $order => $id) $insert->execute([$clientId, $projectId, $positionId, $id, $order + 1]);
         db()->commit();
     } elseif ($action === 'save_base') {
         $id = max(0, (int) ($_POST['document_id'] ?? 0));
