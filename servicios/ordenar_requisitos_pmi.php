@@ -49,11 +49,32 @@ try {
     if ($index === false) throw new RuntimeException('El elemento ya no está disponible. Actualice la página.');
     $other = $index + ($direction === 'up' ? -1 : 1);
     if ($other < 0 || $other >= count($ids)) throw new RuntimeException('El elemento ya está en el extremo de la lista.');
+    $firstAnchor = $ids[min($index, $other)];
+    $secondAnchor = $ids[max($index, $other)];
+    $separatorScope = $kind === 'folder' ? 'folders' : ($folderId !== null ? 'folder' : 'ungrouped');
+    $separatorScopeId = $separatorScope === 'folder' ? (int) $folderId : 0;
+    $separatorQuery = $pdo->prepare('SELECT id, after_item_id FROM pmi_requirement_separators WHERE worker_id = ? AND position_id = ? AND scope_type = ? AND scope_id = ? AND after_item_id IN (?, ?) FOR UPDATE');
+    $separatorQuery->execute([$workerId, $positionId, $separatorScope, $separatorScopeId, $firstAnchor, $secondAnchor]);
+    $separatorsToMove = $separatorQuery->fetchAll(PDO::FETCH_ASSOC);
+    if ($separatorsToMove) {
+        // Apartar primero los anclajes evita conflictos con la clave única durante el intercambio.
+        $parkSeparator = $pdo->prepare('UPDATE pmi_requirement_separators SET after_item_id = ? WHERE id = ?');
+        foreach ($separatorsToMove as $offset => $separator) {
+            $parkSeparator->execute([4294967295 - $offset, (int) $separator['id']]);
+        }
+    }
     [$ids[$index], $ids[$other]] = [$ids[$other], $ids[$index]];
     foreach ($ids as $order => $id) {
         if ($kind === 'folder') $update->execute([$order + 1, $id]);
         elseif ($folderId !== null) $update->execute([$order + 1, $id, (int) $folderId]);
         else $update->execute([$order + 1, $id, $workerId, $positionId]);
+    }
+    if ($separatorsToMove) {
+        $moveSeparator = $pdo->prepare('UPDATE pmi_requirement_separators SET after_item_id = ? WHERE id = ?');
+        foreach ($separatorsToMove as $separator) {
+            $newAnchor = (int) $separator['after_item_id'] === $firstAnchor ? $secondAnchor : $firstAnchor;
+            $moveSeparator->execute([$newAnchor, (int) $separator['id']]);
+        }
     }
     $pdo->commit();
     json_response(['ok' => true]);

@@ -1909,6 +1909,9 @@ function initRequirementsModule() {
         startRequirementSeparatorPlacement(0);
     });
     document.getElementById('saveRequirementSeparatorsBtn')?.addEventListener('click', saveSelectedRequirementSeparators);
+    document.getElementById('deleteSelectedRequirementSeparatorBtn')?.addEventListener('click', () => {
+        if (separatorPlacementId > 0) deleteRequirementSeparator(separatorPlacementId);
+    });
     document.querySelector('#requirementsTable tbody')?.addEventListener('click', (event) => {
         const place = event.target.closest('.requirement-separator-place');
         if (place) {
@@ -1922,8 +1925,6 @@ function initRequirementsModule() {
         }
         const moveSeparator = event.target.closest('.requirement-separator-move');
         if (moveSeparator) { startRequirementSeparatorPlacement(Number(moveSeparator.dataset.separatorId)); return; }
-        const deleteSeparator = event.target.closest('.requirement-separator-delete');
-        if (deleteSeparator) { deleteRequirementSeparator(Number(deleteSeparator.dataset.separatorId)); return; }
         const toggle = event.target.closest('.requirement-folder-toggle');
         if (!toggle) return;
         const id = String(toggle.dataset.folderId);
@@ -2035,6 +2036,7 @@ async function loadRequirements() {
 function renderRequirements() {
     const separatorButton = document.getElementById('addRequirementSeparatorBtn');
     if (separatorButton) separatorButton.innerHTML = separatorPlacementId !== null ? '<i class="fa-solid fa-xmark me-1"></i>Cancelar' : '<i class="fa-solid fa-minus me-1"></i>Separador';
+    document.getElementById('deleteSelectedRequirementSeparatorBtn')?.classList.toggle('d-none', !(separatorPlacementId > 0));
     const saveSeparatorsButton = document.getElementById('saveRequirementSeparatorsBtn');
     if (saveSeparatorsButton) {
         saveSeparatorsButton.classList.toggle('d-none', separatorPlacementId !== 0);
@@ -2056,9 +2058,9 @@ function renderRequirements() {
     const visibleFolders = requirementFolders.filter(folder => requirementRows.some(row => String(row.folder_id) === String(folder.id))).sort((a, b) => orderCompare(a, b, 'sort_order'));
     const renderSeparatorSlot = (scopeType, scopeId, afterItemId, showPlacement = true) => {
         const existing = requirementSeparators.find(item => item.scope_type === scopeType && Number(item.scope_id) === Number(scopeId) && Number(item.after_item_id) === Number(afterItemId));
-        if (existing && (separatorPlacementId === null || Number(existing.id) !== Number(separatorPlacementId))) {
+        if (existing) {
             tbody.lastElementChild?.classList.add('requirement-before-separator');
-            tbody.insertAdjacentHTML('beforeend', `<tr class="requirement-separator"><td colspan="8"><div class="requirement-separator-line">${window.pmiPersonalReadOnly === true ? '<span class="requirement-separator-rule"></span>' : `<button class="requirement-separator-rule requirement-separator-move" type="button" data-separator-id="${Number(existing.id)}" title="Mover separador" aria-label="Mover separador"></button><button class="btn btn-outline-danger requirement-separator-delete" type="button" data-separator-id="${Number(existing.id)}" title="Eliminar separador" aria-label="Eliminar separador"><i class="fa-solid fa-trash"></i></button>`}</div></td></tr>`);
+            tbody.insertAdjacentHTML('beforeend', `<tr class="requirement-separator${Number(existing.id) === Number(separatorPlacementId) ? ' is-selected' : ''}"><td colspan="8"><div class="requirement-separator-line">${window.pmiPersonalReadOnly === true ? '<span class="requirement-separator-rule"></span>' : `<button class="requirement-separator-rule requirement-separator-move" type="button" data-separator-id="${Number(existing.id)}" title="Seleccionar separador" aria-label="Seleccionar separador" aria-pressed="${Number(existing.id) === Number(separatorPlacementId)}"></button>`}</div></td></tr>`);
         }
         if (separatorPlacementId !== null && showPlacement && !existing) {
             const key = `${scopeType}:${Number(scopeId)}:${Number(afterItemId)}`;
@@ -2194,6 +2196,7 @@ async function deleteRequirementSeparator(separatorId) {
         const response = await fetch(`${BASE_URL}/servicios/gestionar_separadores_requisito.php`, { method: 'POST', body });
         const data = await response.json();
         if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo eliminar el separador.');
+        separatorPlacementId = null;
         await loadRequirements();
     } catch (error) {
         Swal.fire('Atención', error.message, 'warning');
