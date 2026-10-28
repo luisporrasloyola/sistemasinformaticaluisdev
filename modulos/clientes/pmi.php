@@ -629,7 +629,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const body = new FormData();
             body.set('csrf_token', <?= json_encode(csrf_token()) ?>);
             body.set('client_id', <?= json_encode((string) $clientId) ?>);
-            body.set('project_id', String(pmiProject));
+            body.set('proyecto_id', String(pmiProject));
             body.set('position_id', list.dataset.sortPositionId);
             ids.forEach(id => body.append('requirement_ids[]', id));
             try {

@@ -19,7 +19,7 @@ try {
     $position = $pdo->prepare('SELECT 1 FROM client_pmi_general_positions WHERE client_id = ? AND project_id = ? AND position_id = ? FOR UPDATE');
     $position->execute([$clientId, $projectId, $positionId]);
     if (!$position->fetchColumn()) throw new RuntimeException('El puesto ya no está disponible.');
-    $current = $pdo->prepare('SELECT requirement_id FROM client_pmi_general_position_requirements WHERE client_id = ? AND project_id = ? AND position_id = ? FOR UPDATE');
+    $current = $pdo->prepare('SELECT pr.requirement_id FROM client_pmi_general_position_requirements pr JOIN requirements_catalog rc ON rc.id = pr.requirement_id WHERE pr.client_id = ? AND pr.project_id = ? AND pr.position_id = ? FOR UPDATE');
     $current->execute([$clientId, $projectId, $positionId]);
     $savedIds = array_map('intval', $current->fetchAll(PDO::FETCH_COLUMN));
     sort($savedIds);
