@@ -584,9 +584,10 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('[data-sort-position-id]').forEach(list => {
         let dragging = null;
         let originalOrder = [];
+        let savingOrder = false;
         list.addEventListener('dragstart', event => {
             const chip = event.target.closest('.client-pmi-draggable-requirement');
-            if (!chip) return;
+            if (!chip || savingOrder) { event.preventDefault(); return; }
             dragging = chip;
             originalOrder = Array.from(list.children);
             event.dataTransfer.effectAllowed = 'move';
@@ -605,8 +606,16 @@ document.addEventListener('DOMContentLoaded', () => {
             event.preventDefault();
             const target = event.target.closest('.client-pmi-draggable-requirement');
             if (!target || target === dragging) return;
-            const before = event.clientX < target.getBoundingClientRect().left + target.offsetWidth / 2;
-            list.insertBefore(dragging, before ? target : target.nextSibling);
+            const previousOrder = [...originalOrder];
+            const from = previousOrder.indexOf(dragging);
+            const to = previousOrder.indexOf(target);
+            if (from < 0 || to < 0) return;
+            const swappedOrder = [...previousOrder];
+            [swappedOrder[from], swappedOrder[to]] = [swappedOrder[to], swappedOrder[from]];
+            dragging.classList.remove('is-dragging');
+            list.querySelectorAll('.is-drop-target').forEach(chip => chip.classList.remove('is-drop-target'));
+            list.replaceChildren(...swappedOrder);
+            savingOrder = true;
             const ids = Array.from(list.children, chip => chip.dataset.requirementId);
             const body = new FormData();
             body.set('csrf_token', <?= json_encode(csrf_token()) ?>);
@@ -619,8 +628,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const result = await response.json();
                 if (!response.ok || !result.ok) throw new Error(result.message || 'No se pudo guardar el orden.');
             } catch (error) {
-                originalOrder.forEach(chip => list.append(chip));
+                list.replaceChildren(...previousOrder);
                 Swal.fire('Atención', error.message, 'warning');
+            } finally {
+                savingOrder = false;
             }
         });
         list.addEventListener('dragend', () => {
