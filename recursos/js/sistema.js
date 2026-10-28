@@ -2111,7 +2111,6 @@ function renderRequirements() {
             </tr>
         `);
     };
-    if (visibleFolders.length) renderSeparatorSlot('folders', 0, 0, false);
     visibleFolders.forEach((folder, folderIndex) => {
         const rows = requirementRows.filter(row => String(row.folder_id) === String(folder.id)).sort((a, b) => orderCompare(a, b, 'folder_item_order'));
         if (!rows.length) return;
@@ -2125,7 +2124,7 @@ function renderRequirements() {
     });
     const ungrouped = requirementRows.filter(row => !row.folder_id).sort((a, b) => orderCompare(a, b, 'sort_order'));
     if (ungrouped.length) {
-        renderSeparatorSlot('ungrouped', 0, 0, !visibleFolders.length);
+        if (visibleFolders.length) renderSeparatorSlot('ungrouped', 0, 0, false);
         ungrouped.forEach((row, index) => { renderRow(row, false, false, index, ungrouped.length); renderSeparatorSlot('ungrouped', 0, row.id, index < ungrouped.length - 1); });
     }
     if (!requirementRows.length && !requirementFolders.length) tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No hay requisitos registrados para este puesto.</td></tr>';
