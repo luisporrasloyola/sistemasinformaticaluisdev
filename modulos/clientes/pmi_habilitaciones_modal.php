@@ -5,7 +5,7 @@
         <div class="col-12" id="habilitationSubjectPanel"><label class="form-label" for="habilitationSubject">Nombre</label><select class="form-select" name="subject_id" id="habilitationSubject" required><option value="">Seleccione personal</option></select><small class="text-muted" id="habilitationSource">Personal de Requisitos - Personal</small></div>
         </div><div class="col-12" id="habilitationMembersPanel" hidden><div class="habilitation-positions-box"><div class="habilitation-positions-heading"><div><div class="habilitation-positions-title"><i class="fa-solid fa-people-group" aria-hidden="true"></i><strong>Integrantes</strong><span class="habilitation-positions-count" id="habilitationMembersCount">0 seleccionados</span></div><p>Seleccione una persona y marque los puestos que necesita.</p></div><label class="habilitation-positions-select-all"><input class="form-check-input" type="checkbox" id="habilitationMembersAll"><span>Seleccionar todos</span></label></div><div class="habilitation-member-tools"><input class="form-control form-control-sm" type="search" id="habilitationMembersSearch" placeholder="Buscar por nombre" aria-label="Buscar integrantes"><label class="habilitation-member-filter"><input class="form-check-input" type="checkbox" id="habilitationOnlyEligible" checked> Solo con puestos</label></div><div id="habilitationMembersList" class="habilitation-positions-list" aria-live="polite"></div><small class="habilitation-positions-error d-none" id="habilitationMembersError">Seleccione al menos un integrante con puestos para este cliente.</small></div></div><div class="col-12" id="habilitationPositionsPanel" hidden><div class="habilitation-positions-box"><div class="habilitation-positions-heading"><div><div class="habilitation-positions-title"><i class="fa-solid fa-briefcase" aria-hidden="true"></i><strong>Puestos</strong><span class="habilitation-positions-count" id="habilitationPositionsCount">0 seleccionados</span></div><p>Elige los puestos que aparecerán en esta habilitación.</p></div><label class="habilitation-positions-select-all" for="habilitationPositionsAll"><input class="form-check-input" type="checkbox" id="habilitationPositionsAll"><span>Seleccionar todo</span></label></div><div id="habilitationPositionsList" class="habilitation-positions-list" aria-live="polite">Seleccione primero un trabajador.</div><small class="habilitation-positions-error d-none" id="habilitationPositionsError"><i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i> Seleccione al menos un puesto.</small></div></div>
         </div><div class="habilitation-main-right"><div class="col-12" id="habilitationConditionsPanel"><div class="d-flex flex-column gap-2" aria-label="Condiciones de la habilitación"><div class="d-flex align-items-center gap-3"><span class="fw-semibold small" style="min-width:125px">Tiene pase</span><label class="d-inline-flex align-items-center gap-1 mb-0">Sí <input class="form-check-input mt-0" type="radio" name="has_pass" value="1" required></label><label class="d-inline-flex align-items-center gap-1 mb-0">No <input class="form-check-input mt-0" type="radio" name="has_pass" value="0" required></label></div><div class="d-flex align-items-center gap-3"><span class="fw-semibold small" style="min-width:125px">Tienen vigencia</span><label class="d-inline-flex align-items-center gap-1 mb-0">Sí <input class="form-check-input mt-0" type="radio" name="has_validity" value="1" required></label><label class="d-inline-flex align-items-center gap-1 mb-0">No <input class="form-check-input mt-0" type="radio" name="has_validity" value="0" required></label></div></div></div>
-        <div class="col-12 habilitation-dates-heading"><strong>Vigencia de habilitación</strong></div><div class="col-md-4"><label class="form-label" for="habilitationRegistration">F. Registro</label><input class="form-control" type="date" name="registration_date" id="habilitationRegistration" required></div><div class="col-md-4"><label class="form-label" for="habilitationStart">F. Inicio</label><input class="form-control" type="date" name="start_date" id="habilitationStart" required></div><div class="col-md-4"><label class="form-label" for="habilitationEnd">F. Fin</label><input class="form-control" type="date" name="end_date" id="habilitationEnd" required></div></div></div>
+        <div class="col-12 mt-3" id="habilitationGroupTitlePanel" hidden><label class="form-label fw-semibold" for="habilitationGroupTitle">Título</label><input class="form-control" type="text" name="group_title" id="habilitationGroupTitle" maxlength="150" placeholder="Escriba el título de la habilitación grupal"></div><div class="col-12 habilitation-dates-heading"><strong>Vigencia de habilitación</strong></div><div class="col-md-4"><label class="form-label" for="habilitationRegistration">F. Registro</label><input class="form-control" type="date" name="registration_date" id="habilitationRegistration" required></div><div class="col-md-4"><label class="form-label" for="habilitationStart">F. Inicio</label><input class="form-control" type="date" name="start_date" id="habilitationStart" required></div><div class="col-md-4"><label class="form-label" for="habilitationEnd">F. Fin</label><input class="form-control" type="date" name="end_date" id="habilitationEnd" required></div></div></div>
     </div><div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-primary" type="submit">Guardar habilitación</button></div>
 </form></div></div>
 <div class="modal fade" id="personalFormatModal" tabindex="-1" aria-labelledby="personalFormatModalTitle" aria-hidden="true"><div class="modal-dialog modal-lg modal-dialog-scrollable"><form class="modal-content" method="post" action="<?= APP_URL ?>/modulos/clientes/pmi_habilitaciones_formato_guardar.php" enctype="multipart/form-data" id="personalFormatForm">
@@ -19,6 +19,15 @@
 <div class="modal fade" id="habilitationPreview" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-xl modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h2 class="modal-title h5" id="habilitationPreviewTitle">Vista previa</h2><button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Cerrar"></button></div><div class="modal-body client-pmi-preview-body" id="habilitationPreviewBody"></div></div></div></div>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.habilitation-group-toggle').forEach(button => button.addEventListener('click', () => {
+        const members = document.getElementById(button.getAttribute('aria-controls'));
+        const expanded = members.hidden;
+        members.hidden = !expanded;
+        button.setAttribute('aria-expanded', String(expanded));
+        button.title = expanded ? 'Ocultar integrantes' : 'Mostrar integrantes';
+        button.querySelector('i').classList.toggle('fa-chevron-up', expanded);
+        button.querySelector('i').classList.toggle('fa-chevron-down', !expanded);
+    }));
     document.querySelectorAll('.habilitation-toggle').forEach(button => button.addEventListener('click', () => {
         const records = document.getElementById(button.getAttribute('aria-controls'));
         if (!records) return;
@@ -122,6 +131,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     form.querySelectorAll('input[name="has_validity"]').forEach(input => input.addEventListener('change', updateValidityFields));
     const type = document.getElementById('habilitationType');
+    const groupTitlePanel = document.getElementById('habilitationGroupTitlePanel');
+    const groupTitleInput = document.getElementById('habilitationGroupTitle');
     const subjectPanel = document.getElementById('habilitationSubjectPanel');
     const membersPanel = document.getElementById('habilitationMembersPanel');
     const membersList = document.getElementById('habilitationMembersList');
@@ -131,6 +142,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const onlyEligible = document.getElementById('habilitationOnlyEligible');
     const membersError = document.getElementById('habilitationMembersError');
     let membersLoaded = false;
+    let membersRequest = 0;
     function filterMembers() {
         const query = membersSearch.value.trim().toLocaleLowerCase();
         membersList.querySelectorAll('.habilitation-member-card').forEach(card => {
@@ -138,12 +150,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     async function loadMembers(selectedId = null, selectedPositions = []) {
+        const request = ++membersRequest;
         if (!membersLoaded) {
             membersList.textContent = 'Cargando personal…';
             try {
                 const response = await fetch(<?= json_encode(APP_URL . '/modulos/clientes/pmi_habilitaciones_integrantes.php') ?> + '?client_id=<?= (int) $clientId ?>&proyecto_id=<?= (int) $projectId ?>&edit_id=' + encodeURIComponent(document.getElementById('habilitationId').value || 0), {credentials: 'same-origin'});
                 if (!response.ok) throw new Error('No se pudo cargar el personal.');
                 const data = await response.json();
+                if (request !== membersRequest) return;
                 membersList.replaceChildren();
                 for (const worker of data.workers || []) {
                     const card = document.createElement('div');
@@ -177,12 +191,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     card.append(positions); membersList.append(card);
                 }
                 membersLoaded = true;
-            } catch (error) { membersList.textContent = error.message; return; }
+            } catch (error) { if (request === membersRequest) membersList.textContent = error.message; return; }
         }
+        const selections = selectedId && typeof selectedId === 'object' ? selectedId : selectedId === null ? {} : {[selectedId]: selectedPositions};
         membersList.querySelectorAll('.habilitation-member-card').forEach(card => {
             const check = card.querySelector('.member-check');
-            check.checked = selectedId !== null && String(check.value) === String(selectedId);
-            card.querySelectorAll('.member-position-check').forEach(position => position.checked = check.checked && selectedPositions.map(String).includes(position.value));
+            check.checked = Object.prototype.hasOwnProperty.call(selections, check.value);
+            const chosen = (selections[check.value] || []).map(String);
+            card.querySelectorAll('.member-position-check').forEach(position => position.checked = check.checked && chosen.includes(position.value));
         });
         membersAll.checked = false;
         membersSearch.value = '';
@@ -220,6 +236,9 @@ document.addEventListener('DOMContentLoaded', () => {
     onlyEligible.addEventListener('change', filterMembers);
     function updateHabilitationMode(selectedId = null, selectedPositions = []) {
         const group = area.value === 'personal' && type.value === 'grupal';
+        groupTitlePanel.hidden = !group;
+        groupTitleInput.disabled = !group;
+        groupTitleInput.required = group;
         modal.classList.toggle('is-group', group);
         subjectPanel.hidden = group;
         membersPanel.hidden = !group;
@@ -336,7 +355,8 @@ document.addEventListener('DOMContentLoaded', () => {
         form.reset(); membersLoaded = false;
         document.getElementById('habilitationId').value = row.id; area.value = row.area; populate(row);
         document.getElementById('habilitationType').value = row.habilitation_type || 'individual';
-        updateHabilitationMode(row.subject_id, row.position_ids || []);
+        groupTitleInput.value = row.group_title || '';
+        updateHabilitationMode(row.member_positions || row.subject_id, row.position_ids || []);
         loadPositions(row.position_ids || []);
         for (const field of ['has_pass', 'has_validity']) {
             const value = field === 'has_validity' && row[field] == null && row.registration_date && row.start_date && row.end_date ? '1' : row[field];
@@ -352,7 +372,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }));
     document.querySelectorAll('.delete-habilitation').forEach(form => form.addEventListener('submit', async event => {
         event.preventDefault();
-        const answer = await Swal.fire({title:'¿Eliminar habilitación?', text:'Los requisitos y sus archivos se conservarán en sus registros originales.', icon:'warning', showCancelButton:true, confirmButtonText:'Eliminar habilitación', cancelButtonText:'Cancelar'});
+        const group = form.querySelector('input[name="action"]')?.value === 'delete_group';
+        const answer = await Swal.fire({title:group ? '¿Eliminar habilitación grupal completa?' : '¿Eliminar habilitación?', text:group ? 'Se quitarán la habilitación y todos sus integrantes. Los requisitos originales se conservarán.' : 'Los requisitos y sus archivos se conservarán en sus registros originales.', icon:'warning', showCancelButton:true, confirmButtonText:group ? 'Eliminar todo el grupo' : 'Eliminar habilitación', cancelButtonText:'Cancelar'});
         if (answer.isConfirmed) HTMLFormElement.prototype.submit.call(form);
     }));
     document.querySelectorAll('.edit-personal-format').forEach(button => button.addEventListener('click', () => {

@@ -16,19 +16,44 @@ try {
     $projectId = pmi_project_id($clientId, $_POST);
     $target .= '&proyecto_id=' . $projectId;
     $id = max(0, (int) ($_POST['id'] ?? 0));
-    if (($_POST['action'] ?? '') === 'delete') {
+    if (($_POST['action'] ?? '') === 'delete_group') {
+        db()->beginTransaction();
+        $lead = db()->prepare("SELECT group_title FROM client_pmi_habilitations WHERE id = ? AND client_id = ? AND project_id = ? AND area = 'personal' AND habilitation_type = 'grupal' FOR UPDATE");
+        $lead->execute([$id, $clientId, $projectId]);
+        $title = $lead->fetchColumn();
+        if ($title === false || trim((string) $title) === '') { throw new DomainException('Habilitación grupal no encontrada.'); }
+        $scope = [$clientId, $projectId, $title];
+        $files = db()->prepare("SELECT pass_file_path FROM client_pmi_habilitations WHERE client_id = ? AND project_id = ? AND area = 'personal' AND habilitation_type = 'grupal' AND group_title = ? AND pass_file_path IS NOT NULL FOR UPDATE");
+        $files->execute($scope);
+        $passFiles = array_unique($files->fetchAll(PDO::FETCH_COLUMN));
+        $delete = db()->prepare("DELETE FROM client_pmi_habilitations WHERE client_id = ? AND project_id = ? AND area = 'personal' AND habilitation_type = 'grupal' AND group_title = ?");
+        $delete->execute($scope);
+        db()->commit();
+        $stillUsed = db()->prepare('SELECT 1 FROM client_pmi_habilitations WHERE pass_file_path = ? LIMIT 1');
+        foreach ($passFiles as $passFile) {
+            if (!$passFile) continue;
+            $stillUsed->execute([$passFile]);
+            if (!$stillUsed->fetchColumn()) delete_uploaded_file((string) $passFile);
+        }
+    } elseif (($_POST['action'] ?? '') === 'delete') {
         $fileStmt = db()->prepare('SELECT pass_file_path FROM client_pmi_habilitations WHERE id = ? AND client_id = ? AND project_id = ?');
         $fileStmt->execute([$id, $clientId, $projectId]);
         $passFile = $fileStmt->fetchColumn();
         $stmt = db()->prepare('DELETE FROM client_pmi_habilitations WHERE id = ? AND client_id = ? AND project_id = ?');
         $stmt->execute([$id, $clientId, $projectId]);
-        if ($stmt->rowCount() && $passFile) { delete_uploaded_file((string) $passFile); }
+        if ($stmt->rowCount() && $passFile) {
+            $stillUsed = db()->prepare('SELECT 1 FROM client_pmi_habilitations WHERE pass_file_path = ? LIMIT 1');
+            $stillUsed->execute([$passFile]);
+            if (!$stillUsed->fetchColumn()) delete_uploaded_file((string) $passFile);
+        }
     } elseif (($_POST['action'] ?? '') === 'save') {
         $area = (string) ($_POST['area'] ?? '');
         $subjectId = (int) ($_POST['subject_id'] ?? 0);
         $isGroup = $area === 'personal' && ($_POST['habilitation_type'] ?? '') === 'grupal';
         if (!in_array($area, ['personal', 'equipo'], true) || (!$isGroup && $subjectId < 1)) { throw new DomainException('Seleccione personal o equipo.'); }
         $habilitationType = $area === 'personal' ? (string) ($_POST['habilitation_type'] ?? '') : 'individual';
+        $groupTitle = $isGroup ? trim((string) ($_POST['group_title'] ?? '')) : null;
+        if ($isGroup && ($groupTitle === '' || mb_strlen($groupTitle) > 150)) { throw new DomainException('Ingrese un título de hasta 150 caracteres para la habilitación grupal.'); }
         $hasPass = $area === 'personal' ? (string) ($_POST['has_pass'] ?? '') : null;
         $hasValidity = $area === 'personal' ? (string) ($_POST['has_validity'] ?? '') : null;
         if ($area === 'personal' && (!in_array($habilitationType, ['individual', 'grupal'], true) || !in_array($hasPass, ['0', '1'], true) || !in_array($hasValidity, ['0', '1'], true))) { throw new DomainException('Seleccione el tipo de habilitación y las opciones de pase y vigencia.'); }
@@ -43,7 +68,7 @@ try {
             $submitted = $_POST['member_ids'] ?? [];
             if (!is_array($submitted) || count($submitted) > 500) { throw new DomainException('Seleccione integrantes válidos.'); }
             $memberIds = array_values(array_unique(array_filter(array_map('intval', $submitted), static fn(int $value): bool => $value > 0)));
-            if (!$memberIds || ($id && count($memberIds) !== 1)) { throw new DomainException('Seleccione al menos un integrante; al editar solo puede elegir uno.'); }
+            if (!$memberIds) { throw new DomainException('Seleccione al menos un integrante.'); }
             $submittedPositions = $_POST['member_positions'] ?? [];
             if (!is_array($submittedPositions) || count($submittedPositions) > 500) { throw new DomainException('Seleccione puestos válidos para los integrantes.'); }
             $placeholders = implode(',', array_fill(0, count($memberIds), '?'));
@@ -85,12 +110,12 @@ try {
             $existingStmt = db()->prepare("SELECT subject_id FROM client_pmi_habilitations WHERE client_id = ? AND project_id = ? AND area = 'personal' AND subject_id IN ($placeholders)");
             $existingStmt->execute(array_merge([$clientId, $projectId], $memberIds));
             $existingIds = array_fill_keys(array_map('intval', $existingStmt->fetchAll(PDO::FETCH_COLUMN)), true);
-            $insert = db()->prepare('INSERT INTO client_pmi_habilitations (client_id, project_id, area, subject_id, habilitation_type, has_pass, has_validity, registration_date, start_date, end_date, registered_by_user_id) VALUES (:client_id, :project_id, :area, :subject_id, :habilitation_type, :has_pass, :has_validity, :registration_date, :start_date, :end_date, :user_id)');
+            $insert = db()->prepare('INSERT INTO client_pmi_habilitations (client_id, project_id, area, subject_id, habilitation_type, group_title, has_pass, has_validity, registration_date, start_date, end_date, registered_by_user_id) VALUES (:client_id, :project_id, :area, :subject_id, :habilitation_type, :group_title, :has_pass, :has_validity, :registration_date, :start_date, :end_date, :user_id)');
             $insertPosition = db()->prepare('INSERT INTO client_pmi_habilitation_positions (habilitation_id, position_id) VALUES (?, ?)');
             $created = 0;
             foreach ($memberIds as $memberId) {
                 if (isset($existingIds[$memberId])) { continue; }
-                $insert->execute($dates + ['client_id' => $clientId, 'project_id' => $projectId, 'area' => 'personal', 'subject_id' => $memberId, 'habilitation_type' => 'grupal', 'has_pass' => (int) $hasPass, 'has_validity' => (int) $hasValidity, 'user_id' => (int) ($_SESSION['user']['id'] ?? 0) ?: null]);
+                $insert->execute($dates + ['client_id' => $clientId, 'project_id' => $projectId, 'area' => 'personal', 'subject_id' => $memberId, 'habilitation_type' => 'grupal', 'group_title' => $groupTitle, 'has_pass' => (int) $hasPass, 'has_validity' => (int) $hasValidity, 'user_id' => (int) ($_SESSION['user']['id'] ?? 0) ?: null]);
                 $habilitationId = (int) db()->lastInsertId();
                 foreach ($memberPositions[$memberId] as $positionId) { $insertPosition->execute([$habilitationId, $positionId]); }
                 ++$created;
@@ -99,15 +124,61 @@ try {
             db()->commit();
             redirect($target);
         }
+        if ($isGroup && $id) {
+            $lead = db()->prepare("SELECT group_title FROM client_pmi_habilitations WHERE id = ? AND client_id = ? AND project_id = ? AND area = 'personal' AND habilitation_type = 'grupal' FOR UPDATE");
+            $lead->execute([$id, $clientId, $projectId]);
+            $oldTitle = $lead->fetchColumn();
+            if ($oldTitle === false || trim((string) $oldTitle) === '') { throw new DomainException('Habilitación grupal no encontrada.'); }
+            $group = db()->prepare("SELECT id, subject_id, pass_file_path FROM client_pmi_habilitations WHERE client_id = ? AND project_id = ? AND area = 'personal' AND habilitation_type = 'grupal' AND group_title = ? FOR UPDATE");
+            $group->execute([$clientId, $projectId, $oldTitle]);
+            $oldMembers = [];
+            $sharedPass = null;
+            foreach ($group as $member) {
+                $oldMembers[(int) $member['subject_id']] = (int) $member['id'];
+                if ($member['pass_file_path']) $sharedPass = $member['pass_file_path'];
+            }
+            $other = db()->prepare("SELECT subject_id FROM client_pmi_habilitations WHERE client_id = ? AND project_id = ? AND area = 'personal' AND subject_id IN ($placeholders) AND (habilitation_type <> 'grupal' OR group_title IS NULL OR group_title <> ?) FOR UPDATE");
+            $other->execute(array_merge([$clientId, $projectId], $memberIds, [$oldTitle]));
+            if ($other->fetchColumn()) { throw new DomainException('Un integrante ya pertenece a otra habilitación.'); }
+            $renameConflict = db()->prepare("SELECT 1 FROM client_pmi_habilitations WHERE client_id = ? AND project_id = ? AND area = 'personal' AND habilitation_type = 'grupal' AND group_title = ? AND group_title <> ? LIMIT 1");
+            $renameConflict->execute([$clientId, $projectId, $groupTitle, $oldTitle]);
+            if ($renameConflict->fetchColumn()) { throw new DomainException('Ya existe otra habilitación grupal con ese título.'); }
+            $updateGroup = db()->prepare("UPDATE client_pmi_habilitations SET group_title = :group_title, has_pass = :has_pass, has_validity = :has_validity, registration_date = :registration_date, start_date = :start_date, end_date = :end_date WHERE id = :id");
+            $insertGroup = db()->prepare('INSERT INTO client_pmi_habilitations (client_id, project_id, area, subject_id, habilitation_type, group_title, has_pass, has_validity, registration_date, start_date, end_date, pass_file_path, registered_by_user_id) VALUES (:client_id, :project_id, :area, :subject_id, :habilitation_type, :group_title, :has_pass, :has_validity, :registration_date, :start_date, :end_date, :pass_file_path, :user_id)');
+            $deletePositions = db()->prepare('DELETE FROM client_pmi_habilitation_positions WHERE habilitation_id = ?');
+            $insertPosition = db()->prepare('INSERT INTO client_pmi_habilitation_positions (habilitation_id, position_id) VALUES (?, ?)');
+            foreach ($memberIds as $memberId) {
+                if (isset($oldMembers[$memberId])) {
+                    $memberHabilitationId = $oldMembers[$memberId];
+                    $updateGroup->execute($dates + ['group_title' => $groupTitle, 'has_pass' => (int) $hasPass, 'has_validity' => (int) $hasValidity, 'id' => $memberHabilitationId]);
+                    $deletePositions->execute([$memberHabilitationId]);
+                } else {
+                    $insertGroup->execute($dates + ['client_id' => $clientId, 'project_id' => $projectId, 'area' => 'personal', 'subject_id' => $memberId, 'habilitation_type' => 'grupal', 'group_title' => $groupTitle, 'has_pass' => (int) $hasPass, 'has_validity' => (int) $hasValidity, 'pass_file_path' => $sharedPass, 'user_id' => (int) ($_SESSION['user']['id'] ?? 0) ?: null]);
+                    $memberHabilitationId = (int) db()->lastInsertId();
+                }
+                foreach ($memberPositions[$memberId] as $positionId) $insertPosition->execute([$memberHabilitationId, $positionId]);
+            }
+            $remove = db()->prepare('DELETE FROM client_pmi_habilitations WHERE id = ?');
+            foreach ($oldMembers as $memberId => $memberHabilitationId) {
+                if (!in_array($memberId, $memberIds, true)) $remove->execute([$memberHabilitationId]);
+            }
+            db()->commit();
+            redirect($target);
+        }
         if ($id) {
-            $existing = db()->prepare('SELECT 1 FROM client_pmi_habilitations WHERE id = ? AND client_id = ? AND project_id = ? FOR UPDATE');
+            $existing = db()->prepare('SELECT habilitation_type, group_title FROM client_pmi_habilitations WHERE id = ? AND client_id = ? AND project_id = ? FOR UPDATE');
             $existing->execute([$id, $clientId, $projectId]);
-            if (!$existing->fetchColumn()) { throw new DomainException('Habilitación no encontrada.'); }
-            $stmt = db()->prepare('UPDATE client_pmi_habilitations SET area = :area, subject_id = :subject_id, habilitation_type = :habilitation_type, has_pass = :has_pass, has_validity = :has_validity, registration_date = :registration_date, start_date = :start_date, end_date = :end_date WHERE id = :id AND client_id = :client_id AND project_id = :project_id');
-            $stmt->execute($dates + ['area' => $area, 'subject_id' => $subjectId, 'habilitation_type' => $habilitationType, 'has_pass' => $hasPass === null ? null : (int) $hasPass, 'has_validity' => $hasValidity === null ? null : (int) $hasValidity, 'id' => $id, 'client_id' => $clientId, 'project_id' => $projectId]);
+            $previous = $existing->fetch();
+            if (!$previous) { throw new DomainException('Habilitación no encontrada.'); }
+            if ($isGroup && $previous['habilitation_type'] === 'grupal' && trim((string) $previous['group_title']) !== '' && $previous['group_title'] !== $groupTitle) {
+                $renameGroup = db()->prepare("UPDATE client_pmi_habilitations SET group_title = ? WHERE client_id = ? AND project_id = ? AND area = 'personal' AND habilitation_type = 'grupal' AND group_title = ?");
+                $renameGroup->execute([$groupTitle, $clientId, $projectId, $previous['group_title']]);
+            }
+            $stmt = db()->prepare('UPDATE client_pmi_habilitations SET area = :area, subject_id = :subject_id, habilitation_type = :habilitation_type, group_title = :group_title, has_pass = :has_pass, has_validity = :has_validity, registration_date = :registration_date, start_date = :start_date, end_date = :end_date WHERE id = :id AND client_id = :client_id AND project_id = :project_id');
+            $stmt->execute($dates + ['area' => $area, 'subject_id' => $subjectId, 'habilitation_type' => $habilitationType, 'group_title' => $groupTitle, 'has_pass' => $hasPass === null ? null : (int) $hasPass, 'has_validity' => $hasValidity === null ? null : (int) $hasValidity, 'id' => $id, 'client_id' => $clientId, 'project_id' => $projectId]);
         } else {
-            $stmt = db()->prepare('INSERT INTO client_pmi_habilitations (client_id, project_id, area, subject_id, habilitation_type, has_pass, has_validity, registration_date, start_date, end_date, registered_by_user_id) VALUES (:client_id, :project_id, :area, :subject_id, :habilitation_type, :has_pass, :has_validity, :registration_date, :start_date, :end_date, :user_id)');
-            $stmt->execute($dates + ['client_id' => $clientId, 'project_id' => $projectId, 'area' => $area, 'subject_id' => $subjectId, 'habilitation_type' => $habilitationType, 'has_pass' => $hasPass === null ? null : (int) $hasPass, 'has_validity' => $hasValidity === null ? null : (int) $hasValidity, 'user_id' => (int) ($_SESSION['user']['id'] ?? 0) ?: null]);
+            $stmt = db()->prepare('INSERT INTO client_pmi_habilitations (client_id, project_id, area, subject_id, habilitation_type, group_title, has_pass, has_validity, registration_date, start_date, end_date, registered_by_user_id) VALUES (:client_id, :project_id, :area, :subject_id, :habilitation_type, :group_title, :has_pass, :has_validity, :registration_date, :start_date, :end_date, :user_id)');
+            $stmt->execute($dates + ['client_id' => $clientId, 'project_id' => $projectId, 'area' => $area, 'subject_id' => $subjectId, 'habilitation_type' => $habilitationType, 'group_title' => $groupTitle, 'has_pass' => $hasPass === null ? null : (int) $hasPass, 'has_validity' => $hasValidity === null ? null : (int) $hasValidity, 'user_id' => (int) ($_SESSION['user']['id'] ?? 0) ?: null]);
             $id = (int) db()->lastInsertId();
         }
         db()->prepare('DELETE FROM client_pmi_habilitation_positions WHERE habilitation_id = ?')->execute([$id]);

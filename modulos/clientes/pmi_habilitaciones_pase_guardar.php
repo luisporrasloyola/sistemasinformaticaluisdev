@@ -35,15 +35,29 @@ try {
     if (!$newFile) throw new DomainException('Seleccione un archivo de pase.');
 
     db()->beginTransaction();
-    $current = db()->prepare("SELECT pass_file_path FROM client_pmi_habilitations WHERE id = ? AND client_id = ? AND project_id = ? AND area = 'personal' AND has_pass = 1 FOR UPDATE");
+    $current = db()->prepare("SELECT pass_file_path, group_title, habilitation_type FROM client_pmi_habilitations WHERE id = ? AND client_id = ? AND project_id = ? AND area = 'personal' AND has_pass = 1 FOR UPDATE");
     $current->execute([$habilitationId, $clientId, $projectId]);
     $row = $current->fetch();
     if (!$row) throw new DomainException('La habilitación cambió; vuelva a intentarlo.');
-    $oldFile = $row['pass_file_path'];
-    $save = db()->prepare('UPDATE client_pmi_habilitations SET pass_file_path = ? WHERE id = ? AND client_id = ? AND project_id = ?');
-    $save->execute([$newFile, $habilitationId, $clientId, $projectId]);
+    if ($row['habilitation_type'] === 'grupal' && trim((string) $row['group_title']) !== '') {
+        $group = db()->prepare("SELECT pass_file_path FROM client_pmi_habilitations WHERE client_id = ? AND project_id = ? AND area = 'personal' AND habilitation_type = 'grupal' AND group_title = ? AND has_pass = 1 FOR UPDATE");
+        $group->execute([$clientId, $projectId, $row['group_title']]);
+        $oldFiles = array_values(array_unique(array_filter($group->fetchAll(PDO::FETCH_COLUMN))));
+        $save = db()->prepare("UPDATE client_pmi_habilitations SET pass_file_path = ? WHERE client_id = ? AND project_id = ? AND area = 'personal' AND habilitation_type = 'grupal' AND group_title = ? AND has_pass = 1");
+        $save->execute([$newFile, $clientId, $projectId, $row['group_title']]);
+    } else {
+        $oldFiles = array_filter([$row['pass_file_path']]);
+        $save = db()->prepare('UPDATE client_pmi_habilitations SET pass_file_path = ? WHERE id = ? AND client_id = ? AND project_id = ?');
+        $save->execute([$newFile, $habilitationId, $clientId, $projectId]);
+    }
     db()->commit();
-    if ($oldFile) delete_uploaded_file($oldFile);
+    try {
+        $stillUsed = db()->prepare('SELECT 1 FROM client_pmi_habilitations WHERE pass_file_path = ? LIMIT 1');
+        foreach ($oldFiles as $oldFile) {
+            $stillUsed->execute([$oldFile]);
+            if (!$stillUsed->fetchColumn()) delete_uploaded_file($oldFile);
+        }
+    } catch (Throwable $ignored) { /* El pase nuevo ya está guardado. */ }
     redirect($target);
 } catch (Throwable $error) {
     if (db()->inTransaction()) db()->rollBack();

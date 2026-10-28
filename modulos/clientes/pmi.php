@@ -83,7 +83,7 @@ require __DIR__ . '/../../includes/header.php';
 .client-pmi-tabs button.active[data-tab="requisitos"]{background:#8353ee;color:white}.client-pmi-tabs button.active[data-tab="formatos"]{background:#1495e0;color:white}.client-pmi-tabs button.active[data-tab="personal"]{background:#168764;color:white}
 .client-pmi-heading{background:#f3f6fb;color:#284672;font-size:.82rem;font-weight:750;letter-spacing:.045em;padding:11px 14px;border-left:3px solid #9bb7e8;border-radius:7px;margin:20px 0 12px}
 .client-pmi-profile{min-width:0;overflow:hidden}
-.client-pmi-profile-photo{display:block;width:auto;height:auto;max-width:100%;max-height:150px;margin-inline:auto;object-fit:contain;border-radius:10px;border:1px solid #d1dbea;background:#eef2f8}
+.client-pmi-profile-photo{display:block;width:auto;height:auto;max-width:100%;max-height:150px;margin-inline:auto;object-fit:contain;border-radius:10px;border:1px solid #d1dbea;background:#eef2f8;cursor:pointer}.client-pmi-profile-photo:focus-visible{outline:3px solid #2563eb;outline-offset:3px}
 .client-pmi-photo-actions{display:flex;flex-direction:column;align-items:center;gap:.4rem;margin:.5rem 0 .9rem}.client-pmi-photo-actions .btn{font-size:.78rem;font-weight:700}.client-pmi-photo-actions .btn-primary{background:#2563eb;border-color:#2563eb}.client-pmi-photo-actions .btn-primary:hover{background:#1d4ed8;border-color:#1d4ed8}
 .client-pmi-details{margin:0;display:grid;gap:11px}
 .client-pmi-details>div{min-width:0;display:grid;grid-template-columns:minmax(82px,41%) minmax(0,1fr);align-items:start;gap:8px}
@@ -182,6 +182,16 @@ require __DIR__ . '/../../includes/header.php';
 .habilitation-card-tone-2{--habilitation-bg:#f2faf6;--habilitation-header:#e3f4eb;--habilitation-border:#cde8da}
 .habilitation-card-tone-3{--habilitation-bg:#fff9f2;--habilitation-header:#fff0e1;--habilitation-border:#f1ddca}
 .habilitation-card-header{background:var(--habilitation-header)}
+.habilitation-group-card{border-color:#d9d2f0!important;background:#fff;box-shadow:0 3px 12px rgba(66,45,112,.06)}
+.habilitation-group-header{background:#eeeaff;color:#30234f}
+.habilitation-group-header strong{font-size:.9rem}
+.habilitation-group-names{margin-top:5px;color:#625979;font-size:.76rem;line-height:1.35}
+.habilitation-group-members{padding:8px 12px 2px;background:#faf9ff}
+.habilitation-group-members[hidden]{display:none!important}
+.habilitation-group-member{margin:0!important;border:0!important;border-bottom:1px solid #e2def0!important;border-radius:0!important;box-shadow:none!important}
+.habilitation-group-member:last-child{border-bottom:0!important}
+.habilitation-group-member .habilitation-card-header{background:#fff}
+.habilitation-group-member .habilitation-card-header .badge{display:none}
 .habilitation-records[hidden]{display:none!important}
 .habilitation-toggle{min-width:30px}
 .habilitation-toggle[aria-expanded="true"]{background:#e6f0ff;color:#1755a8}
@@ -442,13 +452,12 @@ require __DIR__ . '/../../includes/header.php';
 <div class="row g-3">
     <div class="col-lg-3">
         <div class="work-panel h-100 client-pmi-profile">
-            <div class="text-center"><img class="client-pmi-profile-photo" id="clientPmiPhoto" src="<?= $client['photo_path'] ? e(APP_URL . '/' . $client['photo_path']) : APP_URL . '/recursos/imagen_referencial.php' ?>" alt="Foto del cliente"></div>
+            <div class="text-center"><img class="client-pmi-profile-photo" id="clientPmiPhoto" src="<?= $client['photo_path'] ? e(APP_URL . '/' . $client['photo_path']) : APP_URL . '/recursos/imagen_referencial.php' ?>" alt="Foto del cliente" role="button" tabindex="0" aria-label="Cambiar foto del cliente" title="Cambiar foto"></div>
             <div class="client-pmi-photo-actions">
-                <button class="btn btn-sm btn-outline-secondary" type="button" id="changeClientPmiPhotoBtn">Clic para cambiar foto</button>
                 <a class="btn btn-sm btn-primary <?= $client['photo_path'] ? '' : 'disabled' ?>" id="downloadClientPmiPhoto" href="<?= $client['photo_path'] ? e(APP_URL . '/' . $client['photo_path']) : '#' ?>" download="<?= e($client['business_name'] . ' - Foto.' . ($client['photo_path'] ? pathinfo($client['photo_path'], PATHINFO_EXTENSION) : 'jpg')) ?>" <?= $client['photo_path'] ? '' : 'aria-disabled="true"' ?>><i class="fa-solid fa-download me-1" aria-hidden="true"></i>Foto</a>
                 <input class="d-none" type="file" id="clientPmiPhotoInput" accept="image/jpeg,image/png,image/webp" aria-label="Seleccionar foto del cliente">
             </div>
-            <div class="client-pmi-project-field"><label class="form-label" for="clientProjectSelect">Proyecto</label><select class="form-select" id="clientProjectSelect"><option value="0" <?= $projectId === 0 ? 'selected' : '' ?>>Sin proyecto (registros anteriores)</option><?php foreach ($clientProjects as $project): ?><option value="<?= (int) $project['id'] ?>" <?= $projectId === (int) $project['id'] ? 'selected' : '' ?>><?= e($project['name']) ?></option><?php endforeach; ?></select></div>
+            <div class="client-pmi-project-field"><label class="form-label" for="clientProjectSelect">Proyecto</label><select class="form-select" id="clientProjectSelect"><option value="0" <?= $projectId === 0 ? 'selected' : '' ?>>Cliente</option><?php foreach ($clientProjects as $project): ?><option value="<?= (int) $project['id'] ?>" <?= $projectId === (int) $project['id'] ? 'selected' : '' ?>><?= e($project['name']) ?></option><?php endforeach; ?></select></div>
             <dl class="client-pmi-details"><div><dt>Razón social</dt><dd><?= e($client['business_name']) ?></dd></div><div><dt>RUC</dt><dd><?= e($client['ruc']) ?></dd></div></dl>
             <div class="client-pmi-contacts-section">
                 <dl class="client-pmi-details"><div class="client-pmi-contacts-label"><dt>Contactos</dt></div></dl>
@@ -641,9 +650,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
     const photoInput = document.getElementById('clientPmiPhotoInput');
-    const changePhotoButton = document.getElementById('changeClientPmiPhotoBtn');
+    const changePhotoButton = document.getElementById('clientPmiPhoto');
     const downloadPhotoButton = document.getElementById('downloadClientPmiPhoto');
     changePhotoButton?.addEventListener('click', () => photoInput.click());
+    changePhotoButton?.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); photoInput.click(); } });
     photoInput?.addEventListener('change', async () => {
         const file = photoInput.files?.[0];
         if (!file) return;

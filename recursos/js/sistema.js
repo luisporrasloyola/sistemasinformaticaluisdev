@@ -2061,6 +2061,11 @@ function renderRequirements() {
         ? `<span class="requirement-order-buttons"><button class="btn btn-sm btn-outline-secondary" type="button" onclick="moveRequirementOrder('${kind}', ${Number(id)}, 'up')" ${index === 0 ? 'disabled' : ''} title="Subir" aria-label="Subir"><i class="fa-solid fa-arrow-up"></i></button><button class="btn btn-sm btn-outline-secondary" type="button" onclick="moveRequirementOrder('${kind}', ${Number(id)}, 'down')" ${index === length - 1 ? 'disabled' : ''} title="Bajar" aria-label="Bajar"><i class="fa-solid fa-arrow-down"></i></button></span>`
         : '';
     const visibleFolders = requirementFolders.filter(folder => requirementRows.some(row => String(row.folder_id) === String(folder.id))).sort((a, b) => orderCompare(a, b, 'sort_order'));
+    const ungrouped = requirementRows.filter(row => !row.folder_id).sort((a, b) => orderCompare(a, b, 'sort_order'));
+    const topLevel = [...visibleFolders.map(folder => ({kind: 'folder', item: folder})), ...ungrouped.map(row => ({kind: 'record', item: row}))]
+        .sort((a, b) => (Number(a.item.sort_order) || Number.MAX_SAFE_INTEGER) - (Number(b.item.sort_order) || Number.MAX_SAFE_INTEGER)
+            || (a.kind === b.kind ? 0 : a.kind === 'folder' ? -1 : 1)
+            || orderCompare(a.item, b.item, 'sort_order'));
     const renderSeparatorSlot = (scopeType, scopeId, afterItemId, showPlacement = true) => {
         const existing = requirementSeparators.find(item => item.scope_type === scopeType && Number(item.scope_id) === Number(scopeId) && Number(item.after_item_id) === Number(afterItemId));
         if (existing) {
@@ -2076,7 +2081,7 @@ function renderRequirements() {
     const groupHeader = (folder, count, index) => {
         const expanded = openRequirementFolders.has(String(folder.id));
         tbody.insertAdjacentHTML('beforeend', `<tr class="requirement-folder-header ${expanded ? 'is-open' : ''}"><td colspan="8" class="requirement-folder-heading"><div class="d-flex align-items-center justify-content-between gap-2 flex-wrap"><button class="requirement-folder-toggle" type="button" data-folder-id="${Number(folder.id)}" aria-expanded="${expanded}"><span class="requirement-folder-icon"><i class="fa-solid fa-${expanded ? 'folder-open' : 'folder-closed'}"></i></span><span class="requirement-folder-label"><strong>${escapeHtml(folder.name)}</strong><small>${count} requisito${count === 1 ? '' : 's'} dentro de la carpeta</small></span><i class="fa-solid fa-chevron-${expanded ? 'up' : 'down'} ms-2" aria-hidden="true"></i></button>${window.pmiPersonalReadOnly === true ? '' : `<span class="d-flex gap-2">${window.pmiCanReplicateRequirement === true && count ? `<button class="btn btn-sm btn-outline-success" type="button" onclick="replicateRequirementFolder(${Number(folder.id)})" title="Replicar carpeta y requisitos" aria-label="Replicar carpeta y requisitos"><i class="fa-solid fa-copy"></i></button>` : ''}<button class="btn btn-sm btn-outline-primary" type="button" onclick="editRequirementFolder(${Number(folder.id)})" title="Modificar registros de la carpeta"><i class="fa-solid fa-pen"></i></button><button class="btn btn-sm btn-outline-danger" type="button" onclick="deleteRequirementFolder(${Number(folder.id)})" title="Eliminar carpeta"><i class="fa-solid fa-trash"></i></button></span>`}</div></td></tr>`);
-        tbody.lastElementChild.querySelector('span.d-flex.gap-2')?.insertAdjacentHTML('afterbegin', orderButtons('folder', folder.id, index, visibleFolders.length));
+        tbody.lastElementChild.querySelector('span.d-flex.gap-2')?.insertAdjacentHTML('afterbegin', orderButtons('folder', folder.id, index, topLevel.length));
     };
     const renderRow = (row, inFolder = false, isLast = false, index = 0, groupLength = 1) => {
         const hasAttachment = !!(row.file_path || row.word_file_path || row.image_file_path);
@@ -2118,22 +2123,22 @@ function renderRequirements() {
             </tr>
         `);
     };
-    visibleFolders.forEach((folder, folderIndex) => {
-        const rows = requirementRows.filter(row => String(row.folder_id) === String(folder.id)).sort((a, b) => orderCompare(a, b, 'folder_item_order'));
-        if (!rows.length) return;
-        groupHeader(folder, rows.length, folderIndex);
-        if (openRequirementFolders.has(String(folder.id))) {
-            renderSeparatorSlot('folder', folder.id, 0);
-            rows.forEach((row, index) => { renderRow(row, true, index === rows.length - 1, index, rows.length); renderSeparatorSlot('folder', folder.id, row.id, index < rows.length - 1); });
+    topLevel.forEach(({kind, item}, index) => {
+        if (kind === 'folder') {
+            const folder = item;
+            const rows = requirementRows.filter(row => String(row.folder_id) === String(folder.id)).sort((a, b) => orderCompare(a, b, 'folder_item_order'));
+            groupHeader(folder, rows.length, index);
+            if (openRequirementFolders.has(String(folder.id))) {
+                renderSeparatorSlot('folder', folder.id, 0);
+                rows.forEach((row, rowIndex) => { renderRow(row, true, rowIndex === rows.length - 1, rowIndex, rows.length); renderSeparatorSlot('folder', folder.id, row.id, rowIndex < rows.length - 1); });
+            }
+            tbody.insertAdjacentHTML('beforeend', '<tr class="requirement-folder-gap" aria-hidden="true"><td colspan="8"></td></tr>');
+            renderSeparatorSlot('folders', 0, folder.id, index < topLevel.length - 1);
+        } else {
+            renderRow(item, false, false, index, topLevel.length);
+            renderSeparatorSlot('ungrouped', 0, item.id, index < topLevel.length - 1);
         }
-        tbody.insertAdjacentHTML('beforeend', '<tr class="requirement-folder-gap" aria-hidden="true"><td colspan="8"></td></tr>');
-        renderSeparatorSlot('folders', 0, folder.id, folderIndex < visibleFolders.length - 1 || requirementRows.some(row => !row.folder_id));
     });
-    const ungrouped = requirementRows.filter(row => !row.folder_id).sort((a, b) => orderCompare(a, b, 'sort_order'));
-    if (ungrouped.length) {
-        if (visibleFolders.length) renderSeparatorSlot('ungrouped', 0, 0, false);
-        ungrouped.forEach((row, index) => { renderRow(row, false, false, index, ungrouped.length); renderSeparatorSlot('ungrouped', 0, row.id, index < ungrouped.length - 1); });
-    }
     if (!requirementRows.length && !requirementFolders.length) tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No hay requisitos registrados para este puesto.</td></tr>';
 }
 

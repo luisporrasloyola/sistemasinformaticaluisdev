@@ -7,6 +7,7 @@ $habilitationArea = ($_GET['habilitacion_area'] ?? 'personal') === 'equipo' ? 'e
 $habilitationPageSize = 5;
 $habilitationTotal = 0;
 $habilitationPages = 1;
+$habilitationCards = [];
 if ($clientId) {
     $habilitationFrom = " FROM client_pmi_habilitations h
         LEFT JOIN workers w ON h.area = 'personal' AND w.id = h.subject_id
@@ -14,22 +15,35 @@ if ($clientId) {
         LEFT JOIN users u ON u.id = h.registered_by_user_id
         WHERE h.client_id = :client_id AND h.project_id = :project_id AND h.area = :area";
     $habilitationParams = ['client_id' => $clientId, 'project_id' => $projectId, 'area' => $habilitationArea];
-    if ($habilitationSearch !== '') {
-        $habilitationFrom .= " AND (w.full_name LIKE :worker_name OR w.document_number LIKE :worker_detail OR m.equipo LIKE :machine_name OR m.serie_placa LIKE :machine_detail)";
-        $term = '%' . $habilitationSearch . '%';
-        $habilitationParams += ['worker_name' => $term, 'worker_detail' => $term, 'machine_name' => $term, 'machine_detail' => $term];
-    }
-    $count = db()->prepare('SELECT COUNT(*)' . $habilitationFrom);
-    $count->execute($habilitationParams);
-    $habilitationTotal = (int) $count->fetchColumn();
-    $habilitationPages = max(1, (int) ceil($habilitationTotal / $habilitationPageSize));
-    $habilitationPage = min($habilitationPage, $habilitationPages);
     $stmt = db()->prepare("SELECT h.*, COALESCE(w.full_name, m.equipo, 'Registro eliminado') AS subject_name,
         COALESCE(w.document_number, m.serie_placa, '') AS subject_detail, COALESCE(u.name, '-') AS registered_by
         " . $habilitationFrom . "
-        ORDER BY FIELD(h.area, 'personal', 'equipo'), subject_name, h.id LIMIT " . $habilitationPageSize . " OFFSET " . (($habilitationPage - 1) * $habilitationPageSize));
+        ORDER BY FIELD(h.area, 'personal', 'equipo'), subject_name, h.id");
     $stmt->execute($habilitationParams);
-    $habilitations = $stmt->fetchAll();
+    $allHabilitations = $stmt->fetchAll();
+    $allCards = [];
+    foreach ($allHabilitations as $row) {
+        $title = trim((string) ($row['group_title'] ?? ''));
+        $isGroup = $row['area'] === 'personal' && $row['habilitation_type'] === 'grupal' && $title !== '';
+        $key = $isGroup ? 'group:' . mb_strtolower($title) : 'record:' . $row['id'];
+        if (!isset($allCards[$key])) $allCards[$key] = ['is_group' => $isGroup, 'title' => $title, 'members' => []];
+        $allCards[$key]['members'][] = $row;
+    }
+    if ($habilitationSearch !== '') {
+        $needle = mb_strtolower($habilitationSearch);
+        $allCards = array_filter($allCards, static function (array $card) use ($needle): bool {
+            if (mb_strpos(mb_strtolower($card['title']), $needle) !== false) return true;
+            foreach ($card['members'] as $member) {
+                if (mb_strpos(mb_strtolower($member['subject_name'] . ' ' . $member['subject_detail']), $needle) !== false) return true;
+            }
+            return false;
+        });
+    }
+    $habilitationTotal = count($allCards);
+    $habilitationPages = max(1, (int) ceil($habilitationTotal / $habilitationPageSize));
+    $habilitationPage = min($habilitationPage, $habilitationPages);
+    $selectedCards = array_slice(array_values($allCards), ($habilitationPage - 1) * $habilitationPageSize, $habilitationPageSize);
+    foreach ($selectedCards as $card) foreach ($card['members'] as $member) $habilitations[] = $member;
     $workerPositions = db()->prepare('SELECT p.id, p.name FROM client_pmi_habilitation_positions hp JOIN worker_positions wp ON wp.worker_id = ? AND wp.position_id = hp.position_id JOIN client_pmi_general_positions gp ON gp.client_id = ? AND gp.project_id = ? AND gp.position_id = hp.position_id JOIN positions p ON p.id = hp.position_id WHERE hp.habilitation_id = ? ORDER BY p.name, p.id');
     // Los requisitos se definen por cliente y puesto; el último registro del trabajador aporta sus datos.
     $workerDocs = db()->prepare("SELECT wr.id, pr.position_id, rc.name, rc.id AS catalog_id,
@@ -84,6 +98,12 @@ if ($clientId) {
         }
     }
     unset($habilitation);
+    $enrichedById = [];
+    foreach ($habilitations as $habilitation) $enrichedById[(int) $habilitation['id']] = $habilitation;
+    foreach ($selectedCards as $card) {
+        $card['members'] = array_map(static fn(array $member): array => $enrichedById[(int) $member['id']], $card['members']);
+        $habilitationCards[] = $card;
+    }
 
     $personalFormats = [];
     $personalFormatRecords = [];
