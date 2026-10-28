@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/pmi_project_scope.php';
 require_module_access('clientes.pmi');
 $clientId = (int) ($_GET['cliente_id'] ?? 0);
 $type = (string) ($_GET['tipo'] ?? 'base');
@@ -13,16 +14,18 @@ $clientStmt = db()->prepare('SELECT business_name FROM clients WHERE id = :id');
 $clientStmt->execute(['id' => $clientId]);
 $businessName = $clientStmt->fetchColumn();
 if ($businessName === false) { http_response_code(404); exit('Cliente no encontrado.'); }
+try { $projectId = pmi_project_id($clientId, $_GET); }
+catch (DomainException $error) { http_response_code(404); exit('Proyecto no encontrado.'); }
 $safePart = static function (string $value, string $fallback): string {
     $clean = trim((string) preg_replace('/[^\pL\pN _-]+/u', '', $value));
     return $clean !== '' ? mb_substr($clean, 0, 100) : $fallback;
 };
 $clientName = $safePart((string) $businessName, 'Cliente');
 $sql = $type === 'formatos'
-    ? 'SELECT d.id, c.name, d.file_path FROM client_pmi_format_documents d JOIN client_pmi_format_catalog c ON c.id = d.catalog_id WHERE d.client_id = :id AND d.file_path IS NOT NULL ORDER BY c.name, d.id'
-    : 'SELECT id, name, file_path FROM client_pmi_base_documents WHERE client_id = :id AND file_path IS NOT NULL ORDER BY name, id';
+    ? 'SELECT d.id, c.name, d.file_path FROM client_pmi_format_documents d JOIN client_pmi_format_catalog c ON c.id = d.catalog_id AND c.project_id = d.project_id WHERE d.client_id = :id AND d.project_id = :project_id AND d.file_path IS NOT NULL ORDER BY c.name, d.id'
+    : 'SELECT id, name, file_path FROM client_pmi_base_documents WHERE client_id = :id AND project_id = :project_id AND file_path IS NOT NULL ORDER BY name, id';
 $stmt = db()->prepare($sql);
-$stmt->execute(['id' => $clientId]);
+$stmt->execute(['id' => $clientId, 'project_id' => $projectId]);
 $files = [];
 $root = realpath(UPLOAD_PATH);
 foreach ($stmt->fetchAll() as $row) {
@@ -33,7 +36,7 @@ foreach ($stmt->fetchAll() as $row) {
     $requirementName = $safePart((string) $row['name'], 'Requisito');
     $files[] = ['path' => $path, 'name' => $clientName . ' - ' . $requirementName . '.' . $extension, 'id' => (int) $row['id']];
 }
-if (!$files) { redirect('modulos/clientes/pmi.php?cliente_id=' . $clientId . ($type === 'formatos' ? '&tab=formatos' : '') . '&error=' . urlencode('No hay archivos adjuntos disponibles para descargar.')); }
+if (!$files) { redirect('modulos/clientes/pmi.php?cliente_id=' . $clientId . '&proyecto_id=' . $projectId . ($type === 'formatos' ? '&tab=formatos' : '') . '&error=' . urlencode('No hay archivos adjuntos disponibles para descargar.')); }
 if (count($files) === 1) {
     $file = $files[0];
     header('Content-Type: application/octet-stream');

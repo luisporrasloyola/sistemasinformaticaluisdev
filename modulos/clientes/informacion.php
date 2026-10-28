@@ -13,6 +13,14 @@ $stmt->bindValue(':limit', $perPage, PDO::PARAM_INT);
 $stmt->bindValue(':offset', ($page - 1) * $perPage, PDO::PARAM_INT);
 $stmt->execute();
 $clients = $stmt->fetchAll();
+$clientProjects = [];
+if ($clients) {
+    $ids = array_map('intval', array_column($clients, 'id'));
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    $projectsStmt = db()->prepare("SELECT a.client_id, p.name FROM client_project_assignments a JOIN client_project_catalog p ON p.id = a.project_id WHERE a.client_id IN ($placeholders) ORDER BY p.name, p.id");
+    $projectsStmt->execute($ids);
+    foreach ($projectsStmt as $project) { $clientProjects[(int) $project['client_id']][] = $project['name']; }
+}
 require __DIR__ . '/../../includes/header.php';
 ?>
 <div class="page-title">
@@ -23,11 +31,12 @@ require __DIR__ . '/../../includes/header.php';
 <div class="work-panel">
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
-            <thead><tr><th>Razón social</th><th>RUC</th><th class="text-end">Acciones</th></tr></thead>
+            <thead><tr><th>Razón social</th><th>Proyectos</th><th>RUC</th><th class="text-end">Acciones</th></tr></thead>
             <tbody>
             <?php foreach ($clients as $client): ?>
                 <tr>
                     <td><?= e($client['business_name']) ?></td>
+                    <td><?= e(implode(', ', $clientProjects[(int) $client['id']] ?? [])) ?: '—' ?></td>
                     <td><?= e($client['ruc']) ?></td>
                     <td class="text-end">
                         <a class="btn btn-sm btn-outline-primary" href="<?= APP_URL ?>/modulos/clientes/formulario.php?id=<?= (int) $client['id'] ?>" title="Editar <?= e($client['business_name']) ?>" aria-label="Editar <?= e($client['business_name']) ?>"><i class="fa-solid fa-pen-to-square"></i></a>
@@ -39,7 +48,7 @@ require __DIR__ . '/../../includes/header.php';
                     </td>
                 </tr>
             <?php endforeach; ?>
-            <?php if (!$clients): ?><tr><td colspan="3" class="text-center text-muted py-4">Todavía no hay clientes registrados.</td></tr><?php endif; ?>
+            <?php if (!$clients): ?><tr><td colspan="4" class="text-center text-muted py-4">Todavía no hay clientes registrados.</td></tr><?php endif; ?>
             </tbody>
         </table>
     </div>

@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../includes/upload.php';
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/pmi_project_scope.php';
 require_module_access('clientes.pmi');
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') redirect('modulos/clientes/pmi.php');
 verify_csrf($_POST['csrf_token'] ?? null);
@@ -23,6 +24,8 @@ $newFile = null;
 $oldFile = null;
 
 try {
+    $projectId = pmi_project_id($clientId, $_POST);
+    $target .= '&proyecto_id=' . $projectId;
     if ($clientId <= 0 || $habilitationId <= 0 || $catalogId <= 0) throw new DomainException('Seleccione un formato de personal válido.');
     foreach ([$registration, $start, $end] as $date) {
         if ($date === '') continue;
@@ -36,14 +39,14 @@ try {
     if ($start !== '' && $end !== '' && $end < $start) throw new DomainException('La fecha de fin debe ser posterior al inicio.');
 
     $habilitation = db()->prepare("SELECT 1 FROM client_pmi_habilitations
-        WHERE id=:habilitation_id AND client_id=:client_id AND area='personal' LIMIT 1");
-    $habilitation->execute(['habilitation_id' => $habilitationId, 'client_id' => $clientId]);
+        WHERE id=:habilitation_id AND client_id=:client_id AND project_id=:project_id AND area='personal' LIMIT 1");
+    $habilitation->execute(['habilitation_id' => $habilitationId, 'client_id' => $clientId, 'project_id' => $projectId]);
     if (!$habilitation->fetchColumn()) throw new DomainException('Esta habilitación no corresponde a Personal.');
     $catalog = db()->prepare('SELECT 1 FROM client_pmi_format_catalog c
-        WHERE c.id=:catalog_id AND c.client_id=:client_id
+        WHERE c.id=:catalog_id AND c.client_id=:client_id AND c.project_id=:project_id
           AND EXISTS (SELECT 1 FROM client_pmi_format_documents d
-              WHERE d.client_id=c.client_id AND d.catalog_id=c.id) LIMIT 1');
-    $catalog->execute(['catalog_id' => $catalogId, 'client_id' => $clientId]);
+              WHERE d.client_id=c.client_id AND d.project_id=c.project_id AND d.catalog_id=c.id) LIMIT 1');
+    $catalog->execute(['catalog_id' => $catalogId, 'client_id' => $clientId, 'project_id' => $projectId]);
     if (!$catalog->fetchColumn()) throw new DomainException('El formato ya no está disponible en Formatos editables.');
 
     $newFile = upload_file($_FILES['file'] ?? [], 'clientes_pmi_formatos_personal', document_attachment_mimes())['path'];

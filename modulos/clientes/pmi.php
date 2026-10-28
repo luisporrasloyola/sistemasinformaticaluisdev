@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/status_alerts.php';
+require_once __DIR__ . '/pmi_project_scope.php';
 require_module_access('clientes.pmi');
 
 $clientId = max(0, (int) ($_GET['cliente_id'] ?? 0));
@@ -9,6 +10,8 @@ $requestedTab = $_GET['tab'] ?? 'requisitos';
 $activeTab = in_array($requestedTab, ['requisitos', 'formatos', 'personal'], true) ? $requestedTab : 'requisitos';
 $client = null;
 $contacts = [];
+$clientProjects = [];
+$projectId = 0;
 $general = ['personal' => [], 'equipos' => []];
 $positionRequirements = [];
 $activePositionId = 0;
@@ -22,42 +25,47 @@ if ($clientId) {
     $stmt->execute(['id' => $clientId]);
     $client = $stmt->fetch();
     if (!$client) { http_response_code(404); exit('Cliente no encontrado.'); }
+    $projectStmt = db()->prepare('SELECT p.id, p.name FROM client_project_assignments a JOIN client_project_catalog p ON p.id = a.project_id WHERE a.client_id = ? ORDER BY p.name, p.id');
+    $projectStmt->execute([$clientId]);
+    $clientProjects = $projectStmt->fetchAll();
+    try { $projectId = pmi_project_id($clientId, $_GET); }
+    catch (DomainException $error) { http_response_code(404); exit(e($error->getMessage())); }
     if ($activeTab === 'personal') require __DIR__ . '/pmi_habilitaciones_data.php';
     $stmt = db()->prepare('SELECT name, position, phone, email FROM client_contacts WHERE client_id = :id ORDER BY sort_order, id');
     $stmt->execute(['id' => $clientId]);
     $contacts = $stmt->fetchAll();
     if ($activeTab === 'requisitos') {
-    $stmt = db()->prepare('SELECT gp.position_id AS source_id, p.name AS personal_name FROM client_pmi_general_positions gp JOIN positions p ON p.id = gp.position_id WHERE gp.client_id = :id ORDER BY p.name, p.id');
-    $stmt->execute(['id' => $clientId]);
+    $stmt = db()->prepare('SELECT gp.position_id AS source_id, p.name AS personal_name FROM client_pmi_general_positions gp JOIN positions p ON p.id = gp.position_id WHERE gp.client_id = :id AND gp.project_id = :project_id ORDER BY p.name, p.id');
+    $stmt->execute(['id' => $clientId, 'project_id' => $projectId]);
     $general['personal'] = $stmt->fetchAll();
     $availablePositionIds = array_map('intval', array_column($general['personal'], 'source_id'));
     $requestedPositionId = (int) ($_GET['puesto_id'] ?? 0);
     $activePositionId = in_array($requestedPositionId, $availablePositionIds, true) ? $requestedPositionId : ($availablePositionIds[0] ?? 0);
-    $stmt = db()->prepare('SELECT pr.position_id, pr.requirement_id, rc.name FROM client_pmi_general_position_requirements pr JOIN requirements_catalog rc ON rc.id = pr.requirement_id WHERE pr.client_id = :id ORDER BY rc.name, rc.id');
-    $stmt->execute(['id' => $clientId]);
+    $stmt = db()->prepare('SELECT pr.position_id, pr.requirement_id, rc.name FROM client_pmi_general_position_requirements pr JOIN requirements_catalog rc ON rc.id = pr.requirement_id WHERE pr.client_id = :id AND pr.project_id = :project_id ORDER BY rc.name, rc.id');
+    $stmt->execute(['id' => $clientId, 'project_id' => $projectId]);
     foreach ($stmt as $row) $positionRequirements[(int) $row['position_id']][] = $row;
     $stmt = db()->prepare("SELECT gi.category, gi.source_id, dc.nombre AS equipment_document_name
         FROM client_pmi_general_items gi
         JOIN maquinaria_documentos_catalogo dc ON dc.id = gi.source_id
-        WHERE gi.client_id = :id AND gi.category = 'equipos' ORDER BY dc.nombre, gi.source_id");
-    $stmt->execute(['id' => $clientId]);
+        WHERE gi.client_id = :id AND gi.project_id = :project_id AND gi.category = 'equipos' ORDER BY dc.nombre, gi.source_id");
+    $stmt->execute(['id' => $clientId, 'project_id' => $projectId]);
     foreach ($stmt->fetchAll() as $row) {
         if ($row['category'] === 'equipos' && $row['equipment_document_name'] !== null) { $general['equipos'][] = $row; }
     }
-    $stmt = db()->prepare('SELECT d.id, d.name, bc.id AS catalog_id, d.registration_date, d.start_date, d.end_date, d.file_path, d.created_at, COALESCE(u.name, \'—\') AS registered_by, fi.folder_id FROM client_pmi_base_documents d LEFT JOIN users u ON u.id = d.registered_by_user_id LEFT JOIN client_pmi_base_folder_items fi ON fi.document_id = d.id LEFT JOIN client_pmi_base_catalog bc ON bc.client_id = d.client_id AND bc.name = d.name WHERE d.client_id = :id ORDER BY d.name, d.id');
-    $stmt->execute(['id' => $clientId]);
+    $stmt = db()->prepare('SELECT d.id, d.name, bc.id AS catalog_id, d.registration_date, d.start_date, d.end_date, d.file_path, d.created_at, COALESCE(u.name, \'—\') AS registered_by, fi.folder_id FROM client_pmi_base_documents d LEFT JOIN users u ON u.id = d.registered_by_user_id LEFT JOIN client_pmi_base_folder_items fi ON fi.document_id = d.id LEFT JOIN client_pmi_base_catalog bc ON bc.client_id = d.client_id AND bc.project_id = d.project_id AND bc.name = d.name WHERE d.client_id = :id AND d.project_id = :project_id ORDER BY d.name, d.id');
+    $stmt->execute(['id' => $clientId, 'project_id' => $projectId]);
     $baseDocuments = $stmt->fetchAll();
-    $stmt = db()->prepare('SELECT id, name FROM client_pmi_base_folders WHERE client_id = :id ORDER BY name, id');
-    $stmt->execute(['id' => $clientId]);
+    $stmt = db()->prepare('SELECT id, name FROM client_pmi_base_folders WHERE client_id = :id AND project_id = :project_id ORDER BY name, id');
+    $stmt->execute(['id' => $clientId, 'project_id' => $projectId]);
     $baseFolders = $stmt->fetchAll();
     }
     if ($activeTab === 'formatos') {
     try {
-        $stmt = db()->prepare("SELECT d.id, d.catalog_id, c.name, d.registration_date, d.start_date, d.end_date, d.file_path, d.link_url, d.created_at, COALESCE(u.name, '—') AS registered_by, fi.folder_id FROM client_pmi_format_documents d JOIN client_pmi_format_catalog c ON c.id = d.catalog_id LEFT JOIN users u ON u.id = d.registered_by_user_id LEFT JOIN client_pmi_format_folder_items fi ON fi.document_id = d.id WHERE d.client_id = :id ORDER BY c.name, d.id");
-        $stmt->execute(['id' => $clientId]);
+        $stmt = db()->prepare("SELECT d.id, d.catalog_id, c.name, d.registration_date, d.start_date, d.end_date, d.file_path, d.link_url, d.created_at, COALESCE(u.name, '—') AS registered_by, fi.folder_id FROM client_pmi_format_documents d JOIN client_pmi_format_catalog c ON c.id = d.catalog_id AND c.project_id = d.project_id LEFT JOIN users u ON u.id = d.registered_by_user_id LEFT JOIN client_pmi_format_folder_items fi ON fi.document_id = d.id WHERE d.client_id = :id AND d.project_id = :project_id ORDER BY c.name, d.id");
+        $stmt->execute(['id' => $clientId, 'project_id' => $projectId]);
         $formatDocuments = $stmt->fetchAll();
-        $stmt = db()->prepare('SELECT id, name FROM client_pmi_format_folders WHERE client_id = :id ORDER BY name, id');
-        $stmt->execute(['id' => $clientId]);
+        $stmt = db()->prepare('SELECT id, name FROM client_pmi_format_folders WHERE client_id = :id AND project_id = :project_id ORDER BY name, id');
+        $stmt->execute(['id' => $clientId, 'project_id' => $projectId]);
         $formatFolders = $stmt->fetchAll();
     } catch (PDOException $e) {
         // La sección permanece vacía hasta ejecutar database/pmi_clientes_formatos.sql.
@@ -80,6 +88,9 @@ require __DIR__ . '/../../includes/header.php';
 .client-pmi-details>div{min-width:0;display:grid;grid-template-columns:minmax(82px,41%) minmax(0,1fr);align-items:start;gap:8px}
 .client-pmi-details dt{min-width:0;color:#536783;font-size:.77rem;font-weight:650;line-height:1.38}
 .client-pmi-details dd{min-width:0;margin:0;color:#142742;font-size:.8rem;font-weight:700;line-height:1.38;overflow-wrap:anywhere}
+.client-pmi-project-field{margin-top:15px}
+.client-pmi-project-field .form-label{margin-bottom:5px;color:#536783;font-size:.77rem;font-weight:700}
+.client-pmi-project-field .form-select{min-height:34px;font-size:.8rem;color:#142742}
 .client-pmi-contacts-section{margin-top:17px;padding-top:14px;border-top:1px solid #dfe8f3}
 .client-pmi-contacts-label{padding:8px 10px;border-radius:6px;background:#eaf7f2}
 .client-pmi-contacts-label dt{color:#166b55}
@@ -431,6 +442,7 @@ require __DIR__ . '/../../includes/header.php';
         <div class="work-panel h-100 client-pmi-profile">
             <div class="text-center mb-3"><img class="client-pmi-profile-photo" src="<?= $client['photo_path'] ? APP_URL . '/' . e($client['photo_path']) : APP_URL . '/recursos/imagen_referencial.php' ?>" alt="Foto del cliente"></div>
             <dl class="client-pmi-details"><div><dt>Razón social</dt><dd><?= e($client['business_name']) ?></dd></div><div><dt>RUC</dt><dd><?= e($client['ruc']) ?></dd></div></dl>
+            <div class="client-pmi-project-field"><label class="form-label" for="clientProjectSelect">Proyecto</label><select class="form-select" id="clientProjectSelect"><option value="0" <?= $projectId === 0 ? 'selected' : '' ?>>Sin proyecto (registros anteriores)</option><?php foreach ($clientProjects as $project): ?><option value="<?= (int) $project['id'] ?>" <?= $projectId === (int) $project['id'] ? 'selected' : '' ?>><?= e($project['name']) ?></option><?php endforeach; ?></select></div>
             <div class="client-pmi-contacts-section">
                 <dl class="client-pmi-details"><div class="client-pmi-contacts-label"><dt>Contactos</dt></div></dl>
                 <div class="client-pmi-contact-list">
@@ -561,6 +573,22 @@ require __DIR__ . '/../../includes/header.php';
 <?php endif; ?>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+    const pmiProject = <?= (int) $projectId ?>;
+    document.getElementById('clientProjectSelect')?.addEventListener('change', event => {
+        const url = new URL(window.location.href);
+        url.searchParams.set('proyecto_id', event.target.value);
+        url.searchParams.delete('puesto_id');
+        url.searchParams.delete('habilitacion_pagina');
+        window.location.href = url.href;
+    });
+    document.querySelectorAll('form[action*="/modulos/clientes/pmi_"]').forEach(form => {
+        if (!form.querySelector('input[name="proyecto_id"]')) {
+            const input = document.createElement('input'); input.type = 'hidden'; input.name = 'proyecto_id'; input.defaultValue = String(pmiProject); form.append(input);
+        }
+    });
+    document.querySelectorAll('a[href*="/modulos/clientes/pmi_"]').forEach(link => {
+        const url = new URL(link.href); url.searchParams.set('proyecto_id', String(pmiProject)); link.href = url.href;
+    });
     const previewModal = document.getElementById('baseFilePreviewModal');
     const previewBody = document.getElementById('baseFilePreviewBody');
     if (previewModal && previewBody) previewModal.addEventListener('hidden.bs.modal', () => previewBody.replaceChildren());
@@ -582,7 +610,7 @@ document.addEventListener('DOMContentLoaded', () => {
         previewBody.replaceChildren(preview);
         document.getElementById('baseFilePreviewTitle').textContent = name;
         document.getElementById('baseFilePreviewOpen').href = url;
-        document.getElementById('baseFilePreviewDownload').href = <?= json_encode(APP_URL) ?> + '/modulos/clientes/pmi_descargar.php?cliente_id=<?= $clientId ?>&tipo=' + encodeURIComponent(button.dataset.downloadType || 'base') + '&ids[]=' + encodeURIComponent(button.dataset.documentId);
+        document.getElementById('baseFilePreviewDownload').href = <?= json_encode(APP_URL) ?> + '/modulos/clientes/pmi_descargar.php?cliente_id=<?= $clientId ?>&proyecto_id=' + pmiProject + '&tipo=' + encodeURIComponent(button.dataset.downloadType || 'base') + '&ids[]=' + encodeURIComponent(button.dataset.documentId);
         bootstrap.Modal.getOrCreateInstance(previewModal).show();
     });
     document.addEventListener('click', event => {
@@ -713,7 +741,7 @@ document.addEventListener('DOMContentLoaded', () => {
         theme: 'bootstrap4', width: '100%', dropdownParent: $('#baseDocumentModal'),
         placeholder: 'Buscar documento',
         ajax: {url: catalogUrl, dataType: 'json', delay: 250,
-            data: params => ({client_id: '<?= $clientId ?>', q: params.term || ''}),
+            data: params => ({client_id: '<?= $clientId ?>', proyecto_id: pmiProject, q: params.term || ''}),
             processResults: data => ({results: data.results || []})}
     });
     baseCatalog.on('select2:open', () => document.querySelector('.select2-container--open .select2-search__field')?.focus());
@@ -746,7 +774,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (item.file_path) {const link = document.createElement('a'); link.href = '<?= APP_URL ?>/' + item.file_path; link.target = '_blank'; link.rel = 'noopener'; link.textContent = 'Ver archivo actual'; currentFile.append(link); currentFile.classList.remove('d-none');}
         bootstrap.Modal.getOrCreateInstance(baseModal).show();
         try {
-            const response = await fetch('<?= APP_URL ?>/modulos/clientes/pmi_observaciones.php?client_id=<?= $clientId ?>&document_id=' + encodeURIComponent(item.id));
+            const response = await fetch('<?= APP_URL ?>/modulos/clientes/pmi_observaciones.php?client_id=<?= $clientId ?>&proyecto_id=' + pmiProject + '&document_id=' + encodeURIComponent(item.id));
             if (!response.ok) return;
             const data = await response.json();
             if (!data.observations?.length) return;
@@ -758,7 +786,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('addBaseCatalog').addEventListener('click', async () => {
         const result = await catalogDialog({title: 'Nuevo requisito', input: 'text', inputPlaceholder: 'Nombre del requisito', showCancelButton: true, confirmButtonText: 'Agregar', cancelButtonText: 'Cancelar', inputValidator: value => !value?.trim() ? 'Ingrese el nombre del requisito.' : undefined});
         if (!result.isConfirmed) return;
-        const body = new FormData(); body.set('csrf_token', csrf); body.set('client_id', '<?= $clientId ?>'); body.set('action', 'add'); body.set('name', result.value.trim());
+        const body = new FormData(); body.set('csrf_token', csrf); body.set('client_id', '<?= $clientId ?>'); body.set('proyecto_id', String(pmiProject)); body.set('action', 'add'); body.set('name', result.value.trim());
         try {const response = await fetch(catalogUrl, {method:'POST', body}); const data = await response.json(); if (!data.ok) throw new Error(data.message || 'No se pudo crear.'); baseCatalog.append(new Option(data.item.text, data.item.id, true, true)).trigger('change');} catch (error) {Swal.fire('Atención', error.message, 'warning');}
     });
     document.getElementById('deleteBaseCatalog').addEventListener('click', async () => {
@@ -766,7 +794,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!id) {Swal.fire('Atención','Seleccione primero un documento.','warning'); return;}
         const answer = await catalogDialog({title:'¿Eliminar nombre del catálogo?',text:'Solo se puede eliminar si no tiene registros guardados.',icon:'warning',showCancelButton:true,confirmButtonText:'Sí, eliminar',cancelButtonText:'Cancelar'});
         if (!answer.isConfirmed) return;
-        const body = new FormData(); body.set('csrf_token', csrf); body.set('client_id', '<?= $clientId ?>'); body.set('action', 'delete'); body.set('id', id);
+        const body = new FormData(); body.set('csrf_token', csrf); body.set('client_id', '<?= $clientId ?>'); body.set('proyecto_id', String(pmiProject)); body.set('action', 'delete'); body.set('id', id);
         try {const response = await fetch(catalogUrl,{method:'POST',body}); const data = await response.json(); if (!data.ok) throw new Error(data.message || 'No se pudo eliminar.'); baseCatalog.find('option').filter((_, option) => option.value === String(id)).remove(); baseCatalog.val(null).trigger('change');} catch(error) {Swal.fire('Atención',error.message,'warning');}
     });
     const baseChecks=()=>Array.from(document.querySelectorAll('.base-document-check'));
@@ -795,7 +823,7 @@ document.addEventListener('DOMContentLoaded', () => {
         bootstrap.Modal.getOrCreateInstance(document.getElementById('baseFolderModal')).show();
     });
     document.getElementById('baseFolderForm').addEventListener('submit',event=>{if(folderChoices().some(check=>check.checked))return;event.preventDefault();Swal.fire('Atención','Seleccione al menos un documento para la carpeta.','warning')});
-    document.getElementById('downloadSelectedBase').addEventListener('click',()=>{const checks=baseChecks().filter(check=>check.checked);if(!checks.length){Swal.fire('Atención','Seleccione al menos un requisito.','warning');return}const ids=checks.filter(check=>check.dataset.hasFile==='1').map(check=>check.value);if(!ids.length){Swal.fire('Atención','Los requisitos seleccionados no tienen archivos adjuntos.','warning');return}const params=new URLSearchParams({cliente_id:'<?= $clientId ?>'});ids.forEach(id=>params.append('ids[]',id));window.location.href='<?= APP_URL ?>/modulos/clientes/pmi_descargar.php?'+params.toString()});
+    document.getElementById('downloadSelectedBase').addEventListener('click',()=>{const checks=baseChecks().filter(check=>check.checked);if(!checks.length){Swal.fire('Atención','Seleccione al menos un requisito.','warning');return}const ids=checks.filter(check=>check.dataset.hasFile==='1').map(check=>check.value);if(!ids.length){Swal.fire('Atención','Los requisitos seleccionados no tienen archivos adjuntos.','warning');return}const params=new URLSearchParams({cliente_id:'<?= $clientId ?>', proyecto_id:String(pmiProject)});ids.forEach(id=>params.append('ids[]',id));window.location.href='<?= APP_URL ?>/modulos/clientes/pmi_descargar.php?'+params.toString()});
 });
 </script>
 <?php if ($client && $activeTab === 'formatos'): require __DIR__ . '/pmi_formatos_script.php'; endif; ?>

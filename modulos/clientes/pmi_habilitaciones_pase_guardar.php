@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../includes/upload.php';
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/pmi_project_scope.php';
 require_module_access('clientes.pmi');
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') redirect('modulos/clientes/pmi.php');
 verify_csrf($_POST['csrf_token'] ?? null);
@@ -20,9 +21,11 @@ $newFile = null;
 $oldFile = null;
 
 try {
+    $projectId = pmi_project_id($clientId, $_POST);
+    $target .= '&proyecto_id=' . $projectId;
     if (!$clientId || !$habilitationId) throw new DomainException('Habilitación inválida.');
-    $check = db()->prepare("SELECT 1 FROM client_pmi_habilitations WHERE id = ? AND client_id = ? AND area = 'personal' AND has_pass = 1");
-    $check->execute([$habilitationId, $clientId]);
+    $check = db()->prepare("SELECT 1 FROM client_pmi_habilitations WHERE id = ? AND client_id = ? AND project_id = ? AND area = 'personal' AND has_pass = 1");
+    $check->execute([$habilitationId, $clientId, $projectId]);
     if (!$check->fetchColumn()) throw new DomainException('Esta habilitación no tiene pase habilitado.');
 
     $extensions = format_attachment_extensions();
@@ -32,13 +35,13 @@ try {
     if (!$newFile) throw new DomainException('Seleccione un archivo de pase.');
 
     db()->beginTransaction();
-    $current = db()->prepare("SELECT pass_file_path FROM client_pmi_habilitations WHERE id = ? AND client_id = ? AND area = 'personal' AND has_pass = 1 FOR UPDATE");
-    $current->execute([$habilitationId, $clientId]);
+    $current = db()->prepare("SELECT pass_file_path FROM client_pmi_habilitations WHERE id = ? AND client_id = ? AND project_id = ? AND area = 'personal' AND has_pass = 1 FOR UPDATE");
+    $current->execute([$habilitationId, $clientId, $projectId]);
     $row = $current->fetch();
     if (!$row) throw new DomainException('La habilitación cambió; vuelva a intentarlo.');
     $oldFile = $row['pass_file_path'];
-    $save = db()->prepare('UPDATE client_pmi_habilitations SET pass_file_path = ? WHERE id = ? AND client_id = ?');
-    $save->execute([$newFile, $habilitationId, $clientId]);
+    $save = db()->prepare('UPDATE client_pmi_habilitations SET pass_file_path = ? WHERE id = ? AND client_id = ? AND project_id = ?');
+    $save->execute([$newFile, $habilitationId, $clientId, $projectId]);
     db()->commit();
     if ($oldFile) delete_uploaded_file($oldFile);
     redirect($target);

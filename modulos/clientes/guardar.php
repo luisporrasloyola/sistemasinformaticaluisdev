@@ -13,11 +13,21 @@ $names = $_POST['contact_name'] ?? [];
 $positions = $_POST['contact_position'] ?? [];
 $phones = $_POST['contact_phone'] ?? [];
 $emails = $_POST['contact_email'] ?? [];
+$projectInput = $_POST['project_ids'] ?? [];
 $newPhoto = null;
 $oldPhoto = null;
 $target = 'modulos/clientes/formulario.php' . ($id ? '?id=' . $id . '&error=' : '?error=');
 
 try {
+    if (!is_array($projectInput) || count($projectInput) > 500) { throw new DomainException('Seleccione proyectos válidos.'); }
+    $projectIds = array_values(array_unique(array_map('intval', $projectInput)));
+    if (in_array(0, $projectIds, true)) { throw new DomainException('Seleccione proyectos válidos.'); }
+    if ($projectIds) {
+        $placeholders = implode(',', array_fill(0, count($projectIds), '?'));
+        $projectCheck = db()->prepare("SELECT COUNT(*) FROM client_project_catalog WHERE id IN ($placeholders)");
+        $projectCheck->execute($projectIds);
+        if ((int) $projectCheck->fetchColumn() !== count($projectIds)) { throw new DomainException('Uno de los proyectos ya no está disponible.'); }
+    }
     if ($name === '' || mb_strlen($name) > 200) { throw new DomainException('Ingrese una razón social válida.'); }
     if (!preg_match('/^[0-9]{11}$/D', $ruc)) { throw new DomainException('El RUC debe tener exactamente 11 dígitos.'); }
     if (!is_array($names) || !is_array($positions) || !is_array($phones) || !is_array($emails) || count($names) < 1 || count($names) > 100) {
@@ -63,6 +73,22 @@ try {
     foreach ($contacts as $index => $contact) {
         $insert->execute($contact + ['client_id' => $id, 'sort_order' => $index]);
     }
+    $assignedProjects = db()->prepare('SELECT project_id FROM client_project_assignments WHERE client_id = ? FOR UPDATE');
+    $assignedProjects->execute([$id]);
+    $removedProjects = array_diff(array_map('intval', $assignedProjects->fetchAll(PDO::FETCH_COLUMN)), $projectIds);
+    if ($removedProjects) {
+        $scopeTables = ['client_pmi_general_positions', 'client_pmi_general_items', 'client_pmi_base_documents', 'client_pmi_base_catalog', 'client_pmi_base_folders', 'client_pmi_format_documents', 'client_pmi_format_catalog', 'client_pmi_format_folders', 'client_pmi_habilitations'];
+        foreach ($scopeTables as $table) {
+            $hasData = db()->prepare("SELECT 1 FROM {$table} WHERE client_id = ? AND project_id = ? LIMIT 1");
+            foreach ($removedProjects as $removedProjectId) {
+                $hasData->execute([$id, $removedProjectId]);
+                if ($hasData->fetchColumn()) { throw new DomainException('No puede quitar un proyecto que ya tiene datos PMI.'); }
+            }
+        }
+    }
+    db()->prepare('DELETE FROM client_project_assignments WHERE client_id = ?')->execute([$id]);
+    $insertProject = db()->prepare('INSERT INTO client_project_assignments (client_id, project_id) VALUES (?, ?)');
+    foreach ($projectIds as $projectId) { $insertProject->execute([$id, $projectId]); }
     db()->commit();
     if ($newPhoto && $oldPhoto) { delete_uploaded_file($oldPhoto); }
     redirect('modulos/clientes/informacion.php');

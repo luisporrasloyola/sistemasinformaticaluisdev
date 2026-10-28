@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/pmi_project_scope.php';
 require_module_access('clientes.pmi');
 
 $clientId = (int) ($_GET['cliente_id'] ?? 0);
@@ -16,30 +17,32 @@ $formatIds = array_values(array_unique(array_filter(array_map('intval', $formatI
 if ($clientId < 1 || $habilitationId < 1 || !in_array($mode, ['all', 'selected'], true) || count($ids) + count($formatIds) > 100 || ($mode === 'selected' && !$ids && !$formatIds)) {
     http_response_code(400); exit('Solicitud inválida.');
 }
-$stmt = db()->prepare('SELECT h.area, h.subject_id, c.business_name, COALESCE(w.full_name, m.equipo) AS subject_name FROM client_pmi_habilitations h JOIN clients c ON c.id = h.client_id LEFT JOIN workers w ON h.area = \'personal\' AND w.id = h.subject_id LEFT JOIN maquinarias m ON h.area = \'equipo\' AND m.id = h.subject_id WHERE h.id = ? AND h.client_id = ?');
-$stmt->execute([$habilitationId, $clientId]);
+try { $projectId = pmi_project_id($clientId, $_GET); }
+catch (DomainException $error) { http_response_code(404); exit('Proyecto no encontrado.'); }
+$stmt = db()->prepare('SELECT h.area, h.subject_id, c.business_name, COALESCE(w.full_name, m.equipo) AS subject_name FROM client_pmi_habilitations h JOIN clients c ON c.id = h.client_id LEFT JOIN workers w ON h.area = \'personal\' AND w.id = h.subject_id LEFT JOIN maquinarias m ON h.area = \'equipo\' AND m.id = h.subject_id WHERE h.id = ? AND h.client_id = ? AND h.project_id = ?');
+$stmt->execute([$habilitationId, $clientId, $projectId]);
 $habilitation = $stmt->fetch();
 if (!$habilitation) { http_response_code(404); exit('Habilitación no encontrada.'); }
 $positionName = '';
 if ($habilitation['area'] === 'personal') {
-    $check = db()->prepare('SELECT p.name FROM client_pmi_habilitation_positions hp JOIN worker_positions wp ON wp.worker_id = ? AND wp.position_id = hp.position_id JOIN client_pmi_general_positions gp ON gp.client_id = ? AND gp.position_id = hp.position_id JOIN positions p ON p.id = hp.position_id WHERE hp.habilitation_id = ? AND hp.position_id = ?');
-    $check->execute([$habilitation['subject_id'], $clientId, $habilitationId, $positionId]);
+    $check = db()->prepare('SELECT p.name FROM client_pmi_habilitation_positions hp JOIN worker_positions wp ON wp.worker_id = ? AND wp.position_id = hp.position_id JOIN client_pmi_general_positions gp ON gp.client_id = ? AND gp.project_id = ? AND gp.position_id = hp.position_id JOIN positions p ON p.id = hp.position_id WHERE hp.habilitation_id = ? AND hp.position_id = ?');
+    $check->execute([$habilitation['subject_id'], $clientId, $projectId, $habilitationId, $positionId]);
     $positionName = (string) $check->fetchColumn();
     if ($positionName === '' && ($positionId > 0 || $ids)) { http_response_code(400); exit('Puesto inválido.'); }
     $stmt = db()->prepare("SELECT wr.id, rc.name, wr.file_path FROM client_pmi_general_position_requirements pr JOIN requirements_catalog rc ON rc.id = pr.requirement_id
         JOIN worker_requirements wr ON wr.id = (
             SELECT latest.id FROM worker_requirements latest WHERE latest.worker_id = :subject_id AND latest.position_id = pr.position_id AND latest.requirement_id = pr.requirement_id
             ORDER BY latest.registration_date DESC, latest.id DESC LIMIT 1
-        ) WHERE pr.client_id = :client_id AND pr.position_id = :position_id AND wr.file_path IS NOT NULL ORDER BY rc.name LIMIT 101");
-    $stmt->execute(['subject_id' => $habilitation['subject_id'], 'position_id' => $positionId, 'client_id' => $clientId]);
+        ) WHERE pr.client_id = :client_id AND pr.project_id = :project_id AND pr.position_id = :position_id AND wr.file_path IS NOT NULL ORDER BY rc.name LIMIT 101");
+    $stmt->execute(['subject_id' => $habilitation['subject_id'], 'position_id' => $positionId, 'client_id' => $clientId, 'project_id' => $projectId]);
 } else {
     $stmt = db()->prepare("SELECT md.id, dc.nombre AS name, md.archivo_path AS file_path
         FROM client_pmi_general_items gi JOIN maquinaria_documentos_catalogo dc ON dc.id = gi.source_id
         JOIN maquinaria_documentos md ON md.id = (
             SELECT latest.id FROM maquinaria_documentos latest WHERE latest.maquinaria_id = :subject_id AND latest.documento_id = gi.source_id
             ORDER BY latest.fecha_registro DESC, latest.id DESC LIMIT 1
-        ) WHERE gi.client_id = :client_id AND gi.category = 'equipos' AND md.archivo_path IS NOT NULL ORDER BY dc.nombre LIMIT 101");
-    $stmt->execute(['client_id' => $clientId, 'subject_id' => $habilitation['subject_id']]);
+        ) WHERE gi.client_id = :client_id AND gi.project_id = :project_id AND gi.category = 'equipos' AND md.archivo_path IS NOT NULL ORDER BY dc.nombre LIMIT 101");
+    $stmt->execute(['client_id' => $clientId, 'project_id' => $projectId, 'subject_id' => $habilitation['subject_id']]);
 }
 $safe = static function (string $value): string {
     $value = trim((string) preg_replace('/[^\pL\pN _-]+/u', '', $value));
@@ -59,11 +62,11 @@ foreach ($stmt->fetchAll() as $row) {
 }
 if ($habilitation['area'] === 'personal') {
     $formatStmt = db()->prepare("SELECT f.id, fc.name, f.file_path FROM client_pmi_habilitation_formats f
-        JOIN client_pmi_format_catalog fc ON fc.id = f.catalog_id AND fc.client_id = :client_id
+        JOIN client_pmi_format_catalog fc ON fc.id = f.catalog_id AND fc.client_id = :client_id AND fc.project_id = :project_id
         WHERE f.habilitation_id = :habilitation_id AND f.file_path IS NOT NULL
-        AND EXISTS (SELECT 1 FROM client_pmi_format_documents fd WHERE fd.catalog_id = fc.id AND fd.client_id = fc.client_id)
+        AND EXISTS (SELECT 1 FROM client_pmi_format_documents fd WHERE fd.catalog_id = fc.id AND fd.client_id = fc.client_id AND fd.project_id = fc.project_id)
         ORDER BY fc.name LIMIT 101");
-    $formatStmt->execute(['client_id' => $clientId, 'habilitation_id' => $habilitationId]);
+    $formatStmt->execute(['client_id' => $clientId, 'project_id' => $projectId, 'habilitation_id' => $habilitationId]);
     foreach ($formatStmt->fetchAll() as $row) {
         if ($mode === 'selected' && !in_array((int) $row['id'], $formatIds, true)) { continue; }
         if (!preg_match('~^archivos/[A-Za-z0-9_/-]+\.(pdf|jpe?g|png|webp)$~i', (string) $row['file_path'])) { continue; }

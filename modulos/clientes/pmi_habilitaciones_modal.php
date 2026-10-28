@@ -79,7 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
         toolbar.querySelectorAll('.habilitation-download-selected, .habilitation-download-all').forEach(button => button.addEventListener('click', () => {
             const selectedMode = button.classList.contains('habilitation-download-selected');
             const position = card.querySelector('.habilitation-position-tab[aria-pressed="true"]')?.dataset.positionId || '0';
-            const params = new URLSearchParams({cliente_id:toolbar.dataset.clientId, habilitacion_id:toolbar.dataset.habilitationId, puesto_id:position, modo:selectedMode ? 'selected' : 'all'});
+            const params = new URLSearchParams({cliente_id:toolbar.dataset.clientId, proyecto_id:<?= (int) $projectId ?>, habilitacion_id:toolbar.dataset.habilitationId, puesto_id:position, modo:selectedMode ? 'selected' : 'all'});
             if (selectedMode) {
                 card.querySelectorAll('.habilitation-position-row:not([hidden]) .habilitation-file-check:checked').forEach(check => params.append('ids[]', check.value));
                 card.querySelectorAll('.habilitation-format-check:checked').forEach(check => params.append('format_ids[]', check.value));
@@ -141,7 +141,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!membersLoaded) {
             membersList.textContent = 'Cargando personal…';
             try {
-                const response = await fetch(<?= json_encode(APP_URL . '/modulos/clientes/pmi_habilitaciones_integrantes.php') ?> + '?client_id=<?= (int) $clientId ?>&edit_id=' + encodeURIComponent(document.getElementById('habilitationId').value || 0), {credentials: 'same-origin'});
+                const response = await fetch(<?= json_encode(APP_URL . '/modulos/clientes/pmi_habilitaciones_integrantes.php') ?> + '?client_id=<?= (int) $clientId ?>&proyecto_id=<?= (int) $projectId ?>&edit_id=' + encodeURIComponent(document.getElementById('habilitationId').value || 0), {credentials: 'same-origin'});
                 if (!response.ok) throw new Error('No se pudo cargar el personal.');
                 const data = await response.json();
                 membersList.replaceChildren();
@@ -267,7 +267,7 @@ document.addEventListener('DOMContentLoaded', () => {
         positionsList.textContent = 'Cargando puestos…';
         positionsAll.disabled = true;
         try {
-            const url = <?= json_encode(APP_URL . '/modulos/clientes/pmi_habilitaciones_puestos.php') ?> + '?worker_id=' + encodeURIComponent(subject.value) + '&client_id=<?= (int) $clientId ?>';
+            const url = <?= json_encode(APP_URL . '/modulos/clientes/pmi_habilitaciones_puestos.php') ?> + '?worker_id=' + encodeURIComponent(subject.value) + '&client_id=<?= (int) $clientId ?>&proyecto_id=<?= (int) $projectId ?>';
             const response = await fetch(url, {credentials: 'same-origin'});
             if (!response.ok) throw new Error('No se pudieron cargar los puestos.');
             const data = await response.json();
@@ -307,7 +307,7 @@ document.addEventListener('DOMContentLoaded', () => {
         event.preventDefault(); form.dataset.positionValidationAttempted = '1'; positionsError.classList.remove('d-none'); positionsPanel.scrollIntoView({block: 'nearest'});
     });
     const searchableSubject = window.jQuery && jQuery.fn.select2 ? jQuery(subject) : null;
-    if (searchableSubject) searchableSubject.select2({theme:'bootstrap4', width:'100%', dropdownParent:jQuery(modal), placeholder:'Buscar por nombre o documento', ajax:{url:<?= json_encode(APP_URL . '/modulos/clientes/pmi_habilitaciones_buscar.php') ?>, dataType:'json', delay:350, data:params=>({area:area.value,client_id:<?= (int) $clientId ?>,edit_id:document.getElementById('habilitationId').value||0,q:params.term||''}), processResults:data=>({results:data.results||[]})}, language:{noResults:()=> 'No hay personal disponible', searching:()=> 'Buscando…'}});
+    if (searchableSubject) searchableSubject.select2({theme:'bootstrap4', width:'100%', dropdownParent:jQuery(modal), placeholder:'Buscar por nombre o documento', ajax:{url:<?= json_encode(APP_URL . '/modulos/clientes/pmi_habilitaciones_buscar.php') ?>, dataType:'json', delay:350, data:params=>({area:area.value,client_id:<?= (int) $clientId ?>,proyecto_id:<?= (int) $projectId ?>,edit_id:document.getElementById('habilitationId').value||0,q:params.term||''}), processResults:data=>({results:data.results||[]})}, language:{noResults:()=> 'No hay personal disponible', searching:()=> 'Buscando…'}});
     let changingSubjectProgrammatically = false;
     const subjectChanged = () => { if (!changingSubjectProgrammatically) loadPositions(); };
     if (searchableSubject) searchableSubject.on('change', subjectChanged);

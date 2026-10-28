@@ -3,14 +3,17 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/pmi_project_scope.php';
 require_module_access('clientes.pmi');
 
 $clientId = max(0, (int) ($_GET['cliente_id'] ?? 0));
 $habilitationId = max(0, (int) ($_GET['habilitacion_id'] ?? 0));
+try { $projectId = pmi_project_id($clientId, $_GET); }
+catch (DomainException $error) { http_response_code(404); exit('Pase no encontrado.'); }
 $stmt = db()->prepare("SELECT h.pass_file_path, w.full_name FROM client_pmi_habilitations h
     JOIN workers w ON w.id = h.subject_id
-    WHERE h.id = ? AND h.client_id = ? AND h.area = 'personal' AND h.has_pass = 1");
-$stmt->execute([$habilitationId, $clientId]);
+    WHERE h.id = ? AND h.client_id = ? AND h.project_id = ? AND h.area = 'personal' AND h.has_pass = 1");
+$stmt->execute([$habilitationId, $clientId, $projectId]);
 $row = $stmt->fetch();
 $relative = (string) ($row['pass_file_path'] ?? '');
 if (!preg_match('~^archivos/clientes_pmi_pases/[a-f0-9]{32}\.(pdf|docx?|xlsx?|jpe?g|png|webp)$~i', $relative)) {

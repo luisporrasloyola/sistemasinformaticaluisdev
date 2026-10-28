@@ -3,6 +3,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const table = document.getElementById('clientFormatTable');
     if (!table) return;
     const clientId = <?= (int) $clientId ?>;
+    const projectId = <?= (int) $projectId ?>;
     const baseUrl = <?= json_encode(APP_URL) ?>;
     const checks = () => Array.from(table.querySelectorAll('.format-document-check'));
     const folderChecks = () => Array.from(document.querySelectorAll('.format-folder-document-check:not(:disabled)'));
@@ -31,7 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
     linkRemove.addEventListener('click', () => { linkInput.value = ''; updateLinkControls(); linkInput.focus(); });
     formatCatalog.select2({theme: 'bootstrap4', width: '100%', dropdownParent: $('#formatDocumentModal'), placeholder: 'Buscar formato', ajax: {
         url: catalogUrl, dataType: 'json', delay: 250,
-        data: params => ({client_id: clientId, q: params.term || ''}),
+        data: params => ({client_id: clientId, proyecto_id: projectId, q: params.term || ''}),
         processResults: data => ({results: data.results || []}),
     }});
     formatCatalog.on('select2:open', () => document.querySelector('.select2-container--open .select2-search__field')?.focus());
@@ -44,7 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('addFormatCatalog').addEventListener('click', async () => {
         const answer = await catalogDialog({title: 'Nuevo formato', input: 'text', inputPlaceholder: 'Nombre del formato', showCancelButton: true, confirmButtonText: 'Agregar', cancelButtonText: 'Cancelar', inputValidator: value => !value?.trim() ? 'Ingrese el nombre del formato.' : undefined});
         if (!answer.isConfirmed) return;
-        const body = new FormData(); body.set('csrf_token', csrf); body.set('client_id', String(clientId)); body.set('action', 'add'); body.set('name', answer.value.trim());
+        const body = new FormData(); body.set('csrf_token', csrf); body.set('client_id', String(clientId)); body.set('proyecto_id', String(projectId)); body.set('action', 'add'); body.set('name', answer.value.trim());
         try {
             const response = await fetch(catalogUrl, {method: 'POST', body}); const data = await response.json();
             if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo crear el formato.');
@@ -56,7 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!name) { Swal.fire('Atención', 'Seleccione un formato para eliminar.', 'warning'); return; }
         const answer = await catalogDialog({title: '¿Eliminar formato?', text: 'Solo se puede eliminar si no tiene documentos registrados.', icon: 'warning', showCancelButton: true, confirmButtonText: 'Sí, eliminar', cancelButtonText: 'Cancelar'});
         if (!answer.isConfirmed) return;
-        const body = new FormData(); body.set('csrf_token', csrf); body.set('client_id', String(clientId)); body.set('action', 'delete'); body.set('name', name);
+        const body = new FormData(); body.set('csrf_token', csrf); body.set('client_id', String(clientId)); body.set('proyecto_id', String(projectId)); body.set('action', 'delete'); body.set('name', name);
         try {
             const response = await fetch(catalogUrl, {method: 'POST', body}); const data = await response.json();
             if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo eliminar el formato.');
@@ -88,7 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!selected.length) { Swal.fire('Atención', 'Seleccione al menos un formato.', 'warning'); return; }
         const ids = selected.filter(check => check.dataset.hasFile === '1').map(check => check.value);
         if (!ids.length) { Swal.fire('Atención', 'Los formatos seleccionados no tienen archivos adjuntos.', 'warning'); return; }
-        const params = new URLSearchParams({cliente_id: String(clientId), tipo: 'formatos'});
+        const params = new URLSearchParams({cliente_id: String(clientId), proyecto_id: String(projectId), tipo: 'formatos'});
         ids.forEach(id => params.append('ids[]', id));
         location.href = baseUrl + '/modulos/clientes/pmi_descargar.php?' + params;
     });
@@ -121,7 +122,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('formatDocumentTitle').textContent = 'Editar formato';
         if (item.file_path) {
             const link = document.createElement('a');
-            link.href = baseUrl + '/modulos/clientes/pmi_descargar.php?tipo=formatos&cliente_id=' + encodeURIComponent(clientId) + '&ids[]=' + encodeURIComponent(item.id);
+            link.href = baseUrl + '/modulos/clientes/pmi_descargar.php?tipo=formatos&cliente_id=' + encodeURIComponent(clientId) + '&proyecto_id=' + projectId + '&ids[]=' + encodeURIComponent(item.id);
             link.textContent = 'Descargar archivo actual';
             document.getElementById('formatCurrentFile').append(link);
             document.getElementById('formatCurrentFile').classList.remove('d-none');

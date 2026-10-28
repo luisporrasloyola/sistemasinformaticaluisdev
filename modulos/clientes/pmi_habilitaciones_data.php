@@ -12,8 +12,8 @@ if ($clientId) {
         LEFT JOIN workers w ON h.area = 'personal' AND w.id = h.subject_id
         LEFT JOIN maquinarias m ON h.area = 'equipo' AND m.id = h.subject_id
         LEFT JOIN users u ON u.id = h.registered_by_user_id
-        WHERE h.client_id = :client_id AND h.area = :area";
-    $habilitationParams = ['client_id' => $clientId, 'area' => $habilitationArea];
+        WHERE h.client_id = :client_id AND h.project_id = :project_id AND h.area = :area";
+    $habilitationParams = ['client_id' => $clientId, 'project_id' => $projectId, 'area' => $habilitationArea];
     if ($habilitationSearch !== '') {
         $habilitationFrom .= " AND (w.full_name LIKE :worker_name OR w.document_number LIKE :worker_detail OR m.equipo LIKE :machine_name OR m.serie_placa LIKE :machine_detail)";
         $term = '%' . $habilitationSearch . '%';
@@ -30,7 +30,7 @@ if ($clientId) {
         ORDER BY FIELD(h.area, 'personal', 'equipo'), subject_name, h.id LIMIT " . $habilitationPageSize . " OFFSET " . (($habilitationPage - 1) * $habilitationPageSize));
     $stmt->execute($habilitationParams);
     $habilitations = $stmt->fetchAll();
-    $workerPositions = db()->prepare('SELECT p.id, p.name FROM client_pmi_habilitation_positions hp JOIN worker_positions wp ON wp.worker_id = ? AND wp.position_id = hp.position_id JOIN client_pmi_general_positions gp ON gp.client_id = ? AND gp.position_id = hp.position_id JOIN positions p ON p.id = hp.position_id WHERE hp.habilitation_id = ? ORDER BY p.name, p.id');
+    $workerPositions = db()->prepare('SELECT p.id, p.name FROM client_pmi_habilitation_positions hp JOIN worker_positions wp ON wp.worker_id = ? AND wp.position_id = hp.position_id JOIN client_pmi_general_positions gp ON gp.client_id = ? AND gp.project_id = ? AND gp.position_id = hp.position_id JOIN positions p ON p.id = hp.position_id WHERE hp.habilitation_id = ? ORDER BY p.name, p.id');
     // Los requisitos se definen por cliente y puesto; el último registro del trabajador aporta sus datos.
     $workerDocs = db()->prepare("SELECT wr.id, pr.position_id, rc.name, rc.id AS catalog_id,
         wr.registration_date, wr.start_date, wr.end_date, wr.file_path, COALESCE(u.name, '-') AS registered_by
@@ -42,7 +42,7 @@ if ($clientId) {
             ORDER BY latest.registration_date DESC, latest.id DESC LIMIT 1
         )
         LEFT JOIN users u ON u.id = wr.registered_by_user_id
-        WHERE pr.client_id = :client_id AND pr.position_id = :position_id ORDER BY rc.name");
+        WHERE pr.client_id = :client_id AND pr.project_id = :project_id AND pr.position_id = :position_id ORDER BY rc.name");
     $machineDocs = db()->prepare("SELECT md.id, dc.nombre AS name, dc.id AS catalog_id,
         md.fecha_registro AS registration_date, md.fecha_inicio AS start_date, md.fecha_fin AS end_date,
         md.archivo_path AS file_path, COALESCE(u.name, '-') AS registered_by
@@ -53,15 +53,15 @@ if ($clientId) {
             ORDER BY latest.fecha_registro DESC, latest.id DESC LIMIT 1
         )
         LEFT JOIN users u ON u.id = md.registered_by_user_id
-        WHERE gi.client_id = :client_id AND gi.category = 'equipos'
+        WHERE gi.client_id = :client_id AND gi.project_id = :project_id AND gi.category = 'equipos'
         ORDER BY dc.nombre");
     foreach ($habilitations as &$habilitation) {
         if ($habilitation['area'] === 'personal') {
-            $workerPositions->execute([$habilitation['subject_id'], $clientId, $habilitation['id']]);
+            $workerPositions->execute([$habilitation['subject_id'], $clientId, $projectId, $habilitation['id']]);
             $habilitation['positions'] = $workerPositions->fetchAll();
             $habilitation['documents_by_position'] = [];
             foreach ($habilitation['positions'] as $position) {
-                $workerDocs->execute(['client_id' => $clientId, 'subject_id' => $habilitation['subject_id'], 'position_id' => $position['id']]);
+                $workerDocs->execute(['client_id' => $clientId, 'project_id' => $projectId, 'subject_id' => $habilitation['subject_id'], 'position_id' => $position['id']]);
                 $habilitation['documents_by_position'][(int) $position['id']] = $workerDocs->fetchAll();
             }
             $habilitation['progress_by_position'] = [];
@@ -79,7 +79,7 @@ if ($clientId) {
             }
             $habilitation['documents'] = $habilitation['positions'] ? $habilitation['documents_by_position'][(int) $habilitation['positions'][0]['id']] : [];
         } else {
-            $machineDocs->execute(['client_id' => $clientId, 'subject_id' => $habilitation['subject_id']]);
+            $machineDocs->execute(['client_id' => $clientId, 'project_id' => $projectId, 'subject_id' => $habilitation['subject_id']]);
             $habilitation['documents'] = $machineDocs->fetchAll();
         }
     }
@@ -91,9 +91,9 @@ if ($clientId) {
         static fn(array $h): bool => $h['area'] === 'personal'), 'id')));
     if ($personalHabilitationIds) {
         $formatNames = db()->prepare('SELECT DISTINCT c.id, c.name FROM client_pmi_format_documents d
-            JOIN client_pmi_format_catalog c ON c.id = d.catalog_id AND c.client_id = d.client_id
-            WHERE d.client_id = :client_id ORDER BY c.name, c.id');
-        $formatNames->execute(['client_id' => $clientId]);
+            JOIN client_pmi_format_catalog c ON c.id = d.catalog_id AND c.client_id = d.client_id AND c.project_id = d.project_id
+            WHERE d.client_id = :client_id AND d.project_id = :project_id ORDER BY c.name, c.id');
+        $formatNames->execute(['client_id' => $clientId, 'project_id' => $projectId]);
         $personalFormats = $formatNames->fetchAll();
         if ($personalFormats) {
             $idsSql = implode(',', array_fill(0, count($personalHabilitationIds), '?'));

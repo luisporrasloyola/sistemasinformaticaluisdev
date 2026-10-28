@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../includes/upload.php';
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/pmi_project_scope.php';
 require_module_access('clientes.pmi');
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { redirect('modulos/clientes/pmi.php'); }
 verify_csrf($_POST['csrf_token'] ?? null);
@@ -18,6 +19,8 @@ try {
     $check = db()->prepare('SELECT 1 FROM clients WHERE id = :id');
     $check->execute(['id' => $clientId]);
     if ($clientId < 1 || !$check->fetchColumn()) { throw new DomainException('Cliente no encontrado.'); }
+    $projectId = pmi_project_id($clientId, $_POST);
+    $target .= '&proyecto_id=' . $projectId;
 
     if ($action === 'save_document') {
         $id = max(0, (int) ($_POST['document_id'] ?? 0));
@@ -40,25 +43,25 @@ try {
         if ($start && $end && $end < $start) { throw new DomainException('La fecha de fin debe ser posterior al inicio.'); }
 
         if ($id) {
-            $current = db()->prepare('SELECT file_path FROM client_pmi_format_documents WHERE id = :id AND client_id = :client_id');
-            $current->execute(['id' => $id, 'client_id' => $clientId]);
+            $current = db()->prepare('SELECT file_path FROM client_pmi_format_documents WHERE id = :id AND client_id = :client_id AND project_id = :project_id');
+            $current->execute(['id' => $id, 'client_id' => $clientId, 'project_id' => $projectId]);
             $row = $current->fetch();
             if (!$row) { throw new DomainException('Formato no encontrado.'); }
             $oldFile = $row['file_path'];
         }
         $newFile = upload_file($_FILES['file'] ?? [], 'clientes_pmi_formatos', format_attachment_mimes(), format_attachment_extensions())['path'];
         db()->beginTransaction();
-        $catalog = db()->prepare('INSERT INTO client_pmi_format_catalog (client_id, name) VALUES (:client_id, :name) ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)');
-        $catalog->execute(['client_id' => $clientId, 'name' => $name]);
+        $catalog = db()->prepare('INSERT INTO client_pmi_format_catalog (client_id, project_id, name) VALUES (:client_id, :project_id, :name) ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)');
+        $catalog->execute(['client_id' => $clientId, 'project_id' => $projectId, 'name' => $name]);
         $catalogId = (int) db()->lastInsertId();
         if ($id) {
-            db()->prepare('UPDATE client_pmi_format_documents SET catalog_id = :catalog_id, registration_date = :registration_date, start_date = :start_date, end_date = :end_date, file_path = :file_path, link_url = :link_url WHERE id = :id AND client_id = :client_id')->execute([
+            db()->prepare('UPDATE client_pmi_format_documents SET catalog_id = :catalog_id, registration_date = :registration_date, start_date = :start_date, end_date = :end_date, file_path = :file_path, link_url = :link_url WHERE id = :id AND client_id = :client_id AND project_id = :project_id')->execute([
                 'catalog_id' => $catalogId, 'registration_date' => $registration, 'start_date' => $start ?: null, 'end_date' => $end ?: null,
-                'file_path' => $newFile ?: $oldFile, 'link_url' => $linkUrl ?: null, 'id' => $id, 'client_id' => $clientId,
+                'file_path' => $newFile ?: $oldFile, 'link_url' => $linkUrl ?: null, 'id' => $id, 'client_id' => $clientId, 'project_id' => $projectId,
             ]);
         } else {
-            db()->prepare('INSERT INTO client_pmi_format_documents (client_id, catalog_id, registration_date, start_date, end_date, file_path, link_url, registered_by_user_id) VALUES (:client_id, :catalog_id, :registration_date, :start_date, :end_date, :file_path, :link_url, :user_id)')->execute([
-                'client_id' => $clientId, 'catalog_id' => $catalogId, 'registration_date' => $registration, 'start_date' => $start ?: null,
+            db()->prepare('INSERT INTO client_pmi_format_documents (client_id, project_id, catalog_id, registration_date, start_date, end_date, file_path, link_url, registered_by_user_id) VALUES (:client_id, :project_id, :catalog_id, :registration_date, :start_date, :end_date, :file_path, :link_url, :user_id)')->execute([
+                'client_id' => $clientId, 'project_id' => $projectId, 'catalog_id' => $catalogId, 'registration_date' => $registration, 'start_date' => $start ?: null,
                 'end_date' => $end ?: null, 'file_path' => $newFile, 'link_url' => $linkUrl ?: null, 'user_id' => (int) ($_SESSION['user']['id'] ?? 0) ?: null,
             ]);
             $id = (int) db()->lastInsertId();
@@ -68,12 +71,12 @@ try {
     } elseif ($action === 'delete_document') {
         $id = (int) ($_POST['document_id'] ?? 0);
         db()->beginTransaction();
-        $current = db()->prepare('SELECT file_path FROM client_pmi_format_documents WHERE id = :id AND client_id = :client_id FOR UPDATE');
-        $current->execute(['id' => $id, 'client_id' => $clientId]);
+        $current = db()->prepare('SELECT file_path FROM client_pmi_format_documents WHERE id = :id AND client_id = :client_id AND project_id = :project_id FOR UPDATE');
+        $current->execute(['id' => $id, 'client_id' => $clientId, 'project_id' => $projectId]);
         $row = $current->fetch();
         if (!$row) { throw new DomainException('Formato no encontrado.'); }
         $oldFile = $row['file_path'];
-        db()->prepare('DELETE FROM client_pmi_format_documents WHERE id = :id AND client_id = :client_id')->execute(['id' => $id, 'client_id' => $clientId]);
+        db()->prepare('DELETE FROM client_pmi_format_documents WHERE id = :id AND client_id = :client_id AND project_id = :project_id')->execute(['id' => $id, 'client_id' => $clientId, 'project_id' => $projectId]);
         db()->commit();
         if ($oldFile) { delete_uploaded_file($oldFile); }
     } elseif ($action === 'create_folder' || $action === 'update_folder') {
@@ -85,21 +88,21 @@ try {
         if (!$ids) { throw new DomainException('Seleccione al menos un formato.'); }
         db()->beginTransaction();
         if ($action === 'create_folder') {
-            db()->prepare('INSERT INTO client_pmi_format_folders (client_id, name) VALUES (:client_id, :name)')->execute(['client_id' => $clientId, 'name' => $name]);
+            db()->prepare('INSERT INTO client_pmi_format_folders (client_id, project_id, name) VALUES (:client_id, :project_id, :name)')->execute(['client_id' => $clientId, 'project_id' => $projectId, 'name' => $name]);
             $folderId = (int) db()->lastInsertId();
         } else {
-            $folder = db()->prepare('SELECT 1 FROM client_pmi_format_folders WHERE id = :id AND client_id = :client_id FOR UPDATE');
-            $folder->execute(['id' => $folderId, 'client_id' => $clientId]);
+            $folder = db()->prepare('SELECT 1 FROM client_pmi_format_folders WHERE id = :id AND client_id = :client_id AND project_id = :project_id FOR UPDATE');
+            $folder->execute(['id' => $folderId, 'client_id' => $clientId, 'project_id' => $projectId]);
             if (!$folder->fetchColumn()) { throw new DomainException('Carpeta no encontrada.'); }
         }
-        $checkDoc = db()->prepare('SELECT fi.folder_id FROM client_pmi_format_documents d LEFT JOIN client_pmi_format_folder_items fi ON fi.document_id = d.id WHERE d.id = :id AND d.client_id = :client_id');
+        $checkDoc = db()->prepare('SELECT fi.folder_id FROM client_pmi_format_documents d LEFT JOIN client_pmi_format_folder_items fi ON fi.document_id = d.id WHERE d.id = :id AND d.client_id = :client_id AND d.project_id = :project_id');
         foreach ($ids as $docId) {
-            $checkDoc->execute(['id' => $docId, 'client_id' => $clientId]);
+            $checkDoc->execute(['id' => $docId, 'client_id' => $clientId, 'project_id' => $projectId]);
             $row = $checkDoc->fetch();
             if (!$row || ($row['folder_id'] !== null && (int) $row['folder_id'] !== $folderId)) { throw new DomainException('Un formato pertenece a otra carpeta o no existe.'); }
         }
         if ($action === 'update_folder') {
-            db()->prepare('UPDATE client_pmi_format_folders SET name = :name WHERE id = :id AND client_id = :client_id')->execute(['name' => $name, 'id' => $folderId, 'client_id' => $clientId]);
+            db()->prepare('UPDATE client_pmi_format_folders SET name = :name WHERE id = :id AND client_id = :client_id AND project_id = :project_id')->execute(['name' => $name, 'id' => $folderId, 'client_id' => $clientId, 'project_id' => $projectId]);
             db()->prepare('DELETE FROM client_pmi_format_folder_items WHERE folder_id = :folder_id')->execute(['folder_id' => $folderId]);
         }
         $insert = db()->prepare('INSERT INTO client_pmi_format_folder_items (document_id, folder_id) VALUES (:document_id, :folder_id)');
@@ -107,8 +110,8 @@ try {
         db()->commit();
     } elseif ($action === 'delete_folder') {
         $folderId = (int) ($_POST['folder_id'] ?? 0);
-        $delete = db()->prepare('DELETE FROM client_pmi_format_folders WHERE id = :id AND client_id = :client_id');
-        $delete->execute(['id' => $folderId, 'client_id' => $clientId]);
+        $delete = db()->prepare('DELETE FROM client_pmi_format_folders WHERE id = :id AND client_id = :client_id AND project_id = :project_id');
+        $delete->execute(['id' => $folderId, 'client_id' => $clientId, 'project_id' => $projectId]);
         if (!$delete->rowCount()) { throw new DomainException('Carpeta no encontrada.'); }
     } else {
         throw new DomainException('Acción inválida.');
