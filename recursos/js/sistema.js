@@ -2320,8 +2320,8 @@ function openAddRequirement() {
     canObserveCurrentRequirement = window.canManageRequirementObservations === true;
     const form = document.getElementById('requirementForm');
     form.reset();
-    document.getElementById('requirementDocumentType').querySelector('option[value="legacy"]')?.remove();
-    ['pdfInput', 'wordInput'].forEach(inputId => { document.getElementById(inputId).dataset.existing = '0'; });
+    document.getElementById('requirementDocumentType')?.querySelector('option[value="legacy"]')?.remove();
+    ['pdfInput', 'wordInput'].forEach(inputId => { const input = document.getElementById(inputId); if (input) input.dataset.existing = '0'; });
     updateRequirementDocumentFields();
     resetRequirementFileInput();
     form.classList.remove('was-validated');
@@ -2429,13 +2429,16 @@ async function fillRequirementModal(id) {
     document.getElementById('startDate').value = row.start_date;
     document.getElementById('endDate').value = row.end_date;
     document.getElementById('pdfInput').dataset.existing = row.file_path && /\.pdf$/i.test(row.file_path) ? 'pdf' : (row.file_path ? 'legacy' : '0');
-    document.getElementById('wordInput').dataset.existing = row.word_file_path ? '1' : '0';
+    const wordInput = document.getElementById('wordInput');
+    if (wordInput) wordInput.dataset.existing = row.word_file_path ? '1' : '0';
     const documentTypeSelect = document.getElementById('requirementDocumentType');
-    documentTypeSelect.querySelector('option[value="legacy"]')?.remove();
-    if (!row.document_type || row.document_type === 'legacy') {
-        documentTypeSelect.add(new Option('Adjunto anterior (PDF o imagen)', 'legacy'), 0);
+    if (documentTypeSelect) {
+        documentTypeSelect.querySelector('option[value="legacy"]')?.remove();
+        if (!row.document_type || row.document_type === 'legacy') {
+            documentTypeSelect.add(new Option('Adjunto anterior (PDF o imagen)', 'legacy'), 0);
+        }
+        documentTypeSelect.value = row.document_type === 'pdf_word_image' ? 'pdf_word' : (row.document_type || 'legacy');
     }
-    documentTypeSelect.value = row.document_type === 'pdf_word_image' ? 'pdf_word' : (row.document_type || 'legacy');
     updateRequirementDocumentFields();
     document.getElementById('observations').value = '';
     const option = new Option(row.requirement, row.requirement_id, true, true);
@@ -2469,15 +2472,22 @@ function resetRequirementFileInput() {
 }
 
 function updateRequirementDocumentFields() {
-    const type = document.getElementById('requirementDocumentType')?.value || 'legacy';
-    document.getElementById('requirementWordBlock').classList.toggle('d-none', type !== 'pdf_word');
+    const documentTypeSelect = document.getElementById('requirementDocumentType');
+    if (!documentTypeSelect) return;
+    const type = documentTypeSelect.value || 'legacy';
+    document.getElementById('requirementWordBlock')?.classList.toggle('d-none', type !== 'pdf_word');
     const primaryLabel = document.getElementById('requirementPrimaryFileLabel');
-    primaryLabel.textContent = type === 'legacy' ? 'Adjunto (PDF o imagen)' : 'Archivo PDF';
-    primaryLabel.classList.toggle('visually-hidden', type === 'legacy');
+    if (primaryLabel) {
+        primaryLabel.textContent = type === 'legacy' ? 'Adjunto (PDF o imagen)' : 'Archivo PDF';
+        primaryLabel.classList.toggle('visually-hidden', type === 'legacy');
+    }
     document.getElementById('pdfInput').accept = type === 'legacy' ? '.pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp' : '.pdf,application/pdf';
     document.getElementById('pdfInput').required = type !== 'legacy' && document.getElementById('pdfInput').dataset.existing !== 'pdf';
-    document.getElementById('wordInput').required = type === 'pdf_word' && document.getElementById('wordInput').dataset.existing !== '1';
-    if (type !== 'pdf_word') document.getElementById('wordInput').value = '';
+    const wordInput = document.getElementById('wordInput');
+    if (wordInput) {
+        wordInput.required = type === 'pdf_word' && wordInput.dataset.existing !== '1';
+        if (type !== 'pdf_word') wordInput.value = '';
+    }
 }
 
 function renderRequirementAudit(row, activity) {
@@ -2594,7 +2604,7 @@ function setRequirementReadonly(state) {
     });
     document.querySelector('#requirementForm button[type="submit"]').classList.toggle('d-none', state);
     ['requirementPdfBlock', 'requirementWordBlock'].forEach(id => {
-        if (state) document.getElementById(id).classList.add('d-none');
+        if (state) document.getElementById(id)?.classList.add('d-none');
     });
     if (!state) updateRequirementDocumentFields();
     document.getElementById('newCatalogRequirementBtn')?.classList.toggle('d-none', state);
