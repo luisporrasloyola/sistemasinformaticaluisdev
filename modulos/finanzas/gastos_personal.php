@@ -52,27 +52,79 @@ if ($workerId > 0) {
     }
     $monthNames = [1 => 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
     $openingBalanceMonthLabel = $monthNames[(int) substr($period['month'], 5, 2)] . ' de ' . substr($period['month'], 0, 4);
+    $isDateRange = $period['mode'] === 'fechas';
+    $pageSize = 20;
+    $page = max(1, (int) ($_GET['pagina'] ?? 1));
+    $totalDays = 0;
+    $totalPages = 1;
+    $pageDates = [];
+    if ($isDateRange) {
+        $countStmt = db()->prepare('SELECT COUNT(DISTINCT mark_date) FROM attendance_marks WHERE worker_id = ? AND mark_date BETWEEN ? AND ?');
+        $countStmt->execute([$workerId, $period['start'], $period['end']]);
+        $totalDays = (int) $countStmt->fetchColumn();
+        $totalPages = max(1, (int) ceil($totalDays / $pageSize));
+        $page = min($page, $totalPages);
+        $datesStmt = db()->prepare('SELECT DISTINCT mark_date FROM attendance_marks WHERE worker_id = ? AND mark_date BETWEEN ? AND ? ORDER BY mark_date DESC LIMIT ? OFFSET ?');
+        $datesStmt->bindValue(1, $workerId, PDO::PARAM_INT);
+        $datesStmt->bindValue(2, $period['start']);
+        $datesStmt->bindValue(3, $period['end']);
+        $datesStmt->bindValue(4, $pageSize, PDO::PARAM_INT);
+        $datesStmt->bindValue(5, ($page - 1) * $pageSize, PDO::PARAM_INT);
+        $datesStmt->execute();
+        $pageDates = $datesStmt->fetchAll(PDO::FETCH_COLUMN);
+    }
     // Una fila por día marcado. Si hay varias marcaciones, se toma primero la entrada.
-    $marksStmt = db()->prepare("SELECT am.mark_date, am.mark_type, l.name AS location_name, p.name AS project_name
-        FROM attendance_marks am
-        LEFT JOIN attendance_locations l ON l.id = am.location_id
-        LEFT JOIN attendance_projects p ON p.id = am.project_id
-        WHERE am.worker_id = ? AND am.mark_date BETWEEN ? AND ?
-        ORDER BY am.mark_date DESC, CASE WHEN am.mark_type = 'entrada' THEN 0 ELSE 1 END, am.marked_at, am.id");
-    $marksStmt->execute([$workerId, $period['start'], $period['end']]);
     $markedDays = [];
-    foreach ($marksStmt as $mark) {
-        $date = (string) $mark['mark_date'];
-        if (!isset($markedDays[$date])) $markedDays[$date] = $mark;
+    if (!$isDateRange || $pageDates) {
+        $dateFilter = $isDateRange ? 'am.mark_date IN (' . implode(',', array_fill(0, count($pageDates), '?')) . ')' : 'am.mark_date BETWEEN ? AND ?';
+        $marksStmt = db()->prepare("SELECT am.mark_date, am.mark_type, l.name AS location_name, p.name AS project_name
+            FROM attendance_marks am
+            LEFT JOIN attendance_locations l ON l.id = am.location_id
+            LEFT JOIN attendance_projects p ON p.id = am.project_id
+            WHERE am.worker_id = ? AND $dateFilter
+            ORDER BY am.mark_date DESC, CASE WHEN am.mark_type = 'entrada' THEN 0 ELSE 1 END, am.marked_at, am.id");
+        $marksStmt->execute($isDateRange ? array_merge([$workerId], $pageDates) : [$workerId, $period['start'], $period['end']]);
+        foreach ($marksStmt as $mark) {
+            $date = (string) $mark['mark_date'];
+            if (!isset($markedDays[$date])) $markedDays[$date] = $mark;
+        }
     }
     $savedEdits = [];
-    $editsStmt = db()->prepare('SELECT mark_date, amount_override, additional_expense, additional_reason, observations FROM finance_personal_per_diem_edits WHERE worker_id = ? AND mark_date BETWEEN ? AND ?');
-    $editsStmt->execute([$workerId, $period['start'], $period['end']]);
-    foreach ($editsStmt as $edit) $savedEdits[(string) $edit['mark_date']] = $edit;
     $expensesByDate = [];
-    $expensesStmt = db()->prepare('SELECT mark_date, amount, reason FROM finance_personal_additional_expenses WHERE worker_id = ? AND mark_date BETWEEN ? AND ? ORDER BY mark_date, sort_order, id');
-    $expensesStmt->execute([$workerId, $period['start'], $period['end']]);
-    foreach ($expensesStmt as $expense) $expensesByDate[(string) $expense['mark_date']][] = ['amount' => (string) $expense['amount'], 'reason' => (string) $expense['reason']];
+    if ($markedDays) {
+        $selectedDates = array_keys($markedDays);
+        $placeholders = implode(',', array_fill(0, count($selectedDates), '?'));
+        $editsStmt = db()->prepare("SELECT mark_date, amount_override, observations FROM finance_personal_per_diem_edits WHERE worker_id = ? AND mark_date IN ($placeholders)");
+        $editsStmt->execute(array_merge([$workerId], $selectedDates));
+        foreach ($editsStmt as $edit) $savedEdits[(string) $edit['mark_date']] = $edit;
+        $expensesStmt = db()->prepare("SELECT mark_date, amount, reason FROM finance_personal_additional_expenses WHERE worker_id = ? AND mark_date IN ($placeholders) ORDER BY mark_date, sort_order, id");
+        $expensesStmt->execute(array_merge([$workerId], $selectedDates));
+        foreach ($expensesStmt as $expense) $expensesByDate[(string) $expense['mark_date']][] = ['amount' => (string) $expense['amount'], 'reason' => (string) $expense['reason']];
+    }
+    $periodExpenseTotal = 0.0;
+    $periodPerDiemTotal = 0.0;
+    if ($isDateRange && $totalDays > 0) {
+        $overridesStmt = db()->prepare('SELECT mark_date, amount_override FROM finance_personal_per_diem_edits WHERE worker_id = ? AND mark_date BETWEEN ? AND ?');
+        $overridesStmt->execute([$workerId, $period['start'], $period['end']]);
+        $periodOverrides = [];
+        foreach ($overridesStmt as $edit) $periodOverrides[(string) $edit['mark_date']] = $edit['amount_override'];
+        $totalMarksStmt = db()->prepare("SELECT am.mark_date, p.name AS project_name FROM attendance_marks am
+            LEFT JOIN attendance_projects p ON p.id = am.project_id
+            WHERE am.worker_id = ? AND am.mark_date BETWEEN ? AND ?
+            ORDER BY am.mark_date DESC, CASE WHEN am.mark_type = 'entrada' THEN 0 ELSE 1 END, am.marked_at, am.id");
+        $totalMarksStmt->execute([$workerId, $period['start'], $period['end']]);
+        $countedDates = [];
+        foreach ($totalMarksStmt as $mark) {
+            $date = (string) $mark['mark_date'];
+            if (isset($countedDates[$date])) continue;
+            $countedDates[$date] = true;
+            $override = $periodOverrides[$date] ?? null;
+            $periodPerDiemTotal += $override !== null ? (float) $override : (float) (personal_per_diem((string) ($mark['project_name'] ?? ''), $date) ?? 0);
+        }
+        $additionalTotalStmt = db()->prepare('SELECT COALESCE(SUM(a.amount), 0) FROM finance_personal_additional_expenses a WHERE a.worker_id = ? AND a.mark_date BETWEEN ? AND ? AND EXISTS (SELECT 1 FROM attendance_marks am WHERE am.worker_id = a.worker_id AND am.mark_date = a.mark_date)');
+        $additionalTotalStmt->execute([$workerId, $period['start'], $period['end']]);
+        $periodExpenseTotal = $periodPerDiemTotal + (float) $additionalTotalStmt->fetchColumn();
+    }
 } else {
     $stmt = db()->query('SELECT w.id, w.full_name, w.document_type, w.document_number, c.name AS company FROM workers w LEFT JOIN companies c ON c.id = w.company_id ORDER BY c.name, w.full_name, w.id');
     $workers = $stmt->fetchAll();
@@ -120,11 +172,10 @@ require __DIR__ . '/../../includes/header.php';
         <button class="btn btn-outline-primary" type="submit">Ver</button>
     </form>
     <div class="table-responsive">
-        <?php $periodExpenseTotal = 0.0; $periodPerDiemTotal = 0.0; ?>
         <table class="table table-hover align-middle mb-0" id="personalPerDiemTable">
             <thead class="table-light"><tr><th>Fecha</th><th>Ubicación</th><th>Proyecto</th><th>Viáticos</th><th>Observaciones</th><th>Gastos adicionales</th><th>Motivo</th><th>Total</th><th>Acción</th></tr></thead>
             <tbody>
-                <?php foreach ($markedDays as $date => $mark): $automaticPerDiem = personal_per_diem((string) ($mark['project_name'] ?? ''), $date); $savedEdit = $savedEdits[$date] ?? null; $perDiem = $savedEdit && $savedEdit['amount_override'] !== null ? (float) $savedEdit['amount_override'] : $automaticPerDiem; $expenses = $expensesByDate[$date] ?? []; $additionalTotal = array_sum(array_map(static fn($item) => (float) $item['amount'], $expenses)); $observations = (string) ($savedEdit['observations'] ?? ''); $total = $perDiem !== null || $expenses ? (float) ($perDiem ?? 0) + $additionalTotal : null; $periodPerDiemTotal += (float) ($perDiem ?? 0); $periodExpenseTotal += (float) ($total ?? 0); ?>
+                <?php foreach ($markedDays as $date => $mark): $automaticPerDiem = personal_per_diem((string) ($mark['project_name'] ?? ''), $date); $savedEdit = $savedEdits[$date] ?? null; $perDiem = $savedEdit && $savedEdit['amount_override'] !== null ? (float) $savedEdit['amount_override'] : $automaticPerDiem; $expenses = $expensesByDate[$date] ?? []; $additionalTotal = array_sum(array_map(static fn($item) => (float) $item['amount'], $expenses)); $observations = (string) ($savedEdit['observations'] ?? ''); $total = $perDiem !== null || $expenses ? (float) ($perDiem ?? 0) + $additionalTotal : null; if (!$isDateRange) { $periodPerDiemTotal += (float) ($perDiem ?? 0); $periodExpenseTotal += (float) ($total ?? 0); } ?>
                 <tr>
                     <td class="text-nowrap"><?= e(date('d/m/Y', strtotime($date))) ?></td>
                     <td><?= e($mark['location_name'] ?: '—') ?></td>
@@ -142,6 +193,16 @@ require __DIR__ . '/../../includes/header.php';
             <?php if ($markedDays): ?><tfoot><tr><td colspan="3" class="text-end">Gastos totales de viáticos</td><td class="text-nowrap">S/ <?= number_format($periodPerDiemTotal, 2, '.', ',') ?></td><td colspan="3" class="text-end">Gastos totales</td><td colspan="2" class="text-nowrap">S/ <?= number_format($periodExpenseTotal, 2, '.', ',') ?></td></tr></tfoot><?php endif; ?>
         </table>
     </div>
+    <?php if ($isDateRange && $totalPages > 1): ?>
+    <nav class="personal-expense-pagination" aria-label="Páginas de gastos del periodo">
+        <span>Mostrando <?= ($page - 1) * $pageSize + 1 ?>–<?= min($page * $pageSize, $totalDays) ?> de <?= $totalDays ?> fechas · Página <?= $page ?> de <?= $totalPages ?></span>
+        <div class="d-flex gap-2">
+            <?php $pageQuery = ['trabajador_id' => $workerId, 'periodo' => 'fechas', 'desde' => $period['from'], 'hasta' => $period['to']]; ?>
+            <?php if ($page > 1): ?><a class="btn btn-sm btn-outline-primary" href="<?= e(APP_URL . '/modulos/finanzas/gastos_personal.php?' . http_build_query($pageQuery + ['pagina' => $page - 1])) ?>">Anterior</a><?php endif; ?>
+            <?php if ($page < $totalPages): ?><a class="btn btn-sm btn-outline-primary" href="<?= e(APP_URL . '/modulos/finanzas/gastos_personal.php?' . http_build_query($pageQuery + ['pagina' => $page + 1])) ?>">Siguiente</a><?php endif; ?>
+        </div>
+    </nav>
+    <?php endif; ?>
 </section>
 <style>
 .per-diem-info-trigger { display:inline-grid; place-items:center; flex:none; width:34px; height:34px; padding:0; border:1px solid #bdd1f5; border-radius:50%; background:#eef4ff; color:#2563eb; font-size:.9rem; box-shadow:0 2px 6px rgba(37,99,235,.1); transition:background-color .15s,box-shadow .15s,transform .15s; }
@@ -173,6 +234,8 @@ require __DIR__ . '/../../includes/header.php';
 .personal-expense-period .form-control:focus,.personal-expense-period .form-select:focus { border-color:#4f83e6; box-shadow:0 0 0 3px rgba(37,99,235,.12); }
 .personal-expense-period [hidden] { display:none!important; }
 .personal-expense-records-panel .table-responsive { border:1px solid #d7e2f0; border-radius:7px; }
+.personal-expense-pagination { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-top:14px; color:#526b91; font-size:.78rem; }
+.personal-expense-pagination .btn { border-radius:7px; }
 #personalPerDiemTable { width:100%; min-width:980px; color:#172b4d; }
 #personalPerDiemTable thead th { padding:.7rem .55rem; background:#f7f9fc; border-bottom:1px solid #cbd8eb; color:#0f172a; font-size:.7rem; font-weight:800; text-transform:uppercase; vertical-align:middle; white-space:nowrap; }
 #personalPerDiemTable tbody td { padding:.57rem .55rem; border-bottom:1px solid #dce5f0; font-size:.83rem; vertical-align:middle; }
@@ -244,9 +307,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     periodMode.addEventListener('change', updatePeriodFields);
     updatePeriodFields();
-    document.getElementById('expensePeriodMonth').addEventListener('change', event => {
-        if (periodMode.value === 'mes' && event.target.value) event.target.form.requestSubmit();
-    });
     const openingBalance = document.getElementById('personalOpeningBalance');
     if (openingBalance) {
         const editor = document.getElementById('personalOpeningBalanceEditor');
