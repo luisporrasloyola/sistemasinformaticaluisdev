@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/cobranzas_valorizacion_periodo.php';
+require_once __DIR__ . '/../../includes/finanzas_depositos_personal_match.php';
 require_module_access('finanzas.gastos_personal');
 
 function personal_per_diem_rules(): array
@@ -91,6 +92,7 @@ if ($workerId > 0) {
     }
     $savedEdits = [];
     $expensesByDate = [];
+    $depositsByDate = [];
     if ($markedDays) {
         $selectedDates = array_keys($markedDays);
         $placeholders = implode(',', array_fill(0, count($selectedDates), '?'));
@@ -100,6 +102,22 @@ if ($workerId > 0) {
         $expensesStmt = db()->prepare("SELECT mark_date, amount, reason FROM finance_personal_additional_expenses WHERE worker_id = ? AND mark_date IN ($placeholders) ORDER BY mark_date, sort_order, id");
         $expensesStmt->execute(array_merge([$workerId], $selectedDates));
         foreach ($expensesStmt as $expense) $expensesByDate[(string) $expense['mark_date']][] = ['amount' => (string) $expense['amount'], 'reason' => (string) $expense['reason']];
+        $depositsStmt = db()->prepare("SELECT deposit_date, creditor, amount FROM finance_personal_deposits WHERE deposit_date IN ($placeholders)");
+        $depositsStmt->execute($selectedDates);
+        $deposits = $depositsStmt->fetchAll();
+        if ($deposits) {
+            $allWorkers = db()->query('SELECT id, full_name FROM workers')->fetchAll();
+            $resolvedCreditors = [];
+            foreach ($deposits as $deposit) {
+                $creditor = (string) $deposit['creditor'];
+                if (!array_key_exists($creditor, $resolvedCreditors)) {
+                    $resolvedCreditors[$creditor] = personal_deposit_unique_worker_id($creditor, $allWorkers);
+                }
+                if ($resolvedCreditors[$creditor] !== $workerId) continue;
+                $depositDate = (string) $deposit['deposit_date'];
+                $depositsByDate[$depositDate] = ($depositsByDate[$depositDate] ?? 0) + (int) round((float) $deposit['amount'] * 100);
+            }
+        }
     }
     $periodExpenseTotal = 0.0;
     $periodPerDiemTotal = 0.0;
@@ -173,7 +191,7 @@ require __DIR__ . '/../../includes/header.php';
     </form>
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0" id="personalPerDiemTable">
-            <thead class="table-light"><tr><th>Fecha</th><th>Ubicación</th><th>Proyecto</th><th>Viáticos</th><th>Observaciones</th><th>Gastos adicionales</th><th>Motivo</th><th>Total</th><th>Acción</th></tr></thead>
+            <thead class="table-light"><tr><th>Fecha</th><th>Ubicación</th><th>Proyecto</th><th>Viáticos</th><th>Observaciones</th><th>Gastos adicionales</th><th>Motivo</th><th>Total</th><th>Depósitos</th><th>Acción</th></tr></thead>
             <tbody>
                 <?php foreach ($markedDays as $date => $mark): $automaticPerDiem = personal_per_diem((string) ($mark['project_name'] ?? ''), $date); $savedEdit = $savedEdits[$date] ?? null; $perDiem = $savedEdit && $savedEdit['amount_override'] !== null ? (float) $savedEdit['amount_override'] : $automaticPerDiem; $expenses = $expensesByDate[$date] ?? []; $additionalTotal = array_sum(array_map(static fn($item) => (float) $item['amount'], $expenses)); $observations = (string) ($savedEdit['observations'] ?? ''); $total = $perDiem !== null || $expenses ? (float) ($perDiem ?? 0) + $additionalTotal : null; if (!$isDateRange) { $periodPerDiemTotal += (float) ($perDiem ?? 0); $periodExpenseTotal += (float) ($total ?? 0); } ?>
                 <tr>
@@ -185,12 +203,13 @@ require __DIR__ . '/../../includes/header.php';
                     <td class="additional-expense-cell text-nowrap"><?php if ($expenses): foreach ($expenses as $expense): ?><div class="expense-display-line">S/ <?= number_format((float) $expense['amount'], 2, '.', ',') ?></div><?php endforeach; else: ?>—<?php endif; ?></td>
                     <td class="additional-reason-cell" style="min-width:150px"><?php if ($expenses): foreach ($expenses as $expense): ?><div class="expense-display-line"><?= e($expense['reason']) ?></div><?php endforeach; else: ?>—<?php endif; ?></td>
                     <td class="total-expense-cell text-nowrap"><?= $total !== null ? 'S/ ' . number_format($total, 2, '.', ',') : '—' ?></td>
+                    <td class="deposit-amount-cell text-nowrap"><?= isset($depositsByDate[$date]) ? 'S/ ' . number_format($depositsByDate[$date] / 100, 2, '.', ',') : '—' ?></td>
                     <td class="per-diem-actions-cell"><button class="btn btn-sm btn-outline-primary edit-personal-per-diem" type="button" data-mark-date="<?= e($date) ?>" data-automatic="<?= $automaticPerDiem !== null ? (int) $automaticPerDiem : '' ?>" data-override="<?= $savedEdit && $savedEdit['amount_override'] !== null ? e((string) $savedEdit['amount_override']) : '' ?>" data-expenses="<?= e(json_encode($expenses, JSON_UNESCAPED_UNICODE)) ?>" data-observations="<?= e($observations) ?>" aria-label="Editar gastos del <?= e(date('d/m/Y', strtotime($date))) ?>" title="Editar gastos"><i class="fa-solid fa-pen" aria-hidden="true"></i></button></td>
                 </tr>
                 <?php endforeach; ?>
-                <?php if (!$markedDays): ?><tr><td colspan="9" class="text-center text-muted py-4">No hay marcaciones en el periodo seleccionado.</td></tr><?php endif; ?>
+                <?php if (!$markedDays): ?><tr><td colspan="10" class="text-center text-muted py-4">No hay marcaciones en el periodo seleccionado.</td></tr><?php endif; ?>
             </tbody>
-            <?php if ($markedDays): ?><tfoot><tr><td colspan="3" class="text-end">Gastos totales de viáticos</td><td class="text-nowrap">S/ <?= number_format($periodPerDiemTotal, 2, '.', ',') ?></td><td colspan="3" class="text-end">Gastos totales</td><td colspan="2" class="text-nowrap">S/ <?= number_format($periodExpenseTotal, 2, '.', ',') ?></td></tr></tfoot><?php endif; ?>
+            <?php if ($markedDays): ?><tfoot><tr><td colspan="3" class="text-end">Gastos totales de viáticos</td><td class="text-nowrap">S/ <?= number_format($periodPerDiemTotal, 2, '.', ',') ?></td><td colspan="3" class="text-end">Gastos totales</td><td class="text-nowrap">S/ <?= number_format($periodExpenseTotal, 2, '.', ',') ?></td><td colspan="2"></td></tr></tfoot><?php endif; ?>
         </table>
     </div>
     <?php if ($isDateRange && $totalPages > 1): ?>
@@ -236,15 +255,16 @@ require __DIR__ . '/../../includes/header.php';
 .personal-expense-records-panel .table-responsive { border:1px solid #d7e2f0; border-radius:7px; }
 .personal-expense-pagination { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-top:14px; color:#526b91; font-size:.78rem; }
 .personal-expense-pagination .btn { border-radius:7px; }
-#personalPerDiemTable { width:100%; min-width:980px; color:#172b4d; }
+#personalPerDiemTable { width:100%; min-width:1080px; color:#172b4d; }
 #personalPerDiemTable thead th { padding:.7rem .55rem; background:#f7f9fc; border-bottom:1px solid #cbd8eb; color:#0f172a; font-size:.7rem; font-weight:800; text-transform:uppercase; vertical-align:middle; white-space:nowrap; }
 #personalPerDiemTable tbody td { padding:.57rem .55rem; border-bottom:1px solid #dce5f0; font-size:.83rem; vertical-align:middle; }
 #personalPerDiemTable tbody tr:hover:not(.per-diem-editing) td { background:#f8fbff; }
 #personalPerDiemTable tbody tr:last-child td { border-bottom:0; }
 #personalPerDiemTable tfoot td { padding:.65rem .55rem; background:#f4f7fb; border-top:1px solid #d7e2f0; color:#0f172a; font-size:.85rem; font-weight:800; }
-#personalPerDiemTable tfoot td:nth-child(2),#personalPerDiemTable tfoot td:last-child { color:#0b3b80; font-size:1.05rem; }
+#personalPerDiemTable tfoot td:nth-child(2),#personalPerDiemTable tfoot td:nth-child(4) { color:#0b3b80; font-size:1.05rem; }
 #personalPerDiemTable .per-diem-amount-cell,#personalPerDiemTable .total-expense-cell { font-weight:700; }
 #personalPerDiemTable .total-expense-cell { color:#0b3b80; }
+#personalPerDiemTable .deposit-amount-cell { color:#0b3b80; font-weight:700; }
 #personalPerDiemTable .per-diem-actions-cell { width:78px; white-space:nowrap; }
 #personalPerDiemTable .per-diem-actions-cell .btn { display:inline-grid; place-items:center; width:32px; height:32px; padding:0; border-radius:7px; }
 #personalPerDiemTable .per-diem-actions-cell .btn-outline-primary { color:#172b4d; border-color:#cbd5e1; background:#fff; }
