@@ -1,0 +1,418 @@
+<?php
+require_once __DIR__ . '/../../includes/security.php';
+require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../includes/cobranzas_valorizacion_periodo.php';
+require_module_access('finanzas.gastos_personal');
+
+function personal_per_diem_rules(): array
+{
+    return [
+        'SHOUGANGBEIJING' => ['project' => 'SHOUGANG - BEIJING', 'weekday' => 40, 'weekend' => 40],
+        'NSANDINALOMAS' => ['project' => 'NS ANDINA LOMAS', 'weekday' => 25, 'weekend' => 40],
+        'ENELORYGEN' => ['project' => 'ENEL - ORYGEN', 'weekday' => 20, 'weekend' => 20],
+    ];
+}
+
+function personal_per_diem(string $projectName, string $markDate): ?int
+{
+    $projectKey = preg_replace('/[^A-Z0-9]/', '', mb_strtoupper($projectName, 'UTF-8'));
+    $rule = personal_per_diem_rules()[$projectKey] ?? null;
+    if ($rule === null) return null;
+    $weekday = (int) date('N', strtotime($markDate));
+    return $weekday <= 5 ? $rule['weekday'] : $rule['weekend'];
+}
+
+$workerId = max(0, (int) ($_GET['trabajador_id'] ?? 0));
+$worker = null;
+$periodError = '';
+if ($workerId > 0) {
+    $stmt = db()->prepare('SELECT w.id, w.full_name, w.document_type, w.document_number, c.name AS company FROM workers w LEFT JOIN companies c ON c.id = w.company_id WHERE w.id = ?');
+    $stmt->execute([$workerId]);
+    $worker = $stmt->fetch();
+    if (!$worker) {
+        http_response_code(404);
+        exit('Trabajador no encontrado.');
+    }
+    $latestMarkStmt = db()->prepare('SELECT MAX(mark_date) FROM attendance_marks WHERE worker_id = ?');
+    $latestMarkStmt->execute([$workerId]);
+    $latestMark = $latestMarkStmt->fetchColumn();
+    $defaultMonth = $latestMark ? substr((string) $latestMark, 0, 7) : date('Y-m');
+    try {
+        $period = valorizacion_periodo($_GET, $defaultMonth);
+    } catch (InvalidArgumentException $error) {
+        $periodError = $error->getMessage();
+        $period = valorizacion_periodo([], $defaultMonth);
+    }
+    $openingBalance = null;
+    if ($period['mode'] === 'mes') {
+        $balanceStmt = db()->prepare('SELECT opening_balance FROM finance_personal_monthly_balances WHERE worker_id = ? AND balance_month = ?');
+        $balanceStmt->execute([$workerId, $period['month'] . '-01']);
+        $savedBalance = $balanceStmt->fetchColumn();
+        if ($savedBalance !== false) $openingBalance = (string) $savedBalance;
+    }
+    $monthNames = [1 => 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+    $openingBalanceMonthLabel = $monthNames[(int) substr($period['month'], 5, 2)] . ' de ' . substr($period['month'], 0, 4);
+    // Una fila por día marcado. Si hay varias marcaciones, se toma primero la entrada.
+    $marksStmt = db()->prepare("SELECT am.mark_date, am.mark_type, l.name AS location_name, p.name AS project_name
+        FROM attendance_marks am
+        LEFT JOIN attendance_locations l ON l.id = am.location_id
+        LEFT JOIN attendance_projects p ON p.id = am.project_id
+        WHERE am.worker_id = ? AND am.mark_date BETWEEN ? AND ?
+        ORDER BY am.mark_date DESC, CASE WHEN am.mark_type = 'entrada' THEN 0 ELSE 1 END, am.marked_at, am.id");
+    $marksStmt->execute([$workerId, $period['start'], $period['end']]);
+    $markedDays = [];
+    foreach ($marksStmt as $mark) {
+        $date = (string) $mark['mark_date'];
+        if (!isset($markedDays[$date])) $markedDays[$date] = $mark;
+    }
+    $savedEdits = [];
+    $editsStmt = db()->prepare('SELECT mark_date, amount_override, additional_expense, additional_reason, observations FROM finance_personal_per_diem_edits WHERE worker_id = ? AND mark_date BETWEEN ? AND ?');
+    $editsStmt->execute([$workerId, $period['start'], $period['end']]);
+    foreach ($editsStmt as $edit) $savedEdits[(string) $edit['mark_date']] = $edit;
+    $expensesByDate = [];
+    $expensesStmt = db()->prepare('SELECT mark_date, amount, reason FROM finance_personal_additional_expenses WHERE worker_id = ? AND mark_date BETWEEN ? AND ? ORDER BY mark_date, sort_order, id');
+    $expensesStmt->execute([$workerId, $period['start'], $period['end']]);
+    foreach ($expensesStmt as $expense) $expensesByDate[(string) $expense['mark_date']][] = ['amount' => (string) $expense['amount'], 'reason' => (string) $expense['reason']];
+} else {
+    $stmt = db()->query('SELECT w.id, w.full_name, w.document_type, w.document_number, c.name AS company FROM workers w LEFT JOIN companies c ON c.id = w.company_id ORDER BY c.name, w.full_name, w.id');
+    $workers = $stmt->fetchAll();
+}
+require __DIR__ . '/../../includes/header.php';
+?>
+<div class="page-title">
+    <div>
+        <div class="d-flex align-items-center gap-2">
+            <h1 class="mb-0">Gastos de personal</h1>
+            <?php if ($worker): ?><button class="per-diem-info-trigger" type="button" data-bs-toggle="modal" data-bs-target="#personalPerDiemRulesModal" title="Ver reglas de viáticos" aria-label="Ver reglas de viáticos"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></button><?php endif; ?>
+        </div>
+        <p><?= $worker ? 'Ficha de gastos del trabajador.' : 'Seleccione un trabajador para consultar sus gastos.' ?></p>
+    </div>
+    <?php if ($worker): ?><a class="btn btn-outline-primary" href="<?= APP_URL ?>/modulos/finanzas/gastos_personal.php"><i class="fa-solid fa-arrow-left me-2" aria-hidden="true"></i>Volver a la lista</a><?php endif; ?>
+</div>
+<?php if ($worker): ?>
+<section class="work-panel personal-expense-worker-panel <?= $period['mode'] === 'mes' ? '' : 'personal-expense-worker-panel-wide' ?>">
+    <div class="personal-expense-worker-details">
+        <div><span class="personal-expense-detail-label">Trabajador</span><h2 class="h5 mb-0"><?= e($worker['full_name']) ?></h2></div>
+        <div><span class="personal-expense-detail-label"><?= e($worker['document_type'] ?: 'Documento') ?></span><strong><?= e($worker['document_number']) ?></strong></div>
+        <div><span class="personal-expense-detail-label">Empresa</span><strong><?= e($worker['company'] ?: 'Sin empresa') ?></strong></div>
+    </div>
+    <?php if ($period['mode'] === 'mes'): ?>
+    <div class="personal-opening-balance" id="personalOpeningBalance" data-month="<?= e($period['month']) ?>" data-balance="<?= e($openingBalance ?? '') ?>">
+        <div><span class="personal-opening-label">Saldo inicial de <?= e($openingBalanceMonthLabel) ?></span><strong class="d-block" id="personalOpeningBalanceValue"><?= $openingBalance !== null ? 'S/ ' . number_format((float) $openingBalance, 2, '.', ',') : 'Sin registrar' ?></strong></div>
+        <button class="btn btn-sm btn-outline-primary" type="button" id="editPersonalOpeningBalance" title="Editar saldo inicial" aria-label="Editar saldo inicial"><i class="fa-solid fa-pen" aria-hidden="true"></i></button>
+        <div class="personal-opening-editor" id="personalOpeningBalanceEditor" hidden>
+            <div class="input-group input-group-sm"><span class="input-group-text">S/</span><input class="form-control" id="personalOpeningBalanceInput" type="number" min="0" max="999999999.99" step="0.01" inputmode="decimal" aria-label="Saldo inicial del mes"></div>
+            <button class="btn btn-sm btn-primary" type="button" id="savePersonalOpeningBalance" title="Guardar saldo" aria-label="Guardar saldo"><i class="fa-solid fa-check" aria-hidden="true"></i></button>
+            <button class="btn btn-sm btn-outline-secondary" type="button" id="cancelPersonalOpeningBalance" title="Cancelar" aria-label="Cancelar edición"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+        </div>
+    </div>
+    <?php endif; ?>
+</section>
+<section class="work-panel personal-expense-records-panel">
+    <h2 class="h5 mb-3">Registros de gastos</h2>
+    <?php if ($periodError !== ''): ?><div class="alert alert-warning py-2" role="alert"><?= e($periodError) ?></div><?php endif; ?>
+    <form class="personal-expense-period mb-3" method="get" action="<?= e(APP_URL . '/modulos/finanzas/gastos_personal.php') ?>">
+        <input type="hidden" name="trabajador_id" value="<?= (int) $workerId ?>">
+        <div class="personal-expense-period-field"><label for="expensePeriodMode">Periodo</label><select class="form-select form-select-sm" id="expensePeriodMode" name="periodo"><option value="mes" <?= $period['mode'] === 'mes' ? 'selected' : '' ?>>Por mes</option><option value="fechas" <?= $period['mode'] === 'fechas' ? 'selected' : '' ?>>Entre fechas</option></select></div>
+        <div class="personal-expense-period-field" id="expensePeriodMonthField" <?= $period['mode'] !== 'mes' ? 'hidden' : '' ?>><label for="expensePeriodMonth">Mes</label><input class="form-control form-control-sm" id="expensePeriodMonth" name="mes" type="month" value="<?= e($period['month']) ?>" <?= $period['mode'] === 'mes' ? 'required' : 'disabled' ?>></div>
+        <div class="personal-expense-period-field" id="expensePeriodFromField" <?= $period['mode'] !== 'fechas' ? 'hidden' : '' ?>><label for="expensePeriodFrom">Desde</label><input class="form-control form-control-sm" id="expensePeriodFrom" name="desde" type="date" value="<?= e($period['from'] ?: $period['start']) ?>" <?= $period['mode'] === 'fechas' ? 'required' : 'disabled' ?>></div>
+        <div class="personal-expense-period-field" id="expensePeriodToField" <?= $period['mode'] !== 'fechas' ? 'hidden' : '' ?>><label for="expensePeriodTo">Hasta</label><input class="form-control form-control-sm" id="expensePeriodTo" name="hasta" type="date" value="<?= e($period['to'] ?: $period['end']) ?>" <?= $period['mode'] === 'fechas' ? 'required' : 'disabled' ?>></div>
+        <button class="btn btn-outline-primary" type="submit">Ver</button>
+    </form>
+    <div class="table-responsive">
+        <?php $periodExpenseTotal = 0.0; $periodPerDiemTotal = 0.0; ?>
+        <table class="table table-hover align-middle mb-0" id="personalPerDiemTable">
+            <thead class="table-light"><tr><th>Fecha</th><th>Ubicación</th><th>Proyecto</th><th>Viáticos</th><th>Observaciones</th><th>Gastos adicionales</th><th>Motivo</th><th>Total</th><th>Acción</th></tr></thead>
+            <tbody>
+                <?php foreach ($markedDays as $date => $mark): $automaticPerDiem = personal_per_diem((string) ($mark['project_name'] ?? ''), $date); $savedEdit = $savedEdits[$date] ?? null; $perDiem = $savedEdit && $savedEdit['amount_override'] !== null ? (float) $savedEdit['amount_override'] : $automaticPerDiem; $expenses = $expensesByDate[$date] ?? []; $additionalTotal = array_sum(array_map(static fn($item) => (float) $item['amount'], $expenses)); $observations = (string) ($savedEdit['observations'] ?? ''); $total = $perDiem !== null || $expenses ? (float) ($perDiem ?? 0) + $additionalTotal : null; $periodPerDiemTotal += (float) ($perDiem ?? 0); $periodExpenseTotal += (float) ($total ?? 0); ?>
+                <tr>
+                    <td class="text-nowrap"><?= e(date('d/m/Y', strtotime($date))) ?></td>
+                    <td><?= e($mark['location_name'] ?: '—') ?></td>
+                    <td><?= e($mark['project_name'] ?: '—') ?></td>
+                    <td class="text-nowrap per-diem-amount-cell"><?= $perDiem !== null ? 'S/ ' . number_format((float) $perDiem, ((float) $perDiem == (int) $perDiem ? 0 : 2), '.', ',') : '—' ?></td>
+                    <td class="per-diem-observations-cell" style="white-space:pre-line;min-width:180px"><?= $observations !== '' ? e($observations) : '—' ?></td>
+                    <td class="additional-expense-cell text-nowrap"><?php if ($expenses): foreach ($expenses as $expense): ?><div class="expense-display-line">S/ <?= number_format((float) $expense['amount'], 2, '.', ',') ?></div><?php endforeach; else: ?>—<?php endif; ?></td>
+                    <td class="additional-reason-cell" style="min-width:150px"><?php if ($expenses): foreach ($expenses as $expense): ?><div class="expense-display-line"><?= e($expense['reason']) ?></div><?php endforeach; else: ?>—<?php endif; ?></td>
+                    <td class="total-expense-cell text-nowrap"><?= $total !== null ? 'S/ ' . number_format($total, 2, '.', ',') : '—' ?></td>
+                    <td class="per-diem-actions-cell"><button class="btn btn-sm btn-outline-primary edit-personal-per-diem" type="button" data-mark-date="<?= e($date) ?>" data-automatic="<?= $automaticPerDiem !== null ? (int) $automaticPerDiem : '' ?>" data-override="<?= $savedEdit && $savedEdit['amount_override'] !== null ? e((string) $savedEdit['amount_override']) : '' ?>" data-expenses="<?= e(json_encode($expenses, JSON_UNESCAPED_UNICODE)) ?>" data-observations="<?= e($observations) ?>" aria-label="Editar gastos del <?= e(date('d/m/Y', strtotime($date))) ?>" title="Editar gastos"><i class="fa-solid fa-pen" aria-hidden="true"></i></button></td>
+                </tr>
+                <?php endforeach; ?>
+                <?php if (!$markedDays): ?><tr><td colspan="9" class="text-center text-muted py-4">No hay marcaciones en el periodo seleccionado.</td></tr><?php endif; ?>
+            </tbody>
+            <?php if ($markedDays): ?><tfoot><tr><td colspan="3" class="text-end">Gastos totales de viáticos</td><td class="text-nowrap">S/ <?= number_format($periodPerDiemTotal, 2, '.', ',') ?></td><td colspan="3" class="text-end">Gastos totales</td><td colspan="2" class="text-nowrap">S/ <?= number_format($periodExpenseTotal, 2, '.', ',') ?></td></tr></tfoot><?php endif; ?>
+        </table>
+    </div>
+</section>
+<style>
+.per-diem-info-trigger { display:inline-grid; place-items:center; flex:none; width:34px; height:34px; padding:0; border:1px solid #bdd1f5; border-radius:50%; background:#eef4ff; color:#2563eb; font-size:.9rem; box-shadow:0 2px 6px rgba(37,99,235,.1); transition:background-color .15s,box-shadow .15s,transform .15s; }
+.per-diem-info-trigger:hover { background:#dfeaff; box-shadow:0 4px 10px rgba(37,99,235,.16); transform:translateY(-1px); }
+.per-diem-info-trigger:focus-visible { outline:3px solid #93b4ff; outline-offset:2px; }
+.personal-expense-worker-panel.work-panel { display:grid; grid-template-columns:minmax(0,1fr) minmax(255px,auto); align-items:center; gap:20px; margin-bottom:12px; border:1px solid #dedbd4!important; border-radius:15px!important; background:linear-gradient(115deg,#fbfaf7 0%,#f4f2ed 100%)!important; box-shadow:0 5px 18px rgba(60,55,45,.055)!important; }
+.personal-expense-worker-panel-wide.work-panel { grid-template-columns:1fr; }
+.personal-expense-worker-details { display:grid; grid-template-columns:minmax(180px,1fr) minmax(190px,1fr); gap:14px 24px; min-width:0; }
+.personal-expense-worker-details > div:first-child { grid-column:1/-1; }
+.personal-expense-worker-details h2 { color:#172b4d; font-weight:750; }
+.personal-expense-worker-details strong { display:block; color:#172b4d; font-size:.88rem; overflow-wrap:anywhere; }
+.personal-expense-detail-label,.personal-opening-label { display:block; margin-bottom:3px; color:#455b79; font-size:.72rem; font-weight:800; letter-spacing:.035em; text-transform:uppercase; }
+.personal-opening-balance { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:74px; padding:4px 0 4px 18px; border-left:1px solid #dedbd4; }
+.personal-opening-balance strong { color:#0b3b80; font-size:1.18rem; line-height:1.2; }
+.personal-opening-balance .btn { flex:none; width:34px; height:34px; padding:0; border-radius:7px; background:#fff; border-color:#cbd5e1; color:#172b4d; }
+.personal-opening-editor { display:flex; align-items:center; gap:6px; }
+.personal-opening-editor .input-group { width:155px; }
+.personal-opening-editor .input-group-text,.personal-opening-editor input { border-color:#cbd9eb; }
+.personal-opening-editor .btn-primary { color:#fff; background:#2563eb; }
+.personal-opening-balance [hidden] { display:none!important; }
+.personal-expense-records-panel.work-panel { border:1px solid #cbd8eb!important; border-radius:15px!important; box-shadow:0 5px 18px rgba(35,62,102,.045)!important; }
+.personal-expense-records-panel > h2 { color:#172b4d; font-size:1rem; font-weight:750; }
+.personal-expense-period { display:flex; align-items:end; gap:8px; flex-wrap:wrap; }
+.personal-expense-period-field { min-width:125px; }
+.personal-expense-period-field:has(input[type="month"]) { min-width:180px; }
+.personal-expense-period-field label { display:block; margin-bottom:3px; color:#526b91; font-size:.7rem; font-weight:800; letter-spacing:.04em; text-transform:uppercase; }
+.personal-expense-period .form-control,.personal-expense-period .form-select,.personal-expense-period .btn { height:38px; border-radius:8px; }
+.personal-expense-period .form-control,.personal-expense-period .form-select { border-color:#cbd9eb; background:#fff; }
+.personal-expense-period .form-control:focus,.personal-expense-period .form-select:focus { border-color:#4f83e6; box-shadow:0 0 0 3px rgba(37,99,235,.12); }
+.personal-expense-period [hidden] { display:none!important; }
+.personal-expense-records-panel .table-responsive { border:1px solid #d7e2f0; border-radius:7px; }
+#personalPerDiemTable { width:100%; min-width:980px; color:#172b4d; }
+#personalPerDiemTable thead th { padding:.7rem .55rem; background:#f7f9fc; border-bottom:1px solid #cbd8eb; color:#0f172a; font-size:.7rem; font-weight:800; text-transform:uppercase; vertical-align:middle; white-space:nowrap; }
+#personalPerDiemTable tbody td { padding:.57rem .55rem; border-bottom:1px solid #dce5f0; font-size:.83rem; vertical-align:middle; }
+#personalPerDiemTable tbody tr:hover:not(.per-diem-editing) td { background:#f8fbff; }
+#personalPerDiemTable tbody tr:last-child td { border-bottom:0; }
+#personalPerDiemTable tfoot td { padding:.65rem .55rem; background:#f4f7fb; border-top:1px solid #d7e2f0; color:#0f172a; font-size:.85rem; font-weight:800; }
+#personalPerDiemTable tfoot td:nth-child(2),#personalPerDiemTable tfoot td:last-child { color:#0b3b80; font-size:1.05rem; }
+#personalPerDiemTable .per-diem-amount-cell,#personalPerDiemTable .total-expense-cell { font-weight:700; }
+#personalPerDiemTable .total-expense-cell { color:#0b3b80; }
+#personalPerDiemTable .per-diem-actions-cell { width:78px; white-space:nowrap; }
+#personalPerDiemTable .per-diem-actions-cell .btn { display:inline-grid; place-items:center; width:32px; height:32px; padding:0; border-radius:7px; }
+#personalPerDiemTable .per-diem-actions-cell .btn-outline-primary { color:#172b4d; border-color:#cbd5e1; background:#fff; }
+#personalPerDiemTable .per-diem-actions-cell .btn-outline-primary:hover { background:#eff6ff; border-color:#93b4e9; }
+#personalPerDiemTable tr.per-diem-editing > td { background:#ececec; }
+#personalPerDiemTable tr.per-diem-editing > td:first-child { box-shadow:inset 3px 0 #2563eb; }
+#personalPerDiemTable tr.per-diem-editing .form-control { border-color:#cbd9eb; background:#fff; }
+#personalPerDiemTable tr.per-diem-editing .form-control:focus { border-color:#4f83e6; box-shadow:0 0 0 3px rgba(37,99,235,.12); }
+#personalPerDiemTable .per-diem-observations-cell:has(textarea) { min-width:260px; white-space:normal!important; }
+#personalPerDiemTable .additional-expense-cell:has(input) { min-width:155px; }
+#personalPerDiemTable .additional-reason-cell:has(textarea) { min-width:220px; white-space:normal!important; }
+#personalPerDiemTable .expense-display-line { min-height:2rem; padding:.25rem 0; border-bottom:1px solid #e5eaf0; }
+#personalPerDiemTable .expense-display-line:last-child { border-bottom:0; }
+#personalPerDiemTable .expense-edit-line { min-height:2.75rem; margin-bottom:.35rem; }
+.personal-per-diem-rules-modal .modal-content { overflow:hidden; border:1px solid #cbd8eb; border-radius:15px; box-shadow:0 20px 55px rgba(15,35,70,.2); }
+.personal-per-diem-rules-modal .modal-header { padding:16px 20px; background:#f4f7fb; border-bottom:1px solid #d7e2f0; }
+.personal-per-diem-rules-modal .modal-title { display:flex; align-items:center; gap:10px; color:#172b4d; font-weight:750; }
+.personal-per-diem-rules-modal .modal-title-icon { display:inline-grid; place-items:center; width:30px; height:30px; border-radius:8px; background:#e3eeff; color:#2563eb; font-size:.82rem; }
+.personal-per-diem-rules-modal .modal-body { padding:18px 20px; }
+.personal-per-diem-rules-modal .modal-body > p { color:#526b91!important; line-height:1.5; }
+.personal-per-diem-rules-modal .table-responsive { border:1px solid #d7e2f0; border-radius:8px; }
+.personal-per-diem-rules-modal table { margin:0; font-size:.83rem; }
+.personal-per-diem-rules-modal thead th { padding:.7rem .65rem; background:#f7f9fc; border:0; border-bottom:1px solid #d7e2f0; color:#172b4d; font-size:.7rem; font-weight:800; text-transform:uppercase; white-space:nowrap; }
+.personal-per-diem-rules-modal tbody td { padding:.68rem .65rem; border:0; border-bottom:1px solid #e2eaf3; color:#172b4d; }
+.personal-per-diem-rules-modal tbody tr:last-child td { border-bottom:0; }
+.personal-per-diem-rules-modal .rule-rate { color:#0b3b80; font-weight:750; }
+.personal-per-diem-rules-modal .modal-footer { padding:12px 20px; background:#fbfcfe; border-top:1px solid #e2eaf3; }
+.personal-per-diem-rules-modal .modal-footer .btn { border-radius:8px; min-width:80px; }
+@media(max-width:800px) { .personal-expense-worker-panel.work-panel { grid-template-columns:1fr; } .personal-opening-balance { border-left:0; border-top:1px solid #dedbd4; padding:14px 0 0; } }
+@media(max-width:700px) { .personal-expense-period-field { flex:1 1 140px; } .personal-expense-worker-details { grid-template-columns:1fr; gap:10px; } .personal-expense-worker-details > div:first-child { grid-column:auto; } }
+</style>
+<div class="modal fade personal-per-diem-rules-modal" id="personalPerDiemRulesModal" tabindex="-1" aria-labelledby="personalPerDiemRulesTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header"><h2 class="modal-title h5 mb-0" id="personalPerDiemRulesTitle"><span class="modal-title-icon"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></span>Reglas de viáticos</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+            <div class="modal-body">
+                <p class="text-muted small">El importe diario depende del proyecto seleccionado al marcar asistencia y del día de la semana.</p>
+                <div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>Proyecto</th><th>Lunes a viernes</th><th>Sábado y domingo</th></tr></thead><tbody>
+                    <?php foreach (personal_per_diem_rules() as $rule): ?><tr><td><?= e($rule['project']) ?></td><td class="text-nowrap rule-rate">S/ <?= (int) $rule['weekday'] ?></td><td class="text-nowrap rule-rate">S/ <?= (int) $rule['weekend'] ?></td></tr><?php endforeach; ?>
+                </tbody></table></div>
+                <p class="text-muted small mb-0 mt-3">Si la marcación no tiene uno de estos proyectos, no se asigna viático automático.</p>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button></div>
+        </div>
+    </div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const periodMode = document.getElementById('expensePeriodMode');
+    const periodFields = [
+        ['mes', document.getElementById('expensePeriodMonthField'), document.getElementById('expensePeriodMonth')],
+        ['fechas', document.getElementById('expensePeriodFromField'), document.getElementById('expensePeriodFrom')],
+        ['fechas', document.getElementById('expensePeriodToField'), document.getElementById('expensePeriodTo')]
+    ];
+    const updatePeriodFields = () => periodFields.forEach(([mode, wrapper, input]) => {
+        const active = periodMode.value === mode;
+        wrapper.hidden = !active;
+        input.disabled = !active;
+        input.required = active;
+    });
+    periodMode.addEventListener('change', updatePeriodFields);
+    updatePeriodFields();
+    document.getElementById('expensePeriodMonth').addEventListener('change', event => {
+        if (periodMode.value === 'mes' && event.target.value) event.target.form.requestSubmit();
+    });
+    const openingBalance = document.getElementById('personalOpeningBalance');
+    if (openingBalance) {
+        const editor = document.getElementById('personalOpeningBalanceEditor');
+        const input = document.getElementById('personalOpeningBalanceInput');
+        const editButton = document.getElementById('editPersonalOpeningBalance');
+        const saveButton = document.getElementById('savePersonalOpeningBalance');
+        const closeEditor = () => { editor.hidden = true; editButton.hidden = false; input.setCustomValidity(''); };
+        editButton.addEventListener('click', () => {
+            input.value = openingBalance.dataset.balance;
+            editButton.hidden = true;
+            editor.hidden = false;
+            input.focus();
+        });
+        document.getElementById('cancelPersonalOpeningBalance').addEventListener('click', closeEditor);
+        saveButton.addEventListener('click', async () => {
+            if (!input.reportValidity()) return;
+            const data = new FormData();
+            data.set('csrf_token', <?= json_encode(csrf_token()) ?>);
+            data.set('worker_id', <?= (int) $workerId ?>);
+            data.set('month', openingBalance.dataset.month);
+            data.set('amount', input.value.trim());
+            saveButton.disabled = true;
+            try {
+                const response = await fetch(<?= json_encode(APP_URL . '/modulos/finanzas/guardar_saldo_inicial_personal.php') ?>, {method:'POST', body:data, credentials:'same-origin'});
+                const result = await response.json();
+                if (!response.ok || !result.ok) throw new Error(result.message || 'No se pudo guardar el saldo inicial.');
+                openingBalance.dataset.balance = input.value.trim();
+                document.getElementById('personalOpeningBalanceValue').textContent = input.value.trim() === '' ? 'Sin registrar' : 'S/ ' + Number(input.value).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+                closeEditor();
+            } catch (error) {
+                Swal.fire('Atención', error.message, 'warning');
+            } finally {
+                saveButton.disabled = false;
+            }
+        });
+    }
+    const table = document.getElementById('personalPerDiemTable');
+    let activeEdit = null;
+    function addExpenseLine(amount = '', reason = '') {
+        if (!activeEdit) return;
+        const amountList = activeEdit.additionalCell.querySelector('.additional-expense-list');
+        const reasonList = activeEdit.reasonCell.querySelector('.additional-reason-list');
+        if (amountList.children.length >= 30) return;
+        const amountLine = document.createElement('div');
+        amountLine.className = 'expense-edit-line d-flex gap-1';
+        amountLine.innerHTML = '<input class="form-control form-control-sm additional-expense-input" type="number" min="0" max="999999.99" step="0.01" inputmode="decimal" aria-label="Importe del gasto adicional"><button class="btn btn-sm btn-outline-danger remove-additional-expense" type="button" title="Quitar gasto" aria-label="Quitar gasto"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>';
+        amountLine.querySelector('input').value = amount;
+        const reasonLine = document.createElement('div');
+        reasonLine.className = 'expense-edit-line';
+        reasonLine.innerHTML = '<textarea class="form-control form-control-sm additional-reason-input" rows="1" maxlength="1000" aria-label="Motivo del gasto adicional"></textarea>';
+        reasonLine.querySelector('textarea').value = reason;
+        amountList.append(amountLine);
+        reasonList.append(reasonLine);
+    }
+    function cancelEdit() {
+        if (!activeEdit) return;
+        const {row, amountCell, observationsCell, additionalCell, reasonCell, totalCell, actionsCell, original} = activeEdit;
+        amountCell.innerHTML = original.amount;
+        observationsCell.innerHTML = original.observations;
+        additionalCell.innerHTML = original.additional;
+        reasonCell.innerHTML = original.reason;
+        totalCell.innerHTML = original.total;
+        actionsCell.innerHTML = original.actions;
+        observationsCell.style.whiteSpace = 'pre-line';
+        reasonCell.style.whiteSpace = 'pre-line';
+        row.classList.remove('per-diem-editing');
+        activeEdit = null;
+    }
+    table.addEventListener('click', async event => {
+        const button = event.target.closest('button');
+        if (!button || !table.contains(button)) return;
+        if (button.classList.contains('add-additional-expense')) { addExpenseLine(); return; }
+        if (button.classList.contains('remove-additional-expense') && activeEdit) {
+            const index = [...activeEdit.additionalCell.querySelector('.additional-expense-list').children].indexOf(button.closest('.expense-edit-line'));
+            button.closest('.expense-edit-line').remove();
+            activeEdit.reasonCell.querySelector('.additional-reason-list').children[index]?.remove();
+            return;
+        }
+        if (button.classList.contains('cancel-personal-per-diem')) { cancelEdit(); return; }
+        if (button.classList.contains('edit-personal-per-diem')) {
+            cancelEdit();
+            const row = button.closest('tr');
+            const amountCell = row.querySelector('.per-diem-amount-cell');
+            const observationsCell = row.querySelector('.per-diem-observations-cell');
+            const additionalCell = row.querySelector('.additional-expense-cell');
+            const reasonCell = row.querySelector('.additional-reason-cell');
+            const totalCell = row.querySelector('.total-expense-cell');
+            const actionsCell = row.querySelector('.per-diem-actions-cell');
+            const original = {amount: amountCell.innerHTML, observations: observationsCell.innerHTML, additional: additionalCell.innerHTML, reason: reasonCell.innerHTML, total: totalCell.innerHTML, actions: actionsCell.innerHTML};
+            const markDate = button.dataset.markDate;
+            const automatic = button.dataset.automatic;
+            const override = button.dataset.override;
+            const observations = button.dataset.observations;
+            const expenses = JSON.parse(button.dataset.expenses || '[]');
+            row.classList.add('per-diem-editing');
+            amountCell.innerHTML = '<input class="form-control form-control-sm per-diem-input" type="number" min="0" max="999999.99" step="0.01" inputmode="decimal" aria-label="Viáticos en soles">';
+            const amountInput = amountCell.querySelector('input');
+            amountInput.value = override !== '' ? override : automatic;
+            observationsCell.style.whiteSpace = 'normal';
+            observationsCell.innerHTML = '<textarea class="form-control form-control-sm per-diem-observations-input" rows="2" maxlength="10000" required aria-label="Observaciones"></textarea>';
+            observationsCell.querySelector('.per-diem-observations-input').value = observations;
+            additionalCell.innerHTML = '<div class="additional-expense-list"></div><button class="btn btn-sm btn-outline-primary add-additional-expense mt-1" type="button"><i class="fa-solid fa-plus me-1" aria-hidden="true"></i>Agregar gasto</button>';
+            reasonCell.style.whiteSpace = 'normal';
+            reasonCell.innerHTML = '<div class="additional-reason-list"></div>';
+            actionsCell.innerHTML = '<div class="d-flex gap-1"><button class="btn btn-sm btn-primary save-personal-per-diem" type="button" title="Guardar" aria-label="Guardar cambios"><i class="fa-solid fa-check" aria-hidden="true"></i></button><button class="btn btn-sm btn-outline-secondary cancel-personal-per-diem" type="button" title="Cancelar" aria-label="Cancelar edición"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div>';
+            activeEdit = {row, amountCell, observationsCell, additionalCell, reasonCell, totalCell, actionsCell, original, markDate};
+            expenses.forEach(expense => addExpenseLine(expense.amount, expense.reason));
+            amountInput.focus();
+            return;
+        }
+        if (!button.classList.contains('save-personal-per-diem') || !activeEdit) return;
+        const {amountCell, observationsCell, additionalCell, reasonCell, markDate} = activeEdit;
+        const amountInput = amountCell.querySelector('input');
+        const observationsInput = observationsCell.querySelector('.per-diem-observations-input');
+        if (!amountInput.reportValidity()) return;
+        const additionalInputs = [...additionalCell.querySelectorAll('.additional-expense-input')];
+        const reasonInputs = [...reasonCell.querySelectorAll('.additional-reason-input')];
+        const expenses = [];
+        for (let i = 0; i < additionalInputs.length; i++) {
+            const expenseInput = additionalInputs[i];
+            const reasonInput = reasonInputs[i];
+            if (!expenseInput.reportValidity()) return;
+            reasonInput.setCustomValidity(expenseInput.value !== '' && !reasonInput.value.trim() ? 'Indique el motivo de este gasto.' : expenseInput.value === '' && reasonInput.value.trim() ? 'Ingrese el importe o quite este gasto.' : '');
+            if (!reasonInput.reportValidity()) return;
+            if (expenseInput.value !== '') expenses.push({amount: expenseInput.value, reason: reasonInput.value.trim()});
+        }
+        if (!observationsInput.value.trim()) {
+            observationsInput.setCustomValidity('Ingrese una observación para guardar el cambio.');
+        } else { observationsInput.setCustomValidity(''); }
+        if (!observationsInput.reportValidity()) return;
+        const data = new FormData();
+        data.set('csrf_token', <?= json_encode(csrf_token()) ?>);
+        data.set('worker_id', <?= (int) $workerId ?>);
+        data.set('mark_date', markDate);
+        data.set('amount_override', amountInput.value);
+        data.set('additional_expenses', JSON.stringify(expenses));
+        data.set('observations_direct', observationsInput.value.trim());
+        button.disabled = true;
+        try {
+            const response = await fetch(<?= json_encode(APP_URL . '/modulos/finanzas/guardar_viatico_personal.php') ?>, {method: 'POST', body: data, credentials: 'same-origin'});
+            const result = await response.json();
+            if (!response.ok || !result.ok) throw new Error(result.message || 'No se pudieron guardar los cambios.');
+            window.location.reload();
+        } catch (error) {
+            Swal.fire('Atención', error.message, 'warning');
+            button.disabled = false;
+        }
+    });
+});
+</script>
+<?php else: ?>
+<div class="work-panel">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle data-table mb-0" id="gastosPersonalTable">
+            <thead><tr><th>Empresa</th><th>Personal</th><th class="text-end" data-orderable="false">Acción</th></tr></thead>
+            <tbody>
+                <?php foreach ($workers as $person): ?>
+                <tr>
+                    <td><?= e($person['company'] ?: 'Sin empresa') ?></td>
+                    <td><strong><?= e($person['full_name']) ?></strong><small class="d-block text-muted"><?= e(($person['document_type'] ?: 'Documento') . ': ' . $person['document_number']) ?></small></td>
+                    <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="<?= APP_URL ?>/modulos/finanzas/gastos_personal.php?trabajador_id=<?= (int) $person['id'] ?>" aria-label="Ver gastos de <?= e($person['full_name']) ?>"><i class="fa-solid fa-eye me-1" aria-hidden="true"></i>Ver gastos</a></td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+<?php endif; ?>
+<?php require __DIR__ . '/../../includes/footer.php'; ?>

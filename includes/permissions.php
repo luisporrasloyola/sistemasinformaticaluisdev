@@ -60,6 +60,13 @@ function permission_modules_catalog(): array
                 'cobranzas.valorizacion' => 'Valorización',
             ],
         ],
+        'finanzas' => [
+            'label' => 'Finanzas',
+            'children' => [
+                'finanzas.gastos_personal' => 'Gastos de personal',
+                'finanzas.depositos_personal' => 'Depósitos al personal',
+            ],
+        ],
         'empresa_maquirenta' => [
             'label' => 'Empresa Maquirenta',
             'children' => [
