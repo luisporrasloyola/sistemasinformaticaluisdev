@@ -255,9 +255,20 @@ require __DIR__ . '/../../includes/header.php';
 .personal-expense-records-panel .table-responsive { border:1px solid #d7e2f0; border-radius:7px; }
 .personal-expense-pagination { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-top:14px; color:#526b91; font-size:.78rem; }
 .personal-expense-pagination .btn { border-radius:7px; }
-#personalPerDiemTable { width:100%; min-width:1080px; color:#172b4d; }
-#personalPerDiemTable thead th { padding:.7rem .55rem; background:#f7f9fc; border-bottom:1px solid #cbd8eb; color:#0f172a; font-size:.7rem; font-weight:800; text-transform:uppercase; vertical-align:middle; white-space:nowrap; }
-#personalPerDiemTable tbody td { padding:.57rem .55rem; border-bottom:1px solid #dce5f0; font-size:.83rem; vertical-align:middle; }
+#personalPerDiemTable { width:100%; min-width:900px; table-layout:fixed; color:#172b4d; }
+#personalPerDiemTable thead th { padding:.7rem .35rem; background:#f7f9fc; border-bottom:1px solid #cbd8eb; color:#0f172a; font-size:.68rem; font-weight:800; text-transform:uppercase; vertical-align:middle; white-space:normal; overflow-wrap:anywhere; }
+#personalPerDiemTable thead th:nth-child(1) { width:9%; }
+#personalPerDiemTable thead th:nth-child(2) { width:12%; }
+#personalPerDiemTable thead th:nth-child(3) { width:11%; }
+#personalPerDiemTable thead th:nth-child(4) { width:8%; }
+#personalPerDiemTable thead th:nth-child(5) { width:15%; }
+#personalPerDiemTable thead th:nth-child(6) { width:12%; }
+#personalPerDiemTable thead th:nth-child(7) { width:10%; }
+#personalPerDiemTable thead th:nth-child(8) { width:9%; }
+#personalPerDiemTable thead th:nth-child(9) { width:9%; }
+#personalPerDiemTable thead th:nth-child(10) { width:5%; }
+#personalPerDiemTable tbody td { padding:.57rem .35rem; border-bottom:1px solid #dce5f0; font-size:.8rem; vertical-align:middle; overflow-wrap:anywhere; }
+#personalPerDiemTable:has(.per-diem-editing) { min-width:1250px; table-layout:auto; }
 #personalPerDiemTable tbody tr:hover:not(.per-diem-editing) td { background:#f8fbff; }
 #personalPerDiemTable tbody tr:last-child td { border-bottom:0; }
 #personalPerDiemTable tfoot td { padding:.65rem .55rem; background:#f4f7fb; border-top:1px solid #d7e2f0; color:#0f172a; font-size:.85rem; font-weight:800; }
@@ -265,7 +276,7 @@ require __DIR__ . '/../../includes/header.php';
 #personalPerDiemTable .per-diem-amount-cell,#personalPerDiemTable .total-expense-cell { font-weight:700; }
 #personalPerDiemTable .total-expense-cell { color:#0b3b80; }
 #personalPerDiemTable .deposit-amount-cell { color:#0b3b80; font-weight:700; }
-#personalPerDiemTable .per-diem-actions-cell { width:78px; white-space:nowrap; }
+#personalPerDiemTable .per-diem-actions-cell { white-space:nowrap; }
 #personalPerDiemTable .per-diem-actions-cell .btn { display:inline-grid; place-items:center; width:32px; height:32px; padding:0; border-radius:7px; }
 #personalPerDiemTable .per-diem-actions-cell .btn-outline-primary { color:#172b4d; border-color:#cbd5e1; background:#fff; }
 #personalPerDiemTable .per-diem-actions-cell .btn-outline-primary:hover { background:#eff6ff; border-color:#93b4e9; }

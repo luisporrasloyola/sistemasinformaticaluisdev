@@ -47,6 +47,20 @@ require __DIR__ . '/../../includes/header.php';
 </div>
 <style>
 .personal-deposit-upload.work-panel{margin-bottom:12px;border:1px solid #dedbd4!important;border-radius:15px!important;background:linear-gradient(115deg,#fbfaf7 0%,#f4f2ed 100%)!important;box-shadow:0 5px 18px rgba(60,55,45,.055)!important}
+.personal-deposit-upload-title{display:flex;align-items:flex-start;gap:8px}
+.personal-deposit-upload-title h2{line-height:26px}
+.personal-deposit-info{display:inline-grid;place-items:center;flex:none;width:26px;height:26px;padding:0;border:1px solid #bdd2f4;border-radius:50%;background:#eef5ff;color:#2563eb;line-height:1;cursor:pointer}
+.personal-deposit-info:hover{background:#dfeeff;border-color:#8fb3ed}
+.personal-deposit-info:focus-visible{outline:3px solid #93b4ff;outline-offset:2px}
+.personal-deposit-model-modal .modal-content{border:1px solid #cbd8eb;border-radius:15px;overflow:hidden}
+.personal-deposit-model-modal .modal-header{background:#f4f7fb}
+.personal-deposit-model-carousel{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;scroll-behavior:smooth;overscroll-behavior-inline:contain;padding:4px 4px 12px}
+.personal-deposit-model-slide{flex:0 0 100%;min-width:0;scroll-snap-align:start;text-align:center}
+.personal-deposit-model-slide img{display:block;max-width:100%;max-height:min(55vh,450px);width:auto;height:auto;margin:auto;border:1px solid #d9e3ef;border-radius:8px;object-fit:contain}
+.personal-deposit-model-slide figcaption{margin-top:8px;color:#344761;font-size:.85rem;font-weight:700}
+.personal-deposit-model-nav{display:flex;justify-content:center;gap:7px;flex-wrap:wrap;margin-top:4px}
+.personal-deposit-model-nav a{display:inline-grid;place-items:center;width:29px;height:29px;border:1px solid #cbd8eb;border-radius:50%;color:#2563eb;text-decoration:none;font-size:.8rem;font-weight:700}
+.personal-deposit-model-nav a:hover,.personal-deposit-model-nav a:focus-visible{background:#eef5ff;border-color:#8fb3ed}
 .personal-deposit-records.work-panel{border:1px solid #cbd8eb;border-radius:15px}
 .personal-deposit-upload-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
 .personal-deposit-fields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
@@ -78,7 +92,7 @@ require __DIR__ . '/../../includes/header.php';
 </style>
 <section class="work-panel personal-deposit-upload" aria-labelledby="personalDepositUploadTitle">
     <div class="personal-deposit-upload-header">
-        <div><h2 class="h5 mb-1" id="personalDepositUploadTitle">Nuevo depósito</h2><p class="small text-muted mb-0">Seleccione hasta 5 fotos (JPG, PNG o WEBP; máximo 5 MB por foto). Cada foto corresponde a un depósito.</p></div>
+        <div><div class="personal-deposit-upload-title mb-1"><h2 class="h5 mb-0" id="personalDepositUploadTitle">Nuevo depósito</h2><button class="personal-deposit-info" type="button" data-bs-toggle="modal" data-bs-target="#personalDepositModelsModal" title="Ver comprobantes compatibles" aria-label="Ver comprobantes compatibles"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></button></div><p class="small text-muted mb-0">Seleccione hasta 5 fotos (JPG, PNG o WEBP; máximo 5 MB por foto). Cada foto corresponde a un depósito.</p></div>
         <label class="btn btn-primary mb-0" for="personalDepositFile"><i class="fa-solid fa-file-arrow-up me-1" aria-hidden="true"></i>Seleccionar fotos</label>
         <input class="visually-hidden" type="file" id="personalDepositFile" accept="image/jpeg,image/png,image/webp" multiple aria-label="Seleccionar hasta cinco fotos del depósito">
     </div>
@@ -86,6 +100,20 @@ require __DIR__ . '/../../includes/header.php';
     <div class="mt-3" id="personalDepositProgress" hidden><div class="small fw-semibold mb-1" id="personalDepositProgressText" role="status"></div><div class="progress" role="progressbar" aria-label="Lectura y guardado de depósitos" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="progress-bar progress-bar-striped progress-bar-animated" id="personalDepositProgressBar" style="width:0%"></div></div></div>
     <div class="mt-3" id="personalDepositSelection" hidden><div class="small text-muted mb-2" id="personalDepositFileCount"></div><div id="personalDepositCards"></div></div>
 </section>
+<div class="modal fade personal-deposit-model-modal" id="personalDepositModelsModal" tabindex="-1" aria-labelledby="personalDepositModelsTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content">
+        <div class="modal-header"><h2 class="modal-title h5 mb-0" id="personalDepositModelsTitle">Comprobantes compatibles</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+        <div class="modal-body"><p class="text-muted small mb-3">La lectura automática reconoce estos formatos de Yape, Plin y transferencias bancarias.</p>
+            <div class="personal-deposit-model-carousel" aria-label="Ejemplos de comprobantes">
+                <?php foreach ([['YAPE.png', 'Yape'], ['PLIN.png', 'Plin'], ['tranferencia interbank.png', 'Transferencia Interbank'], ['tranferencia interbank otro modelo.png', 'Transferencia Interbank'], ['Transferencia BCP.png', 'Transferencia BCP']] as $index => [$file, $label]): ?>
+                    <figure class="personal-deposit-model-slide mb-0" id="depositModel<?= $index + 1 ?>"><img src="<?= e(APP_URL . '/img/depositosgemini/' . rawurlencode($file)) ?>" alt="Modelo de comprobante <?= e($label) ?>" loading="lazy" decoding="async"><figcaption><?= e($label) ?></figcaption></figure>
+                <?php endforeach; ?>
+            </div>
+            <nav class="personal-deposit-model-nav" aria-label="Ir a un modelo de comprobante"><?php for ($index = 1; $index <= 5; $index++): ?><a href="#depositModel<?= $index ?>" aria-label="Ver modelo <?= $index ?>"><?= $index ?></a><?php endfor; ?></nav>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button></div>
+    </div></div>
+</div>
 <section class="work-panel personal-deposit-records" aria-labelledby="personalDepositRecordsTitle">
     <h2 class="h5 mb-3" id="personalDepositRecordsTitle">Registros de depósitos</h2>
     <?php if ($depositDbError): ?><div class="alert alert-warning mb-3">Para guardar y ver depósitos, ejecute <code>database/finanzas_depositos_personal.sql</code> en la base de datos.</div><?php endif; ?>
