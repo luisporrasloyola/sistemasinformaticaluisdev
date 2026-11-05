@@ -11,6 +11,7 @@ $listRows = [];
 $listTotal = 0;
 $listError = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete_valuation') {
+    if (is_personal_role()) { http_response_code(403); exit('El rol Personal no puede eliminar valorizaciones.'); }
     verify_csrf($_POST['csrf_token'] ?? null);
     $deleteId = filter_var($_POST['valorizacion_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
     if (!$deleteId) {
@@ -140,7 +141,7 @@ require __DIR__ . '/../../includes/header.php';
                         <button class="btn btn-sm btn-primary cv-list-icon cv-export-pdf" type="button" data-url="<?= e(APP_URL . '/servicios/cobranzas/valorizacion_reporte_datos.php?valorizacion_id=' . (int) $row['valorizacion_id']) ?>" title="PDF Interno" aria-label="Descargar PDF Interno de <?= e((string) $row['business_name']) ?>"><i class="fa-solid fa-file-pdf" aria-hidden="true"></i></button>
                         <button class="btn btn-sm btn-danger cv-list-icon cv-export-pdf" type="button" data-mode="cobranzas" data-url="<?= e(APP_URL . '/servicios/cobranzas/valorizacion_reporte_datos.php?valorizacion_id=' . (int) $row['valorizacion_id']) ?>" title="PDF Cobranzas" aria-label="Descargar PDF Cobranzas de <?= e((string) $row['business_name']) ?>"><i class="fa-solid fa-file-pdf" aria-hidden="true"></i></button>
                         <?php endif; ?>
-                        <button class="btn btn-sm btn-outline-danger cv-list-icon cv-delete-valuation" type="button" data-bs-toggle="modal" data-bs-target="#cvDeleteValuationModal" data-valuation-id="<?= (int) $row['valorizacion_id'] ?>" data-client="<?= e((string) $row['business_name']) ?>" data-equipment="<?= e($equipment) ?>" data-period="<?= e($shownPeriod) ?>" data-parts="<?= (int) $row['partes_total'] ?>" title="Eliminar valorización" aria-label="Eliminar valorización de <?= e((string) $row['business_name']) ?>"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
+                        <?php if (!is_personal_role()): ?><button class="btn btn-sm btn-outline-danger cv-list-icon cv-delete-valuation" type="button" data-bs-toggle="modal" data-bs-target="#cvDeleteValuationModal" data-valuation-id="<?= (int) $row['valorizacion_id'] ?>" data-client="<?= e((string) $row['business_name']) ?>" data-equipment="<?= e($equipment) ?>" data-period="<?= e($shownPeriod) ?>" data-parts="<?= (int) $row['partes_total'] ?>" title="Eliminar valorización" aria-label="Eliminar valorización de <?= e((string) $row['business_name']) ?>"><i class="fa-solid fa-trash" aria-hidden="true"></i></button><?php endif; ?>
                     </div></td>
                 </tr>
             <?php endforeach; ?>

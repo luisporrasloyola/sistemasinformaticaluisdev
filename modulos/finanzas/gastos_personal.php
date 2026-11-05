@@ -267,13 +267,13 @@ require __DIR__ . '/../../includes/header.php';
     <div class="personal-opening-balance" id="personalOpeningBalance" data-month="<?= e($period['month']) ?>" data-balance="<?= e($openingBalance ?? '') ?>">
         <div class="personal-opening-copy">
             <span class="personal-opening-label"><i class="fa-solid fa-wallet" aria-hidden="true"></i>Saldo inicial de <?= e($openingBalanceMonthLabel) ?></span>
-            <div class="personal-opening-value-row"><strong id="personalOpeningBalanceValue"><?= $openingBalance !== null ? 'S/ ' . number_format((float) $openingBalance, 2, '.', ',') : 'Sin registrar' ?></strong><button class="btn btn-sm btn-outline-primary" type="button" id="editPersonalOpeningBalance" title="Editar saldo inicial" aria-label="Editar saldo inicial"><i class="fa-solid fa-pen" aria-hidden="true"></i></button></div>
+            <div class="personal-opening-value-row"><strong id="personalOpeningBalanceValue"><?= $openingBalance !== null ? 'S/ ' . number_format((float) $openingBalance, 2, '.', ',') : 'Sin registrar' ?></strong><?php if (!is_personal_role()): ?><button class="btn btn-sm btn-outline-primary" type="button" id="editPersonalOpeningBalance" title="Editar saldo inicial" aria-label="Editar saldo inicial"><i class="fa-solid fa-pen" aria-hidden="true"></i></button><?php endif; ?></div>
         </div>
-        <div class="personal-opening-editor" id="personalOpeningBalanceEditor" hidden>
+        <?php if (!is_personal_role()): ?><div class="personal-opening-editor" id="personalOpeningBalanceEditor" hidden>
             <div class="input-group input-group-sm"><span class="input-group-text">S/</span><input class="form-control" id="personalOpeningBalanceInput" type="number" min="0" max="999999999.99" step="0.01" inputmode="decimal" aria-label="Saldo inicial del mes"></div>
             <button class="btn btn-sm btn-primary" type="button" id="savePersonalOpeningBalance" title="Guardar saldo" aria-label="Guardar saldo"><i class="fa-solid fa-check" aria-hidden="true"></i></button>
             <button class="btn btn-sm btn-outline-secondary" type="button" id="cancelPersonalOpeningBalance" title="Cancelar" aria-label="Cancelar edición"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
-        </div>
+        </div><?php endif; ?>
     </div>
     <?php endif; ?>
 </section>
@@ -486,7 +486,7 @@ document.addEventListener('DOMContentLoaded', () => {
     periodMode.addEventListener('change', updatePeriodFields);
     updatePeriodFields();
     const openingBalance = document.getElementById('personalOpeningBalance');
-    if (openingBalance) {
+    if (openingBalance && document.getElementById('editPersonalOpeningBalance')) {
         const editor = document.getElementById('personalOpeningBalanceEditor');
         const input = document.getElementById('personalOpeningBalanceInput');
         const editButton = document.getElementById('editPersonalOpeningBalance');

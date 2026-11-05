@@ -64,7 +64,7 @@ if (!$depositDbError) {
             $matched = 0;
             $offset = 0;
             do {
-                $depositStmt = db()->prepare('SELECT id, deposit_date, creditor, amount, payment_method FROM finance_personal_deposits WHERE deposit_date BETWEEN ? AND ?' . $searchWhere . $personalCandidateWhere . ' ORDER BY deposit_date DESC, id DESC LIMIT 100 OFFSET ' . $offset);
+                $depositStmt = db()->prepare('SELECT id, deposit_date, creditor, amount, payment_method, registered_by_user_id FROM finance_personal_deposits WHERE deposit_date BETWEEN ? AND ?' . $searchWhere . $personalCandidateWhere . ' ORDER BY deposit_date DESC, id DESC LIMIT 100 OFFSET ' . $offset);
                 $depositStmt->execute(array_merge($searchParams, $personalCandidateParams));
                 $candidates = $depositStmt->fetchAll(PDO::FETCH_ASSOC);
                 foreach ($candidates as $record) {
@@ -77,7 +77,7 @@ if (!$depositDbError) {
                 $offset += count($candidates);
             } while (count($depositRecords) < 26 && count($candidates) === 100);
         } else {
-            $depositStmt = db()->prepare('SELECT id, deposit_date, creditor, amount, payment_method FROM finance_personal_deposits WHERE deposit_date BETWEEN ? AND ?' . $searchWhere . ' ORDER BY deposit_date DESC, id DESC LIMIT 26 OFFSET ' . (($depositPage - 1) * 25));
+            $depositStmt = db()->prepare('SELECT id, deposit_date, creditor, amount, payment_method, registered_by_user_id FROM finance_personal_deposits WHERE deposit_date BETWEEN ? AND ?' . $searchWhere . ' ORDER BY deposit_date DESC, id DESC LIMIT 26 OFFSET ' . (($depositPage - 1) * 25));
             $depositStmt->execute($searchParams);
             $depositRecords = $depositStmt->fetchAll();
         }
@@ -183,7 +183,7 @@ require __DIR__ . '/../../includes/header.php';
         <div class="personal-deposit-period-field personal-deposit-search-field"><label for="personalDepositSearch">Acreedor de depósito</label><input class="form-control form-control-sm" id="personalDepositSearch" name="buscar" type="search" maxlength="100" value="<?= e($depositSearch) ?>" placeholder="Buscar por nombre" autocomplete="off"></div>
         <button class="btn btn-outline-primary" type="submit">Ver</button>
     </form>
-    <div class="table-responsive"><table class="personal-deposit-table"><thead><tr><th>Fecha</th><th>Acreedor de depósito</th><th>Monto depositado</th><th>Modo de pago</th><th>Acciones</th></tr></thead><tbody id="personalDepositRows"><?php foreach ($depositRecords as $record): ?><tr data-id="<?= (int) $record['id'] ?>" data-date="<?= e((string) $record['deposit_date']) ?>" data-creditor="<?= e((string) $record['creditor']) ?>" data-amount="<?= e((string) $record['amount']) ?>" data-method="<?= e((string) $record['payment_method']) ?>"><td><?= e(date('d/m/Y', strtotime((string) $record['deposit_date']))) ?></td><td><?= e((string) $record['creditor']) ?></td><td>S/ <?= e(number_format((float) $record['amount'], 2)) ?></td><td><?= e((string) $record['payment_method']) ?></td><td><div class="personal-deposit-actions"><button class="personal-deposit-action" type="button" data-action="edit" title="Editar depósito" aria-label="Editar depósito"><i class="fa-solid fa-pen" aria-hidden="true"></i></button><a class="personal-deposit-action is-file" href="<?= e(APP_URL . '/servicios/finanzas/depositos_personal_archivo.php?id=' . (int) $record['id']) ?>" target="_blank" rel="noopener noreferrer" title="Ver foto" aria-label="Ver foto"><i class="fa-solid fa-file-image" aria-hidden="true"></i></a><button class="personal-deposit-action is-delete" type="button" data-action="delete" title="Eliminar depósito" aria-label="Eliminar depósito"><i class="fa-solid fa-trash" aria-hidden="true"></i></button></div></td></tr><?php endforeach; ?><?php if (!$depositRecords && !$depositDbError): ?><tr id="personalDepositEmpty"><td colspan="5"><?= $depositSearch !== '' ? 'No se encontraron depósitos para ese acreedor en el período seleccionado.' : 'Aún no hay depósitos registrados.' ?></td></tr><?php endif; ?></tbody></table></div>
+    <div class="table-responsive"><table class="personal-deposit-table"><thead><tr><th>Fecha</th><th>Acreedor de depósito</th><th>Monto depositado</th><th>Modo de pago</th><th>Acciones</th></tr></thead><tbody id="personalDepositRows"><?php foreach ($depositRecords as $record): ?><tr data-id="<?= (int) $record['id'] ?>" data-date="<?= e((string) $record['deposit_date']) ?>" data-creditor="<?= e((string) $record['creditor']) ?>" data-amount="<?= e((string) $record['amount']) ?>" data-method="<?= e((string) $record['payment_method']) ?>" data-can-manage="<?= (is_admin() || (is_personal_role() && (int) $record['registered_by_user_id'] === (int) (current_user()['id'] ?? 0))) ? '1' : '0' ?>"><td><?= e(date('d/m/Y', strtotime((string) $record['deposit_date']))) ?></td><td><?= e((string) $record['creditor']) ?></td><td>S/ <?= e(number_format((float) $record['amount'], 2)) ?></td><td><?= e((string) $record['payment_method']) ?></td><td><div class="personal-deposit-actions"><?php if (is_admin() || (is_personal_role() && (int) $record['registered_by_user_id'] === (int) (current_user()['id'] ?? 0))): ?><button class="personal-deposit-action" type="button" data-action="edit" title="Editar depósito" aria-label="Editar depósito"><i class="fa-solid fa-pen" aria-hidden="true"></i></button><?php endif; ?><a class="personal-deposit-action is-file" href="<?= e(APP_URL . '/servicios/finanzas/depositos_personal_archivo.php?id=' . (int) $record['id']) ?>" target="_blank" rel="noopener noreferrer" title="Ver foto" aria-label="Ver foto"><i class="fa-solid fa-file-image" aria-hidden="true"></i></a><?php if (is_admin() || (is_personal_role() && (int) $record['registered_by_user_id'] === (int) (current_user()['id'] ?? 0))): ?><button class="personal-deposit-action is-delete" type="button" data-action="delete" title="Eliminar depósito" aria-label="Eliminar depósito"><i class="fa-solid fa-trash" aria-hidden="true"></i></button><?php endif; ?></div></td></tr><?php endforeach; ?><?php if (!$depositRecords && !$depositDbError): ?><tr id="personalDepositEmpty"><td colspan="5"><?= $depositSearch !== '' ? 'No se encontraron depósitos para ese acreedor en el período seleccionado.' : 'Aún no hay depósitos registrados.' ?></td></tr><?php endif; ?></tbody></table></div>
     <?php if ($depositPage > 1 || $depositHasMore): ?><nav class="d-flex justify-content-end gap-2 mt-3" aria-label="Páginas de depósitos"><?php if ($depositPage > 1): ?><a class="btn btn-sm btn-outline-secondary" href="?<?= e(http_build_query($depositPeriodQuery + ['pagina' => $depositPage - 1])) ?>">Anterior</a><?php endif; ?><?php if ($depositHasMore): ?><a class="btn btn-sm btn-outline-secondary" href="?<?= e(http_build_query($depositPeriodQuery + ['pagina' => $depositPage + 1])) ?>">Siguiente</a><?php endif; ?></nav><?php endif; ?>
 </section>
 <script>
@@ -198,8 +198,9 @@ window.personalDepositGemini = {
     periodEnd: <?= json_encode($depositPeriod['end']) ?>,
     search: <?= json_encode($depositSearch, JSON_UNESCAPED_UNICODE) ?>,
     page: <?= $depositPage ?>,
+    canManageNew: <?= (is_admin() || is_personal_role()) ? 'true' : 'false' ?>,
     csrf: <?= json_encode(csrf_token()) ?>
 };
 </script>
-<script src="<?= e(APP_URL . '/recursos/js/finanzas_depositos_personal.js?v=13') ?>" defer></script>
+<script src="<?= e(APP_URL . '/recursos/js/finanzas_depositos_personal.js?v=14') ?>" defer></script>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>

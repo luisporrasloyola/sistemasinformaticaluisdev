@@ -4,11 +4,11 @@ require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
 require_module_access('finanzas.gastos_personal');
 
+if (is_personal_role()) json_response(['ok' => false, 'message' => 'El rol Personal no puede modificar el saldo inicial.'], 403);
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_response(['ok' => false, 'message' => 'Método no permitido.'], 405);
 verify_csrf($_POST['csrf_token'] ?? null);
 
 $workerId = filter_var($_POST['worker_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
-if (is_personal_role()) require_personal_own_worker((int) $workerId);
 $month = trim((string) ($_POST['month'] ?? ''));
 $amount = trim((string) ($_POST['amount'] ?? ''));
 if (!$workerId || !preg_match('/^\d{4}-(0[1-9]|1[0-2])$/D', $month)) {

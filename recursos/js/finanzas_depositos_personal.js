@@ -50,6 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
         row.dataset.creditor = record.acreedor;
         row.dataset.amount = record.monto;
         row.dataset.method = record.modo_pago;
+        row.dataset.canManage = record.canManage === undefined ? row.dataset.canManage || '0' : (record.canManage ? '1' : '0');
         row.classList.remove('is-editing');
         row.replaceChildren();
         const [year, month, day] = record.fecha.split('-');
@@ -80,7 +81,9 @@ document.addEventListener('DOMContentLoaded', () => {
         remove.dataset.action = 'delete';
         remove.title = remove.ariaLabel = 'Eliminar depósito';
         remove.innerHTML = '<i class="fa-solid fa-trash" aria-hidden="true"></i>';
-        actions.append(edit, view, remove);
+        if (row.dataset.canManage === '1') actions.appendChild(edit);
+        actions.appendChild(view);
+        if (row.dataset.canManage === '1') actions.appendChild(remove);
         cell.appendChild(actions);
         row.appendChild(cell);
     }
@@ -92,6 +95,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const row = button.closest('tr[data-id]');
         if (!row) return;
         const action = button.dataset.action;
+        if (row.dataset.canManage !== '1') return;
         if (action === 'edit') {
             if (rows.querySelector('tr.is-editing')) return;
             row.classList.add('is-editing');
@@ -292,6 +296,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (visiblePeriod) {
                 document.getElementById('personalDepositEmpty')?.remove();
                 const row = document.createElement('tr');
+                result.canManage = settings.canManageNew;
                 renderRow(row, result);
                 rows.prepend(row);
                 while (rows.querySelectorAll('tr[data-id]').length > 25) rows.querySelector('tr[data-id]:last-of-type')?.remove();

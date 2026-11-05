@@ -21,13 +21,18 @@ $action = (string) ($_POST['action'] ?? '');
 if (!$id || !in_array($action, ['update', 'delete'], true)) deposit_action_reply(400, ['error' => 'Acción no válida.']);
 
 try {
-    $stmt = db()->prepare('SELECT id, image_path, creditor FROM finance_personal_deposits WHERE id = ?');
+    $stmt = db()->prepare('SELECT id, image_path, creditor, registered_by_user_id FROM finance_personal_deposits WHERE id = ?');
     $stmt->execute([$id]);
     $record = $stmt->fetch();
-    if ($record && is_personal_role() && !personal_deposit_is_own((string) $record['creditor'])) deposit_action_reply(403, ['error' => 'Solo puede modificar sus propios depósitos.']);
     if (!$record) deposit_action_reply(404, ['error' => 'El depósito ya no existe. Actualice la página.']);
+    $userId = (int) (current_user()['id'] ?? 0);
+    if (!is_admin() && (!is_personal_role() || $userId <= 0 || (int) $record['registered_by_user_id'] !== $userId)) {
+        deposit_action_reply(403, ['error' => 'Solo puede modificar los depósitos que usted subió.']);
+    }
     if ($action === 'delete') {
-        db()->prepare('DELETE FROM finance_personal_deposits WHERE id = ?')->execute([$id]);
+        $delete = db()->prepare('DELETE FROM finance_personal_deposits WHERE id = ?' . (is_admin() ? '' : ' AND registered_by_user_id = ?'));
+        $delete->execute(is_admin() ? [$id] : [$id, $userId]);
+        if ($delete->rowCount() !== 1) deposit_action_reply(403, ['error' => 'No puede eliminar este depósito.']);
         delete_uploaded_file((string) $record['image_path']);
         deposit_action_reply(200, ['message' => 'Depósito eliminado.']);
     }
@@ -42,8 +47,8 @@ try {
     if ($creditor === '' || mb_strlen($creditor) > 150) deposit_action_reply(422, ['error' => 'Ingrese el acreedor (máximo 150 caracteres).']);
     if (!preg_match('/^\d{1,9}(?:\.\d{1,2})?$/D', $amount) || (float) $amount <= 0) deposit_action_reply(422, ['error' => 'Ingrese un monto válido en soles.']);
     if (!in_array($method, ['YAPE', 'PLIN', 'Tranferencia Interbank', 'Tranferencia BCP'], true)) deposit_action_reply(422, ['error' => 'El modo de pago no corresponde a un modelo configurado.']);
-    db()->prepare('UPDATE finance_personal_deposits SET deposit_date = ?, creditor = ?, amount = ?, payment_method = ? WHERE id = ?')
-        ->execute([$date, $creditor, $amount, $method, $id]);
+    $update = db()->prepare('UPDATE finance_personal_deposits SET deposit_date = ?, creditor = ?, amount = ?, payment_method = ? WHERE id = ?' . (is_admin() ? '' : ' AND registered_by_user_id = ?'));
+    $update->execute(is_admin() ? [$date, $creditor, $amount, $method, $id] : [$date, $creditor, $amount, $method, $id, $userId]);
     deposit_action_reply(200, ['id' => $id, 'fecha' => $date, 'acreedor' => $creditor, 'monto' => number_format((float) $amount, 2, '.', ''), 'modo_pago' => $method]);
 } catch (Throwable $error) {
     error_log('Error en acciones de depósitos personales: ' . $error->getMessage());

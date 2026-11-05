@@ -131,6 +131,7 @@ if ($clientId) {
             $existing = $stmt->fetch();
         }
         if ($action === 'delete') {
+            if (is_personal_role()) { http_response_code(403); exit('El rol Personal no puede eliminar registros de valorización.'); }
             if (!$existing) $error = 'No se encontró el registro.';
             else {
                 db()->prepare('DELETE FROM cobranzas_valorizacion_registros WHERE id = ? AND valorizacion_id = ?')->execute([$recordId, $valuationId]);
