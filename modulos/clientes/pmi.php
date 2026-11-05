@@ -701,20 +701,30 @@ document.addEventListener('DOMContentLoaded', () => {
         const button = event.target.closest('.preview-base-document');
         if (!button || !previewModal || !previewBody) return;
         const path = button.dataset.filePath || '';
-        if (!/^archivos\/clientes_pmi(?:_formatos)?\/[A-Za-z0-9_-]+\.(?:pdf|jpe?g|png|webp)$/i.test(path)) {
+        if (!/^archivos\/clientes_pmi(?:_formatos)?\/[A-Za-z0-9_-]+\.(?:pdf|jpe?g|png|webp|docx?|xlsx?)$/i.test(path)) {
             Swal.fire('Vista previa no disponible', 'La ruta del archivo no es válida.', 'warning');
             return;
         }
         const url = <?= json_encode(APP_URL) ?> + '/' + path.split('/').map(encodeURIComponent).join('/');
         const name = button.dataset.documentName || 'Archivo';
         const isPdf = /\.pdf$/i.test(path);
-        const preview = document.createElement(isPdf ? 'iframe' : 'img');
-        preview.src = url;
-        if (isPdf) preview.title = 'Vista previa de ' + name;
-        else preview.alt = 'Archivo adjunto de ' + name;
-        previewBody.replaceChildren(preview);
+        const isOffice = /\.(?:docx?|xlsx?)$/i.test(path);
+        if (isOffice) {
+            const message = document.createElement('p');
+            message.className = 'text-muted py-5 mb-0';
+            message.textContent = 'Los archivos de Word y Excel no tienen vista previa aquí. Use Descargar para abrirlos en su dispositivo.';
+            previewBody.replaceChildren(message);
+        } else {
+            const preview = document.createElement(isPdf ? 'iframe' : 'img');
+            preview.src = url;
+            if (isPdf) preview.title = 'Vista previa de ' + name;
+            else preview.alt = 'Archivo adjunto de ' + name;
+            previewBody.replaceChildren(preview);
+        }
         document.getElementById('baseFilePreviewTitle').textContent = name;
-        document.getElementById('baseFilePreviewOpen').href = url;
+        const openLink = document.getElementById('baseFilePreviewOpen');
+        openLink.href = url;
+        openLink.classList.toggle('d-none', isOffice);
         document.getElementById('baseFilePreviewDownload').href = <?= json_encode(APP_URL) ?> + '/modulos/clientes/pmi_descargar.php?cliente_id=<?= $clientId ?>&proyecto_id=' + pmiProject + '&tipo=' + encodeURIComponent(button.dataset.downloadType || 'base') + '&ids[]=' + encodeURIComponent(button.dataset.documentId);
         bootstrap.Modal.getOrCreateInstance(previewModal).show();
     });

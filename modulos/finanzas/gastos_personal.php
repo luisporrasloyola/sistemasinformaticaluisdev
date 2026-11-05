@@ -23,7 +23,90 @@ function personal_per_diem(string $projectName, string $markDate): ?int
     return $weekday <= 5 ? $rule['weekday'] : $rule['weekend'];
 }
 
+/** Calcula el saldo al final de cada día visible; cada mes comienza con su saldo inicial. */
+function personal_remaining_balances(int $workerId, array $visibleDates): array
+{
+    if (!$visibleDates) return [];
+    $months = array_values(array_unique(array_map(static fn(string $date): string => substr($date, 0, 7), $visibleDates)));
+    $monthStarts = array_map(static fn(string $month): string => $month . '-01', $months);
+    $ranges = [];
+    $rangeParams = [];
+    foreach ($monthStarts as $start) {
+        $ranges[] = '(mark_date BETWEEN ? AND ?)';
+        $rangeParams[] = $start;
+        $rangeParams[] = date('Y-m-t', strtotime($start));
+    }
+    $dateFilter = implode(' OR ', $ranges);
+    $placeholders = implode(',', array_fill(0, count($monthStarts), '?'));
+
+    $opening = [];
+    $stmt = db()->prepare("SELECT balance_month, opening_balance FROM finance_personal_monthly_balances WHERE worker_id = ? AND balance_month IN ($placeholders)");
+    $stmt->execute(array_merge([$workerId], $monthStarts));
+    foreach ($stmt as $row) $opening[substr((string) $row['balance_month'], 0, 7)] = (int) round((float) $row['opening_balance'] * 100);
+
+    $markedDays = [];
+    $stmt = db()->prepare('SELECT am.mark_date, p.name AS project_name FROM attendance_marks am LEFT JOIN attendance_projects p ON p.id = am.project_id WHERE am.worker_id = ? AND (' . str_replace('mark_date', 'am.mark_date', $dateFilter) . ") ORDER BY am.mark_date, CASE WHEN am.mark_type = 'entrada' THEN 0 ELSE 1 END, am.marked_at, am.id");
+    $stmt->execute(array_merge([$workerId], $rangeParams));
+    foreach ($stmt as $row) {
+        $date = (string) $row['mark_date'];
+        if (!array_key_exists($date, $markedDays)) $markedDays[$date] = (string) ($row['project_name'] ?? '');
+    }
+
+    $overrides = [];
+    $stmt = db()->prepare("SELECT mark_date, amount_override FROM finance_personal_per_diem_edits WHERE worker_id = ? AND ($dateFilter)");
+    $stmt->execute(array_merge([$workerId], $rangeParams));
+    foreach ($stmt as $row) if ($row['amount_override'] !== null) $overrides[(string) $row['mark_date']] = (int) round((float) $row['amount_override'] * 100);
+
+    $additional = [];
+    $stmt = db()->prepare("SELECT mark_date, SUM(amount) AS total FROM finance_personal_additional_expenses WHERE worker_id = ? AND ($dateFilter) GROUP BY mark_date");
+    $stmt->execute(array_merge([$workerId], $rangeParams));
+    foreach ($stmt as $row) $additional[(string) $row['mark_date']] = (int) round((float) $row['total'] * 100);
+
+    $deposits = [];
+    $depositFilter = str_replace('mark_date', 'deposit_date', $dateFilter);
+    $stmt = db()->prepare("SELECT deposit_date, creditor, amount FROM finance_personal_deposits WHERE ($depositFilter)");
+    $stmt->execute($rangeParams);
+    $workers = personal_deposit_workers();
+    $resolvedNames = [];
+    foreach ($stmt as $row) {
+        $creditor = (string) $row['creditor'];
+        if (!array_key_exists($creditor, $resolvedNames)) $resolvedNames[$creditor] = personal_deposit_unique_worker_id($creditor, $workers);
+        if ($resolvedNames[$creditor] !== $workerId) continue;
+        $date = (string) $row['deposit_date'];
+        $deposits[$date] = ($deposits[$date] ?? 0) + (int) round((float) $row['amount'] * 100);
+    }
+
+    $visible = array_fill_keys($visibleDates, true);
+    $remainingByDate = [];
+    foreach ($months as $month) {
+        $dates = [];
+        foreach (array_keys($markedDays + $deposits) as $date) {
+            if (str_starts_with($date, $month . '-')) $dates[$date] = true;
+        }
+        ksort($dates);
+        $balance = $opening[$month] ?? 0;
+        foreach ($dates as $date => $_) {
+            $balance += $deposits[$date] ?? 0;
+            if (array_key_exists($date, $markedDays)) {
+                $perDiem = $overrides[$date] ?? (personal_per_diem($markedDays[$date], $date) ?? 0) * 100;
+                $balance -= $perDiem + ($additional[$date] ?? 0);
+            }
+            if (isset($visible[$date])) $remainingByDate[$date] = $balance;
+        }
+    }
+    return $remainingByDate;
+}
+
+
 $workerId = max(0, (int) ($_GET['trabajador_id'] ?? 0));
+if (is_personal_role()) {
+    $linkedWorkerId = current_user_worker_id();
+    if (!$linkedWorkerId || ($workerId > 0 && $workerId !== $linkedWorkerId)) {
+        http_response_code(403);
+        exit('Solo puede acceder a sus propios gastos.');
+    }
+    $workerId = $linkedWorkerId;
+}
 $worker = null;
 $periodError = '';
 if ($workerId > 0) {
@@ -93,20 +176,21 @@ if ($workerId > 0) {
     $savedEdits = [];
     $expensesByDate = [];
     $depositsByDate = [];
+    $depositPhotosByDate = [];
     if ($markedDays) {
         $selectedDates = array_keys($markedDays);
         $placeholders = implode(',', array_fill(0, count($selectedDates), '?'));
-        $editsStmt = db()->prepare("SELECT mark_date, amount_override, observations FROM finance_personal_per_diem_edits WHERE worker_id = ? AND mark_date IN ($placeholders)");
+        $editsStmt = db()->prepare("SELECT e.mark_date, e.amount_override, e.observations, u.name AS registered_by FROM finance_personal_per_diem_edits e LEFT JOIN users u ON u.id = e.updated_by_user_id WHERE e.worker_id = ? AND e.mark_date IN ($placeholders)");
         $editsStmt->execute(array_merge([$workerId], $selectedDates));
         foreach ($editsStmt as $edit) $savedEdits[(string) $edit['mark_date']] = $edit;
         $expensesStmt = db()->prepare("SELECT mark_date, amount, reason FROM finance_personal_additional_expenses WHERE worker_id = ? AND mark_date IN ($placeholders) ORDER BY mark_date, sort_order, id");
         $expensesStmt->execute(array_merge([$workerId], $selectedDates));
         foreach ($expensesStmt as $expense) $expensesByDate[(string) $expense['mark_date']][] = ['amount' => (string) $expense['amount'], 'reason' => (string) $expense['reason']];
-        $depositsStmt = db()->prepare("SELECT deposit_date, creditor, amount FROM finance_personal_deposits WHERE deposit_date IN ($placeholders)");
+        $depositsStmt = db()->prepare("SELECT id, deposit_date, creditor, amount FROM finance_personal_deposits WHERE deposit_date IN ($placeholders)");
         $depositsStmt->execute($selectedDates);
         $deposits = $depositsStmt->fetchAll();
         if ($deposits) {
-            $allWorkers = db()->query('SELECT id, full_name FROM workers')->fetchAll();
+            $allWorkers = personal_deposit_workers();
             $resolvedCreditors = [];
             foreach ($deposits as $deposit) {
                 $creditor = (string) $deposit['creditor'];
@@ -116,11 +200,13 @@ if ($workerId > 0) {
                 if ($resolvedCreditors[$creditor] !== $workerId) continue;
                 $depositDate = (string) $deposit['deposit_date'];
                 $depositsByDate[$depositDate] = ($depositsByDate[$depositDate] ?? 0) + (int) round((float) $deposit['amount'] * 100);
+                $depositPhotosByDate[$depositDate][] = ['id' => (int) $deposit['id'], 'amount' => (string) $deposit['amount']];
             }
         }
     }
     $periodExpenseTotal = 0.0;
     $periodPerDiemTotal = 0.0;
+    $periodDepositTotalCents = array_sum($depositsByDate);
     if ($isDateRange && $totalDays > 0) {
         $overridesStmt = db()->prepare('SELECT mark_date, amount_override FROM finance_personal_per_diem_edits WHERE worker_id = ? AND mark_date BETWEEN ? AND ?');
         $overridesStmt->execute([$workerId, $period['start'], $period['end']]);
@@ -142,7 +228,18 @@ if ($workerId > 0) {
         $additionalTotalStmt = db()->prepare('SELECT COALESCE(SUM(a.amount), 0) FROM finance_personal_additional_expenses a WHERE a.worker_id = ? AND a.mark_date BETWEEN ? AND ? AND EXISTS (SELECT 1 FROM attendance_marks am WHERE am.worker_id = a.worker_id AND am.mark_date = a.mark_date)');
         $additionalTotalStmt->execute([$workerId, $period['start'], $period['end']]);
         $periodExpenseTotal = $periodPerDiemTotal + (float) $additionalTotalStmt->fetchColumn();
+        $periodDepositTotalCents = 0;
+        $periodDepositsStmt = db()->prepare('SELECT d.creditor, d.amount FROM finance_personal_deposits d WHERE d.deposit_date BETWEEN ? AND ? AND EXISTS (SELECT 1 FROM attendance_marks am WHERE am.worker_id = ? AND am.mark_date = d.deposit_date)');
+        $periodDepositsStmt->execute([$period['start'], $period['end'], $workerId]);
+        $allWorkers = personal_deposit_workers();
+        $resolvedCreditors = [];
+        foreach ($periodDepositsStmt as $deposit) {
+            $creditor = (string) $deposit['creditor'];
+            if (!array_key_exists($creditor, $resolvedCreditors)) $resolvedCreditors[$creditor] = personal_deposit_unique_worker_id($creditor, $allWorkers);
+            if ($resolvedCreditors[$creditor] === $workerId) $periodDepositTotalCents += (int) round((float) $deposit['amount'] * 100);
+        }
     }
+    $remainingByDate = personal_remaining_balances($workerId, array_keys($markedDays));
 } else {
     $stmt = db()->query('SELECT w.id, w.full_name, w.document_type, w.document_number, c.name AS company FROM workers w LEFT JOIN companies c ON c.id = w.company_id ORDER BY c.name, w.full_name, w.id');
     $workers = $stmt->fetchAll();
@@ -157,7 +254,7 @@ require __DIR__ . '/../../includes/header.php';
         </div>
         <p><?= $worker ? 'Ficha de gastos del trabajador.' : 'Seleccione un trabajador para consultar sus gastos.' ?></p>
     </div>
-    <?php if ($worker): ?><a class="btn btn-outline-primary" href="<?= APP_URL ?>/modulos/finanzas/gastos_personal.php"><i class="fa-solid fa-arrow-left me-2" aria-hidden="true"></i>Volver a la lista</a><?php endif; ?>
+    <?php if ($worker && !is_personal_role()): ?><a class="btn btn-outline-primary" href="<?= APP_URL ?>/modulos/finanzas/gastos_personal.php"><i class="fa-solid fa-arrow-left me-2" aria-hidden="true"></i>Volver a la lista</a><?php endif; ?>
 </div>
 <?php if ($worker): ?>
 <section class="work-panel personal-expense-worker-panel <?= $period['mode'] === 'mes' ? '' : 'personal-expense-worker-panel-wide' ?>">
@@ -168,8 +265,10 @@ require __DIR__ . '/../../includes/header.php';
     </div>
     <?php if ($period['mode'] === 'mes'): ?>
     <div class="personal-opening-balance" id="personalOpeningBalance" data-month="<?= e($period['month']) ?>" data-balance="<?= e($openingBalance ?? '') ?>">
-        <div><span class="personal-opening-label">Saldo inicial de <?= e($openingBalanceMonthLabel) ?></span><strong class="d-block" id="personalOpeningBalanceValue"><?= $openingBalance !== null ? 'S/ ' . number_format((float) $openingBalance, 2, '.', ',') : 'Sin registrar' ?></strong></div>
-        <button class="btn btn-sm btn-outline-primary" type="button" id="editPersonalOpeningBalance" title="Editar saldo inicial" aria-label="Editar saldo inicial"><i class="fa-solid fa-pen" aria-hidden="true"></i></button>
+        <div class="personal-opening-copy">
+            <span class="personal-opening-label"><i class="fa-solid fa-wallet" aria-hidden="true"></i>Saldo inicial de <?= e($openingBalanceMonthLabel) ?></span>
+            <div class="personal-opening-value-row"><strong id="personalOpeningBalanceValue"><?= $openingBalance !== null ? 'S/ ' . number_format((float) $openingBalance, 2, '.', ',') : 'Sin registrar' ?></strong><button class="btn btn-sm btn-outline-primary" type="button" id="editPersonalOpeningBalance" title="Editar saldo inicial" aria-label="Editar saldo inicial"><i class="fa-solid fa-pen" aria-hidden="true"></i></button></div>
+        </div>
         <div class="personal-opening-editor" id="personalOpeningBalanceEditor" hidden>
             <div class="input-group input-group-sm"><span class="input-group-text">S/</span><input class="form-control" id="personalOpeningBalanceInput" type="number" min="0" max="999999999.99" step="0.01" inputmode="decimal" aria-label="Saldo inicial del mes"></div>
             <button class="btn btn-sm btn-primary" type="button" id="savePersonalOpeningBalance" title="Guardar saldo" aria-label="Guardar saldo"><i class="fa-solid fa-check" aria-hidden="true"></i></button>
@@ -191,7 +290,7 @@ require __DIR__ . '/../../includes/header.php';
     </form>
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0" id="personalPerDiemTable">
-            <thead class="table-light"><tr><th>Fecha</th><th>Ubicación</th><th>Proyecto</th><th>Viáticos</th><th>Observaciones</th><th>Gastos adicionales</th><th>Motivo</th><th>Total</th><th>Depósitos</th><th>Acción</th></tr></thead>
+            <thead class="table-light"><tr><th>Fecha</th><th>Ubicación</th><th>Proyecto</th><th>Viáticos</th><th>Observaciones</th><th>Gastos adicionales</th><th>Motivo</th><th>Total</th><th>Depósitos</th><th>Saldo restante</th><th>Registrado por</th><th>Acción</th></tr></thead>
             <tbody>
                 <?php foreach ($markedDays as $date => $mark): $automaticPerDiem = personal_per_diem((string) ($mark['project_name'] ?? ''), $date); $savedEdit = $savedEdits[$date] ?? null; $perDiem = $savedEdit && $savedEdit['amount_override'] !== null ? (float) $savedEdit['amount_override'] : $automaticPerDiem; $expenses = $expensesByDate[$date] ?? []; $additionalTotal = array_sum(array_map(static fn($item) => (float) $item['amount'], $expenses)); $observations = (string) ($savedEdit['observations'] ?? ''); $total = $perDiem !== null || $expenses ? (float) ($perDiem ?? 0) + $additionalTotal : null; if (!$isDateRange) { $periodPerDiemTotal += (float) ($perDiem ?? 0); $periodExpenseTotal += (float) ($total ?? 0); } ?>
                 <tr>
@@ -199,17 +298,19 @@ require __DIR__ . '/../../includes/header.php';
                     <td><?= e($mark['location_name'] ?: '—') ?></td>
                     <td><?= e($mark['project_name'] ?: '—') ?></td>
                     <td class="text-nowrap per-diem-amount-cell"><?= $perDiem !== null ? 'S/ ' . number_format((float) $perDiem, ((float) $perDiem == (int) $perDiem ? 0 : 2), '.', ',') : '—' ?></td>
-                    <td class="per-diem-observations-cell" style="white-space:pre-line;min-width:180px"><?= $observations !== '' ? e($observations) : '—' ?></td>
+                    <td class="per-diem-observations-cell" style="white-space:pre-line"><?= $observations !== '' ? e($observations) : '—' ?></td>
                     <td class="additional-expense-cell text-nowrap"><?php if ($expenses): foreach ($expenses as $expense): ?><div class="expense-display-line">S/ <?= number_format((float) $expense['amount'], 2, '.', ',') ?></div><?php endforeach; else: ?>—<?php endif; ?></td>
-                    <td class="additional-reason-cell" style="min-width:150px"><?php if ($expenses): foreach ($expenses as $expense): ?><div class="expense-display-line"><?= e($expense['reason']) ?></div><?php endforeach; else: ?>—<?php endif; ?></td>
+                    <td class="additional-reason-cell"><?php if ($expenses): foreach ($expenses as $expense): ?><div class="expense-display-line"><?= $expense['reason'] !== '' ? e($expense['reason']) : '—' ?></div><?php endforeach; else: ?>—<?php endif; ?></td>
                     <td class="total-expense-cell text-nowrap"><?= $total !== null ? 'S/ ' . number_format($total, 2, '.', ',') : '—' ?></td>
                     <td class="deposit-amount-cell text-nowrap"><?= isset($depositsByDate[$date]) ? 'S/ ' . number_format($depositsByDate[$date] / 100, 2, '.', ',') : '—' ?></td>
-                    <td class="per-diem-actions-cell"><button class="btn btn-sm btn-outline-primary edit-personal-per-diem" type="button" data-mark-date="<?= e($date) ?>" data-automatic="<?= $automaticPerDiem !== null ? (int) $automaticPerDiem : '' ?>" data-override="<?= $savedEdit && $savedEdit['amount_override'] !== null ? e((string) $savedEdit['amount_override']) : '' ?>" data-expenses="<?= e(json_encode($expenses, JSON_UNESCAPED_UNICODE)) ?>" data-observations="<?= e($observations) ?>" aria-label="Editar gastos del <?= e(date('d/m/Y', strtotime($date))) ?>" title="Editar gastos"><i class="fa-solid fa-pen" aria-hidden="true"></i></button></td>
+                    <td class="remaining-balance-cell text-nowrap"><?= isset($remainingByDate[$date]) ? 'S/ ' . number_format($remainingByDate[$date] / 100, 2, '.', ',') : '—' ?></td>
+                    <td class="registered-by-cell"><?= !empty($savedEdit['registered_by']) ? e($savedEdit['registered_by']) : '—' ?></td>
+                    <td class="per-diem-actions-cell"><div class="d-flex gap-1"><button class="btn btn-sm btn-outline-primary edit-personal-per-diem" type="button" data-mark-date="<?= e($date) ?>" data-automatic="<?= $automaticPerDiem !== null ? (int) $automaticPerDiem : '' ?>" data-override="<?= $savedEdit && $savedEdit['amount_override'] !== null ? e((string) $savedEdit['amount_override']) : '' ?>" data-expenses="<?= e(json_encode($expenses, JSON_UNESCAPED_UNICODE)) ?>" data-observations="<?= e($observations) ?>" aria-label="Editar gastos del <?= e(date('d/m/Y', strtotime($date))) ?>" title="Editar gastos"><i class="fa-solid fa-pen" aria-hidden="true"></i></button><?php if (!empty($depositPhotosByDate[$date])): ?><button class="btn btn-sm btn-outline-primary view-personal-deposits" type="button" data-bs-toggle="modal" data-bs-target="#personalDepositPhotosModal" data-deposit-photos="<?= e(json_encode($depositPhotosByDate[$date])) ?>" data-date="<?= e(date('d/m/Y', strtotime($date))) ?>" aria-label="Ver comprobantes de depósitos del <?= e(date('d/m/Y', strtotime($date))) ?>" title="Ver comprobantes de depósitos"><i class="fa-solid fa-file-image" aria-hidden="true"></i></button><?php endif; ?></div></td>
                 </tr>
                 <?php endforeach; ?>
-                <?php if (!$markedDays): ?><tr><td colspan="10" class="text-center text-muted py-4">No hay marcaciones en el periodo seleccionado.</td></tr><?php endif; ?>
+                <?php if (!$markedDays): ?><tr><td colspan="12" class="text-center text-muted py-4">No hay marcaciones en el periodo seleccionado.</td></tr><?php endif; ?>
             </tbody>
-            <?php if ($markedDays): ?><tfoot><tr><td colspan="3" class="text-end">Gastos totales de viáticos</td><td class="text-nowrap">S/ <?= number_format($periodPerDiemTotal, 2, '.', ',') ?></td><td colspan="3" class="text-end">Gastos totales</td><td class="text-nowrap">S/ <?= number_format($periodExpenseTotal, 2, '.', ',') ?></td><td colspan="2"></td></tr></tfoot><?php endif; ?>
+            <?php if ($markedDays): ?><tfoot><tr><td colspan="3"></td><td class="text-nowrap" aria-label="Total de viáticos">S/ <?= number_format($periodPerDiemTotal, 2, '.', ',') ?></td><td colspan="3"></td><td class="text-nowrap" aria-label="Total de gastos">S/ <?= number_format($periodExpenseTotal, 2, '.', ',') ?></td><td class="text-nowrap" aria-label="Total de depósitos">S/ <?= number_format($periodDepositTotalCents / 100, 2, '.', ',') ?></td><td colspan="3"></td></tr></tfoot><?php endif; ?>
         </table>
     </div>
     <?php if ($isDateRange && $totalPages > 1): ?>
@@ -233,14 +334,20 @@ require __DIR__ . '/../../includes/header.php';
 .personal-expense-worker-details > div:first-child { grid-column:1/-1; }
 .personal-expense-worker-details h2 { color:#172b4d; font-weight:750; }
 .personal-expense-worker-details strong { display:block; color:#172b4d; font-size:.88rem; overflow-wrap:anywhere; }
-.personal-expense-detail-label,.personal-opening-label { display:block; margin-bottom:3px; color:#455b79; font-size:.72rem; font-weight:800; letter-spacing:.035em; text-transform:uppercase; }
-.personal-opening-balance { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:74px; padding:4px 0 4px 18px; border-left:1px solid #dedbd4; }
-.personal-opening-balance strong { color:#0b3b80; font-size:1.18rem; line-height:1.2; }
-.personal-opening-balance .btn { flex:none; width:34px; height:34px; padding:0; border-radius:7px; background:#fff; border-color:#cbd5e1; color:#172b4d; }
-.personal-opening-editor { display:flex; align-items:center; gap:6px; }
-.personal-opening-editor .input-group { width:155px; }
-.personal-opening-editor .input-group-text,.personal-opening-editor input { border-color:#cbd9eb; }
-.personal-opening-editor .btn-primary { color:#fff; background:#2563eb; }
+.personal-expense-detail-label { display:block; margin-bottom:3px; color:#455b79; font-size:.72rem; font-weight:800; letter-spacing:.035em; text-transform:uppercase; }
+.personal-opening-balance { min-width:270px; max-width:350px; min-height:96px; padding:16px 18px; border:1px solid #ecd3a1; border-radius:13px; background:linear-gradient(135deg,#fff2d9 0%,#fffcf5 100%); box-shadow:0 5px 15px rgba(139,92,22,.09); }
+.personal-opening-copy { min-width:0; }
+.personal-opening-value-row { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:6px; }
+.personal-opening-label { display:flex; align-items:center; gap:7px; margin-bottom:7px; color:#805a24; font-size:.7rem; font-weight:800; letter-spacing:.035em; line-height:1.35; text-transform:uppercase; }
+.personal-opening-label i { display:inline-grid; place-items:center; flex:none; width:25px; height:25px; border-radius:7px; background:#fce6bc; color:#a36b18; font-size:.75rem; }
+.personal-opening-balance strong { color:#75480d; font-size:1.45rem; font-weight:800; letter-spacing:-.02em; line-height:1.15; }
+.personal-opening-balance .btn { flex:none; width:36px; height:36px; padding:0; border-radius:9px; background:#fff; border-color:#e6c98e; color:#885b17; box-shadow:0 2px 5px rgba(139,92,22,.07); }
+.personal-opening-balance .btn:hover { background:#fff0d4; border-color:#d6ac62; color:#75480d; }
+.personal-opening-editor { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:10px; padding-top:10px; border-top:1px solid #f0ddb9; }
+.personal-opening-editor .input-group { width:min(155px,100%); }
+.personal-opening-editor .input-group-text,.personal-opening-editor input { border-color:#ecd3a1; }
+.personal-opening-editor .btn-primary { color:#fff; background:#a36b18; border-color:#a36b18; }
+.personal-opening-editor .btn-primary:hover { color:#fff; background:#875711; border-color:#875711; }
 .personal-opening-balance [hidden] { display:none!important; }
 .personal-expense-records-panel.work-panel { border:1px solid #cbd8eb!important; border-radius:15px!important; box-shadow:0 5px 18px rgba(35,62,102,.045)!important; }
 .personal-expense-records-panel > h2 { color:#172b4d; font-size:1rem; font-weight:750; }
@@ -255,29 +362,33 @@ require __DIR__ . '/../../includes/header.php';
 .personal-expense-records-panel .table-responsive { border:1px solid #d7e2f0; border-radius:7px; }
 .personal-expense-pagination { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-top:14px; color:#526b91; font-size:.78rem; }
 .personal-expense-pagination .btn { border-radius:7px; }
-#personalPerDiemTable { width:100%; min-width:900px; table-layout:fixed; color:#172b4d; }
-#personalPerDiemTable thead th { padding:.7rem .35rem; background:#f7f9fc; border-bottom:1px solid #cbd8eb; color:#0f172a; font-size:.68rem; font-weight:800; text-transform:uppercase; vertical-align:middle; white-space:normal; overflow-wrap:anywhere; }
-#personalPerDiemTable thead th:nth-child(1) { width:9%; }
-#personalPerDiemTable thead th:nth-child(2) { width:12%; }
-#personalPerDiemTable thead th:nth-child(3) { width:11%; }
+#personalPerDiemTable { width:100%; min-width:930px; table-layout:fixed; color:#172b4d; }
+#personalPerDiemTable thead th { padding:.65rem .25rem; background:#f7f9fc; border-bottom:1px solid #cbd8eb; color:#0f172a; font-size:.62rem; font-weight:800; text-transform:uppercase; vertical-align:middle; white-space:normal; overflow-wrap:anywhere; }
+#personalPerDiemTable thead th:nth-child(1) { width:7%; }
+#personalPerDiemTable thead th:nth-child(2) { width:8%; }
+#personalPerDiemTable thead th:nth-child(3) { width:8%; }
 #personalPerDiemTable thead th:nth-child(4) { width:8%; }
-#personalPerDiemTable thead th:nth-child(5) { width:15%; }
-#personalPerDiemTable thead th:nth-child(6) { width:12%; }
-#personalPerDiemTable thead th:nth-child(7) { width:10%; }
-#personalPerDiemTable thead th:nth-child(8) { width:9%; }
+#personalPerDiemTable thead th:nth-child(5) { width:10%; }
+#personalPerDiemTable thead th:nth-child(6) { width:8%; }
+#personalPerDiemTable thead th:nth-child(7) { width:8%; }
+#personalPerDiemTable thead th:nth-child(8) { width:8%; }
 #personalPerDiemTable thead th:nth-child(9) { width:9%; }
-#personalPerDiemTable thead th:nth-child(10) { width:5%; }
-#personalPerDiemTable tbody td { padding:.57rem .35rem; border-bottom:1px solid #dce5f0; font-size:.8rem; vertical-align:middle; overflow-wrap:anywhere; }
-#personalPerDiemTable:has(.per-diem-editing) { min-width:1250px; table-layout:auto; }
+#personalPerDiemTable thead th:nth-child(10) { width:9%; }
+#personalPerDiemTable thead th:nth-child(11) { width:9%; }
+#personalPerDiemTable thead th:nth-child(12) { width:8%; }
+#personalPerDiemTable tbody td { padding:.5rem .25rem; border-bottom:1px solid #dce5f0; font-size:.72rem; vertical-align:middle; overflow-wrap:anywhere; }
+#personalPerDiemTable:has(.per-diem-editing) { min-width:1350px; table-layout:auto; }
 #personalPerDiemTable tbody tr:hover:not(.per-diem-editing) td { background:#f8fbff; }
 #personalPerDiemTable tbody tr:last-child td { border-bottom:0; }
-#personalPerDiemTable tfoot td { padding:.65rem .55rem; background:#f4f7fb; border-top:1px solid #d7e2f0; color:#0f172a; font-size:.85rem; font-weight:800; }
-#personalPerDiemTable tfoot td:nth-child(2),#personalPerDiemTable tfoot td:nth-child(4) { color:#0b3b80; font-size:1.05rem; }
+#personalPerDiemTable tfoot td { padding:.6rem .25rem; background:#f4f7fb; border-top:1px solid #d7e2f0; color:#0f172a; font-size:.78rem; font-weight:800; }
+#personalPerDiemTable tfoot td:nth-child(2),#personalPerDiemTable tfoot td:nth-child(4),#personalPerDiemTable tfoot td:nth-child(5) { color:#0b3b80; font-size:.9rem; }
 #personalPerDiemTable .per-diem-amount-cell,#personalPerDiemTable .total-expense-cell { font-weight:700; }
 #personalPerDiemTable .total-expense-cell { color:#0b3b80; }
 #personalPerDiemTable .deposit-amount-cell { color:#0b3b80; font-weight:700; }
+#personalPerDiemTable .remaining-balance-cell { color:#0b3b80; font-weight:800; }
+#personalPerDiemTable .registered-by-cell { overflow-wrap:anywhere; }
 #personalPerDiemTable .per-diem-actions-cell { white-space:nowrap; }
-#personalPerDiemTable .per-diem-actions-cell .btn { display:inline-grid; place-items:center; width:32px; height:32px; padding:0; border-radius:7px; }
+#personalPerDiemTable .per-diem-actions-cell .btn { display:inline-grid; place-items:center; width:29px; height:29px; padding:0; border-radius:7px; }
 #personalPerDiemTable .per-diem-actions-cell .btn-outline-primary { color:#172b4d; border-color:#cbd5e1; background:#fff; }
 #personalPerDiemTable .per-diem-actions-cell .btn-outline-primary:hover { background:#eff6ff; border-color:#93b4e9; }
 #personalPerDiemTable tr.per-diem-editing > td { background:#ececec; }
@@ -304,7 +415,14 @@ require __DIR__ . '/../../includes/header.php';
 .personal-per-diem-rules-modal .rule-rate { color:#0b3b80; font-weight:750; }
 .personal-per-diem-rules-modal .modal-footer { padding:12px 20px; background:#fbfcfe; border-top:1px solid #e2eaf3; }
 .personal-per-diem-rules-modal .modal-footer .btn { border-radius:8px; min-width:80px; }
-@media(max-width:800px) { .personal-expense-worker-panel.work-panel { grid-template-columns:1fr; } .personal-opening-balance { border-left:0; border-top:1px solid #dedbd4; padding:14px 0 0; } }
+.personal-deposit-photos-modal .modal-content { border:1px solid #cbd8eb; border-radius:15px; overflow:hidden; }
+.personal-deposit-photos-modal .modal-header { background:#f4f7fb; }
+.personal-deposit-photos-list { display:flex; gap:12px; overflow-x:auto; scroll-snap-type:x mandatory; padding:4px 4px 12px; }
+.personal-deposit-photo { flex:0 0 100%; min-width:0; margin:0; scroll-snap-align:start; text-align:center; }
+.personal-deposit-photo img { display:block; max-width:100%; max-height:65vh; width:auto; height:auto; margin:auto; border:1px solid #d7e2f0; border-radius:8px; object-fit:contain; }
+.personal-deposit-photo figcaption { margin-top:8px; color:#344761; font-size:.85rem; font-weight:700; }
+@media(max-width:800px) { .personal-expense-worker-panel.work-panel { grid-template-columns:1fr; } .personal-opening-balance { max-width:none; min-width:0; } }
+@media(max-width:550px) { .personal-opening-balance { padding:12px; } .personal-opening-balance strong { font-size:1.25rem; } .personal-opening-value-row .btn { width:32px; height:32px; } }
 @media(max-width:700px) { .personal-expense-period-field { flex:1 1 140px; } .personal-expense-worker-details { grid-template-columns:1fr; gap:10px; } .personal-expense-worker-details > div:first-child { grid-column:auto; } }
 </style>
 <div class="modal fade personal-per-diem-rules-modal" id="personalPerDiemRulesModal" tabindex="-1" aria-labelledby="personalPerDiemRulesTitle" aria-hidden="true">
@@ -322,8 +440,37 @@ require __DIR__ . '/../../includes/header.php';
         </div>
     </div>
 </div>
+<div class="modal fade personal-deposit-photos-modal" id="personalDepositPhotosModal" tabindex="-1" aria-labelledby="personalDepositPhotosTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content">
+        <div class="modal-header"><h2 class="modal-title h5 mb-0" id="personalDepositPhotosTitle">Comprobantes de depósitos</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+        <div class="modal-body"><div class="personal-deposit-photos-list" id="personalDepositPhotosList"></div></div>
+        <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button></div>
+    </div></div>
+</div>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+    const photoModal = document.getElementById('personalDepositPhotosModal');
+    const photoList = document.getElementById('personalDepositPhotosList');
+    const photoEndpoint = <?= json_encode(APP_URL . '/servicios/finanzas/depositos_personal_archivo.php') ?>;
+    photoModal.addEventListener('show.bs.modal', event => {
+        photoList.replaceChildren();
+        const trigger = event.relatedTarget;
+        document.getElementById('personalDepositPhotosTitle').textContent = `Comprobantes de depósitos · ${trigger.dataset.date}`;
+        const photos = JSON.parse(trigger.dataset.depositPhotos || '[]');
+        for (const [index, photo] of photos.entries()) {
+            const figure = document.createElement('figure');
+            figure.className = 'personal-deposit-photo';
+            const image = document.createElement('img');
+            image.src = `${photoEndpoint}?id=${encodeURIComponent(photo.id)}`;
+            image.alt = `Comprobante ${index + 1} del ${trigger.dataset.date}`;
+            image.loading = index === 0 ? 'eager' : 'lazy';
+            const caption = document.createElement('figcaption');
+            caption.textContent = `Depósito ${index + 1} de ${photos.length} · S/ ${Number(photo.amount).toFixed(2)}`;
+            figure.append(image, caption);
+            photoList.appendChild(figure);
+        }
+    });
+    photoModal.addEventListener('hidden.bs.modal', () => photoList.replaceChildren());
     const periodMode = document.getElementById('expensePeriodMode');
     const periodFields = [
         ['mes', document.getElementById('expensePeriodMonthField'), document.getElementById('expensePeriodMonth')],
@@ -364,9 +511,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const response = await fetch(<?= json_encode(APP_URL . '/modulos/finanzas/guardar_saldo_inicial_personal.php') ?>, {method:'POST', body:data, credentials:'same-origin'});
                 const result = await response.json();
                 if (!response.ok || !result.ok) throw new Error(result.message || 'No se pudo guardar el saldo inicial.');
-                openingBalance.dataset.balance = input.value.trim();
-                document.getElementById('personalOpeningBalanceValue').textContent = input.value.trim() === '' ? 'Sin registrar' : 'S/ ' + Number(input.value).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
-                closeEditor();
+                window.location.reload();
             } catch (error) {
                 Swal.fire('Atención', error.message, 'warning');
             } finally {
@@ -437,7 +582,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const amountInput = amountCell.querySelector('input');
             amountInput.value = override !== '' ? override : automatic;
             observationsCell.style.whiteSpace = 'normal';
-            observationsCell.innerHTML = '<textarea class="form-control form-control-sm per-diem-observations-input" rows="2" maxlength="10000" required aria-label="Observaciones"></textarea>';
+            observationsCell.innerHTML = '<textarea class="form-control form-control-sm per-diem-observations-input" rows="2" maxlength="10000" aria-label="Observaciones"></textarea>';
             observationsCell.querySelector('.per-diem-observations-input').value = observations;
             additionalCell.innerHTML = '<div class="additional-expense-list"></div><button class="btn btn-sm btn-outline-primary add-additional-expense mt-1" type="button"><i class="fa-solid fa-plus me-1" aria-hidden="true"></i>Agregar gasto</button>';
             reasonCell.style.whiteSpace = 'normal';
@@ -460,14 +605,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const expenseInput = additionalInputs[i];
             const reasonInput = reasonInputs[i];
             if (!expenseInput.reportValidity()) return;
-            reasonInput.setCustomValidity(expenseInput.value !== '' && !reasonInput.value.trim() ? 'Indique el motivo de este gasto.' : expenseInput.value === '' && reasonInput.value.trim() ? 'Ingrese el importe o quite este gasto.' : '');
+            reasonInput.setCustomValidity(expenseInput.value === '' && reasonInput.value.trim() ? 'Ingrese el importe o quite este gasto.' : '');
             if (!reasonInput.reportValidity()) return;
             if (expenseInput.value !== '') expenses.push({amount: expenseInput.value, reason: reasonInput.value.trim()});
         }
-        if (!observationsInput.value.trim()) {
-            observationsInput.setCustomValidity('Ingrese una observación para guardar el cambio.');
-        } else { observationsInput.setCustomValidity(''); }
-        if (!observationsInput.reportValidity()) return;
         const data = new FormData();
         data.set('csrf_token', <?= json_encode(csrf_token()) ?>);
         data.set('worker_id', <?= (int) $workerId ?>);

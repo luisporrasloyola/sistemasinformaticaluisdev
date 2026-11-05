@@ -96,7 +96,9 @@ try {
             if (!$row) { throw new DomainException('Documento no encontrado.'); }
             $oldFile = $row['file_path'];
         }
-        $newFile = upload_file($_FILES['file'] ?? [], 'clientes_pmi', document_attachment_mimes())['path'];
+        $allowedExtensions = array_intersect_key(format_attachment_extensions(), array_flip(['pdf', 'jpg', 'jpeg', 'png', 'webp', 'doc', 'docx', 'xls', 'xlsx']));
+        $allowedMimes = array_values(array_unique(array_merge(...array_values($allowedExtensions))));
+        $newFile = upload_file($_FILES['file'] ?? [], 'clientes_pmi', $allowedMimes, $allowedExtensions)['path'];
         db()->beginTransaction();
         // Un nombre compartido se incorpora al catálogo del proyecto al usarlo.
         db()->prepare('INSERT INTO client_pmi_base_catalog (client_id, project_id, name) VALUES (:client_id, :project_id, :name)

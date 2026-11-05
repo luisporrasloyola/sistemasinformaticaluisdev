@@ -33,7 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!savedDates.length) return;
         const last = [...savedDates].sort().at(-1);
         const latestMonth = last.slice(0, 7);
-        if (settings.periodMode === 'mes' && settings.periodMonth === latestMonth && settings.page === 1) return;
+        if (settings.periodMode === 'mes' && settings.periodMonth === latestMonth && settings.page === 1 && !settings.search) return;
         const url = new URL(window.location.href);
         url.searchParams.delete('pagina');
         url.searchParams.set('periodo', 'mes');
@@ -288,7 +288,7 @@ document.addEventListener('DOMContentLoaded', () => {
             item.status.classList.remove('is-error');
             item.status.textContent = 'Depósito guardado correctamente.';
             savedDates.push(result.fecha);
-            const visiblePeriod = result.fecha >= settings.periodStart && result.fecha <= settings.periodEnd && settings.page === 1;
+            const visiblePeriod = result.fecha >= settings.periodStart && result.fecha <= settings.periodEnd && settings.page === 1 && !settings.search;
             if (visiblePeriod) {
                 document.getElementById('personalDepositEmpty')?.remove();
                 const row = document.createElement('tr');

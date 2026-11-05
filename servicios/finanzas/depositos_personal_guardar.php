@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/upload.php';
 require_module_access('finanzas.depositos_personal');
+require_once __DIR__ . '/../../includes/finanzas_depositos_personal_match.php';
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 
@@ -19,6 +20,7 @@ $date = trim((string) ($_POST['fecha'] ?? ''));
 $creditor = trim((string) ($_POST['acreedor'] ?? ''));
 $amount = trim((string) ($_POST['monto'] ?? ''));
 $method = trim((string) ($_POST['modo_pago'] ?? ''));
+if (is_personal_role() && !personal_deposit_is_own($creditor)) deposit_save_reply(403, ['error' => 'El acreedor debe corresponder al personal vinculado a su cuenta.']);
 $parsedDate = preg_match('/^\d{4}-\d{2}-\d{2}$/D', $date) ? DateTimeImmutable::createFromFormat('!Y-m-d', $date) : false;
 if (!$parsedDate || $parsedDate->format('Y-m-d') !== $date) deposit_save_reply(422, ['error' => 'Ingrese una fecha válida.']);
 if ($creditor === '' || mb_strlen($creditor) > 150) deposit_save_reply(422, ['error' => 'Ingrese el acreedor (máximo 150 caracteres).']);

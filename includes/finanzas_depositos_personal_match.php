@@ -54,3 +54,20 @@ function personal_deposit_unique_worker_id(string $creditor, array $workers): ?i
     }
     return $match;
 }
+
+/** @return array<int, array{id:int|string, full_name:string}> */
+function personal_deposit_workers(): array
+{
+    require_once __DIR__ . '/../config/database.php';
+    static $workers = null;
+    if ($workers === null) {
+        $workers = db()->query('SELECT id, full_name FROM workers')->fetchAll(PDO::FETCH_ASSOC);
+    }
+    return $workers;
+}
+
+function personal_deposit_is_own(string $creditor): bool
+{
+    $workerId = current_user_worker_id();
+    return $workerId !== null && personal_deposit_unique_worker_id($creditor, personal_deposit_workers()) === $workerId;
+}

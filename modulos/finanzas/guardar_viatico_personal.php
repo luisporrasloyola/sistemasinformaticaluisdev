@@ -8,6 +8,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_response(['ok' => false, 'messag
 verify_csrf($_POST['csrf_token'] ?? null);
 
 $workerId = filter_var($_POST['worker_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+if (is_personal_role()) require_personal_own_worker((int) $workerId);
 $markDate = (string) ($_POST['mark_date'] ?? '');
 $amountText = trim((string) ($_POST['amount_override'] ?? ''));
 $additionalText = trim((string) ($_POST['additional_expense'] ?? ''));
@@ -27,8 +28,8 @@ if (isset($_POST['additional_expenses'])) {
         }
         $expenseAmount = trim((string) $item['amount']);
         $expenseReason = trim($item['reason']);
-        if (!preg_match('/^\d{1,6}(?:\.\d{1,2})?$/', $expenseAmount) || (float) $expenseAmount > 999999.99 || $expenseReason === '' || mb_strlen($expenseReason) > 1000) {
-            json_response(['ok' => false, 'message' => 'Cada gasto debe tener un importe válido y su motivo.'], 422);
+        if (!preg_match('/^\d{1,6}(?:\.\d{1,2})?$/', $expenseAmount) || (float) $expenseAmount > 999999.99 || mb_strlen($expenseReason) > 1000) {
+            json_response(['ok' => false, 'message' => 'Cada gasto debe tener un importe válido; el motivo puede quedar vacío.'], 422);
         }
     }
 }
@@ -42,14 +43,14 @@ if ($amountText !== '' && (!preg_match('/^\d{1,6}(?:\.\d{1,2})?$/', $amountText)
 if ($additionalText !== '' && (!preg_match('/^\d{1,6}(?:\.\d{1,2})?$/', $additionalText) || (float) $additionalText > 999999.99)) {
     json_response(['ok' => false, 'message' => 'Ingrese un gasto adicional válido de hasta dos decimales.'], 422);
 }
-if (mb_strlen($additionalReason) > 1000 || ($additionalText !== '' && $additionalReason === '') || ($additionalText === '' && $additionalReason !== '')) {
-    json_response(['ok' => false, 'message' => 'El gasto adicional y su motivo deben ingresarse juntos.'], 422);
+if (mb_strlen($additionalReason) > 1000 || ($additionalText === '' && $additionalReason !== '')) {
+    json_response(['ok' => false, 'message' => 'Ingrese el importe del gasto adicional o quite su motivo.'], 422);
 }
-if ($directObservations !== null && ($directObservations === '' || mb_strlen($directObservations) > 10000)) {
-    json_response(['ok' => false, 'message' => 'Ingrese una observación de hasta 10000 caracteres.'], 422);
+if ($directObservations !== null && mb_strlen($directObservations) > 10000) {
+    json_response(['ok' => false, 'message' => 'La observación no puede superar los 10000 caracteres.'], 422);
 }
-if ($directObservations === null && ($newObservation === '' || mb_strlen($newObservation) > 1000 || mb_strlen($observations) > 9000)) {
-    json_response(['ok' => false, 'message' => 'Ingrese una nueva observación de hasta 1000 caracteres.'], 422);
+if ($directObservations === null && (mb_strlen($newObservation) > 1000 || mb_strlen($observations) > 10000)) {
+    json_response(['ok' => false, 'message' => 'La observación no puede superar su límite de caracteres.'], 422);
 }
 
 try {
@@ -61,8 +62,8 @@ try {
         $combined = $directObservations;
     } else {
         $author = trim((string) (current_user()['name'] ?? 'Usuario'));
-        $entry = date('d/m/Y H:i') . ' · ' . $author . ': ' . $newObservation;
-        $combined = $observations === '' ? $entry : $observations . "\n" . $entry;
+        $entry = $newObservation === '' ? '' : date('d/m/Y H:i') . ' · ' . $author . ': ' . $newObservation;
+        $combined = $entry === '' ? $observations : ($observations === '' ? $entry : $observations . "\n" . $entry);
     }
     if (mb_strlen($combined) > 10000) json_response(['ok' => false, 'message' => 'El campo de observaciones alcanzó su límite.'], 422);
 

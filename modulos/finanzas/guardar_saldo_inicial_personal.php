@@ -8,6 +8,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_response(['ok' => false, 'messag
 verify_csrf($_POST['csrf_token'] ?? null);
 
 $workerId = filter_var($_POST['worker_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+if (is_personal_role()) require_personal_own_worker((int) $workerId);
 $month = trim((string) ($_POST['month'] ?? ''));
 $amount = trim((string) ($_POST['amount'] ?? ''));
 if (!$workerId || !preg_match('/^\d{4}-(0[1-9]|1[0-2])$/D', $month)) {

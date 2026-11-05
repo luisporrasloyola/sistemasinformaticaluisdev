@@ -27,9 +27,9 @@
                     <div class="border rounded bg-light p-2 mt-2 d-none" id="baseObservationHistory"><strong class="small">Historial de observaciones</strong><div class="small mt-2" id="baseObservationList"></div></div>
                 </div>
                 <div>
-                    <label class="form-label" for="baseDocumentFile">Adjunto (PDF o imagen)</label>
-                    <input class="form-control" type="file" id="baseDocumentFile" name="file" accept="application/pdf,image/jpeg,image/png,image/webp">
-                    <small class="text-muted">Formatos permitidos: PDF, JPG, PNG y WEBP. Máximo 10 MB.</small>
+                    <label class="form-label" for="baseDocumentFile">Adjunto (PDF, imagen, Word o Excel)</label>
+                    <input class="form-control" type="file" id="baseDocumentFile" name="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx">
+                    <small class="text-muted">Formatos permitidos: PDF, JPG, PNG, WEBP, DOC, DOCX, XLS y XLSX. Máximo 10 MB.</small>
                     <div class="small mt-2 d-none" id="baseCurrentFile"></div>
                 </div>
             </div>

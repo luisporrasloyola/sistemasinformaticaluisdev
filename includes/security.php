@@ -131,6 +131,9 @@ function current_user_can_module(string $moduleKey): bool
     }
 
     if (is_personal_role()) {
+        if (in_array($moduleKey, ['finanzas', 'finanzas.gastos_personal', 'finanzas.depositos_personal'], true)) {
+            return current_user_worker_id() !== null;
+        }
         if (in_array($moduleKey, ['control_personal', 'control_personal.control_asistencia', 'cobranzas', 'cobranzas.valorizacion'], true)) return true;
         require_once __DIR__ . '/../config/database.php';
         require_once __DIR__ . '/permissions.php';

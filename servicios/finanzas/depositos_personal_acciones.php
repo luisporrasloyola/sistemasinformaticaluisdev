@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/upload.php';
 require_module_access('finanzas.depositos_personal');
+require_once __DIR__ . '/../../includes/finanzas_depositos_personal_match.php';
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 
@@ -20,9 +21,10 @@ $action = (string) ($_POST['action'] ?? '');
 if (!$id || !in_array($action, ['update', 'delete'], true)) deposit_action_reply(400, ['error' => 'Acción no válida.']);
 
 try {
-    $stmt = db()->prepare('SELECT id, image_path FROM finance_personal_deposits WHERE id = ?');
+    $stmt = db()->prepare('SELECT id, image_path, creditor FROM finance_personal_deposits WHERE id = ?');
     $stmt->execute([$id]);
     $record = $stmt->fetch();
+    if ($record && is_personal_role() && !personal_deposit_is_own((string) $record['creditor'])) deposit_action_reply(403, ['error' => 'Solo puede modificar sus propios depósitos.']);
     if (!$record) deposit_action_reply(404, ['error' => 'El depósito ya no existe. Actualice la página.']);
     if ($action === 'delete') {
         db()->prepare('DELETE FROM finance_personal_deposits WHERE id = ?')->execute([$id]);
@@ -34,6 +36,7 @@ try {
     $creditor = trim((string) ($_POST['acreedor'] ?? ''));
     $amount = trim((string) ($_POST['monto'] ?? ''));
     $method = trim((string) ($_POST['modo_pago'] ?? ''));
+    if (is_personal_role() && !personal_deposit_is_own($creditor)) deposit_action_reply(403, ['error' => 'El acreedor debe corresponder al personal vinculado a su cuenta.']);
     $parsedDate = preg_match('/^\d{4}-\d{2}-\d{2}$/D', $date) ? DateTimeImmutable::createFromFormat('!Y-m-d', $date) : false;
     if (!$parsedDate || $parsedDate->format('Y-m-d') !== $date) deposit_action_reply(422, ['error' => 'Ingrese una fecha válida.']);
     if ($creditor === '' || mb_strlen($creditor) > 150) deposit_action_reply(422, ['error' => 'Ingrese el acreedor (máximo 150 caracteres).']);

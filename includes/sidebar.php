@@ -88,6 +88,15 @@ $isAdmin = is_admin();
             <div class="collapse <?= $cobranzasOpen ? 'show' : '' ?>" id="cobranzasMenuPersonal"><div class="submenu">
                 <a class="nav-link sub-link <?= $cobranzasValorizacionOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/cobranzas/valorizacion.php"><i class="fa-solid fa-file-invoice-dollar"></i><span>Valorización</span></a>
             </div></div>
+            <?php if (current_user_can_module('finanzas.gastos_personal')): ?>
+                <button class="nav-link nav-parent <?= $finanzasOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#finanzasMenuPersonal" aria-expanded="<?= $finanzasOpen ? 'true' : 'false' ?>" aria-controls="finanzasMenuPersonal">
+                    <i class="fa-solid fa-coins"></i><span>Finanzas</span><i class="fa-solid fa-chevron-down nav-caret"></i>
+                </button>
+                <div class="collapse <?= $finanzasOpen ? 'show' : '' ?>" id="finanzasMenuPersonal"><div class="submenu">
+                    <a class="nav-link sub-link <?= $finanzasGastosOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/finanzas/gastos_personal.php"><i class="fa-solid fa-receipt"></i><span>Gastos de personal</span></a>
+                    <a class="nav-link sub-link <?= $finanzasDepositosOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/finanzas/depositos_personal.php"><i class="fa-solid fa-money-bill-transfer"></i><span>Depósitos al personal</span></a>
+                </div></div>
+            <?php endif; ?>
             <?php if (current_user_can_module('requisitos')): ?>
                 <button class="nav-link nav-parent <?= $requisitosOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#requisitosMenuPersonal" aria-expanded="<?= $requisitosOpen ? 'true' : 'false' ?>">
                     <i class="fa-solid fa-folder-open"></i><span>Requisitos</span><i class="fa-solid fa-chevron-down nav-caret"></i>
