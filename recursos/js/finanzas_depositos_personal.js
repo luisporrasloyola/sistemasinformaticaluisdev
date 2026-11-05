@@ -231,6 +231,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const url = URL.createObjectURL(file);
         previewUrls.push(url);
         preview.src = url;
+        preview.addEventListener('error', () => {
+            preview.hidden = true;
+        });
         const fields = document.createElement('div');
         fields.className = 'personal-deposit-fields mt-3';
         fields.append(
@@ -331,8 +334,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     image.onerror = () => reject(new Error('No se pudo abrir la foto. Seleccione otra copia en JPG, PNG o WEBP.'));
                     image.src = objectUrl;
                 });
-            } finally {
+                release = () => URL.revokeObjectURL(objectUrl);
+            } catch (error) {
                 URL.revokeObjectURL(objectUrl);
+                throw error;
             }
         }
         try {
@@ -365,12 +370,22 @@ document.addEventListener('DOMContentLoaded', () => {
         status.classList.remove('is-error');
         status.textContent = 'Leyendo foto con Gemini…';
         try {
-            const blob = item.preparedFile || await prepareImage(file);
+            let blob = item.preparedFile;
+            if (!blob) {
+                try {
+                    blob = await prepareImage(file);
+                } catch (decodeError) {
+                    if (file.size > 1500000 || !allowed.includes(file.type)) throw decodeError;
+                    // Algunos navegadores móviles no pueden dibujar el archivo,
+                    // aunque el servidor sí puede leer el JPEG original.
+                    blob = file;
+                }
+            }
             item.preparedFile = blob;
             if (currentGeneration !== generation) return;
             const data = new FormData();
             data.append('csrf_token', settings.csrf);
-            data.append('imagen', blob, 'lectura.jpg');
+            data.append('imagen', blob, blob === file ? file.name : 'lectura.jpg');
             const response = await fetch(settings.endpoint, {method: 'POST', body: data, credentials: 'same-origin'}).catch(() => {
                 throw new Error('No se pudo conectar para leer la foto. Revise su conexión e intente de nuevo.');
             });

@@ -84,6 +84,9 @@ curl_close($handle);
 if ($response === false) deposit_gemini_reply(503, ['error' => 'La lectura tardó demasiado o no pudo conectarse.']);
 $payload = json_decode($response, true);
 if ($status === 429) deposit_gemini_reply(429, ['error' => 'La cuota de Gemini está temporalmente agotada. Intente más tarde.']);
+if (stripos((string) ($payload['error']['message'] ?? ''), 'source image could not be decoded') !== false) {
+    deposit_gemini_reply(422, ['error' => 'No se pudo interpretar esta imagen. Compártala o expórtela nuevamente como JPG y vuelva a seleccionarla.']);
+}
 if ($status !== 200 || !is_array($payload) || ($payload['candidates'][0]['finishReason'] ?? '') !== 'STOP') {
     deposit_gemini_reply(503, ['error' => 'Gemini no pudo completar la lectura.']);
 }

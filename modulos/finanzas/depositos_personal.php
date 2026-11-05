@@ -76,6 +76,7 @@ require __DIR__ . '/../../includes/header.php';
 .personal-deposit-status{font-size:.8rem;color:#526b91}
 .personal-deposit-status.is-error{color:#b42318}
 .personal-deposit-preview{display:block;width:auto;max-width:100%;max-height:220px;margin:0 0 12px;border:1px solid #d9e3ef;border-radius:7px;object-fit:contain}
+.personal-deposit-preview[hidden]{display:none}
 .personal-deposit-actions{display:flex;align-items:center;gap:5px;white-space:nowrap}
 .personal-deposit-action{display:inline-grid;place-items:center;width:30px;height:30px;padding:0;border:1px solid #cbd8eb;border-radius:6px;background:#fff;color:#12213a}
 .personal-deposit-action:hover{background:#f0f5ff}
@@ -142,5 +143,5 @@ window.personalDepositGemini = {
     csrf: <?= json_encode(csrf_token()) ?>
 };
 </script>
-<script src="<?= e(APP_URL . '/recursos/js/finanzas_depositos_personal.js?v=11') ?>" defer></script>
+<script src="<?= e(APP_URL . '/recursos/js/finanzas_depositos_personal.js?v=12') ?>" defer></script>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>
