@@ -142,5 +142,5 @@ window.personalDepositGemini = {
     csrf: <?= json_encode(csrf_token()) ?>
 };
 </script>
-<script src="<?= e(APP_URL . '/recursos/js/finanzas_depositos_personal.js?v=10') ?>" defer></script>
+<script src="<?= e(APP_URL . '/recursos/js/finanzas_depositos_personal.js?v=11') ?>" defer></script>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>

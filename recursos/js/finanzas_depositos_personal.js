@@ -241,7 +241,7 @@ document.addEventListener('DOMContentLoaded', () => {
         );
         card.append(header, status, preview, fields);
         cards.appendChild(card);
-        return {card, status, retry, save, close, file, url, saved: false};
+        return {card, status, retry, save, close, file, url, preparedFile: null, saved: false};
     }
 
     function validFields(card) {
@@ -266,9 +266,11 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const data = new FormData();
             data.append('csrf_token', settings.csrf);
-            data.append('foto', item.file, item.file.name);
+            data.append('foto', item.preparedFile || item.file, item.preparedFile?.name || item.file.name);
             for (const [key, field] of Object.entries(fields)) data.append(key, field.value.trim());
-            const response = await fetch(settings.saveEndpoint, {method: 'POST', body: data, credentials: 'same-origin'});
+            const response = await fetch(settings.saveEndpoint, {method: 'POST', body: data, credentials: 'same-origin'}).catch(() => {
+                throw new Error('No se pudo conectar para guardar el depósito. Revise su conexión e intente de nuevo.');
+            });
             const result = await response.json();
             if (currentGeneration !== generation) return;
             if (!response.ok) {
@@ -314,24 +316,46 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function prepareImage(file) {
-        const bitmap = await createImageBitmap(file);
+        let source;
+        let release = () => {};
+        try {
+            if (typeof createImageBitmap !== 'function') throw new Error('Decodificador no disponible');
+            source = await createImageBitmap(file);
+            release = () => source.close();
+        } catch {
+            const objectUrl = URL.createObjectURL(file);
+            try {
+                source = await new Promise((resolve, reject) => {
+                    const image = new Image();
+                    image.onload = () => resolve(image);
+                    image.onerror = () => reject(new Error('No se pudo abrir la foto. Seleccione otra copia en JPG, PNG o WEBP.'));
+                    image.src = objectUrl;
+                });
+            } finally {
+                URL.revokeObjectURL(objectUrl);
+            }
+        }
         try {
             const canvas = document.createElement('canvas');
-            let scale = Math.min(1, 2000 / Math.max(bitmap.width, bitmap.height));
+            let scale = Math.min(1, 2000 / Math.max(source.width, source.height));
             let blob = null;
             for (let attempt = 0; attempt < 4; attempt++) {
-                canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-                canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-                canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+                canvas.width = Math.max(1, Math.round(source.width * scale));
+                canvas.height = Math.max(1, Math.round(source.height * scale));
+                const context = canvas.getContext('2d', {alpha: false});
+                if (!context) throw new Error('No se pudo preparar la foto en este dispositivo.');
+                context.fillStyle = '#fff';
+                context.fillRect(0, 0, canvas.width, canvas.height);
+                context.drawImage(source, 0, 0, canvas.width, canvas.height);
                 blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', .82 - attempt * .12));
                 if (blob && blob.size <= 1500000) break;
                 scale *= .75;
             }
             canvas.width = canvas.height = 0;
             if (!blob || blob.size > 1500000) throw new Error('No se pudo preparar una copia ligera de la foto.');
-            return blob;
+            return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', {type: 'image/jpeg', lastModified: file.lastModified});
         } finally {
-            bitmap.close();
+            release();
         }
     }
 
@@ -341,12 +365,15 @@ document.addEventListener('DOMContentLoaded', () => {
         status.classList.remove('is-error');
         status.textContent = 'Leyendo foto con Gemini…';
         try {
-            const blob = await prepareImage(file);
+            const blob = item.preparedFile || await prepareImage(file);
+            item.preparedFile = blob;
             if (currentGeneration !== generation) return;
             const data = new FormData();
             data.append('csrf_token', settings.csrf);
             data.append('imagen', blob, 'lectura.jpg');
-            const response = await fetch(settings.endpoint, {method: 'POST', body: data, credentials: 'same-origin'});
+            const response = await fetch(settings.endpoint, {method: 'POST', body: data, credentials: 'same-origin'}).catch(() => {
+                throw new Error('No se pudo conectar para leer la foto. Revise su conexión e intente de nuevo.');
+            });
             const result = await response.json();
             if (currentGeneration !== generation) return;
             if (!response.ok) throw new Error(result.error || 'No se pudo leer la foto.');
