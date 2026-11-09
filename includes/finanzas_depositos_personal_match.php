@@ -36,6 +36,12 @@ function personal_deposit_matches_name(string $creditor, string $workerName): bo
             $matches = $token['masked'] || strlen($token['value']) === 1
                 ? str_starts_with($namePart, $token['value'])
                 : $namePart === $token['value'];
+            // Algunos bancos cortan el último nombre por el ancho del comprobante.
+            // Exigir seis letras y todas las demás palabras para evitar coincidencias débiles.
+            if (!$matches && $index === count($creditorTokens) - 1
+                && strlen($token['value']) >= 6 && strlen($namePart) > strlen($token['value'])) {
+                $matches = str_starts_with($namePart, $token['value']);
+            }
             if ($matches && $assign($index + 1, $used + [$position => true])) return true;
         }
         return false;
