@@ -54,8 +54,32 @@ $entryEnd = minutes_to_time($entryTimeMinutes + $tolerance);
 $exitStart = $exitTime;
 $exitEnd = $exitTime;
 
-try { attendance_report_assert_schedule_editable($scheduleId); }
-catch (DomainException $error) { json_response(['ok' => false, 'message' => $error->getMessage()], 409); }
+try {
+    attendance_report_assert_schedule_editable($scheduleId);
+} catch (DomainException $error) {
+    // Los reportes cerrados usan la hora oficial, la tolerancia y la salida.
+    // Permitir solo ampliar la ventana de marcación; no reescribir esos datos históricos.
+    $previous = db()->prepare('SELECT entry_time, entry_start, entry_end, exit_time, tolerance_minutes, status
+        FROM attendance_schedule_days WHERE schedule_id = ? AND day_of_week = ? LIMIT 1');
+    $previous->execute([$scheduleId, $dayOfWeek]);
+    $day = $previous->fetch(PDO::FETCH_ASSOC);
+    $oldAdvance = $day
+        ? (time_to_minutes((string) $day['entry_time']) - time_to_minutes((string) $day['entry_start']) + 1440) % 1440
+        : 0;
+    if (!$day || (int) $day['status'] !== 1
+        || $day['entry_time'] !== $entryTime || $day['entry_end'] !== $entryEnd
+        || $day['exit_time'] !== $exitTime || (int) $day['tolerance_minutes'] !== $tolerance
+        || $entryAdvance < $oldAdvance) {
+        json_response(['ok' => false, 'message' => $error->getMessage()], 409);
+    }
+    if ($entryAdvance === $oldAdvance) json_response(['ok' => true]);
+    $update = db()->prepare('UPDATE attendance_schedule_days SET entry_start = ?
+        WHERE schedule_id = ? AND day_of_week = ? AND status = 1
+          AND entry_time = ? AND entry_start = ? AND entry_end = ? AND exit_time = ? AND tolerance_minutes = ?');
+    $update->execute([$entryStart, $scheduleId, $dayOfWeek, $entryTime, $day['entry_start'], $entryEnd, $exitTime, $tolerance]);
+    if ($update->rowCount() !== 1) json_response(['ok' => false, 'message' => 'El horario cambió mientras se guardaba. Actualice la página e intente nuevamente.'], 409);
+    json_response(['ok' => true]);
+}
 $stmt = db()->prepare('SELECT id FROM attendance_schedules WHERE id = :id AND status = 1');
 $stmt->execute(['id' => $scheduleId]);
 if (!$stmt->fetch()) {
