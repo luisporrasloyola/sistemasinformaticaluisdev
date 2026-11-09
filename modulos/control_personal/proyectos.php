@@ -10,8 +10,8 @@ require __DIR__ . '/../../includes/header.php';
 ?>
 <div class="page-title">
     <div>
-        <h1>Proyectos</h1>
-        <p>Gestión de proyectos para el control de personal.</p>
+        <h1>Clientes</h1>
+        <p>Gestión de clientes para el control de personal.</p>
     </div>
     <button class="btn btn-primary" type="button" id="newProjectBtn"><i class="fa-solid fa-plus me-2"></i>Nuevo proyecto</button>
 </div>
