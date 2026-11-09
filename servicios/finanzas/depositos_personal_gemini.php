@@ -58,7 +58,7 @@ session_write_close();
 $image = file_get_contents($path);
 if ($image === false) deposit_gemini_reply(400, ['error' => 'No se pudo leer la imagen.']);
 $prompt = <<<'PROMPT'
-Analiza este comprobante peruano. Devuelve exclusivamente JSON con las claves modelo, fecha, acreedor, monto, modo_pago. Reconoce SOLO estos cuatro tipos de comprobante y sus variantes descritas:
+Analiza este comprobante peruano. Devuelve exclusivamente JSON con las claves modelo, fecha, acreedor, monto, modo_pago. Reconoce SOLO estos cinco tipos de comprobante y sus variantes descritas:
 1. YAPE: diseño morado, marca yape y texto "¡Yapeaste!". modelo="YAPE", modo_pago="YAPE". Fecha junto al ícono de calendario. Acreedor: el nombre debajo del importe, copiado literalmente con cualquier asterisco visible. No uses "Santa Rosa de Lima", celular ni destino como acreedor. Monto: la cantidad principal bajo "¡Yapeaste!".
 2. PLIN de Interbank: logotipo plin, texto "¡Pago exitoso!", importe en verde, secciones "Enviado a:" y "Fecha y hora:". modelo="PLIN", modo_pago="PLIN". Fecha: la de "Fecha y hora:". Acreedor: exclusivamente el nombre inmediatamente debajo de "Enviado a:", sin teléfono ni la palabra Plin. Monto: el importe principal en verde debajo de "¡Pago exitoso!".
    Variante PLIN de Interbank: fondo verde, logotipo Interbank, texto "Plineo exitoso", importe verde grande, fecha debajo del importe y sección "Enviado a". También usa modelo="PLIN" y modo_pago="PLIN". Fecha: la que aparece debajo del importe. Acreedor: solo el nombre junto a "Enviado a", antes del teléfono. Monto: el importe verde grande. Si el teléfono del destinatario termina con "- Yape", eso indica el destino, NO el modo de pago: sigue siendo PLIN porque el comprobante dice "Plineo exitoso". Por ejemplo, con "04 Nov 2026", "Jesus R Carrasquel L" y "S/ 200", devuelve fecha="04/11/2026", acreedor="Jesus R Carrasquel L", monto="200" y modo_pago="PLIN".
@@ -66,6 +66,7 @@ Analiza este comprobante peruano. Devuelve exclusivamente JSON con las claves mo
    a) Interbank personal: logotipo Interbank, círculo verde con marca de verificación, texto "Transferiste" y "de forma inmediata", secciones "Cuenta cargo:", "Cuenta destino:", "Fecha y hora:". Fecha: la de "Fecha y hora:". Acreedor: el nombre completo de la persona en "Cuenta destino:", después del banco receptor y antes del número de cuenta; NO uses el banco ni "Cuenta cargo" como acreedor. Monto: la cantidad principal verde debajo de "Transferiste".
    b) Interbank Empresas: logotipo "Interbank Empresas", título "Constancia de operación", marca verde de verificación, texto "Transferencia exitosa", secciones "Número de solicitud:", "Desde:", "Para:" y "Fecha y hora:". Fecha: la de "Fecha y hora:". Acreedor: exclusivamente el nombre de persona inmediatamente después de "Para:", antes del tipo de cuenta y del número de cuenta; NO uses el nombre de "Desde:" ni el banco. Monto: el importe principal verde debajo de "Transferencia exitosa". El número de solicitud no es el monto.
 4. TRANSFERENCIA_BCP: logotipo BCP azul y naranja, texto "¡Transferencia exitosa!", importe principal azul grande, fecha debajo del importe y secciones "Enviado a", "Desde" y "Número de operación". modelo="TRANSFERENCIA_BCP" y modo_pago="Tranferencia BCP". Fecha: la que aparece inmediatamente debajo del importe principal, aunque incluya día de la semana y hora. Acreedor: únicamente el nombre de la persona junto a "Enviado a", antes del número de cuenta enmascarado; conserva mayúsculas, minúsculas, iniciales y punto final tal como se ven. NO uses "Corriente Soles", "Desde", número de cuenta ni "Número de operación" como acreedor. Monto: el importe azul grande después de S/, sin la coma de millares; por ejemplo, S/ 2,000.00 se convierte en "2000.00".
+5. TRANSFERENCIA_MOVIMIENTO: pantalla blanca con título "Detalle de movimiento", importe negativo "-S/" y concepto "Cargo Transferencia". modelo="TRANSFERENCIA_MOVIMIENTO" y modo_pago="Transferencia". Fecha: exclusivamente "Fecha de operación", NO "Fecha de proceso". Acreedor: el texto completo de "Descripción", uniendo sus líneas en orden con un espacio, sin añadir ni reordenar nombres; NO uses "Canal" ni "N. de operación". Monto: el valor absoluto del importe principal negativo, como cadena positiva; por ejemplo "-S/ 300.00" devuelve "300.00". Con "08 nov 2026" y "Nicho Espinoza Franklin" seguido de "Alexan", devuelve fecha="08/11/2026", acreedor="Nicho Espinoza Franklin Alexan", monto="300" y modo_pago="Transferencia".
 El logotipo Interbank por sí solo no identifica el modelo 2 ni 3. Si la foto no coincide claramente con uno de los modelos descritos, devuelve modelo="pendiente" y los otros cuatro campos null.
 Para todos: fecha DD/MM/AAAA; monto como cadena numérica positiva sin S/ ni separadores de miles, con punto decimal solo si corresponde. Copia el nombre tal como aparece, sin inventar ni completar caracteres ocultos. Si un dato es ilegible o ambiguo, devuelve null para ese dato. Ignora hora, comisión, número de operación, número de cuenta y código de seguridad.
 PROMPT;
@@ -94,7 +95,7 @@ $raw = implode('', array_column($payload['candidates'][0]['content']['parts'] ??
 $values = json_decode($raw, true);
 if (!is_array($values)) deposit_gemini_reply(503, ['error' => 'La lectura no produjo datos utilizables.']);
 $model = $values['modelo'] ?? '';
-if (!in_array($model, ['YAPE', 'PLIN', 'TRANSFERENCIA_INTERBANK', 'TRANSFERENCIA_BCP'], true)) deposit_gemini_reply(200, ['model' => 'pendiente', 'fields' => null]);
+if (!in_array($model, ['YAPE', 'PLIN', 'TRANSFERENCIA_INTERBANK', 'TRANSFERENCIA_BCP', 'TRANSFERENCIA_MOVIMIENTO'], true)) deposit_gemini_reply(200, ['model' => 'pendiente', 'fields' => null]);
 
 $date = is_string($values['fecha'] ?? null) ? trim($values['fecha']) : '';
 $parsedDate = DateTimeImmutable::createFromFormat('!d/m/Y', $date);
@@ -106,5 +107,10 @@ deposit_gemini_reply(200, ['model' => $model, 'fields' => [
     'fecha' => $date,
     'acreedor' => $creditor !== '' ? $creditor : null,
     'monto' => $amount,
-    'modo_pago' => $model === 'TRANSFERENCIA_INTERBANK' ? 'Tranferencia Interbank' : ($model === 'TRANSFERENCIA_BCP' ? 'Tranferencia BCP' : $model),
+    'modo_pago' => match ($model) {
+        'TRANSFERENCIA_INTERBANK' => 'Tranferencia Interbank',
+        'TRANSFERENCIA_BCP' => 'Tranferencia BCP',
+        'TRANSFERENCIA_MOVIMIENTO' => 'Transferencia',
+        default => $model,
+    },
 ]]);

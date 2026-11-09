@@ -162,11 +162,11 @@ require __DIR__ . '/../../includes/header.php';
         <div class="modal-header"><h2 class="modal-title h5 mb-0" id="personalDepositModelsTitle">Comprobantes compatibles</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
         <div class="modal-body"><p class="text-muted small mb-3">La lectura automática reconoce estos formatos de Yape, Plin y transferencias bancarias.</p>
             <div class="personal-deposit-model-carousel" aria-label="Ejemplos de comprobantes">
-                <?php foreach ([['YAPE.png', 'Yape'], ['PLIN.png', 'Plin'], ['PLIN otro modelo.png', 'Plin'], ['tranferencia interbank.png', 'Transferencia Interbank'], ['tranferencia interbank otro modelo.png', 'Transferencia Interbank'], ['Transferencia BCP.png', 'Transferencia BCP']] as $index => [$file, $label]): ?>
+                <?php foreach ([['YAPE.png', 'Yape'], ['PLIN.png', 'Plin'], ['PLIN otro modelo.png', 'Plin'], ['tranferencia interbank.png', 'Transferencia Interbank'], ['tranferencia interbank otro modelo.png', 'Transferencia Interbank'], ['Transferencia BCP.png', 'Transferencia BCP'], ['Transferencia.png', 'Transferencia']] as $index => [$file, $label]): ?>
                     <figure class="personal-deposit-model-slide mb-0" id="depositModel<?= $index + 1 ?>"><img src="<?= e(APP_URL . '/img/depositosgemini/' . rawurlencode($file)) ?>" alt="Modelo de comprobante <?= e($label) ?>" loading="lazy" decoding="async"><figcaption><?= e($label) ?></figcaption></figure>
                 <?php endforeach; ?>
             </div>
-            <nav class="personal-deposit-model-nav" aria-label="Ir a un modelo de comprobante"><?php for ($index = 1; $index <= 6; $index++): ?><a href="#depositModel<?= $index ?>" aria-label="Ver modelo <?= $index ?>"><?= $index ?></a><?php endfor; ?></nav>
+            <nav class="personal-deposit-model-nav" aria-label="Ir a un modelo de comprobante"><?php for ($index = 1; $index <= 7; $index++): ?><a href="#depositModel<?= $index ?>" aria-label="Ver modelo <?= $index ?>"><?= $index ?></a><?php endfor; ?></nav>
         </div>
         <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button></div>
     </div></div>
@@ -202,5 +202,5 @@ window.personalDepositGemini = {
     csrf: <?= json_encode(csrf_token()) ?>
 };
 </script>
-<script src="<?= e(APP_URL . '/recursos/js/finanzas_depositos_personal.js?v=14') ?>" defer></script>
+<script src="<?= e(APP_URL . '/recursos/js/finanzas_depositos_personal.js?v=15') ?>" defer></script>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>

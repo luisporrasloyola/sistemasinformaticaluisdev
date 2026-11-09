@@ -41,8 +41,8 @@ if (!$entryTime || !$exitTime) {
     json_response(['ok' => false, 'message' => 'Complete la hora de entrada y la hora de salida.'], 400);
 }
 
-if ($entryAdvance === false || $tolerance === false || $entryAdvance < 0 || $entryAdvance > 180 || $tolerance < 0 || $tolerance > 180) {
-    json_response(['ok' => false, 'message' => 'Los márgenes de entrada deben estar entre 0 y 180 minutos.'], 400);
+if ($entryAdvance === false || $tolerance === false || $entryAdvance < 0 || $entryAdvance > 600 || $tolerance < 0 || $tolerance > 180) {
+    json_response(['ok' => false, 'message' => 'La anticipación debe estar entre 0 y 600 minutos y la tolerancia entre 0 y 180 minutos.'], 400);
 }
 
 $entryTimeMinutes = time_to_minutes($entryTime);

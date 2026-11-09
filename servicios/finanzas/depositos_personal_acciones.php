@@ -46,7 +46,7 @@ try {
     if (!$parsedDate || $parsedDate->format('Y-m-d') !== $date) deposit_action_reply(422, ['error' => 'Ingrese una fecha válida.']);
     if ($creditor === '' || mb_strlen($creditor) > 150) deposit_action_reply(422, ['error' => 'Ingrese el acreedor (máximo 150 caracteres).']);
     if (!preg_match('/^\d{1,9}(?:\.\d{1,2})?$/D', $amount) || (float) $amount <= 0) deposit_action_reply(422, ['error' => 'Ingrese un monto válido en soles.']);
-    if (!in_array($method, ['YAPE', 'PLIN', 'Tranferencia Interbank', 'Tranferencia BCP'], true)) deposit_action_reply(422, ['error' => 'El modo de pago no corresponde a un modelo configurado.']);
+    if (!in_array($method, ['YAPE', 'PLIN', 'Tranferencia Interbank', 'Tranferencia BCP', 'Transferencia'], true)) deposit_action_reply(422, ['error' => 'El modo de pago no corresponde a un modelo configurado.']);
     $update = db()->prepare('UPDATE finance_personal_deposits SET deposit_date = ?, creditor = ?, amount = ?, payment_method = ? WHERE id = ?' . (is_admin() ? '' : ' AND registered_by_user_id = ?'));
     $update->execute(is_admin() ? [$date, $creditor, $amount, $method, $id] : [$date, $creditor, $amount, $method, $id, $userId]);
     deposit_action_reply(200, ['id' => $id, 'fecha' => $date, 'acreedor' => $creditor, 'monto' => number_format((float) $amount, 2, '.', ''), 'modo_pago' => $method]);

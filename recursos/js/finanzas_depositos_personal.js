@@ -397,7 +397,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const result = await response.json();
             if (currentGeneration !== generation) return;
             if (!response.ok) throw new Error(result.error || 'No se pudo leer la foto.');
-            if (!['YAPE', 'PLIN', 'TRANSFERENCIA_INTERBANK', 'TRANSFERENCIA_BCP'].includes(result.model)) {
+            if (!['YAPE', 'PLIN', 'TRANSFERENCIA_INTERBANK', 'TRANSFERENCIA_BCP', 'TRANSFERENCIA_MOVIMIENTO'].includes(result.model)) {
                 status.textContent = 'Modelo pendiente de configurar. Esta foto aún no se puede guardar.';
                 return;
             }
@@ -413,7 +413,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 status.textContent = 'Datos detectados. Guardando depósito…';
                 await saveCard(item, currentGeneration);
             } else {
-                const modelName = result.model === 'TRANSFERENCIA_INTERBANK' ? 'Transferencia Interbank' : result.model === 'TRANSFERENCIA_BCP' ? 'Transferencia BCP' : result.model === 'PLIN' ? 'Plin' : 'Yape';
+                const modelName = result.model === 'TRANSFERENCIA_INTERBANK' ? 'Transferencia Interbank' : result.model === 'TRANSFERENCIA_BCP' ? 'Transferencia BCP' : result.model === 'TRANSFERENCIA_MOVIMIENTO' ? 'Transferencia' : result.model === 'PLIN' ? 'Plin' : 'Yape';
                 status.textContent = `${modelName} reconocido. Revise y complete los datos pendientes.`;
                 item.save.hidden = false;
             }

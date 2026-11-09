@@ -25,7 +25,7 @@ $parsedDate = preg_match('/^\d{4}-\d{2}-\d{2}$/D', $date) ? DateTimeImmutable::c
 if (!$parsedDate || $parsedDate->format('Y-m-d') !== $date) deposit_save_reply(422, ['error' => 'Ingrese una fecha válida.']);
 if ($creditor === '' || mb_strlen($creditor) > 150) deposit_save_reply(422, ['error' => 'Ingrese el acreedor (máximo 150 caracteres).']);
 if (!preg_match('/^\d{1,9}(?:\.\d{1,2})?$/D', $amount) || (float) $amount <= 0) deposit_save_reply(422, ['error' => 'Ingrese un monto válido en soles.']);
-if (!in_array($method, ['YAPE', 'PLIN', 'Tranferencia Interbank', 'Tranferencia BCP'], true)) deposit_save_reply(422, ['error' => 'El modo de pago no corresponde a un modelo configurado.']);
+if (!in_array($method, ['YAPE', 'PLIN', 'Tranferencia Interbank', 'Tranferencia BCP', 'Transferencia'], true)) deposit_save_reply(422, ['error' => 'El modo de pago no corresponde a un modelo configurado.']);
 $photo = $_FILES['foto'] ?? null;
 if (!is_array($photo) || ($photo['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || ($photo['size'] ?? 0) < 1000 || ($photo['size'] ?? 0) > 5 * 1024 * 1024) deposit_save_reply(422, ['error' => 'La foto debe ocupar entre 1 KB y 5 MB.']);
 $info = @getimagesize((string) $photo['tmp_name']);

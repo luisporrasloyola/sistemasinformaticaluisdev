@@ -57,7 +57,7 @@ function schedule_advance_minutes(?string $entryTime, ?string $entryStart): int
     $start = ((int) substr($entryStart, 0, 2) * 60) + (int) substr($entryStart, 3, 2);
     $difference = $official - $start;
     if ($difference < 0) $difference += 1440;
-    return min(180, max(0, $difference));
+    return min(600, max(0, $difference));
 }
 
 $configuredDays = count($scheduleDays);
@@ -207,7 +207,7 @@ require __DIR__ . '/../../includes/header.php';
                     </div>
                     <div class="col-md-4">
                         <label class="form-label">Puede marcar antes</label>
-                        <div class="input-group"><input class="form-control" type="number" name="entry_advance_minutes" id="entryAdvanceMinutes" min="0" max="180" value="30" required><span class="input-group-text">min</span></div>
+                        <div class="input-group"><input class="form-control" type="number" name="entry_advance_minutes" id="entryAdvanceMinutes" min="0" max="600" value="30" required><span class="input-group-text">min</span></div>
                         <div class="form-text">Anticipación permitida.</div>
                     </div>
                     <div class="col-md-4">
