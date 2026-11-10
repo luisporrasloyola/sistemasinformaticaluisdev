@@ -3253,9 +3253,7 @@ function initMaquinariaDatos() {
     const addContactButton = document.getElementById('addMachineContact');
     const contactFields = [
         ['name', 'Nombre', 'text', 150],
-        ['position', 'Cargo', 'text', 120],
-        ['phone', 'Celular', 'tel', 40],
-        ['email', 'Correo', 'email', 190]
+        ['phone', 'Celular', 'tel', 40]
     ];
     const renumberContacts = () => {
         contactsList.querySelectorAll('.machine-contact-card').forEach((card, index) => {
@@ -3284,7 +3282,7 @@ function initMaquinariaDatos() {
             const column = document.createElement('div');
             column.className = 'col-md-6';
             const label = document.createElement('label');
-            label.className = 'form-label';
+            label.className = 'form-label d-block w-100';
             label.textContent = labelText;
             const input = document.createElement('input');
             input.className = 'form-control';

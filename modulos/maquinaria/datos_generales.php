@@ -3,9 +3,14 @@ require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
 require_module_access('maquinaria.datos_generales');
 
-$stmt = db()->query('SELECT m.*, c.name AS empresa
+$stmt = db()->query('SELECT m.*, c.name AS empresa, mc.name AS contacto_nombre, mc.phone AS contacto_celular
     FROM maquinarias m
     LEFT JOIN companies c ON c.id = m.company_id
+    LEFT JOIN maquinaria_contactos mc ON mc.id = (
+        SELECT primer.id FROM maquinaria_contactos primer
+        WHERE primer.maquinaria_id = m.id
+        ORDER BY primer.sort_order, primer.id LIMIT 1
+    )
     ORDER BY m.equipo, m.serie_placa');
 $maquinarias = $stmt->fetchAll();
 require __DIR__ . '/../../includes/header.php';
@@ -27,6 +32,7 @@ require __DIR__ . '/../../includes/header.php';
                 <th>Empresa</th>
                 <th>Serie o Placa</th>
                 <th>A&ntilde;o del equipo</th>
+                <th>Contacto</th>
                 <th>Foto</th>
                 <th>Acci&oacute;n</th>
             </tr>
@@ -38,6 +44,14 @@ require __DIR__ . '/../../includes/header.php';
                     <td><?= e($item['empresa'] ?? '') ?></td>
                     <td><?= e($item['serie_placa']) ?></td>
                     <td><?= e((string) $item['anio_equipo']) ?></td>
+                    <td>
+                        <?php if (!empty($item['contacto_nombre'])): ?>
+                            <div class="fw-semibold"><?= e($item['contacto_nombre']) ?></div>
+                            <div class="text-muted small"><?= e($item['contacto_celular'] ?? '') ?></div>
+                        <?php else: ?>
+                            <span class="text-muted">—</span>
+                        <?php endif; ?>
+                    </td>
                     <td>
                         <button class="btn btn-sm btn-outline-secondary js-ver-foto-maquinaria" type="button" data-foto="<?= e($item['foto_path'] ?? '') ?>" <?= empty($item['foto_path']) ? 'disabled' : '' ?> title="Ver foto">
                             <i class="fa-solid fa-image"></i>

@@ -10,7 +10,7 @@ if ($id > 0) {
     $stmt->execute([$id]);
     $machine = $stmt->fetch();
     if (!$machine) { http_response_code(404); exit('No se encontró la maquinaria.'); }
-    $stmt = db()->prepare('SELECT name, position, phone, email FROM maquinaria_contactos WHERE maquinaria_id = ? ORDER BY sort_order, id');
+    $stmt = db()->prepare('SELECT name, phone FROM maquinaria_contactos WHERE maquinaria_id = ? ORDER BY sort_order, id');
     $stmt->execute([$id]);
     $contacts = $stmt->fetchAll();
 }
@@ -60,7 +60,7 @@ require __DIR__ . '/../../includes/header.php';
                 <button class="btn btn-sm btn-outline-primary" type="button" id="addMachineContact"><i class="fa-solid fa-plus me-1"></i>Agregar contacto</button>
             </div>
             <div id="machineContacts"></div>
-            <div class="form-text">Complete los cuatro datos de cada contacto que agregue.</div>
+            <div class="form-text">Complete el nombre y celular de cada contacto que agregue.</div>
         </div>
         <div class="col-lg-4">
             <h2 class="h5 mb-3">Foto</h2>

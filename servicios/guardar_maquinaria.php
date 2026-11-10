@@ -13,32 +13,27 @@ $seriePlaca = trim((string) ($_POST['serie_placa'] ?? ''));
 $anioEquipo = (int) ($_POST['anio_equipo'] ?? 0);
 $currentYear = (int) date('Y') + 1;
 $contactNames = $_POST['contact_name'] ?? [];
-$contactPositions = $_POST['contact_position'] ?? [];
 $contactPhones = $_POST['contact_phone'] ?? [];
-$contactEmails = $_POST['contact_email'] ?? [];
 
 if ($companyInput === '' || $equipo === '' || $seriePlaca === '' || $anioEquipo < 1950 || $anioEquipo > $currentYear) {
     json_response(['ok' => false, 'message' => 'Complete todos los campos obligatorios.'], 400);
 }
 
-if (!is_array($contactNames) || !is_array($contactPositions) || !is_array($contactPhones) || !is_array($contactEmails)
-    || count($contactNames) > 100 || count($contactNames) !== count($contactPositions)
-    || count($contactNames) !== count($contactPhones) || count($contactNames) !== count($contactEmails)) {
+if (!is_array($contactNames) || !is_array($contactPhones)
+    || count($contactNames) > 100 || count($contactNames) !== count($contactPhones)) {
     json_response(['ok' => false, 'message' => 'Revise los datos de los contactos.'], 400);
 }
 $contacts = [];
 foreach ($contactNames as $index => $name) {
     $contact = [
         'name' => trim((string) $name),
-        'position' => trim((string) ($contactPositions[$index] ?? '')),
         'phone' => trim((string) ($contactPhones[$index] ?? '')),
-        'email' => trim((string) ($contactEmails[$index] ?? '')),
+        'position' => '',
+        'email' => '',
     ];
     if ($contact['name'] === '' || mb_strlen($contact['name']) > 150
-        || $contact['position'] === '' || mb_strlen($contact['position']) > 120
-        || $contact['phone'] === '' || mb_strlen($contact['phone']) > 40
-        || !filter_var($contact['email'], FILTER_VALIDATE_EMAIL) || strlen($contact['email']) > 190) {
-        json_response(['ok' => false, 'message' => 'Complete nombre, cargo, celular y correo válido en cada contacto.'], 400);
+        || $contact['phone'] === '' || mb_strlen($contact['phone']) > 40) {
+        json_response(['ok' => false, 'message' => 'Complete nombre y celular en cada contacto.'], 400);
     }
     $contacts[] = $contact;
 }
