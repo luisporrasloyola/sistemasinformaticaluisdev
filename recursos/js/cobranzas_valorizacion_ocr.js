@@ -320,13 +320,16 @@ document.addEventListener('DOMContentLoaded', () => {
         fieldStatus.textContent = 'Leyendo la foto automáticamente…';
         document.dispatchEvent(new CustomEvent('cv:reading-start'));
         try {
-            const canvas = document.createElement('canvas');
-            const scale = Math.min(1, 2000 / Math.max(editorCanvas.width, editorCanvas.height));
-            canvas.width = Math.round(editorCanvas.width * scale);
-            canvas.height = Math.round(editorCanvas.height * scale);
-            canvas.getContext('2d').drawImage(editorCanvas, 0, 0, canvas.width, canvas.height);
-            const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', .84));
-            canvas.width = canvas.height = 0;
+            let canvas = editorCanvas;
+            if (Math.max(editorCanvas.width, editorCanvas.height) > 2000) {
+                canvas = document.createElement('canvas');
+                const scale = 2000 / Math.max(editorCanvas.width, editorCanvas.height);
+                canvas.width = Math.round(editorCanvas.width * scale);
+                canvas.height = Math.round(editorCanvas.height * scale);
+                canvas.getContext('2d').drawImage(editorCanvas, 0, 0, canvas.width, canvas.height);
+            }
+            const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', .8));
+            if (canvas !== editorCanvas) canvas.width = canvas.height = 0;
             if (!blob || blob.size > 1500000) throw new Error('La vista preparada supera 1,5 MB. Recorte o reduzca la imagen.');
             const data = new FormData();
             data.append('csrf_token', form.querySelector('[name="csrf_token"]').value);

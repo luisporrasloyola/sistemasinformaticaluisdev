@@ -185,6 +185,11 @@ if ($clientId) {
                     }
                     db()->prepare('UPDATE cobranzas_valorizaciones SET registered_by_user_id = COALESCE(registered_by_user_id, ?) WHERE id = ?')
                         ->execute([(int) (current_user()['id'] ?? 0) ?: null, $valuationId]);
+                    if (($_SERVER['HTTP_X_CV_BATCH'] ?? '') === '1') {
+                        header('Content-Type: application/json; charset=utf-8');
+                        echo json_encode(['ok' => true, 'month' => substr($date, 0, 7)]);
+                        exit;
+                    }
                     redirect('modulos/cobranzas/valorizacion.php?' . http_build_query([
                         'valorizacion_id' => $valuationId,
                         'periodo' => 'mes',
@@ -195,6 +200,12 @@ if ($clientId) {
                     $error = $exception instanceof RuntimeException ? $exception->getMessage() : 'No se pudo guardar el registro. Verifique la tabla SQL.';
                     if (!($exception instanceof RuntimeException)) error_log('Error en Cobranzas Valorización: ' . $exception->getMessage());
                 }
+            }
+            if (($_SERVER['HTTP_X_CV_BATCH'] ?? '') === '1' && $error !== '') {
+                http_response_code(422);
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(['ok' => false, 'message' => $error]);
+                exit;
             }
         }
     }
@@ -314,8 +325,8 @@ require __DIR__ . '/../../includes/header.php';
 </div></section>
 <?php if ($client): ?>
 <section class="work-panel cv-panel cv-upload" aria-labelledby="cvUploadTitle">
-<div class="d-flex align-items-center justify-content-between gap-2 flex-wrap"><div><div class="cv-upload-title mb-1"><h2 class="h5" id="cvUploadTitle">Nuevo parte diario</h2><button class="cv-info-button" type="button" data-bs-toggle="modal" data-bs-target="#cvModelInfoModal" aria-label="Ver modelo de parte diario" title="Ver modelo de parte diario"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></button></div><p class="small text-muted mb-0">Adjunte una foto o PDF; si se leen todos los datos, el registro aparecerá en la tabla automáticamente.</p></div><label class="btn btn-primary mb-0" for="cvQuickFile"><i class="fa-solid fa-file-arrow-up me-1" aria-hidden="true"></i>Seleccionar archivo</label><input class="visually-hidden" type="file" id="cvQuickFile" accept="image/jpeg,image/png,image/webp,application/pdf" aria-label="Seleccionar imagen o PDF"></div>
-<div class="small text-muted mt-2 cv-file-hint">JPG, PNG, WEBP o PDF. Máximo 5 MB por archivo.</div>
+<div class="d-flex align-items-center justify-content-between gap-2 flex-wrap"><div><div class="cv-upload-title mb-1"><h2 class="h5" id="cvUploadTitle">Nuevo parte diario</h2><button class="cv-info-button" type="button" data-bs-toggle="modal" data-bs-target="#cvModelInfoModal" aria-label="Ver modelo de parte diario" title="Ver modelo de parte diario"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></button></div><p class="small text-muted mb-0">Adjunte hasta 5 fotos o PDF; cada archivo corresponde a un parte diario.</p></div><label class="btn btn-primary mb-0" for="cvQuickFile"><i class="fa-solid fa-file-arrow-up me-1" aria-hidden="true"></i>Seleccionar archivos</label><input class="visually-hidden" type="file" id="cvQuickFile" accept="image/jpeg,image/png,image/webp,application/pdf" multiple aria-label="Seleccionar hasta 5 imágenes o PDF"></div>
+<div class="small text-muted mt-2 cv-file-hint">JPG, PNG, WEBP o PDF. Hasta 5 archivos, máximo 5 MB por archivo.</div>
 <div id="cvProgressBox" class="mt-3" hidden><div class="d-flex justify-content-between small mb-1"><strong id="cvProgressLabel">Preparando archivo…</strong><span id="cvProgressFile"></span></div><div class="progress" role="progressbar" aria-label="Progreso de lectura" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar progress-bar-striped progress-bar-animated" id="cvProgressBar" style="width:15%"></div></div></div>
 </section>
 <div class="modal fade" id="cvModelInfoModal" tabindex="-1" aria-labelledby="cvModelInfoTitle" aria-hidden="true"><div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h2 class="modal-title h5" id="cvModelInfoTitle">Modelo de parte diario</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div><div class="modal-body"><p class="mb-3">Sube una foto nítida o un PDF de este modelo para que la IA lea automáticamente el equipo, la fecha y las horas.</p><img class="cv-model-example" src="<?= e(APP_URL . '/img/parte2.jpg') ?>" alt="Ejemplo del modelo de parte diario requerido" loading="lazy"><div class="text-center mt-2"><a href="<?= e(APP_URL . '/img/parte2.jpg') ?>" target="_blank" rel="noopener noreferrer">Ver imagen en tamaño completo</a></div></div></div></div></div>
@@ -342,7 +353,7 @@ require __DIR__ . '/../../includes/header.php';
 <div class="modal fade" id="cvFileModal" tabindex="-1" aria-labelledby="cvFileTitle" aria-hidden="true"><div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h2 class="modal-title h5 me-auto" id="cvFileTitle">Archivo original</h2><div class="btn-group btn-group-sm cv-zoom-tools me-2" id="cvZoomTools" role="group" aria-label="Zoom de la imagen" hidden><button class="btn btn-outline-secondary" type="button" id="cvZoomOut" aria-label="Alejar imagen" title="Alejar"><i class="fa-solid fa-minus" aria-hidden="true"></i></button><button class="btn btn-outline-secondary" type="button" id="cvZoomReset" title="Restablecer zoom">100 %</button><button class="btn btn-outline-secondary" type="button" id="cvZoomIn" aria-label="Acercar imagen" title="Acercar"><i class="fa-solid fa-plus" aria-hidden="true"></i></button></div><a class="btn btn-primary btn-sm me-3" id="cvFileDownload" href="#"><i class="fa-solid fa-download me-1" aria-hidden="true"></i>Descargar</a><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div><div class="modal-body cv-preview" id="cvFileBody"></div></div></div></div>
 <?php endif; ?>
 <script type="module" src="<?= e(APP_URL . '/recursos/js/cobranzas_valorizacion_archivo.js?v=8') ?>"></script>
-<script type="module" src="<?= e(APP_URL . '/recursos/js/cobranzas_valorizacion_ocr.js?v=21') ?>"></script>
+<script type="module" src="<?= e(APP_URL . '/recursos/js/cobranzas_valorizacion_ocr.js?v=22') ?>"></script>
 <script type="module" src="<?= e(APP_URL . '/recursos/js/cobranzas_valorizacion_reporte.js?v=33') ?>"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
@@ -408,7 +419,10 @@ document.addEventListener('DOMContentLoaded', () => {
         input.disabled = true;
         try {
             const response = await fetch(input.dataset.endpoint, {method:'POST', body:data, credentials:'same-origin', headers:{Accept:'application/json'}});
-            if (!(response.headers.get('content-type') || '').includes('application/json')) throw new Error('La sesión venció. Actualice la página.');
+            if (!(response.headers.get('content-type') || '').includes('application/json')) {
+                if (response.status === 419 || response.redirected) throw new Error('La sesión venció. Actualice la página e inicie sesión si es necesario.');
+                throw new Error(`No se pudo guardar el archivo (HTTP ${response.status}). Intente nuevamente.`);
+            }
             const result = await response.json();
             if (!response.ok || !result.ok) throw new Error(result.message || 'No se pudo guardar el dato.');
             input.value = data.get('valor');
@@ -460,6 +474,80 @@ document.addEventListener('DOMContentLoaded', () => {
     const progressLabel = document.getElementById('cvProgressLabel');
     const progressFile = document.getElementById('cvProgressFile');
     let autoSaving = false;
+    let batchFiles = [];
+    let batchSaved = 0;
+    let batchMonth = '';
+    let batchActive = false;
+    let savingBatch = false;
+    const batchForm = formElement.querySelector('form');
+    const batchError = document.createElement('div');
+    batchError.className = 'alert alert-danger mt-2';
+    batchError.setAttribute('role', 'alert');
+    batchError.hidden = true;
+    batchForm.prepend(batchError);
+    const batchMessage = message => {batchError.textContent = message; batchError.hidden = !message;};
+    const finishBatch = () => {
+        batchActive = false;
+        batchFiles = [];
+        quickFile.disabled = false;
+        if (batchSaved) {
+            const url = new URL(window.location.href);
+            url.searchParams.set('periodo', 'mes');
+            url.searchParams.set('mes', batchMonth);
+            url.searchParams.delete('pagina');
+            window.location.assign(url.toString());
+        } else progressBox.hidden = true;
+    };
+    const readNextFile = () => {
+        if (!batchFiles.length) {finishBatch(); return;}
+        const file = batchFiles.shift();
+        autoSaving = false;
+        batchMessage('');
+        batchForm.reset();
+        formElement.classList.remove('needs-file', 'editing');
+        fields.id.value = '';
+        document.getElementById('cvFile').required = true;
+        document.getElementById('cvFormTitle').textContent = 'Revisar valorización';
+        document.getElementById('cvSelectedFile').textContent = file.name;
+        updateTotal();
+        openPanel(false);
+        const transfer = new DataTransfer();
+        transfer.items.add(file);
+        const originalInput = document.getElementById('cvFile');
+        originalInput.files = transfer.files;
+        progressFile.textContent = `${batchSaved + 1} de ${batchSaved + batchFiles.length + 1}: ${file.name}`;
+        showProgress('Preparando archivo…', 15);
+        originalInput.dispatchEvent(new Event('change', {bubbles:true}));
+    };
+    batchForm.addEventListener('submit', async event => {
+        if (!batchActive) return;
+        event.preventDefault();
+        if (savingBatch) return;
+        if (!batchForm.reportValidity()) return;
+        const selectedFile = document.getElementById('cvFile').files[0];
+        if (!selectedFile) {batchMessage('Seleccione nuevamente el archivo original antes de guardar.'); return;}
+        savingBatch = true;
+        const submit = batchForm.querySelector('[type="submit"]');
+        submit.disabled = true;
+        batchMessage('');
+        try {
+            // El campo oculto name="action" oculta la propiedad form.action en el navegador.
+            const response = await fetch(batchForm.getAttribute('action'), {method:'POST', body:new FormData(batchForm), credentials:'same-origin', headers:{'X-CV-Batch':'1', Accept:'application/json'}});
+            if (!(response.headers.get('content-type') || '').includes('application/json')) throw new Error('La sesión venció. Actualice la página.');
+            const result = await response.json();
+            if (!response.ok || !result.ok) throw new Error(result.message || 'No se pudo guardar el registro.');
+            batchSaved++;
+            if (!batchMonth || result.month > batchMonth) batchMonth = result.month;
+            formElement.hidden = true;
+            document.dispatchEvent(new CustomEvent('cv:source', {detail:null}));
+            readNextFile();
+        } catch (error) {
+            autoSaving = false;
+            batchMessage(error.message || 'No se pudo guardar el registro.');
+            formElement.hidden = false;
+            formElement.scrollIntoView({behavior:'smooth', block:'start'});
+        } finally {savingBatch = false; submit.disabled = false;}
+    });
     const showProgress = (label, width, active = true) => {
         progressBox.hidden = false;
         progressLabel.textContent = label;
@@ -506,25 +594,16 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     fields.hora_inicio.addEventListener('input',updateTotal);fields.hora_final.addEventListener('input',updateTotal);
     quickFile.addEventListener('change', () => {
-        const file = quickFile.files[0];
-        if (!file) return;
-        autoSaving = false;
-        formElement.querySelector('form').reset();
-        formElement.classList.remove('needs-file');
-        formElement.classList.remove('editing');
-        fields.id.value = '';
-        document.getElementById('cvFile').required = true;
-        document.getElementById('cvFormTitle').textContent = 'Revisar valorización';
-        document.getElementById('cvSelectedFile').textContent = file.name;
-        updateTotal();
-        openPanel(false);
-        const transfer = new DataTransfer();
-        transfer.items.add(file);
-        const originalInput = document.getElementById('cvFile');
-        originalInput.files = transfer.files;
-        progressFile.textContent = file.name;
-        showProgress('Preparando archivo…', 15);
-        originalInput.dispatchEvent(new Event('change', {bubbles:true}));
+        const files = Array.from(quickFile.files);
+        quickFile.value = '';
+        if (!files.length) return;
+        if (files.length > 5) {window.alert('Seleccione hasta 5 archivos por vez.'); return;}
+        batchFiles = files;
+        batchSaved = 0;
+        batchMonth = '';
+        batchActive = true;
+        quickFile.disabled = true;
+        readNextFile();
         quickFile.value = '';
     });
     document.addEventListener('cv:reading-start', () => {quickFile.disabled=true;showProgress('Leyendo datos con Gemini…', 55);});
@@ -539,13 +618,13 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(() => form.requestSubmit(), 0);
             return;
         }
-        quickFile.disabled=false;
+        if (!batchActive) quickFile.disabled=false;
         showProgress('Revise los datos pendientes y guarde el registro.', 100, false);
         formElement.hidden = false;
         formElement.scrollIntoView({behavior:'smooth', block:'start'});
     });
     document.addEventListener('cv:reading-error', event => {
-        quickFile.disabled=false;
+        if (!batchActive) quickFile.disabled=false;
         if (!document.getElementById('cvFile').files.length) formElement.classList.add('needs-file');
         showProgress(event.detail?.message || 'No se pudo completar la lectura; ingrese los datos manualmente.', 100, false);
         progressBar.classList.remove('bg-success');
@@ -553,6 +632,12 @@ document.addEventListener('DOMContentLoaded', () => {
         formElement.hidden = false;
     });
     document.getElementById('cvCancel').addEventListener('click', () => {
+        if (batchActive) {
+            formElement.hidden = true;
+            document.dispatchEvent(new CustomEvent('cv:source', {detail:null}));
+            readNextFile();
+            return;
+        }
         formElement.hidden = true;
         progressBox.hidden = true;
         formElement.dispatchEvent(new Event('hidden.bs.modal'));

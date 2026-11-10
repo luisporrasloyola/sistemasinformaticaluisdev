@@ -3219,42 +3219,11 @@ let machineReadOnlyMode = false;
 
 function initMaquinariaDatos() {
     const table = document.getElementById('maquinariaTable');
-    if (!table) return;
-
     const form = document.getElementById('maquinariaForm');
-    const modal = new bootstrap.Modal(document.getElementById('maquinariaModal'));
-    const photoModal = new bootstrap.Modal(document.getElementById('maquinariaFotoModal'));
+    if (!table && !form) return;
 
-    document.getElementById('nuevoMaquinariaBtn')?.addEventListener('click', () => {
-        form.reset();
-        form.classList.remove('was-validated');
-        document.getElementById('maquinariaId').value = '';
-        setMachineCompanyValue('');
-        document.getElementById('maquinariaModalTitle').textContent = 'Nueva maquinaria';
-        renderMaquinariaFotoActual(null);
-        modal.show();
-    });
-
-    document.querySelectorAll('.js-editar-maquinaria').forEach((button) => {
-        button.addEventListener('click', () => {
-            form.reset();
-            form.classList.remove('was-validated');
-            document.getElementById('maquinariaId').value = button.dataset.id || '';
-            setMachineCompanyValue(button.dataset.companyId || '');
-            document.getElementById('maquinariaEquipo').value = button.dataset.equipo || '';
-            document.getElementById('maquinariaSerie').value = button.dataset.serie || '';
-            document.getElementById('maquinariaAnio').value = button.dataset.anio || '';
-            document.getElementById('maquinariaModalTitle').textContent = 'Editar maquinaria';
-            renderMaquinariaFotoActual(button.dataset.foto || null);
-            modal.show();
-        });
-    });
-    const requestedMachineId = new URLSearchParams(window.location.search).get('maquinaria_id');
-    if (requestedMachineId && /^\d+$/.test(requestedMachineId)) {
-        const requestedEdit = [...document.querySelectorAll('.js-editar-maquinaria')].find(button => button.dataset.id === requestedMachineId);
-        requestedEdit?.click();
-    }
-
+    if (table) {
+        const photoModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('maquinariaFotoModal'));
     document.querySelectorAll('.js-eliminar-maquinaria').forEach((button) => {
         button.addEventListener('click', async () => {
             const ok = await confirmAction('\u00bfEliminar maquinaria?');
@@ -3277,19 +3246,119 @@ function initMaquinariaDatos() {
         });
     });
 
-    form.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        if (!form.checkValidity()) return;
-        const response = await fetch(`${BASE_URL}/servicios/guardar_maquinaria.php`, { method: 'POST', body: new FormData(form) });
-        const data = await response.json();
-        if (!data.ok) {
-            Swal.fire('Atenci\u00f3n', data.message || 'No se pudo guardar.', 'warning');
-            return;
+    }
+
+    if (!form) return;
+    const contactsList = document.getElementById('machineContacts');
+    const addContactButton = document.getElementById('addMachineContact');
+    const contactFields = [
+        ['name', 'Nombre', 'text', 150],
+        ['position', 'Cargo', 'text', 120],
+        ['phone', 'Celular', 'tel', 40],
+        ['email', 'Correo', 'email', 190]
+    ];
+    const renumberContacts = () => {
+        contactsList.querySelectorAll('.machine-contact-card').forEach((card, index) => {
+            card.querySelector('.machine-contact-title').textContent = `Contacto ${index + 1}`;
+        });
+    };
+    const addContact = (contact = {}, optionalEmpty = false) => {
+        const card = document.createElement('div');
+        card.className = 'card mb-3 machine-contact-card';
+        if (optionalEmpty) card.dataset.optionalEmpty = 'true';
+        const body = document.createElement('div');
+        body.className = 'card-body';
+        const heading = document.createElement('div');
+        heading.className = 'd-flex justify-content-between align-items-center mb-3';
+        const title = document.createElement('strong');
+        title.className = 'machine-contact-title';
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'btn btn-sm btn-outline-danger remove-machine-contact';
+        remove.setAttribute('aria-label', 'Quitar contacto');
+        remove.innerHTML = '<i class="fa-solid fa-trash" aria-hidden="true"></i>';
+        heading.append(title, remove);
+        const row = document.createElement('div');
+        row.className = 'row g-3';
+        contactFields.forEach(([key, labelText, type, maxLength]) => {
+            const column = document.createElement('div');
+            column.className = 'col-md-6';
+            const label = document.createElement('label');
+            label.className = 'form-label';
+            label.textContent = labelText;
+            const input = document.createElement('input');
+            input.className = 'form-control';
+            input.type = type;
+            input.name = `contact_${key}[]`;
+            input.maxLength = maxLength;
+            input.value = contact[key] || '';
+            input.required = !optionalEmpty;
+            label.append(input);
+            column.append(label);
+            row.append(column);
+        });
+        body.append(heading, row);
+        card.append(body);
+        if (optionalEmpty) {
+            card.addEventListener('input', () => {
+                const inputs = [...card.querySelectorAll('input')];
+                const hasData = inputs.some(input => input.value.trim() !== '');
+                inputs.forEach(input => { input.required = hasData; });
+            });
         }
-        modal.hide();
-        window.location.reload();
+        contactsList.append(card);
+        renumberContacts();
+        return card;
+    };
+    addContactButton?.addEventListener('click', () => addContact({}).querySelector('input').focus());
+    contactsList?.addEventListener('click', event => {
+        const button = event.target.closest('.remove-machine-contact');
+        if (button) {
+            button.closest('.machine-contact-card').remove();
+            renumberContacts();
+        }
     });
 
+    if (window.machineInitialContacts?.length) {
+        window.machineInitialContacts.forEach(contact => addContact(contact));
+    } else {
+        addContact({}, true);
+    }
+    renderMaquinariaFotoActual(window.machineCurrentPhoto || null);
+    document.getElementById('maquinariaFoto')?.addEventListener('change', event => {
+        const file = event.target.files[0];
+        if (!file || !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) return;
+        const preview = document.getElementById('maquinariaFotoPreview');
+        const url = URL.createObjectURL(file);
+        const image = document.createElement('img');
+        image.src = url;
+        image.alt = 'Vista previa de maquinaria';
+        image.onload = () => URL.revokeObjectURL(url);
+        preview.replaceChildren(image);
+    });
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        form.classList.add('was-validated');
+        const emptyInputs = [...contactsList.querySelectorAll('.machine-contact-card')]
+            .filter(card => card.dataset.optionalEmpty === 'true' && [...card.querySelectorAll('input')].every(input => input.value.trim() === ''))
+            .flatMap(card => [...card.querySelectorAll('input')]);
+        emptyInputs.forEach(input => { input.disabled = true; });
+        const valid = form.checkValidity();
+        const payload = valid ? new FormData(form) : null;
+        emptyInputs.forEach(input => { input.disabled = false; });
+        if (!valid) { form.reportValidity(); return; }
+        const saveButton = form.querySelector('button[type="submit"]');
+        saveButton.disabled = true;
+        try {
+            const response = await fetch(`${BASE_URL}/servicios/guardar_maquinaria.php`, { method: 'POST', body: payload });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo guardar la maquinaria.');
+            window.location.href = `${BASE_URL}/modulos/maquinaria/datos_generales.php`;
+        } catch (error) {
+            Swal.fire('Atención', error.message || 'No se pudo guardar la maquinaria.', 'warning');
+            saveButton.disabled = false;
+        }
+    });
     initMachineCompanyQuickActions();
 }
 
