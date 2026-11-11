@@ -9,6 +9,12 @@ function attendance_report_hours_label(int $minutes): string
     return sprintf('%s%d h %02d min', $sign, intdiv($absolute, 60), $absolute % 60);
 }
 
+/** Equivalencia visual del saldo: una jornada ordinaria equivale a 8 h 30 min. */
+function attendance_report_days_label(int $minutes): string
+{
+    return number_format($minutes / 510, 1, '.', '') . ' días';
+}
+
 /**
  * Libro mensual de un trabajador a partir de jornadas ya conciliadas.
  * El saldo inicial anterior al primer mes conocido es cero; no se inventan

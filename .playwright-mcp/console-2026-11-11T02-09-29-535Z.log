@@ -1,0 +1,2 @@
+[      89ms] [WARNING] Error with Feature-Policy header: Some features are specified in both Feature-Policy and Permissions-Policy header: camera, geolocation. Values defined in Permissions-Policy header will be used. @ :1
+[   22551ms] [WARNING] Error with Feature-Policy header: Some features are specified in both Feature-Policy and Permissions-Policy header: camera, geolocation. Values defined in Permissions-Policy header will be used. @ :1

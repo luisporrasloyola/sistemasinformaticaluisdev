@@ -55,6 +55,39 @@ function attendance_report_assert_editable(int $workerId, string $date, ?PDO $pd
     }
 }
 
+/** Reabre solo los meses afectados, dentro de la transacción de una corrección administrativa. */
+function attendance_report_reopen_for_correction(PDO $pdo, int $workerId, string $from, string $to, string $reason, ?int $actorId): void
+{
+    if (!$pdo->inTransaction()) throw new LogicException('La reapertura requiere una transacción.');
+    // Mismo orden de bloqueo que el cierre: trabajador, luego mes.
+    $workerLock = $pdo->prepare('SELECT id FROM workers WHERE id = ? FOR UPDATE');
+    $workerLock->execute([$workerId]);
+    if (!$workerLock->fetchColumn()) throw new DomainException('El trabajador ya no existe.');
+    $fromMonth = substr($from, 0, 7);
+    $toMonth = substr($to, 0, 7);
+    $select = $pdo->prepare('SELECT report_month, admin_user_id, admin_closed_at, staff_user_id, staff_closed_at
+        FROM attendance_report_month_closures WHERE worker_id = ? AND report_month BETWEEN ? AND ?
+          AND (admin_closed_at IS NOT NULL OR staff_closed_at IS NOT NULL) FOR UPDATE');
+    $select->execute([$workerId, $fromMonth, $toMonth]);
+    $closed = $select->fetchAll(PDO::FETCH_ASSOC);
+    if (!$closed) return;
+    $audit = $pdo->prepare('INSERT INTO attendance_report_revisions
+        (worker_id, report_month, previous_admin_user_id, previous_admin_closed_at,
+         previous_staff_user_id, previous_staff_closed_at, correction_date, correction_reason, corrected_by_user_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    $reopen = $pdo->prepare('UPDATE attendance_report_month_closures
+        SET admin_user_id = NULL, admin_closed_at = NULL, staff_user_id = NULL, staff_closed_at = NULL
+        WHERE worker_id = ? AND report_month = ?');
+    $cancelRequest = $pdo->prepare("UPDATE attendance_report_reopen_requests SET status = 'cancelled'
+        WHERE worker_id = ? AND report_month = ? AND status = 'pending'");
+    foreach ($closed as $row) {
+        $audit->execute([$workerId, $row['report_month'], $row['admin_user_id'], $row['admin_closed_at'],
+            $row['staff_user_id'], $row['staff_closed_at'], $from, $reason, $actorId]);
+        $reopen->execute([$workerId, $row['report_month']]);
+        $cancelRequest->execute([$workerId, $row['report_month']]);
+    }
+}
+
 function attendance_report_assert_range_editable(int $workerId, string $from, string $to, ?PDO $pdo = null, bool $lock = false): void
 {
     $month = new DateTimeImmutable(substr($from, 0, 7) . '-01');

@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/attendance_calendar.php';
 require_once __DIR__ . '/../../includes/attendance_report_closure.php';
+require_once __DIR__ . '/../../includes/attendance_labor_regime_correction.php';
 
 require_role('Administrador');
 verify_csrf($_POST['csrf_token'] ?? null);
@@ -14,6 +15,8 @@ $date = trim((string) ($_POST['mark_date'] ?? ''));
 $type = trim((string) ($_POST['calendar_event_type'] ?? ''));
 $restKind = trim((string) ($_POST['rest_kind'] ?? ''));
 $reason = trim((string) ($_POST['reason'] ?? ''));
+$requestedLaborRegime = trim((string) ($_POST['labor_regime'] ?? ''));
+$laborReason = trim((string) ($_POST['labor_reason'] ?? ''));
 $holidayDoubleEnabled = (string) ($_POST['holiday_double_enabled'] ?? '1');
 $parsedDate = DateTimeImmutable::createFromFormat('!Y-m-d', $date);
 
@@ -38,7 +41,7 @@ $name = match ($type) {
 $pdo = db();
 try {
     $pdo->beginTransaction();
-    attendance_report_assert_editable($workerId, $date, $pdo, true);
+    attendance_report_reopen_for_correction($pdo, $workerId, $date, $date, $reason, (int) (current_user()['id'] ?? 0) ?: null);
 
     $worker = $pdo->prepare('SELECT id, company_id FROM workers WHERE id = :id LIMIT 1');
     $worker->execute(['id' => $workerId]);
@@ -66,6 +69,7 @@ try {
             $saveDouble->execute(['worker' => $workerId, 'date' => $date,
                 'enabled' => (int) $holidayDoubleEnabled, 'actor' => (int) (current_user()['id'] ?? 0) ?: null]);
         }
+        if ($requestedLaborRegime !== '') attendance_labor_regime_correct($pdo, $workerId, $date, $requestedLaborRegime, $laborReason, (int) (current_user()['id'] ?? 0) ?: null);
         $pdo->commit();
         json_response(['ok' => true, 'message' => 'El calendario laboral ya tiene esa clasificación para este día.']);
     }
@@ -108,6 +112,7 @@ try {
         $saveDouble->execute(['worker' => $workerId, 'date' => $date,
             'enabled' => (int) $holidayDoubleEnabled, 'actor' => (int) (current_user()['id'] ?? 0) ?: null]);
     }
+    if ($requestedLaborRegime !== '') attendance_labor_regime_correct($pdo, $workerId, $date, $requestedLaborRegime, $laborReason, (int) (current_user()['id'] ?? 0) ?: null);
     $pdo->commit();
     json_response(['ok' => true, 'message' => 'El día se actualizó en el calendario laboral y en el reporte de asistencias. Las marcaciones anteriores se conservaron.']);
 } catch (Throwable $error) {

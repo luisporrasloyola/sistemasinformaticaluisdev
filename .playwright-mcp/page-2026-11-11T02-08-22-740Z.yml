@@ -1,0 +1,307 @@
+- generic [ref=f12e2]:
+  - complementary [ref=f12e3]:
+    - generic [ref=f12e4]:
+      - generic [ref=f12e5]: 
+      - generic [ref=f12e7]:
+        - generic [ref=f12e8]: Life
+        - generic [ref=f12e9]: Maquinarias
+    - generic [ref=f12e10]: Menú principal
+    - navigation [ref=f12e11]:
+      - link " Dashboard" [ref=f12e12] [cursor=pointer]:
+        - /url: http://localhost/lifemaquinarias/panel.php
+        - generic [ref=f12e13]: 
+        - generic [ref=f12e14]: Dashboard
+      - button " Control de personal " [ref=f12e15] [cursor=pointer]:
+        - generic [ref=f12e16]: 
+        - generic [ref=f12e17]: Control de personal
+        - generic [ref=f12e18]: 
+      - text:           
+      - button " Requisitos " [ref=f12e19] [cursor=pointer]:
+        - generic [ref=f12e20]: 
+        - generic [ref=f12e21]: Requisitos
+        - generic [ref=f12e22]: 
+      - text:   
+      - button " Maquinaria " [ref=f12e23] [cursor=pointer]:
+        - generic [ref=f12e24]: 
+        - generic [ref=f12e25]: Maquinaria
+        - generic [ref=f12e26]: 
+      - text:   
+      - button " Empresa " [ref=f12e27] [cursor=pointer]:
+        - generic [ref=f12e28]: 
+        - generic [ref=f12e29]: Empresa
+        - generic [ref=f12e30]: 
+      - text:     
+      - button " Clientes " [ref=f12e31] [cursor=pointer]:
+        - generic [ref=f12e32]: 
+        - generic [ref=f12e33]: Clientes
+        - generic [ref=f12e34]: 
+      - text:  
+      - button " Cobranzas " [ref=f12e35] [cursor=pointer]:
+        - generic [ref=f12e36]: 
+        - generic [ref=f12e37]: Cobranzas
+        - generic [ref=f12e38]: 
+      - text: 
+      - button " Finanzas " [ref=f12e39] [cursor=pointer]:
+        - generic [ref=f12e40]: 
+        - generic [ref=f12e41]: Finanzas
+        - generic [ref=f12e42]: 
+      - text:  
+      - button " Empresa Maquirenta " [ref=f12e43] [cursor=pointer]:
+        - generic [ref=f12e44]: 
+        - generic [ref=f12e45]: Empresa Maquirenta
+        - generic [ref=f12e46]: 
+      - text:                        
+      - link " Usuarios" [ref=f12e47] [cursor=pointer]:
+        - /url: http://localhost/lifemaquinarias/modulos/usuario/usuarios.php
+        - generic [ref=f12e48]: 
+        - generic [ref=f12e49]: Usuarios
+      - button " Configuración " [ref=f12e50] [cursor=pointer]:
+        - generic [ref=f12e51]: 
+        - generic [ref=f12e52]: Configuración
+        - generic [ref=f12e53]: 
+      - text: 
+      - link " Cerrar sesión" [ref=f12e54] [cursor=pointer]:
+        - /url: http://localhost/lifemaquinarias/salir.php
+        - generic [ref=f12e55]: 
+        - generic [ref=f12e56]: Cerrar sesión
+    - generic [ref=f12e57]:
+      - strong [ref=f12e58]: © 2026 Life Maquinarias
+      - generic [ref=f12e59]: Todos los derechos reservados.
+  - main [ref=f12e60]:
+    - generic [ref=f12e61]:
+      - button "Alternar menú" [ref=f12e62] [cursor=pointer]:
+        - generic [ref=f12e63]: 
+      - generic [ref=f12e64]:
+        - button "Observaciones" [ref=f12e65] [cursor=pointer]:
+          - generic [ref=f12e66]: 
+          - generic [ref=f12e67]: "32"
+        - text:                                 
+      - generic [ref=f12e68]:
+        - button "Notificaciones" [ref=f12e69] [cursor=pointer]:
+          - generic [ref=f12e70]: 
+          - generic [ref=f12e71]: "19"
+        - text:                    
+      - img "Usuario" [ref=f12e74]
+    - generic [ref=f12e75]:
+      - generic [ref=f12e77]:
+        - heading "Dashboard" [level=1] [ref=f12e78]
+        - paragraph [ref=f12e79]: Estado documental del personal por empresa y puesto de trabajo.
+      - generic [ref=f12e80]:
+        - generic [ref=f12e86]:
+          - generic [ref=f12e87]: Total en Verde
+          - strong [ref=f12e88]: "5"
+          - generic [ref=f12e89]: Documentos Aptos
+        - generic [ref=f12e96]:
+          - generic [ref=f12e97]: Total en Amarillo
+          - strong [ref=f12e98]: "4"
+          - generic [ref=f12e99]: Documentos por vencer
+        - generic [ref=f12e105]:
+          - generic [ref=f12e106]: Total en Rojo
+          - strong [ref=f12e107]: "42"
+          - generic [ref=f12e108]: Documentos vencidos
+      - generic [ref=f12e109]:
+        - heading "Semáforo general" [level=2] [ref=f12e112]
+        - heading "Personal por empresa" [level=2] [ref=f12e117]
+        - heading "Puestos principales" [level=2] [ref=f12e122]
+      - generic [ref=f12e125]:
+        - generic [ref=f12e126]:
+          - heading "Detalle del personal" [level=2] [ref=f12e127]
+          - link " Ver personal" [ref=f12e128] [cursor=pointer]:
+            - /url: http://localhost/lifemaquinarias/modulos/aliados/personal.php
+            - generic [ref=f12e129]: 
+            - text: Ver personal
+        - generic [ref=f12e130]:
+          - generic [ref=f12e131]:
+            - generic [ref=f12e132]: Empresa
+            - combobox [aria-hidden] [ref=f12e133]
+            - combobox [ref=f12e136] [cursor=pointer]:
+              - textbox "Todas" [ref=f12e137]
+          - generic [ref=f12e138]:
+            - generic [ref=f12e139]: Apellidos y Nombres
+            - searchbox "Buscar personal" [ref=f12e140]
+          - generic [ref=f12e141]:
+            - generic [ref=f12e142]: Puesto de trabajo
+            - combobox [aria-hidden] [ref=f12e143]
+            - combobox [ref=f12e146] [cursor=pointer]:
+              - textbox "Buscar puesto de trabajo" [ref=f12e147]
+          - generic [ref=f12e148]:
+            - generic [ref=f12e149]: Requisito
+            - combobox [aria-hidden] [ref=f12e150]
+            - combobox [ref=f12e153] [cursor=pointer]:
+              - textbox "Buscar requisito" [ref=f12e154]
+          - generic [ref=f12e155]:
+            - generic [ref=f12e156]: Estado
+            - combobox [ref=f12e157]:
+              - option "Todos" [selected]
+              - option "APTO"
+              - option "POR VENCER"
+              - option "NO APTO"
+              - option "SIN ESTADO"
+          - generic [ref=f12e158]:
+            - generic [ref=f12e159]: Estado de observación
+            - combobox [ref=f12e160]:
+              - option "Todos" [selected]
+              - option "Conforme"
+              - option "Observado"
+        - table [ref=f12e162]:
+          - rowgroup [ref=f12e163]:
+            - row [ref=f12e164]:
+              - columnheader "Empresa" [ref=f12e165]
+              - columnheader "Apellidos y Nombres" [ref=f12e166]
+              - columnheader "Puesto de trabajo" [ref=f12e167]
+              - columnheader "Requisito" [ref=f12e168]
+              - columnheader "Estado" [ref=f12e169]
+              - columnheader "Registrado por" [ref=f12e170]
+              - columnheader "Acción" [ref=f12e171]
+          - rowgroup [ref=f12e172]:
+            - row [ref=f12e173]:
+              - cell "Aliado Estratégico" [ref=f12e174]
+              - cell "Ernesto Suarez 22334343" [ref=f12e175]:
+                - strong [ref=f12e176]: Ernesto Suarez
+                - generic [ref=f12e177]: "22334343"
+              - cell "Operador de Grúa" [ref=f12e178]
+              - cell "DNI" [ref=f12e179]
+              - cell "NO APTO" [ref=f12e180]
+              - cell "Administrador" [ref=f12e182]
+              - cell [ref=f12e183]:
+                - generic [ref=f12e184]:
+                  - button "" [disabled]
+                  - button "" [ref=f12e185] [cursor=pointer]
+                  - button "" [ref=f12e187] [cursor=pointer]
+            - row [ref=f12e189]:
+              - cell "Aliado Estratégico" [ref=f12e190]
+              - cell "Ernesto Suarez 22334343" [ref=f12e191]:
+                - strong [ref=f12e192]: Ernesto Suarez
+                - generic [ref=f12e193]: "22334343"
+              - cell "Operador de Grúa" [ref=f12e194]
+              - cell "SCTR" [ref=f12e195]
+              - cell "NO APTO" [ref=f12e196]
+              - cell "enrique" [ref=f12e198]
+              - cell [ref=f12e199]:
+                - generic [ref=f12e200]:
+                  - button "" [ref=f12e201] [cursor=pointer]
+                  - button "" [ref=f12e203] [cursor=pointer]
+                  - button "" [ref=f12e205] [cursor=pointer]
+            - row [ref=f12e207]:
+              - cell "Aliado Estratégico" [ref=f12e208]
+              - cell "Ernesto Suarez 22334343" [ref=f12e209]:
+                - strong [ref=f12e210]: Ernesto Suarez
+                - generic [ref=f12e211]: "22334343"
+              - cell "Operador de Grúa" [ref=f12e212]
+              - cell "VIDA LEY" [ref=f12e213]
+              - cell "NO APTO" [ref=f12e214]
+              - cell "enrique" [ref=f12e216]
+              - cell [ref=f12e217]:
+                - generic [ref=f12e218]:
+                  - button "" [ref=f12e219] [cursor=pointer]
+                  - button "" [ref=f12e221] [cursor=pointer]
+            - row [ref=f12e223]:
+              - cell "Aliado Estratégico" [ref=f12e224]
+              - cell "Rolando Juarez 34343434" [ref=f12e225]:
+                - strong [ref=f12e226]: Rolando Juarez
+                - generic [ref=f12e227]: "34343434"
+              - cell "Operador de Montacargas" [ref=f12e228]
+              - cell "SCTR" [ref=f12e229]
+              - cell "NO APTO" [ref=f12e230]
+              - cell "Administrador" [ref=f12e232]
+              - cell [ref=f12e233]:
+                - generic [ref=f12e234]:
+                  - button "" [ref=f12e235] [cursor=pointer]
+                  - button "" [ref=f12e237] [cursor=pointer]
+            - row [ref=f12e239]:
+              - cell "Aliado Estratégico" [ref=f12e240]
+              - cell "Rolando Juarez 34343434" [ref=f12e241]:
+                - strong [ref=f12e242]: Rolando Juarez
+                - generic [ref=f12e243]: "34343434"
+              - cell "Operador de Montacargas" [ref=f12e244]
+              - cell "VIDA LEY" [ref=f12e245]
+              - cell "NO APTO" [ref=f12e246]
+              - cell "Administrador" [ref=f12e248]
+              - cell [ref=f12e249]:
+                - generic [ref=f12e250]:
+                  - button "" [disabled]
+                  - button "" [ref=f12e251] [cursor=pointer]
+            - row [ref=f12e253]:
+              - cell "Aliado Estratégico" [ref=f12e254]
+              - cell "Rolando Juarez 34343434" [ref=f12e255]:
+                - strong [ref=f12e256]: Rolando Juarez
+                - generic [ref=f12e257]: "34343434"
+              - cell "Rigger" [ref=f12e258]
+              - cell "No tiene requisitos" [ref=f12e259]
+              - cell "SIN ESTADO" [ref=f12e260]
+              - cell [ref=f12e262]
+              - cell [ref=f12e263]:
+                - generic [ref=f12e264]:
+                  - button "" [disabled]
+                  - button "" [disabled]
+            - row [ref=f12e265]:
+              - cell "GRUAS Y TRANSPORTES JAIR S.A.C" [ref=f12e266]
+              - cell "Carlos Ramos 32424233" [ref=f12e267]:
+                - strong [ref=f12e268]: Carlos Ramos
+                - generic [ref=f12e269]: "32424233"
+              - cell "Operador de Camión Grúa" [ref=f12e270]
+              - cell "ALTA T REGISTRO" [ref=f12e271]
+              - cell "NO APTO" [ref=f12e272]
+              - cell "Administrador" [ref=f12e274]
+              - cell [ref=f12e275]:
+                - generic [ref=f12e276]:
+                  - button "" [ref=f12e277] [cursor=pointer]
+                  - button "" [ref=f12e279] [cursor=pointer]
+            - row [ref=f12e281]:
+              - cell "GRUAS Y TRANSPORTES JAIR S.A.C" [ref=f12e282]
+              - cell "Carlos Ramos 32424233" [ref=f12e283]:
+                - strong [ref=f12e284]: Carlos Ramos
+                - generic [ref=f12e285]: "32424233"
+              - cell "Operador de Camión Grúa" [ref=f12e286]
+              - cell "Boleta Firmada" [ref=f12e287]
+              - cell "NO APTO" [ref=f12e288]
+              - cell "Administrador" [ref=f12e290]
+              - cell [ref=f12e291]:
+                - generic [ref=f12e292]:
+                  - button "" [disabled]
+                  - button "" [ref=f12e293] [cursor=pointer]
+            - row [ref=f12e295]:
+              - cell "GRUAS Y TRANSPORTES JAIR S.A.C" [ref=f12e296]
+              - cell "Carlos Ramos 32424233" [ref=f12e297]:
+                - strong [ref=f12e298]: Carlos Ramos
+                - generic [ref=f12e299]: "32424233"
+              - cell "Operador de Camión Grúa" [ref=f12e300]
+              - cell "CAMO" [ref=f12e301]
+              - cell "APTO" [ref=f12e302]
+              - cell "Administrador" [ref=f12e304]
+              - cell [ref=f12e305]:
+                - generic [ref=f12e306]:
+                  - button "" [ref=f12e307] [cursor=pointer]
+                  - button "" [ref=f12e309] [cursor=pointer]
+            - row [ref=f12e311]:
+              - cell "GRUAS Y TRANSPORTES JAIR S.A.C" [ref=f12e312]
+              - cell "Carlos Ramos 32424233" [ref=f12e313]:
+                - strong [ref=f12e314]: Carlos Ramos
+                - generic [ref=f12e315]: "32424233"
+              - cell "Operador de Camión Grúa" [ref=f12e316]
+              - cell "CERTIADULTO" [ref=f12e317]
+              - cell "NO APTO" [ref=f12e318]
+              - cell "Administrador" [ref=f12e320]
+              - cell [ref=f12e321]:
+                - generic [ref=f12e322]:
+                  - button "" [disabled]
+                  - button "" [ref=f12e323] [cursor=pointer]
+        - generic [ref=f12e325]:
+          - generic [ref=f12e326]: Mostrando 1 a 10 de 79 registros
+          - navigation [ref=f12e327]:
+            - list [ref=f12e328]:
+              - listitem [ref=f12e329]:
+                - button "Anterior": «
+              - listitem [ref=f12e330]:
+                - button "1" [ref=f12e331] [cursor=pointer]
+              - listitem [ref=f12e332]:
+                - button "2" [ref=f12e333] [cursor=pointer]
+              - listitem [ref=f12e334]:
+                - button "3" [ref=f12e335] [cursor=pointer]
+              - listitem [ref=f12e336]:
+                - button "4" [ref=f12e337] [cursor=pointer]
+              - listitem [ref=f12e338]:
+                - button "5" [ref=f12e339] [cursor=pointer]
+              - listitem [ref=f12e340]:
+                - button "Siguiente" [ref=f12e341] [cursor=pointer]: »
+      - text:   +

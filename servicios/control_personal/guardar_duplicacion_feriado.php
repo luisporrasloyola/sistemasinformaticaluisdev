@@ -24,7 +24,8 @@ if ($date > date('Y-m-d')) {
 $pdo = db();
 try {
     $pdo->beginTransaction();
-    attendance_report_assert_editable($workerId, $date, $pdo, true);
+    attendance_report_reopen_for_correction($pdo, $workerId, $date, $date,
+        'Cambio de duplicación de horas en feriado', (int) (current_user()['id'] ?? 0) ?: null);
     $worker = $pdo->prepare('SELECT company_id FROM workers WHERE id = :id LIMIT 1');
     $worker->execute(['id' => $workerId]);
     $companyId = $worker->fetchColumn();

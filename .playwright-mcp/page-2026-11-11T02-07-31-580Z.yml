@@ -1,0 +1,141 @@
+- generic [ref=f8e2]:
+  - complementary [ref=f8e3]:
+    - generic [ref=f8e4]:
+      - generic [ref=f8e5]: 
+      - generic [ref=f8e7]:
+        - generic [ref=f8e8]: Life
+        - generic [ref=f8e9]: Maquinarias
+    - generic [ref=f8e10]: Menú principal
+    - navigation [ref=f8e11]:
+      - button " Control de personal " [expanded] [ref=f8e12] [cursor=pointer]:
+        - generic [ref=f8e13]: 
+        - generic [ref=f8e14]: Control de personal
+        - generic [ref=f8e15]: 
+      - generic [ref=f8e17]:
+        - link " Dashboard de asistencia" [ref=f8e18] [cursor=pointer]:
+          - /url: http://localhost/lifemaquinarias/modulos/control_personal/dashboard_asistencia.php
+          - generic [ref=f8e19]: 
+          - generic [ref=f8e20]: Dashboard de asistencia
+        - link " Control de asistencia" [ref=f8e21] [cursor=pointer]:
+          - /url: http://localhost/lifemaquinarias/modulos/control_personal/control_asistencia.php
+          - generic [ref=f8e22]: 
+          - generic [ref=f8e23]: Control de asistencia
+        - link " Reporte de asistencias" [ref=f8e24] [cursor=pointer]:
+          - /url: http://localhost/lifemaquinarias/modulos/control_personal/reporte_asistencias.php
+          - generic [ref=f8e25]: 
+          - generic [ref=f8e26]: Reporte de asistencias
+      - button " Cobranzas " [ref=f8e27] [cursor=pointer]:
+        - generic [ref=f8e28]: 
+        - generic [ref=f8e29]: Cobranzas
+        - generic [ref=f8e30]: 
+      - text: 
+      - button " Finanzas " [ref=f8e31] [cursor=pointer]:
+        - generic [ref=f8e32]: 
+        - generic [ref=f8e33]: Finanzas
+        - generic [ref=f8e34]: 
+      - text:  
+      - button " Requisitos " [ref=f8e35] [cursor=pointer]:
+        - generic [ref=f8e36]: 
+        - generic [ref=f8e37]: Requisitos
+        - generic [ref=f8e38]: 
+      - text:  
+      - button " Empresa Maquirenta " [ref=f8e39] [cursor=pointer]:
+        - generic [ref=f8e40]: 
+        - generic [ref=f8e41]: Empresa Maquirenta
+        - generic [ref=f8e42]: 
+      - text:  
+      - link " Cerrar sesión" [ref=f8e43] [cursor=pointer]:
+        - /url: http://localhost/lifemaquinarias/salir.php
+        - generic [ref=f8e44]: 
+        - generic [ref=f8e45]: Cerrar sesión
+    - generic [ref=f8e46]:
+      - strong [ref=f8e47]: © 2026 Life Maquinarias
+      - generic [ref=f8e48]: Todos los derechos reservados.
+  - main [ref=f8e49]:
+    - generic [ref=f8e50]:
+      - button "Alternar menú" [ref=f8e51] [cursor=pointer]:
+        - generic [ref=f8e52]: 
+      - img "Usuario" [ref=f8e55]
+    - generic [ref=f8e56]:
+      - generic [ref=f8e57]:
+        - generic [ref=f8e58]:
+          - heading "Control de asistencia" [level=1] [ref=f8e59]
+          - paragraph [ref=f8e60]: Marcación mediante GPS, cámara y validación de horario.
+        - button " Mi programación" [ref=f8e61] [cursor=pointer]:
+          - generic [ref=f8e62]: 
+          - text: Mi programación
+      - generic [ref=f8e63]:
+        - generic [ref=f8e65]:
+          - heading "Marcación" [level=2] [ref=f8e67]
+          - generic [ref=f8e68]:
+            - generic [ref=f8e69]:
+              - generic [ref=f8e70]: Horario
+              - combobox [aria-hidden] [ref=f8e71]
+              - combobox [ref=f8e74] [cursor=pointer]:
+                - button "Remove all items" [ref=f8e75]: ×
+                - textbox "Horario de oficina" [ref=f8e76]
+            - generic [ref=f8e77]:
+              - generic [ref=f8e78]: Lugar de marcación
+              - combobox [disabled] [aria-hidden] [ref=f8e79]
+              - combobox [disabled] [ref=f8e82]:
+                - textbox "Seleccione un lugar" [disabled] [ref=f8e83]
+            - generic [ref=f8e84]:
+              - generic [ref=f8e85]: Proyecto
+              - combobox [aria-hidden] [ref=f8e86]
+              - combobox [ref=f8e89] [cursor=pointer]:
+                - textbox "Seleccione un proyecto" [ref=f8e90]
+            - generic [ref=f8e91]:
+              - generic [ref=f8e92]: Régimen laboral
+              - combobox "Régimen laboral" [ref=f8e93]:
+                - option "Regular"
+                - option "Régimen 21×7" [selected]
+              - generic [ref=f8e94]: Continúas en el régimen 21×7. Hoy corresponde A13.
+          - generic [ref=f8e95]: Sin lugares autorizados
+          - generic [ref=f8e97]:
+            - button " Registrar marcación" [disabled]:
+              - generic: 
+              - text: Registrar marcación
+            - text: 
+            - button " Marcar salida" [disabled]:
+              - generic: 
+              - text: Marcar salida
+          - generic [ref=f8e98]: No tiene lugares de marcación habilitados. Comuníquese con el administrador.
+        - generic [ref=f8e99]:
+          - generic [ref=f8e101]:
+            - generic [ref=f8e102]:
+              - heading "Vista de cámara" [level=2] [ref=f8e103]
+              - generic [ref=f8e106]:
+                - generic [ref=f8e107]: 
+                - strong [ref=f8e108]: Cámara no disponible
+                - generic [ref=f8e109]: Se habilitará al registrar una marcación.
+            - generic [ref=f8e110]:
+              - heading "Mapa" [level=2] [ref=f8e111]
+              - generic [ref=f8e113]:
+                - generic [ref=f8e114]: 
+                - strong [ref=f8e115]: Mapa no disponible
+                - generic [ref=f8e116]: Se mostrará el lugar de marcación seleccionado.
+          - generic [ref=f8e117]:
+            - generic [ref=f8e118]:
+              - heading "Actividad reciente" [level=2] [ref=f8e119]
+              - paragraph [ref=f8e120]: Consulta las marcaciones recientes del trabajador.
+            - generic [ref=f8e121]:
+              - table [ref=f8e122]:
+                - rowgroup [ref=f8e123]:
+                  - row [ref=f8e124]:
+                    - columnheader "Fecha" [ref=f8e125]
+                    - columnheader "Hora" [ref=f8e126]
+                    - columnheader "Tipo" [ref=f8e127]
+                    - columnheader "Trabajador" [ref=f8e128]
+                    - columnheader "Lugar de marcación" [ref=f8e129]
+                    - columnheader "Proyecto" [ref=f8e130]
+                    - columnheader "Estado" [ref=f8e131]
+                    - columnheader "Foto" [ref=f8e132]
+                - rowgroup [ref=f8e133]:
+                  - row [ref=f8e134]:
+                    - cell "Sin entradas ni salidas recientes." [ref=f8e135]
+              - generic [ref=f8e137]:
+                - generic [ref=f8e138]: 0 registros · Página 1 de 1
+                - group "Paginación" [ref=f8e139]:
+                  - button "Anterior" [disabled]
+                  - button "Siguiente" [disabled]
+      - text: 

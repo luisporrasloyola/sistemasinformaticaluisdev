@@ -3,6 +3,7 @@ require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/attendance_projects.php';
 require_once __DIR__ . '/../../includes/attendance_overnight.php';
+require_once __DIR__ . '/../../includes/attendance_labor_cycle.php';
 require_module_access('control_personal.control_asistencia');
 ensure_quick_attendance_marking_schema();
 
@@ -44,6 +45,9 @@ $marksStmt = db()->prepare("SELECT id,mark_type,mark_time,marked_at,location_id,
     FROM attendance_marks WHERE worker_id=:worker_id AND mark_date=:today ORDER BY marked_at,id");
 $marksStmt->execute(['worker_id'=>$workerId,'today'=>$workDate]);
 $marks = $marksStmt->fetchAll();
+$regimeHistory = attendance_labor_cycle_history(db(), [$workerId], $workDate);
+$regimeState = attendance_labor_cycle_state($regimeHistory[$workerId] ?? [], $workDate);
+$laborRegime = $regimeState['regime'];
 $lastMark = $marks ? $marks[array_key_last($marks)] : null;
 $hasEntry = (bool)array_filter($marks,static fn(array $mark):bool=>$mark['mark_type']==='entrada');
 $hasExit = (bool)array_filter($marks,static fn(array $mark):bool=>$mark['mark_type']==='salida');
@@ -69,4 +73,6 @@ json_response([
     'today'=>$today,
     'work_date'=>$workDate,
     'holiday_today'=>$holidayToday,
+    'labor_regime'=>$laborRegime,
+    'labor_cycle_code'=>$regimeState['cycle']['code'] ?? null,
 ]);

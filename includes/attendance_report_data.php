@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/attendance_calendar.php';
 require_once __DIR__ . '/attendance_report_daily.php';
+require_once __DIR__ . '/attendance_labor_cycle.php';
 require_once __DIR__ . '/attendance_report_hours.php';
 require_once __DIR__ . '/attendance_holiday_double.php';
 
@@ -126,7 +127,7 @@ function attendance_report_effective_schedule_day(array $assignment, ?array $pro
 /** @return array{early_eligible: bool, early_minutes: int, exit_minutes: int} */
 function attendance_report_overtime_components(string $scheduledEntry, string $scheduledExit, ?string $actualEntry, ?string $actualExit, bool $earlyAuthorized): array
 {
-    $result = ['early_eligible' => false, 'early_minutes' => 0, 'exit_minutes' => 0];
+    $result = ['early_eligible' => false, 'exit_after_schedule' => false, 'early_minutes' => 0, 'exit_minutes' => 0];
     if ($scheduledEntry === '' || $scheduledExit === '') return $result;
 
     $day = strtotime('2000-01-01 00:00:00');
@@ -151,6 +152,7 @@ function attendance_report_overtime_components(string $scheduledEntry, string $s
         $result['early_minutes'] = (int) ceil(($entryStart - $entryMark) / 60);
     }
     if ($exitMark !== false) {
+        $result['exit_after_schedule'] = $exitMark > $exitStart;
         $minutesAfterExit = (int) floor(($exitMark - $exitStart) / 60);
         $result['exit_minutes'] = $exitMark > $exitStart + 15 * 60 ? max(0, $minutesAfterExit) : 0;
     }
@@ -382,6 +384,20 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
         $manualDayOverrides = [];
     }
     $earlyOvertimeAuthorized = [];
+    $laborRegimes = [];
+    $laborCycleDates = [];
+    try {
+        $laborCycleDates = attendance_labor_cycle_range(
+            attendance_labor_cycle_history(db(), array_column($workers, 'id'), $dateTo), $dateFrom, $dateTo
+        );
+        foreach ($laborCycleDates as $cycleWorkerId => $cycleDates) {
+            foreach ($cycleDates as $cycleDate => $cycleState) {
+                if ($cycleState['daily']) $laborRegimes[$cycleWorkerId][$cycleDate] = $cycleState['daily'];
+            }
+        }
+    } catch (Throwable $error) {
+        // Los registros anteriores a la migración conservan el régimen regular.
+    }
     if ($workerId > 0) {
         try {
             $authorizationStmt = db()->prepare('SELECT work_date FROM attendance_early_overtime_authorizations WHERE worker_id = :worker_id AND work_date BETWEEN :date_from AND :date_to AND is_authorized = 1');
@@ -409,6 +425,11 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
 
         while ($cursor <= $periodEnd) {
             $date = $cursor->format('Y-m-d');
+            $laborRegimeRow = $laborRegimes[$id][$date] ?? null;
+            $laborCycle = $laborCycleDates[$id][$date]['cycle'] ?? null;
+            $laborRegime = $laborCycle ? '21x7' : 'regular';
+            $allowRegimeEntryExtra = $laborRegime === '21x7' && !empty($laborRegimeRow['allow_entry_overtime']);
+            $allowRegimeExitExtra = $laborRegime === '21x7' && !empty($laborRegimeRow['allow_exit_overtime']);
             $weekday = (int) $cursor->format('N');
 
             $markedAssignmentsMap = $marksByWorkerAndDateAndAssignment[$id][$date] ?? [];
@@ -470,7 +491,9 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 $calendarEvent = attendance_calendar_resolve_event($calendarEvents, $date, $id, (int) $worker['company_id']);
                 $manualOverride = $calendarEvent ? null : ($manualDayOverrides[$id][$date] ?? null);
                 // El día especial prevalece; las marcaciones permanecen intactas en la base.
-                if ($manualOverride || attendance_calendar_overrides_marks((string) ($calendarEvent['event_type'] ?? ''))) { $entry = null; $exit = null; }
+                $calendarOverrideType = (string) ($calendarEvent['event_type'] ?? '');
+                if ($manualOverride || (attendance_calendar_overrides_marks($calendarOverrideType)
+                    && !($laborCycle && $calendarOverrideType === 'rest'))) { $entry = null; $exit = null; }
                 $program = $dateProgramsMap[$aid] ?? null;
                 $effectiveScheduleId = (int) ($entry['schedule_id'] ?? $exit['schedule_id'] ?? $program['schedule_id'] ?? $assignment['schedule_id']);
                 $scheduleDay = attendance_report_effective_schedule_day($assignment, $program, $entry, $exit, $scheduleDaysBySchedule, $weekday);
@@ -494,6 +517,7 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                         $isEarlyExit = attendance_report_exit_is_early($scheduledEntry, $scheduledExit, (string) $exit['mark_time']);
                     }
                 }
+                if ($laborCycle) { $isLate = false; $isEarlyExit = false; }
 
             if ($manualOverride) {
                 $stateKey = 'absent';
@@ -508,6 +532,8 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                     'holiday' => 'holiday', 'vacation' => 'vacation', 'permission' => 'permission',
                     'rest' => 'rest', default => 'non_working',
                 };
+            } elseif ($laborCycle && ($laborCycle['rest'] || $laborCycle['transition']) && !$manualOverride) {
+                $stateKey = 'rest';
             } elseif (!$hasSchedule) {
                 $stateKey = 'unscheduled';
             } elseif ($date < $today) {
@@ -524,7 +550,7 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
             } elseif ($entry && $date === $today) {
                 $scheduledExit = (string) ($scheduleDay['exit_time'] ?? $scheduleDay['exit_start'] ?? $scheduleDay['exit_end'] ?? '');
                 $journeyKey = $scheduledExit !== '' && $nowTime > $scheduledExit ? 'exit_pending' : 'active';
-            } elseif ($hasSchedule && !$isNonWorking && $date >= $today) {
+            } elseif ($hasSchedule && !$isNonWorking && !$laborCycle && $date >= $today) {
                 $journeyKey = 'pending';
             }
 
@@ -539,6 +565,7 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
             $earlyOvertimeMinutes = 0;
             $exitOvertimeMinutes = 0;
             $earlyOvertimeEligible = false;
+            $exitAfterSchedule = false;
             $scheduleLabel = '-';
             if ($scheduleDay) {
                 $officialEntry = (string) ($scheduleDay['entry_time'] ?? $scheduleDay['entry_start'] ?? '');
@@ -570,9 +597,10 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                     (string) ($scheduleDay['exit_time'] ?? $scheduleDay['exit_start'] ?? ''),
                     $entry ? (string) $entry['mark_time'] : null,
                     $exit ? (string) $exit['mark_time'] : null,
-                    isset($earlyOvertimeAuthorized[$date])
+                    isset($earlyOvertimeAuthorized[$date]) || $allowRegimeEntryExtra
                 );
                 $earlyOvertimeEligible = $components['early_eligible'];
+                $exitAfterSchedule = $components['exit_after_schedule'];
                 $earlyOvertimeMinutes = $components['early_minutes'];
                 $exitOvertimeMinutes = $components['exit_minutes'];
                 $overtimeMinutes = $earlyOvertimeMinutes + $exitOvertimeMinutes;
@@ -587,6 +615,13 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 $earlyOvertimeMinutes = $holidayMinutes['early_overtime_minutes'];
                 $exitOvertimeMinutes = $holidayMinutes['exit_overtime_minutes'];
                 $overtimeMinutes = $holidayOvertimeMinutes + $earlyOvertimeMinutes + $exitOvertimeMinutes;
+            }
+            if ($laborRegime === '21x7') {
+                $lateMinutes = 0;
+                $holidayOvertimeMinutes = 0;
+                if (!$allowRegimeEntryExtra) $earlyOvertimeMinutes = 0;
+                if (!$allowRegimeExitExtra) $exitOvertimeMinutes = 0;
+                $overtimeMinutes = $earlyOvertimeMinutes + $exitOvertimeMinutes;
             }
             $holidayScheduleCredit = $eventType === 'holiday' && !$entry && !$exit
                 && $scheduleDay && $date < $today;
@@ -643,14 +678,23 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 'tolerance_minutes' => $hasSchedule ? max(0,(int)($scheduleDay['tolerance_minutes'] ?? 0)) : null,
                 'location' => $journeyLocations,
                 'entry_location' => $entryLocation, 'exit_location' => $exitLocation,
-                'state_key' => $stateKey, 'state_code' => $state['code'], 'state_label' => $state['label'], 'state_class' => $state['class'],
+                'state_key' => $stateKey,
+                'state_code' => $laborCycle && !$manualOverride && (($entry || $exit) || (($eventType === '' || $eventType === 'rest') && ($laborCycle['rest'] || $laborCycle['transition']))) ? $laborCycle['code'] : $state['code'],
+                'state_label' => $laborCycle && !$manualOverride && (($entry || $exit) || (($eventType === '' || $eventType === 'rest') && ($laborCycle['rest'] || $laborCycle['transition'])))
+                    ? ('Régimen 21×7 · ' . $laborCycle['code'] . ($entry || $exit ? ' · con marcación' : '')) : $state['label'],
+                'state_class' => $laborCycle && $laborCycle['rest'] && ($eventType === '' || $eventType === 'rest') ? 'report-state-rest' : $state['class'],
                 'journey_key' => $journeyKey, 'journey_label' => $journey['label'], 'journey_class' => $journey['class'],
                 'worked_minutes' => $workedMinutes, 'scheduled_minutes' => $scheduledMinutes,
                 'holiday_schedule_credit' => $holidayScheduleCredit,
                 'lunch_deduction_minutes' => $lunchDeductionMinutes,
                 'late_minutes' => $lateMinutes, 'overtime_minutes' => $overtimeMinutes,
+                'labor_regime' => $laborRegime,
+                'labor_cycle_code' => $laborCycle['code'] ?? null,
+                'regime_entry_overtime_allowed' => $allowRegimeEntryExtra,
+                'regime_exit_overtime_allowed' => $allowRegimeExitExtra,
                 'holiday_overtime_minutes' => $holidayOvertimeMinutes,
                 'early_overtime_eligible' => $earlyOvertimeEligible,
+                'exit_after_schedule' => $exitAfterSchedule,
                 'early_overtime_authorized' => isset($earlyOvertimeAuthorized[$date]),
                 'early_overtime_minutes' => $earlyOvertimeMinutes,
                 'exit_overtime_minutes' => $exitOvertimeMinutes,

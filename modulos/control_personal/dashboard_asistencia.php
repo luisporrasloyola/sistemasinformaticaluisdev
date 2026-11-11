@@ -3,9 +3,13 @@ require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/attendance_calendar.php';
 require_once __DIR__ . '/../../includes/attendance_report_data.php';
+require_once __DIR__ . '/../../includes/attendance_labor_cycle.php';
 require_module_access('control_personal.dashboard');
 
 $attendanceLiveVersion = (int) db()->query('SELECT COALESCE(MAX(id), 0) FROM attendance_marks')->fetchColumn();
+$regimeLiveVersion = 0;
+try { $regimeLiveVersion = (int) db()->query('SELECT COALESCE(MAX(id), 0) FROM attendance_labor_regime_audit')->fetchColumn(); }
+catch (PDOException $error) { if ($error->getCode() !== '42S02') throw $error; }
 
 $today = date('Y-m-d');
 $defaultRangeStart = date('Y-m-01');
@@ -27,6 +31,14 @@ if ($personalView) {
 } else {
     $dashboardCompanies = db()->query('SELECT id, name FROM companies ORDER BY name')->fetchAll();
     $dashboardWorkers = db()->query("SELECT w.id, w.company_id, w.full_name, w.document_number, c.name AS company FROM workers w LEFT JOIN companies c ON c.id = w.company_id ORDER BY w.full_name, w.id")->fetchAll();
+    if (!array_key_exists('empresa_id', $_GET)) {
+        foreach ($dashboardCompanies as $company) {
+            if (mb_strtolower(trim((string) $company['name']), 'UTF-8') === 'life maquinarias') {
+                $selectedCompanyId = (int) $company['id'];
+                break;
+            }
+        }
+    }
 }
 $attendanceLocations = db()->query("SELECT id, name FROM attendance_locations WHERE status = 1 ORDER BY name")->fetchAll();
 $adminMarkSchedules = is_admin() ? db()->query("SELECT id, name FROM attendance_schedules WHERE status = 1 ORDER BY name")->fetchAll() : [];
@@ -93,7 +105,7 @@ $holidayDoubleDisabled = $pageWorkerIds
     : [];
 
 // Guardar solo los cinco totales generales; las marcaciones de la página se consultan de nuevo.
-$summaryCacheKey = hash('sha256', implode('|', ['calendar-priority-v2', $rangeStart, $rangeEnd, $selectedCompanyId, $selectedWorkerId, $attendanceLiveVersion]));
+$summaryCacheKey = hash('sha256', implode('|', ['calendar-priority-v2', $rangeStart, $rangeEnd, $selectedCompanyId, $selectedWorkerId, $attendanceLiveVersion, $regimeLiveVersion]));
 $summaryCache = $_SESSION['attendance_dashboard_totals'][$summaryCacheKey] ?? null;
 $hasSummaryCache = is_array($summaryCache)
     && isset($summaryCache['expires'], $summaryCache['totals'])
@@ -209,7 +221,7 @@ $stmt = db()->prepare("SELECT
         aa.location_id AS assignment_location_id,
         aa.valid_from AS assignment_valid_from,
         aa.valid_until AS assignment_valid_until,
-        DATE(aa.created_at) AS assignment_start_date,
+        aa.valid_from AS assignment_start_date,
         am.mark_date,
         am.assignment_id AS mark_assignment_id,
         am.mark_type,
@@ -275,6 +287,25 @@ foreach ($stmt->fetchAll() as $row) {
                 'project_id' => (int) ($row['mark_project_id'] ?? 0),
             ];
         }
+    }
+}
+$laborCycleDates = [];
+try {
+    $laborCycleDates = attendance_labor_cycle_range(
+        attendance_labor_cycle_history(db(), array_keys($matrixRows), $monthEnd), $monthStart, $monthEnd
+    );
+} catch (PDOException $error) {
+    if ($error->getCode() !== '42S02') throw $error;
+}
+$signedReportWorkers = [];
+if (is_admin() && $matrixRows) {
+    foreach (array_chunk(array_keys($matrixRows), 500) as $workerIds) {
+        $placeholders = implode(',', array_fill(0, count($workerIds), '?'));
+        $signedStmt = db()->prepare("SELECT worker_id FROM attendance_report_month_closures
+            WHERE report_month = ? AND worker_id IN ($placeholders)
+              AND (admin_closed_at IS NOT NULL OR staff_closed_at IS NOT NULL)");
+        $signedStmt->execute([substr($monthStart, 0, 7), ...$workerIds]);
+        foreach ($signedStmt->fetchAll(PDO::FETCH_COLUMN) as $signedWorkerId) $signedReportWorkers[(int) $signedWorkerId] = true;
     }
 }
 
@@ -369,7 +400,10 @@ foreach ($matrixRows as $workerId => $worker) {
             $calendarEvents, $cellDate, (int) $worker['worker_id'], (int) $worker['company_id']
         );
         $manualAbsence = !$calendarEvent && isset($manualDayOverrides[$workerId][$cellDate]);
-        if ($manualAbsence || attendance_calendar_overrides_marks((string) ($calendarEvent['event_type'] ?? ''))) { $entry = null; $exit = null; }
+        $summaryCycle = $laborCycleDates[$workerId][$cellDate]['cycle'] ?? null;
+        $summaryEventType = (string) ($calendarEvent['event_type'] ?? '');
+        if ($manualAbsence || (attendance_calendar_overrides_marks($summaryEventType)
+            && !($summaryCycle && $summaryEventType === 'rest'))) { $entry = null; $exit = null; }
         $weekdayNumber = (int) date('N', strtotime($cellDate));
         $markedAssignmentId = (int) ($entry['assignment_id'] ?? $exit['assignment_id'] ?? 0);
         $dayProgram = $markedAssignmentId > 0
@@ -390,7 +424,10 @@ foreach ($matrixRows as $workerId => $worker) {
         $isAbsence = $manualAbsence || (!$entry && !$exit && $cellDate < $today && $isScheduledDay);
 
         $attendanceCode = '';
-        if ($isAbsence) {
+        $laborCycle = $laborCycleDates[$workerId][$cellDate]['cycle'] ?? null;
+        if ($laborCycle && ($laborCycle['rest'] || $laborCycle['transition']) && !$manualAbsence && !$entry && !$exit) {
+            $attendanceCode = '';
+        } elseif ($isAbsence) {
             $attendanceCode = 'F';
         } elseif ($entry || $exit) {
             if ($isLate && $isEarlyExit) {
@@ -412,6 +449,7 @@ foreach ($matrixRows as $workerId => $worker) {
             'F' => 'absences',
             default => null,
         };
+        if ($laborCycle && ($entry || $exit)) $summaryKey = 'attendances';
 
         if ($summaryKey !== null) {
             $matrixSummary[$workerId][$summaryKey]++;
@@ -549,19 +587,19 @@ document.addEventListener('DOMContentLoaded', () => {
         <small>Ausencias del periodo</small>
         <i class="fa-solid fa-user-xmark"></i>
     </div>
-    <div class="attendance-kpi-card kpi-yellow">
+    <div class="attendance-kpi-card kpi-green">
         <span>Tardanzas</span>
         <strong><?= $attendancePeriodTotals['late'] ?></strong>
         <small>Entradas fuera de tolerancia</small>
         <i class="fa-solid fa-clock"></i>
     </div>
-    <div class="attendance-kpi-card kpi-orange">
+    <div class="attendance-kpi-card kpi-green">
         <span>Asisti&oacute; con salida anticipada</span>
         <strong><?= $attendancePeriodTotals['early_exit'] ?></strong>
         <small>Salidas antes del horario</small>
         <i class="fa-solid fa-arrow-right-from-bracket"></i>
     </div>
-    <div class="attendance-kpi-card kpi-rose">
+    <div class="attendance-kpi-card kpi-green">
         <span>Asistió con tardanza y salida anticipada</span>
         <strong><?= $attendancePeriodTotals['late_early_exit'] ?></strong>
         <small>Jornadas con ambas incidencias</small>
@@ -621,7 +659,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         );
                         $manualOverride = $calendarEvent ? null : ($manualDayOverrides[(int) $worker['worker_id']][$cellDate] ?? null);
                         $manualAbsence = $manualOverride !== null;
-                        if ($manualAbsence || attendance_calendar_overrides_marks((string) ($calendarEvent['event_type'] ?? ''))) { $entry = null; $exit = null; }
+                        $cellCycle = $laborCycleDates[(int) $worker['worker_id']][$cellDate]['cycle'] ?? null;
+                        $cellEventType = (string) ($calendarEvent['event_type'] ?? '');
+                        if ($manualAbsence || (attendance_calendar_overrides_marks($cellEventType)
+                            && !($cellCycle && $cellEventType === 'rest'))) { $entry = null; $exit = null; }
                         $weekdayNumber = (int) date('N', strtotime($cellDate));
                         $markedAssignmentId = (int) ($entry['assignment_id'] ?? $exit['assignment_id'] ?? 0);
                         $dayProgram = $markedAssignmentId > 0
@@ -650,9 +691,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         $attendanceCode = '';
                         $attendanceLabel = '';
                         $incidents = [];
+                        $laborCycle = $laborCycleDates[(int) $worker['worker_id']][$cellDate]['cycle'] ?? null;
 
                         if ($calendarOnlyHoliday) {
                             $attendanceLabel = 'Feriado';
+                        } elseif ($laborCycle && ($laborCycle['rest'] || $laborCycle['transition'])
+                            && ($calendarEventType === '' || $calendarEventType === 'rest') && !$manualAbsence && !$entry && !$exit) {
+                            $attendanceCode = $laborCycle['code'];
+                            $attendanceLabel = $laborCycle['transition'] ? 'Día de transición del régimen 21×7' : 'Descanso del régimen 21×7';
                         } elseif ($isAbsence) {
                             $attendanceCode = 'F';
                             $attendanceLabel = 'Faltó';
@@ -677,6 +723,11 @@ document.addEventListener('DOMContentLoaded', () => {
                                 $attendanceLabel = 'Asistió sin incidencias';
                             }
                         }
+                        if ($laborCycle && ($entry || $exit) && !$manualAbsence) {
+                            $attendanceCode = $laborCycle['code'];
+                            $attendanceLabel = 'Régimen 21×7 · ' . $laborCycle['code'] . ' · con marcación';
+                            $incidents = [];
+                        }
 
                         $cellClass = match ($attendanceCode) {
                             'F' => 'matrix-absent',
@@ -693,6 +744,9 @@ document.addEventListener('DOMContentLoaded', () => {
                                 default => 'matrix-empty',
                             },
                         };
+                        if ($laborCycle && $attendanceCode === $laborCycle['code']) {
+                            $cellClass = $laborCycle['rest'] ? 'matrix-rest' : ($laborCycle['transition'] ? 'matrix-non-working' : 'matrix-ok');
+                        }
                         if (!$isAssignedPeriod && $attendanceCode === '' && !$calendarEvent) {
                             $cellClass = 'matrix-empty';
                         }
@@ -735,6 +789,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             data-date="<?= e(date('d/m/Y', strtotime($cellDate))) ?>"
                             data-date-iso="<?= e($cellDate) ?>"
                             data-worker-id="<?= (int) $worker['worker_id'] ?>"
+                            data-report-signed="<?= isset($signedReportWorkers[(int) $worker['worker_id']]) ? '1' : '0' ?>"
                             data-assigned="<?= $isAssignedPeriod && $worker['assignment_valid_from'] <= $cellDate && ($worker['assignment_valid_until'] === '' || $worker['assignment_valid_until'] >= $cellDate) ? '1' : '0' ?>"
                             data-schedule-id="<?= $scheduleId ?>"
                             data-manual-enabled="<?= $manualCorrectionAllowed ? '1' : '0' ?>"
@@ -757,6 +812,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             data-marked-schedule-label="<?= e($markedScheduleLabel) ?>"
                             data-marked-project-id="<?= $markedProjectId ?>"
                             data-calendar-type="<?= e($calendarEventType) ?>"
+                            data-labor-regime="<?= $laborCycle ? '21x7' : 'regular' ?>"
                             data-holiday-double-enabled="<?= isset($holidayDoubleDisabled[(int) $worker['worker_id']][$cellDate]) ? '0' : '1' ?>"
                             data-calendar-name="<?= e((string) ($calendarEvent['name'] ?? '')) ?>"
                             data-entry-project-id="<?= (int) ($entry['project_id'] ?? 0) ?>"
@@ -891,6 +947,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         <?php if (is_admin()): ?><div class="attendance-manual-audit d-none" id="matrixManualAudit"><span><i class="fa-solid fa-shield-halved"></i></span><div><small>Última actualización administrativa</small><strong id="matrixManualAuditUser"></strong><time id="matrixManualAuditDate"></time><p class="attendance-manual-audit-reason d-none" id="matrixManualAuditReason"></p></div></div><?php endif; ?>
                     </section>
                     <?php if (is_admin()): ?>
+                    <div class="attendance-detail-controls">
+                    <div class="alert alert-warning d-none" id="matrixClosedReportWarning" role="status">Este mes ya tiene un cierre. Si guarda una corrección, el reporte se actualizará y ambas partes deberán cerrarlo nuevamente. Los cierres anteriores quedarán auditados.</div>
                     <div class="attendance-manual-locked d-none" id="matrixManualLocked" role="status">
                         <span><i class="fa-solid fa-calendar-day"></i></span>
                         <div><strong>Corrección aún no disponible</strong><p id="matrixManualLockedMessage">La jornada actual todavía está en curso.</p><small>Podrá corregirse a partir del día siguiente.</small><button class="btn btn-outline-primary btn-sm d-none mt-2" type="button" id="matrixAdminMarkOpen"><i class="fa-solid fa-user-clock me-1"></i>Registrar marcación administrativa de hoy</button></div>
@@ -932,8 +990,17 @@ document.addEventListener('DOMContentLoaded', () => {
                             <small class="attendance-location-help">Los puntos de ruta ya registrados no serán modificados.</small>
                         </div>
                         <div class="attendance-manual-reason mt-2"><label class="form-label" for="matrixManualReason">Observación</label><textarea class="form-control" name="reason" id="matrixManualReason" rows="2" maxlength="500" required placeholder="Ej.: El servidor no estuvo disponible durante el ingreso."></textarea></div>
-                        <div class="attendance-manual-actions"><small><i class="fa-solid fa-lock"></i> El cambio quedará auditado con su usuario y fecha.</small><button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk me-1"></i> Guardar corrección</button></div>
+                        <div class="attendance-manual-actions"><small><i class="fa-solid fa-lock"></i> El cambio quedará auditado con su usuario y fecha.</small></div>
                     </form>
+                    <form id="attendanceLaborRegimeForm" class="attendance-labor-regime-form">
+                        <div class="attendance-manual-heading"><span><i class="fa-solid fa-user-gear"></i></span><div><strong>Corregir régimen laboral</strong><small>Regular interrumpe el ciclo; 21×7 lo inicia o continúa. Las marcaciones se conservan.</small></div></div>
+                        <div class="attendance-labor-regime-fields">
+                            <div><label class="form-label" for="matrixLaborRegime">Régimen</label><select class="form-select" id="matrixLaborRegime" name="regime"><option value="regular">Regular</option><option value="21x7">21×7</option></select></div>
+                            <div><label class="form-label" for="matrixLaborReason">Motivo del cambio de régimen</label><input class="form-control" id="matrixLaborReason" name="reason" maxlength="500" placeholder="Solo si cambia el régimen"></div>
+                        </div>
+                        <div class="attendance-labor-regime-actions"><small><i class="fa-solid fa-lock"></i> Se guardarán solo los cambios realizados.</small><button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk me-1"></i>Guardar cambios</button></div>
+                    </form>
+                    </div>
                     <?php endif; ?>
                 </div>
             </div>
@@ -955,6 +1022,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <input type="hidden" name="worker_id" id="adminMarkWorkerId">
                     <input type="hidden" name="mark_date" id="adminMarkDate">
                     <div class="d-flex flex-wrap gap-2 mb-3" id="adminMarkStatus" aria-live="polite"></div>
+                    <div class="alert alert-warning d-none" id="adminMarkClosedReportWarning">Este mes ya tiene un cierre. Al guardar, el reporte se actualizará y ambas partes deberán cerrarlo nuevamente.</div>
                     <fieldset class="attendance-result-choice" id="adminMarkResultGroup"><legend>Resultado de asistencia</legend><div class="attendance-result-options">
                         <label class="attendance-result-option result-on-time"><input type="radio" name="attendance_result" value="puntual" checked required><span><i class="fa-solid fa-circle-check"></i><strong>Asistió sin incidencias</strong></span></label>
                         <label class="attendance-result-option result-late"><input type="radio" name="attendance_result" value="tardanza" required><span><i class="fa-solid fa-clock"></i><strong>Asistió con tardanza</strong></span></label>
@@ -968,6 +1036,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="col-sm-6"><label class="form-label" for="adminMarkLocation">Lugar de marcación</label><select class="form-select select2-searchable" name="location_id" id="adminMarkLocation" data-placeholder="Buscar lugar" data-no-results="No se encontraron lugares" required><option value="">Seleccione un lugar</option><?php foreach ($attendanceLocations as $location): ?><option value="<?= (int) $location['id'] ?>"><?= e($location['name']) ?></option><?php endforeach; ?></select></div>
                         <div class="col-sm-6"><label class="form-label" for="adminMarkProject">Proyecto</label><select class="form-select select2-searchable" name="project_id" id="adminMarkProject" data-placeholder="Buscar proyecto" data-no-results="No se encontraron proyectos" required><option value="">Seleccione un proyecto</option><?php foreach ($adminMarkProjects as $project): ?><option value="<?= (int) $project['id'] ?>"><?= e($project['name']) ?></option><?php endforeach; ?></select></div>
                         <div class="col-12"><label class="form-label" for="adminMarkReason">Motivo</label><textarea class="form-control" name="reason" id="adminMarkReason" rows="2" maxlength="500" required placeholder="Indique por qué el trabajador no pudo marcar personalmente."></textarea></div>
+                        <div class="col-12"><label class="form-label" for="adminMarkLaborRegime">Régimen laboral</label><select class="form-select" name="labor_regime" id="adminMarkLaborRegime"><option value="regular">Regular</option><option value="21x7">21×7</option></select><small class="text-muted">Se conserva el régimen actual si no lo cambia.</small></div>
+                        <div class="col-12 d-none" id="adminMarkLaborReasonGroup"><label class="form-label" for="adminMarkLaborReason">Motivo del cambio de régimen</label><input class="form-control" name="labor_reason" id="adminMarkLaborReason" maxlength="500" placeholder="Indique por qué cambia el régimen laboral"></div>
                     </div>
                 </div>
                 <div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cerrar</button><button class="btn btn-primary" type="submit">Guardar marcación</button></div>

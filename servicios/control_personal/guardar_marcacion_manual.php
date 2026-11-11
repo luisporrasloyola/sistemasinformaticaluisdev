@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/attendance_report_closure.php';
 require_once __DIR__ . '/../../includes/attendance_calendar.php';
+require_once __DIR__ . '/../../includes/attendance_labor_regime_correction.php';
 
 require_role('Administrador');
 verify_csrf($_POST['csrf_token'] ?? null);
@@ -33,6 +34,8 @@ $markDate = trim((string) ($_POST['mark_date'] ?? ''));
 $entryTime = trim((string) ($_POST['entry_time'] ?? ''));
 $exitTime = trim((string) ($_POST['exit_time'] ?? ''));
 $reason = trim((string) ($_POST['reason'] ?? ''));
+$requestedLaborRegime = trim((string) ($_POST['labor_regime'] ?? ''));
+$laborReason = trim((string) ($_POST['labor_reason'] ?? ''));
 $entryLocationId = max(0, (int) ($_POST['entry_location_id'] ?? 0));
 $exitLocationId = max(0, (int) ($_POST['exit_location_id'] ?? 0));
 $attendanceResult = trim((string) ($_POST['attendance_result'] ?? ''));
@@ -80,7 +83,7 @@ if ($projectProvided && $projectId > 0) {
 if ($attendanceResult === 'falta') {
     try {
         $pdo->beginTransaction();
-        attendance_report_assert_editable($workerId, $markDate, $pdo, true);
+        attendance_report_reopen_for_correction($pdo, $workerId, $markDate, $markDate, $reason, $actorId);
         $workerStmt = $pdo->prepare('SELECT id FROM workers WHERE id = :id LIMIT 1 FOR UPDATE');
         $workerStmt->execute(['id' => $workerId]);
         if (!$workerStmt->fetchColumn()) {
@@ -106,6 +109,7 @@ if ($attendanceResult === 'falta') {
             ON DUPLICATE KEY UPDATE attendance_status='falta', reason=VALUES(reason),
                 adjusted_by_user_id=VALUES(adjusted_by_user_id), updated_at=CURRENT_TIMESTAMP");
         $override->execute(['worker' => $workerId, 'date' => $markDate, 'reason' => $reason, 'user' => $actorId]);
+        if ($requestedLaborRegime !== '') attendance_labor_regime_correct($pdo, $workerId, $markDate, $requestedLaborRegime, $laborReason, $actorId);
         $pdo->commit();
         manual_response(['ok' => true, 'message' => 'La jornada fue registrada como falta y las marcaciones originales se conservaron.']);
     } catch (Throwable $error) {
@@ -237,7 +241,7 @@ $saveMark = static function (string $type, string $time, int $locationId) use ($
 
 try {
     $pdo->beginTransaction();
-    attendance_report_assert_editable($workerId, $markDate, $pdo, true);
+    attendance_report_reopen_for_correction($pdo, $workerId, $markDate, $markDate, $reason, $actorId);
     $clearOverride = $pdo->prepare('DELETE FROM attendance_manual_day_overrides WHERE worker_id=:worker AND mark_date=:date');
     $clearOverride->execute(['worker' => $workerId, 'date' => $markDate]);
     if ($entryTime !== '') $saveMark('entrada', $entryTime, $entryLocationId);
@@ -332,6 +336,7 @@ try {
         $saveDouble->execute(['worker' => $workerId, 'date' => $markDate,
             'enabled' => (int) $holidayDoubleEnabled, 'actor' => $actorId]);
     }
+    if ($requestedLaborRegime !== '') attendance_labor_regime_correct($pdo, $workerId, $markDate, $requestedLaborRegime, $laborReason, $actorId);
     $pdo->commit();
     manual_response(['ok' => true, 'message' => $attendanceResult === 'feriado'
         ? 'El feriado y sus marcaciones fueron guardados y auditados correctamente.'

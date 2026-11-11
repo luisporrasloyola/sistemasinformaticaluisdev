@@ -27,10 +27,14 @@ function attendance_report_classify_day(array $row, ?string $asOfDate = null): a
             default => 'unclassified',
         };
     }
+    $laborCode = (string) ($row['labor_cycle_code'] ?? '');
+    $cycleRest = preg_match('/^D[1-7]$/', $laborCode) === 1
+        && ($calendarType === '' || $calendarType === 'rest');
+    if ($cycleRest) $restKind = 'regime';
 
     $worked = $hasEntry && $state !== 'absent';
     $incomplete = ($hasEntry && !$hasExit && $journey !== 'active') || (!$hasEntry && $hasExit);
-    $regular = $worked && $hasExit && $state === 'attended'
+    $regular = $worked && $hasExit && $state === 'attended' && ($row['labor_regime'] ?? 'regular') === 'regular'
         && $journey === 'completed'
         && (int) ($row['late_minutes'] ?? 0) === 0;
     $futureUnmarked = $date > $asOfDate && !$hasEntry && !$hasExit;
@@ -53,6 +57,8 @@ function attendance_report_classify_day(array $row, ?string $asOfDate = null): a
         'calendar_type' => $calendarType,
         'calendar_event_id' => (int) ($row['calendar_event_id'] ?? 0),
         'rest_kind' => $restKind,
+        'labor_cycle_rest' => $cycleRest,
+        'labor_cycle_rest_worked' => $cycleRest && $worked,
         'worked_minutes' => max(0, (int) ($row['worked_minutes'] ?? 0)),
         'holiday_overtime_minutes' => max(0, (int) ($row['holiday_overtime_minutes'] ?? 0)),
         'early_overtime_minutes' => max(0, (int) ($row['early_overtime_minutes'] ?? 0)),
@@ -99,7 +105,7 @@ function attendance_report_summarize_monthly_days(array $days): array
             $months[$month] = array_fill_keys([
                 'worked', 'regular', 'incomplete', 'late', 'absent', 'holiday',
                 'non_working', 'vacation', 'rest', 'rest_hours', 'rest_regime',
-                'rest_unclassified', 'pending',
+                'rest_unclassified', 'rest_regime_worked', 'pending',
             ], 0);
         }
         foreach (['worked', 'regular', 'incomplete', 'late', 'absent', 'pending'] as $key) {
@@ -108,7 +114,8 @@ function attendance_report_summarize_monthly_days(array $days): array
         $calendarType = (string) ($day['calendar_type'] ?? '');
         if (in_array($calendarType, ['holiday', 'non_working', 'vacation'], true)) {
             $months[$month][$calendarType]++;
-        } elseif ($calendarType === 'rest') {
+        }
+        if ($calendarType === 'rest' || !empty($day['labor_cycle_rest'])) {
             $months[$month]['rest']++;
             $restKey = match ($day['rest_kind'] ?? null) {
                 'hours' => 'rest_hours',
@@ -117,6 +124,7 @@ function attendance_report_summarize_monthly_days(array $days): array
             };
             $months[$month][$restKey]++;
         }
+        if (!empty($day['labor_cycle_rest_worked'])) $months[$month]['rest_regime_worked']++;
     }
     ksort($months);
     return $months;

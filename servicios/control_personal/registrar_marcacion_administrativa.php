@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/attendance_location_access.php';
 require_once __DIR__ . '/../../includes/attendance_report_closure.php';
+require_once __DIR__ . '/../../includes/attendance_labor_regime_correction.php';
 require_role('Administrador');
 verify_csrf($_POST['csrf_token'] ?? null);
 
@@ -17,6 +18,8 @@ $locationId = max(0, (int)($_POST['location_id'] ?? 0));
 $projectId = max(0, (int)($_POST['project_id'] ?? 0));
 $attendanceResult = trim((string)($_POST['attendance_result'] ?? ''));
 $reason = trim((string)($_POST['reason'] ?? ''));
+$laborRegime = trim((string)($_POST['labor_regime'] ?? ''));
+$laborReason = trim((string)($_POST['labor_reason'] ?? ''));
 $today = date('Y-m-d');
 
 if ($workerId <= 0) json_response(['ok'=>false,'message'=>'Seleccione un trabajador válido.'], 422);
@@ -27,6 +30,9 @@ if ($date !== $today) json_response(['ok'=>false,'message'=>'Solo se puede regis
 if ($attendanceResult !== 'falta' && !preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $time)) json_response(['ok'=>false,'message'=>'Ingrese una hora válida.'], 422);
 if ($attendanceResult !== 'falta' && strtotime($date . ' ' . $time . ':00') > time()) json_response(['ok'=>false,'message'=>'La hora de marcación no puede ser futura.'], 422);
 if ($reason === '' || mb_strlen($reason) > 500) json_response(['ok'=>false,'message'=>'Ingrese un motivo de hasta 500 caracteres.'], 422);
+if ($laborRegime !== '' && (!in_array($laborRegime, ['regular', '21x7'], true) || $laborReason === '' || mb_strlen($laborReason) > 500)) {
+    json_response(['ok'=>false,'message'=>'Indique un régimen y motivo de cambio válidos.'], 422);
+}
 
 if ($attendanceResult !== 'falta' && $type === 'entrada' && !in_array($attendanceResult, ['puntual', 'tardanza'], true)) {
     json_response(['ok'=>false,'message'=>'Seleccione el resultado de asistencia.'], 422);
@@ -35,7 +41,8 @@ if ($attendanceResult !== 'falta' && $type === 'entrada' && !in_array($attendanc
 $pdo = db();
 $pdo->beginTransaction();
 try {
-    attendance_report_assert_editable($workerId, $date, $pdo, true);
+    attendance_report_reopen_for_correction($pdo, $workerId, $date, $date, $reason,
+        (int) (current_user()['id'] ?? 0) ?: null);
     $workerStmt = $pdo->prepare('SELECT id FROM workers WHERE id=:id FOR UPDATE');
     $workerStmt->execute(['id'=>$workerId]);
     if (!$workerStmt->fetchColumn()) throw new DomainException('El trabajador ya no existe.');
@@ -48,6 +55,7 @@ try {
             ON DUPLICATE KEY UPDATE attendance_status='falta', reason=VALUES(reason),
                 adjusted_by_user_id=VALUES(adjusted_by_user_id), updated_at=CURRENT_TIMESTAMP");
         $override->execute(['worker'=>$workerId,'date'=>$today,'reason'=>$reason,'user'=>$actorId]);
+        if ($laborRegime !== '') attendance_labor_regime_correct($pdo, $workerId, $today, $laborRegime, $laborReason, $actorId);
         $pdo->commit();
         json_response(['ok'=>true,'message'=>'La jornada fue registrada como falta. Las marcaciones existentes se conservaron.','status'=>'falta']);
     }
@@ -143,6 +151,7 @@ try {
         'location'=>$locationId,'status'=>$status,'reason'=>$reason,'user'=>$actorId]);
     $clearOverride = $pdo->prepare('DELETE FROM attendance_manual_day_overrides WHERE worker_id=:worker AND mark_date=:date');
     $clearOverride->execute(['worker'=>$workerId,'date'=>$today]);
+    if ($laborRegime !== '') attendance_labor_regime_correct($pdo, $workerId, $today, $laborRegime, $laborReason, $actorId);
     $pdo->commit();
     json_response(['ok'=>true,'message'=>ucfirst($type) . ' registrada administrativamente.','status'=>$status]);
 } catch (Throwable $error) {

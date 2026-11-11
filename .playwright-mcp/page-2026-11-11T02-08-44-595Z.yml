@@ -1,0 +1,737 @@
+- generic [ref=f15e2]:
+  - complementary [ref=f15e3]:
+    - generic [ref=f15e4]:
+      - generic [ref=f15e5]: 
+      - generic [ref=f15e7]:
+        - generic [ref=f15e8]: Life
+        - generic [ref=f15e9]: Maquinarias
+    - generic [ref=f15e10]: Menú principal
+    - navigation [ref=f15e11]:
+      - link " Dashboard" [ref=f15e12] [cursor=pointer]:
+        - /url: http://localhost/lifemaquinarias/panel.php
+        - generic [ref=f15e13]: 
+        - generic [ref=f15e14]: Dashboard
+      - button " Control de personal " [expanded] [ref=f15e15] [cursor=pointer]:
+        - generic [ref=f15e16]: 
+        - generic [ref=f15e17]: Control de personal
+        - generic [ref=f15e18]: 
+      - generic [ref=f15e20]:
+        - link " Dashboard de asistencia" [ref=f15e21] [cursor=pointer]:
+          - /url: http://localhost/lifemaquinarias/modulos/control_personal/dashboard_asistencia.php
+          - generic [ref=f15e22]: 
+          - generic [ref=f15e23]: Dashboard de asistencia
+        - link " Calendario laboral" [ref=f15e24] [cursor=pointer]:
+          - /url: http://localhost/lifemaquinarias/modulos/control_personal/calendario_laboral.php
+          - generic [ref=f15e25]: 
+          - generic [ref=f15e26]: Calendario laboral
+        - link " Plantillas de horarios" [ref=f15e27] [cursor=pointer]:
+          - /url: http://localhost/lifemaquinarias/modulos/control_personal/horarios.php
+          - generic [ref=f15e28]: 
+          - generic [ref=f15e29]: Plantillas de horarios
+        - link " Lugares de marcación" [ref=f15e30] [cursor=pointer]:
+          - /url: http://localhost/lifemaquinarias/modulos/control_personal/puntos_marcacion.php
+          - generic [ref=f15e31]: 
+          - generic [ref=f15e32]: Lugares de marcación
+        - link " Asignaciones" [ref=f15e33] [cursor=pointer]:
+          - /url: http://localhost/lifemaquinarias/modulos/control_personal/asignaciones.php
+          - generic [ref=f15e34]: 
+          - generic [ref=f15e35]: Asignaciones
+        - link " Clientes" [ref=f15e36] [cursor=pointer]:
+          - /url: http://localhost/lifemaquinarias/modulos/control_personal/proyectos.php
+          - generic [ref=f15e37]: 
+          - generic [ref=f15e38]: Clientes
+        - link " Calendario y programación de jornadas" [ref=f15e39] [cursor=pointer]:
+          - /url: http://localhost/lifemaquinarias/modulos/control_personal/programacion_personal.php
+          - generic [ref=f15e40]: 
+          - generic [ref=f15e41]: Calendario y programación de jornadas
+        - link " Control de asistencia" [ref=f15e42] [cursor=pointer]:
+          - /url: http://localhost/lifemaquinarias/modulos/control_personal/control_asistencia.php
+          - generic [ref=f15e43]: 
+          - generic [ref=f15e44]: Control de asistencia
+        - link " Reporte de marcaciones" [ref=f15e45] [cursor=pointer]:
+          - /url: http://localhost/lifemaquinarias/modulos/control_personal/reportes.php
+          - generic [ref=f15e46]: 
+          - generic [ref=f15e47]: Reporte de marcaciones
+        - link " Reporte de asistencias" [ref=f15e48] [cursor=pointer]:
+          - /url: http://localhost/lifemaquinarias/modulos/control_personal/reporte_asistencias.php
+          - generic [ref=f15e49]: 
+          - generic [ref=f15e50]: Reporte de asistencias
+        - link " Control de asistencia_old" [ref=f15e51] [cursor=pointer]:
+          - /url: http://localhost/lifemaquinarias/modulos/aliados/control_asistencia.php
+          - generic [ref=f15e52]: 
+          - generic [ref=f15e53]: Control de asistencia_old
+      - button " Requisitos " [ref=f15e54] [cursor=pointer]:
+        - generic [ref=f15e55]: 
+        - generic [ref=f15e56]: Requisitos
+        - generic [ref=f15e57]: 
+      - text:   
+      - button " Maquinaria " [ref=f15e58] [cursor=pointer]:
+        - generic [ref=f15e59]: 
+        - generic [ref=f15e60]: Maquinaria
+        - generic [ref=f15e61]: 
+      - text:   
+      - button " Empresa " [ref=f15e62] [cursor=pointer]:
+        - generic [ref=f15e63]: 
+        - generic [ref=f15e64]: Empresa
+        - generic [ref=f15e65]: 
+      - text:     
+      - button " Clientes " [ref=f15e66] [cursor=pointer]:
+        - generic [ref=f15e67]: 
+        - generic [ref=f15e68]: Clientes
+        - generic [ref=f15e69]: 
+      - text:  
+      - button " Cobranzas " [ref=f15e70] [cursor=pointer]:
+        - generic [ref=f15e71]: 
+        - generic [ref=f15e72]: Cobranzas
+        - generic [ref=f15e73]: 
+      - text: 
+      - button " Finanzas " [ref=f15e74] [cursor=pointer]:
+        - generic [ref=f15e75]: 
+        - generic [ref=f15e76]: Finanzas
+        - generic [ref=f15e77]: 
+      - text:  
+      - button " Empresa Maquirenta " [ref=f15e78] [cursor=pointer]:
+        - generic [ref=f15e79]: 
+        - generic [ref=f15e80]: Empresa Maquirenta
+        - generic [ref=f15e81]: 
+      - text:                        
+      - link " Usuarios" [ref=f15e82] [cursor=pointer]:
+        - /url: http://localhost/lifemaquinarias/modulos/usuario/usuarios.php
+        - generic [ref=f15e83]: 
+        - generic [ref=f15e84]: Usuarios
+      - button " Configuración " [ref=f15e85] [cursor=pointer]:
+        - generic [ref=f15e86]: 
+        - generic [ref=f15e87]: Configuración
+        - generic [ref=f15e88]: 
+      - text: 
+      - link " Cerrar sesión" [ref=f15e89] [cursor=pointer]:
+        - /url: http://localhost/lifemaquinarias/salir.php
+        - generic [ref=f15e90]: 
+        - generic [ref=f15e91]: Cerrar sesión
+    - generic [ref=f15e92]:
+      - strong [ref=f15e93]: © 2026 Life Maquinarias
+      - generic [ref=f15e94]: Todos los derechos reservados.
+  - main [ref=f15e95]:
+    - generic [ref=f15e96]:
+      - button "Alternar menú" [ref=f15e97] [cursor=pointer]:
+        - generic [ref=f15e98]: 
+      - generic [ref=f15e99]:
+        - button "Observaciones" [ref=f15e100] [cursor=pointer]:
+          - generic [ref=f15e101]: 
+          - generic [ref=f15e102]: "32"
+        - text:                                 
+      - generic [ref=f15e103]:
+        - button "Notificaciones" [ref=f15e104] [cursor=pointer]:
+          - generic [ref=f15e105]: 
+          - generic [ref=f15e106]: "19"
+        - text:                    
+      - img "Usuario" [ref=f15e109]
+    - generic [ref=f15e110]:
+      - generic [ref=f15e111]:
+        - generic [ref=f15e112]:
+          - heading "Reporte individual de asistencia" [level=1] [ref=f15e113]
+          - paragraph [ref=f15e114]: Consulta, revisa y genera el informe detallado de cada trabajador.
+        - generic [ref=f15e115]:
+          - link " Descargar Excel" [ref=f15e116] [cursor=pointer]:
+            - /url: http://localhost/lifemaquinarias/servicios/control_personal/descargar_reporte_asistencia_excel.php?mes=2026-09&desde=2026-09-01&hasta=2026-09-30&empresa_id=0&trabajador_id=20
+            - generic [ref=f15e117]: 
+            - text: Descargar Excel
+          - link " Descargar PDF" [ref=f15e118] [cursor=pointer]:
+            - /url: http://localhost/lifemaquinarias/servicios/control_personal/descargar_reporte_asistencia.php?mes=2026-09&desde=2026-09-01&hasta=2026-09-30&empresa_id=0&trabajador_id=20
+            - generic [ref=f15e119]: 
+            - text: Descargar PDF
+      - generic [ref=f15e121]:
+        - generic [ref=f15e122]:
+          - generic [ref=f15e123]: Mes y año
+          - textbox "Mes y año" [ref=f15e124]: 2026-09
+        - generic [ref=f15e125]:
+          - generic [ref=f15e126]: Empresa
+          - combobox [aria-hidden] [ref=f15e127]
+          - combobox [ref=f15e130] [cursor=pointer]:
+            - textbox "Todas las empresas" [ref=f15e131]
+        - generic [ref=f15e132]:
+          - generic [ref=f15e133]: Trabajador
+          - combobox [aria-hidden] [ref=f15e134]
+          - combobox [ref=f15e137] [cursor=pointer]:
+            - textbox "PRUEBA VISUAL 21X7 - 9370bc68df5" [ref=f15e138]
+        - button " Generar" [ref=f15e140] [cursor=pointer]:
+          - generic [ref=f15e141]: 
+          - text: Generar
+      - generic [ref=f15e142]:
+        - generic [ref=f15e143]:
+          - generic [ref=f15e144]:
+            - text: REPORTE INDIVIDUAL
+            - heading "PRUEBA VISUAL 21X7" [level=2] [ref=f15e145]
+            - paragraph [ref=f15e146]: 01/09/2026 al 30/09/2026
+          - generic [ref=f15e147]:
+            - generic [ref=f15e148]: "Documento: DNI - 9370bc68df5"
+            - generic [ref=f15e149]: "Empresa: Life Maquinarias"
+            - generic [ref=f15e150]: "Cargo: Sin cargo registrado"
+            - generic [ref=f15e151]: "Horario: Horario de oficina"
+          - generic [ref=f15e152]: 30 días registrados
+        - generic [ref=f15e153]:
+          - generic [ref=f15e155]:
+            - text: "Puntualidad:"
+            - strong [ref=f15e156]: 0%
+          - generic [ref=f15e158]:
+            - text: "Jornadas finalizadas:"
+            - strong [ref=f15e159]: 0%
+        - generic "Resumen de días de septiembre 2026" [ref=f15e160]:
+          - generic [ref=f15e161]:
+            - generic [ref=f15e162]:
+              - text: "Días trabajados:"
+              - strong [ref=f15e163]: "0"
+            - generic [ref=f15e164]:
+              - generic [ref=f15e165]:
+                - text: Asistencia regular
+                - strong [ref=f15e166]: "0"
+              - generic [ref=f15e167]:
+                - text: No concluidos
+                - strong [ref=f15e168]: "0"
+              - generic [ref=f15e169]:
+                - text: Tardanzas
+                - strong [ref=f15e170]: "0"
+          - generic [ref=f15e171]:
+            - generic [ref=f15e172]:
+              - text: Feriados
+              - strong [ref=f15e173]: 0 días
+            - generic [ref=f15e174]:
+              - text: No laborables
+              - strong [ref=f15e175]: 0 días
+            - generic [ref=f15e176]:
+              - text: Vacaciones
+              - strong [ref=f15e177]: 0 días
+            - generic [ref=f15e178]:
+              - text: Faltas
+              - strong [ref=f15e179]: 22 días
+          - generic [ref=f15e180]:
+            - generic [ref=f15e181]:
+              - text: "Descansos:"
+              - strong [ref=f15e182]: 7 días
+            - generic [ref=f15e183]:
+              - generic [ref=f15e184]:
+                - text: A cuenta de horas
+                - strong [ref=f15e185]: 0 días
+              - generic [ref=f15e186]:
+                - text: Régimen laboral
+                - strong [ref=f15e187]: 7 días
+        - generic [ref=f15e188]:
+          - generic [ref=f15e189]: "Horas trabajadas:"
+          - strong [ref=f15e190]: 0 h 00 min
+        - generic [ref=f15e191]:
+          - generic [ref=f15e192]:
+            - generic [ref=f15e193]:
+              - generic [ref=f15e194]: H. canjeadas · septiembre 2026
+              - strong [ref=f15e195]: 0 h 00 min
+              - generic [ref=f15e196]: 0 sábado(s) × 6 h + 0 otro(s) día(s) × 8 h 30 min
+            - generic [ref=f15e197]:
+              - generic [ref=f15e198]: HEMP · agosto 2026
+              - strong [ref=f15e200]: 0 h 00 min
+              - generic [ref=f15e201]: Saldo del mes anterior
+          - generic [ref=f15e202]:
+            - generic [ref=f15e203]:
+              - generic [ref=f15e204]:
+                - text: Feriado ×2
+                - strong [ref=f15e205]: 0 h 00 min
+              - generic [ref=f15e206]:
+                - text: Extra por entrada
+                - strong [ref=f15e207]: 0 h 00 min
+              - generic [ref=f15e208]:
+                - text: Extra por salida
+                - strong [ref=f15e209]: 0 h 00 min
+            - generic [ref=f15e210]:
+              - generic [ref=f15e211]: Horas extras · septiembre 2026
+              - strong [ref=f15e212]: 0 h 00 min
+          - generic [ref=f15e213]:
+            - generic [ref=f15e214]: Horas extras vigentes
+            - strong [ref=f15e215]: 0 h 00 min
+            - generic [ref=f15e216]: HEMP + extras del mes − horas canjeadas
+        - generic [ref=f15e217]:
+          - heading "Detalle diario" [level=3] [ref=f15e218]
+          - paragraph [ref=f15e219]: Marcaciones y novedades del periodo seleccionado.
+        - generic [ref=f15e220]:
+          - heading "Régimen laboral 21×7" [level=4] [ref=f15e221]
+          - paragraph [ref=f15e222]: Las horas extras de entrada y salida no se contabilizan salvo autorización del administrador para cada fecha.
+          - generic [ref=f15e223]:
+            - strong [ref=f15e224]: 01/09/2026
+            - generic [ref=f15e225]: "Entrada: sin autorizar · Salida: sin autorizar"
+          - generic [ref=f15e226]:
+            - strong [ref=f15e227]: 02/09/2026
+            - generic [ref=f15e228]: "Entrada: sin autorizar · Salida: sin autorizar"
+          - generic [ref=f15e229]:
+            - strong [ref=f15e230]: 03/09/2026
+            - generic [ref=f15e231]: "Entrada: sin autorizar · Salida: sin autorizar"
+          - generic [ref=f15e232]:
+            - strong [ref=f15e233]: 04/09/2026
+            - generic [ref=f15e234]: "Entrada: sin autorizar · Salida: sin autorizar"
+          - generic [ref=f15e235]:
+            - strong [ref=f15e236]: 05/09/2026
+            - generic [ref=f15e237]: "Entrada: sin autorizar · Salida: sin autorizar"
+          - generic [ref=f15e238]:
+            - strong [ref=f15e239]: 06/09/2026
+            - generic [ref=f15e240]: "Entrada: sin autorizar · Salida: sin autorizar"
+          - generic [ref=f15e241]:
+            - strong [ref=f15e242]: 07/09/2026
+            - generic [ref=f15e243]: "Entrada: sin autorizar · Salida: sin autorizar"
+          - generic [ref=f15e244]:
+            - strong [ref=f15e245]: 08/09/2026
+            - generic [ref=f15e246]: "Entrada: sin autorizar · Salida: sin autorizar"
+          - generic [ref=f15e247]:
+            - strong [ref=f15e248]: 09/09/2026
+            - generic [ref=f15e249]: "Entrada: sin autorizar · Salida: sin autorizar"
+          - generic [ref=f15e250]:
+            - strong [ref=f15e251]: 10/09/2026
+            - generic [ref=f15e252]: "Entrada: sin autorizar · Salida: sin autorizar"
+          - generic [ref=f15e253]:
+            - strong [ref=f15e254]: 11/09/2026
+            - generic [ref=f15e255]: "Entrada: sin autorizar · Salida: sin autorizar"
+          - generic [ref=f15e256]:
+            - strong [ref=f15e257]: 12/09/2026
+            - generic [ref=f15e258]: "Entrada: sin autorizar · Salida: sin autorizar"
+          - generic [ref=f15e259]:
+            - strong [ref=f15e260]: 13/09/2026
+            - generic [ref=f15e261]: "Entrada: sin autorizar · Salida: sin autorizar"
+          - generic [ref=f15e262]:
+            - strong [ref=f15e263]: 14/09/2026
+            - generic [ref=f15e264]: "Entrada: sin autorizar · Salida: sin autorizar"
+          - generic [ref=f15e265]:
+            - strong [ref=f15e266]: 15/09/2026
+            - generic [ref=f15e267]: "Entrada: sin autorizar · Salida: sin autorizar"
+          - generic [ref=f15e268]:
+            - strong [ref=f15e269]: 16/09/2026
+            - generic [ref=f15e270]: "Entrada: sin autorizar · Salida: sin autorizar"
+          - generic [ref=f15e271]:
+            - strong [ref=f15e272]: 17/09/2026
+            - generic [ref=f15e273]: "Entrada: sin autorizar · Salida: sin autorizar"
+          - generic [ref=f15e274]:
+            - strong [ref=f15e275]: 18/09/2026
+            - generic [ref=f15e276]: "Entrada: sin autorizar · Salida: sin autorizar"
+          - generic [ref=f15e277]:
+            - strong [ref=f15e278]: 19/09/2026
+            - generic [ref=f15e279]: "Entrada: sin autorizar · Salida: sin autorizar"
+          - generic [ref=f15e280]:
+            - strong [ref=f15e281]: 20/09/2026
+            - generic [ref=f15e282]: "Entrada: sin autorizar · Salida: sin autorizar"
+          - generic [ref=f15e283]:
+            - strong [ref=f15e284]: 21/09/2026
+            - generic [ref=f15e285]: "Entrada: sin autorizar · Salida: sin autorizar"
+          - generic [ref=f15e286]:
+            - strong [ref=f15e287]: 22/09/2026
+            - generic [ref=f15e288]: "Entrada: sin autorizar · Salida: sin autorizar"
+          - generic [ref=f15e289]:
+            - strong [ref=f15e290]: 23/09/2026
+            - generic [ref=f15e291]: "Entrada: sin autorizar · Salida: sin autorizar"
+          - generic [ref=f15e292]:
+            - strong [ref=f15e293]: 24/09/2026
+            - generic [ref=f15e294]: "Entrada: sin autorizar · Salida: sin autorizar"
+          - generic [ref=f15e295]:
+            - strong [ref=f15e296]: 25/09/2026
+            - generic [ref=f15e297]: "Entrada: sin autorizar · Salida: sin autorizar"
+          - generic [ref=f15e298]:
+            - strong [ref=f15e299]: 26/09/2026
+            - generic [ref=f15e300]: "Entrada: sin autorizar · Salida: sin autorizar"
+          - generic [ref=f15e301]:
+            - strong [ref=f15e302]: 27/09/2026
+            - generic [ref=f15e303]: "Entrada: sin autorizar · Salida: sin autorizar"
+          - generic [ref=f15e304]:
+            - strong [ref=f15e305]: 28/09/2026
+            - generic [ref=f15e306]: "Entrada: sin autorizar · Salida: sin autorizar"
+          - generic [ref=f15e307]:
+            - strong [ref=f15e308]: 29/09/2026
+            - generic [ref=f15e309]: "Entrada: sin autorizar · Salida: sin autorizar"
+          - generic [ref=f15e310]:
+            - strong [ref=f15e311]: 30/09/2026
+            - generic [ref=f15e312]: "Entrada: sin autorizar · Salida: sin autorizar"
+        - table [ref=f15e314]:
+          - rowgroup [ref=f15e315]:
+            - row [ref=f15e316]:
+              - columnheader "Fecha" [ref=f15e317]
+              - columnheader "Día" [ref=f15e318]
+              - columnheader "Horario" [ref=f15e319]
+              - columnheader "Tolerancia" [ref=f15e320]
+              - columnheader "Proyecto" [ref=f15e321]
+              - columnheader "Lugar de entrada" [ref=f15e322]
+              - columnheader "Lugar de salida" [ref=f15e323]
+              - columnheader "Entrada" [ref=f15e324]
+              - columnheader "Salida" [ref=f15e325]
+              - columnheader "Tardanza" [ref=f15e326]
+              - columnheader "Horas extras" [ref=f15e327]
+              - columnheader "Horas trabajadas" [ref=f15e328]
+              - columnheader "Estado de asistencia" [ref=f15e329]
+              - columnheader "Estado de jornada" [ref=f15e330]
+          - rowgroup [ref=f15e331]:
+            - row [ref=f15e332]:
+              - cell "30/09/2026" [ref=f15e333]
+              - cell "Mié." [ref=f15e334]
+              - cell "08:00 - 18:00" [ref=f15e335]
+              - cell "5 min" [ref=f15e336]
+              - cell "-" [ref=f15e337]
+              - cell "-" [ref=f15e338]
+              - cell "-" [ref=f15e340]
+              - cell "-" [ref=f15e341]
+              - cell "-" [ref=f15e342]
+              - cell "-" [ref=f15e343]
+              - cell "-" [ref=f15e344]
+              - cell "-" [ref=f15e345]
+              - cell [ref=f15e346]:
+                - generic "Falta" [ref=f15e347]:
+                  - strong [ref=f15e348]: F
+              - cell "—" [ref=f15e349]
+            - row [ref=f15e351]:
+              - cell "29/09/2026" [ref=f15e352]
+              - cell "Mar." [ref=f15e353]
+              - cell "08:00 - 18:00" [ref=f15e354]
+              - cell "1 min" [ref=f15e355]
+              - cell "-" [ref=f15e356]
+              - cell "-" [ref=f15e357]
+              - cell "-" [ref=f15e359]
+              - cell "-" [ref=f15e360]
+              - cell "-" [ref=f15e361]
+              - cell "-" [ref=f15e362]
+              - cell "-" [ref=f15e363]
+              - cell "-" [ref=f15e364]
+              - cell [ref=f15e365]:
+                - generic "Régimen 21×7 · D7" [ref=f15e366]:
+                  - strong [ref=f15e367]: D7
+              - cell "—" [ref=f15e368]
+            - row [ref=f15e370]:
+              - cell "28/09/2026" [ref=f15e371]
+              - cell "Lun." [ref=f15e372]
+              - cell "00:00 - 18:00" [ref=f15e373]
+              - cell "23 min" [ref=f15e374]
+              - cell "-" [ref=f15e375]
+              - cell "-" [ref=f15e376]
+              - cell "-" [ref=f15e378]
+              - cell "-" [ref=f15e379]
+              - cell "-" [ref=f15e380]
+              - cell "-" [ref=f15e381]
+              - cell "-" [ref=f15e382]
+              - cell "-" [ref=f15e383]
+              - cell [ref=f15e384]:
+                - generic "Régimen 21×7 · D6" [ref=f15e385]:
+                  - strong [ref=f15e386]: D6
+              - cell "—" [ref=f15e387]
+            - row [ref=f15e389]:
+              - cell "27/09/2026" [ref=f15e390]
+              - cell "Dom." [ref=f15e391]
+              - cell "00:00 - 23:00" [ref=f15e392]
+              - cell "0 min" [ref=f15e393]
+              - cell "-" [ref=f15e394]
+              - cell "-" [ref=f15e395]
+              - cell "-" [ref=f15e397]
+              - cell "-" [ref=f15e398]
+              - cell "-" [ref=f15e399]
+              - cell "-" [ref=f15e400]
+              - cell "-" [ref=f15e401]
+              - cell "-" [ref=f15e402]
+              - cell [ref=f15e403]:
+                - generic "Régimen 21×7 · D5" [ref=f15e404]:
+                  - strong [ref=f15e405]: D5
+              - cell "—" [ref=f15e406]
+            - row [ref=f15e408]:
+              - cell "26/09/2026" [ref=f15e409]
+              - cell "Sáb." [ref=f15e410]
+              - cell "00:00 - 11:00" [ref=f15e411]
+              - cell "0 min" [ref=f15e412]
+              - cell "-" [ref=f15e413]
+              - cell "-" [ref=f15e414]
+              - cell "-" [ref=f15e416]
+              - cell "-" [ref=f15e417]
+              - cell "-" [ref=f15e418]
+              - cell "-" [ref=f15e419]
+              - cell "-" [ref=f15e420]
+              - cell "-" [ref=f15e421]
+              - cell [ref=f15e422]:
+                - generic "Régimen 21×7 · D4" [ref=f15e423]:
+                  - strong [ref=f15e424]: D4
+              - cell "—" [ref=f15e425]
+            - row [ref=f15e427]:
+              - cell "25/09/2026" [ref=f15e428]
+              - cell "Vie." [ref=f15e429]
+              - cell "12:00 - 06:00" [ref=f15e430]
+              - cell "0 min" [ref=f15e431]
+              - cell "-" [ref=f15e432]
+              - cell "-" [ref=f15e433]
+              - cell "-" [ref=f15e435]
+              - cell "-" [ref=f15e436]
+              - cell "-" [ref=f15e437]
+              - cell "-" [ref=f15e438]
+              - cell "-" [ref=f15e439]
+              - cell "-" [ref=f15e440]
+              - cell [ref=f15e441]:
+                - generic "Régimen 21×7 · D3" [ref=f15e442]:
+                  - strong [ref=f15e443]: D3
+              - cell "—" [ref=f15e444]
+            - row [ref=f15e446]:
+              - cell "24/09/2026" [ref=f15e447]
+              - cell "Jue." [ref=f15e448]
+              - cell "08:00 - 18:00" [ref=f15e449]
+              - cell "0 min" [ref=f15e450]
+              - cell "-" [ref=f15e451]
+              - cell "-" [ref=f15e452]
+              - cell "-" [ref=f15e454]
+              - cell "-" [ref=f15e455]
+              - cell "-" [ref=f15e456]
+              - cell "-" [ref=f15e457]
+              - cell "-" [ref=f15e458]
+              - cell "-" [ref=f15e459]
+              - cell [ref=f15e460]:
+                - generic "Régimen 21×7 · D2" [ref=f15e461]:
+                  - strong [ref=f15e462]: D2
+              - cell "—" [ref=f15e463]
+            - row [ref=f15e465]:
+              - cell "23/09/2026" [ref=f15e466]
+              - cell "Mié." [ref=f15e467]
+              - cell "08:00 - 18:00" [ref=f15e468]
+              - cell "5 min" [ref=f15e469]
+              - cell "-" [ref=f15e470]
+              - cell "-" [ref=f15e471]
+              - cell "-" [ref=f15e473]
+              - cell "-" [ref=f15e474]
+              - cell "-" [ref=f15e475]
+              - cell "-" [ref=f15e476]
+              - cell "-" [ref=f15e477]
+              - cell "-" [ref=f15e478]
+              - cell [ref=f15e479]:
+                - generic "Régimen 21×7 · D1" [ref=f15e480]:
+                  - strong [ref=f15e481]: D1
+              - cell "—" [ref=f15e482]
+            - row [ref=f15e484]:
+              - cell "22/09/2026" [ref=f15e485]
+              - cell "Mar." [ref=f15e486]
+              - cell "08:00 - 18:00" [ref=f15e487]
+              - cell "1 min" [ref=f15e488]
+              - cell "-" [ref=f15e489]
+              - cell "-" [ref=f15e490]
+              - cell "-" [ref=f15e492]
+              - cell "-" [ref=f15e493]
+              - cell "-" [ref=f15e494]
+              - cell "-" [ref=f15e495]
+              - cell "-" [ref=f15e496]
+              - cell "-" [ref=f15e497]
+              - cell [ref=f15e498]:
+                - generic "Régimen 21×7 · M" [ref=f15e499]:
+                  - strong [ref=f15e500]: M
+              - cell "—" [ref=f15e501]
+            - row [ref=f15e503]:
+              - cell "21/09/2026" [ref=f15e504]
+              - cell "Lun." [ref=f15e505]
+              - cell "00:00 - 18:00" [ref=f15e506]
+              - cell "23 min" [ref=f15e507]
+              - cell "-" [ref=f15e508]
+              - cell "-" [ref=f15e509]
+              - cell "-" [ref=f15e511]
+              - cell "-" [ref=f15e512]
+              - cell "-" [ref=f15e513]
+              - cell "-" [ref=f15e514]
+              - cell "-" [ref=f15e515]
+              - cell "-" [ref=f15e516]
+              - cell [ref=f15e517]:
+                - generic "Falta" [ref=f15e518]:
+                  - strong [ref=f15e519]: F
+              - cell "—" [ref=f15e520]
+            - row [ref=f15e522]:
+              - cell "20/09/2026" [ref=f15e523]
+              - cell "Dom." [ref=f15e524]
+              - cell "00:00 - 23:00" [ref=f15e525]
+              - cell "0 min" [ref=f15e526]
+              - cell "-" [ref=f15e527]
+              - cell "-" [ref=f15e528]
+              - cell "-" [ref=f15e530]
+              - cell "-" [ref=f15e531]
+              - cell "-" [ref=f15e532]
+              - cell "-" [ref=f15e533]
+              - cell "-" [ref=f15e534]
+              - cell "-" [ref=f15e535]
+              - cell [ref=f15e536]:
+                - generic "Falta" [ref=f15e537]:
+                  - strong [ref=f15e538]: F
+              - cell "—" [ref=f15e539]
+            - row [ref=f15e541]:
+              - cell "19/09/2026" [ref=f15e542]
+              - cell "Sáb." [ref=f15e543]
+              - cell "00:00 - 11:00" [ref=f15e544]
+              - cell "0 min" [ref=f15e545]
+              - cell "-" [ref=f15e546]
+              - cell "-" [ref=f15e547]
+              - cell "-" [ref=f15e549]
+              - cell "-" [ref=f15e550]
+              - cell "-" [ref=f15e551]
+              - cell "-" [ref=f15e552]
+              - cell "-" [ref=f15e553]
+              - cell "-" [ref=f15e554]
+              - cell [ref=f15e555]:
+                - generic "Falta" [ref=f15e556]:
+                  - strong [ref=f15e557]: F
+              - cell "—" [ref=f15e558]
+            - row [ref=f15e560]:
+              - cell "18/09/2026" [ref=f15e561]
+              - cell "Vie." [ref=f15e562]
+              - cell "12:00 - 06:00" [ref=f15e563]
+              - cell "0 min" [ref=f15e564]
+              - cell "-" [ref=f15e565]
+              - cell "-" [ref=f15e566]
+              - cell "-" [ref=f15e568]
+              - cell "-" [ref=f15e569]
+              - cell "-" [ref=f15e570]
+              - cell "-" [ref=f15e571]
+              - cell "-" [ref=f15e572]
+              - cell "-" [ref=f15e573]
+              - cell [ref=f15e574]:
+                - generic "Falta" [ref=f15e575]:
+                  - strong [ref=f15e576]: F
+              - cell "—" [ref=f15e577]
+            - row [ref=f15e579]:
+              - cell "17/09/2026" [ref=f15e580]
+              - cell "Jue." [ref=f15e581]
+              - cell "08:00 - 18:00" [ref=f15e582]
+              - cell "0 min" [ref=f15e583]
+              - cell "-" [ref=f15e584]
+              - cell "-" [ref=f15e585]
+              - cell "-" [ref=f15e587]
+              - cell "-" [ref=f15e588]
+              - cell "-" [ref=f15e589]
+              - cell "-" [ref=f15e590]
+              - cell "-" [ref=f15e591]
+              - cell "-" [ref=f15e592]
+              - cell [ref=f15e593]:
+                - generic "Falta" [ref=f15e594]:
+                  - strong [ref=f15e595]: F
+              - cell "—" [ref=f15e596]
+            - row [ref=f15e598]:
+              - cell "16/09/2026" [ref=f15e599]
+              - cell "Mié." [ref=f15e600]
+              - cell "08:00 - 18:00" [ref=f15e601]
+              - cell "5 min" [ref=f15e602]
+              - cell "-" [ref=f15e603]
+              - cell "-" [ref=f15e604]
+              - cell "-" [ref=f15e606]
+              - cell "-" [ref=f15e607]
+              - cell "-" [ref=f15e608]
+              - cell "-" [ref=f15e609]
+              - cell "-" [ref=f15e610]
+              - cell "-" [ref=f15e611]
+              - cell [ref=f15e612]:
+                - generic "Falta" [ref=f15e613]:
+                  - strong [ref=f15e614]: F
+              - cell "—" [ref=f15e615]
+            - row [ref=f15e617]:
+              - cell "15/09/2026" [ref=f15e618]
+              - cell "Mar." [ref=f15e619]
+              - cell "08:00 - 18:00" [ref=f15e620]
+              - cell "1 min" [ref=f15e621]
+              - cell "-" [ref=f15e622]
+              - cell "-" [ref=f15e623]
+              - cell "-" [ref=f15e625]
+              - cell "-" [ref=f15e626]
+              - cell "-" [ref=f15e627]
+              - cell "-" [ref=f15e628]
+              - cell "-" [ref=f15e629]
+              - cell "-" [ref=f15e630]
+              - cell [ref=f15e631]:
+                - generic "Falta" [ref=f15e632]:
+                  - strong [ref=f15e633]: F
+              - cell "—" [ref=f15e634]
+            - row [ref=f15e636]:
+              - cell "14/09/2026" [ref=f15e637]
+              - cell "Lun." [ref=f15e638]
+              - cell "00:00 - 18:00" [ref=f15e639]
+              - cell "23 min" [ref=f15e640]
+              - cell "-" [ref=f15e641]
+              - cell "-" [ref=f15e642]
+              - cell "-" [ref=f15e644]
+              - cell "-" [ref=f15e645]
+              - cell "-" [ref=f15e646]
+              - cell "-" [ref=f15e647]
+              - cell "-" [ref=f15e648]
+              - cell "-" [ref=f15e649]
+              - cell [ref=f15e650]:
+                - generic "Falta" [ref=f15e651]:
+                  - strong [ref=f15e652]: F
+              - cell "—" [ref=f15e653]
+            - row [ref=f15e655]:
+              - cell "13/09/2026" [ref=f15e656]
+              - cell "Dom." [ref=f15e657]
+              - cell "00:00 - 23:00" [ref=f15e658]
+              - cell "0 min" [ref=f15e659]
+              - cell "-" [ref=f15e660]
+              - cell "-" [ref=f15e661]
+              - cell "-" [ref=f15e663]
+              - cell "-" [ref=f15e664]
+              - cell "-" [ref=f15e665]
+              - cell "-" [ref=f15e666]
+              - cell "-" [ref=f15e667]
+              - cell "-" [ref=f15e668]
+              - cell [ref=f15e669]:
+                - generic "Falta" [ref=f15e670]:
+                  - strong [ref=f15e671]: F
+              - cell "—" [ref=f15e672]
+            - row [ref=f15e674]:
+              - cell "12/09/2026" [ref=f15e675]
+              - cell "Sáb." [ref=f15e676]
+              - cell "00:00 - 11:00" [ref=f15e677]
+              - cell "0 min" [ref=f15e678]
+              - cell "-" [ref=f15e679]
+              - cell "-" [ref=f15e680]
+              - cell "-" [ref=f15e682]
+              - cell "-" [ref=f15e683]
+              - cell "-" [ref=f15e684]
+              - cell "-" [ref=f15e685]
+              - cell "-" [ref=f15e686]
+              - cell "-" [ref=f15e687]
+              - cell [ref=f15e688]:
+                - generic "Falta" [ref=f15e689]:
+                  - strong [ref=f15e690]: F
+              - cell "—" [ref=f15e691]
+            - row [ref=f15e693]:
+              - cell "11/09/2026" [ref=f15e694]
+              - cell "Vie." [ref=f15e695]
+              - cell "12:00 - 06:00" [ref=f15e696]
+              - cell "0 min" [ref=f15e697]
+              - cell "-" [ref=f15e698]
+              - cell "-" [ref=f15e699]
+              - cell "-" [ref=f15e701]
+              - cell "-" [ref=f15e702]
+              - cell "-" [ref=f15e703]
+              - cell "-" [ref=f15e704]
+              - cell "-" [ref=f15e705]
+              - cell "-" [ref=f15e706]
+              - cell [ref=f15e707]:
+                - generic "Falta" [ref=f15e708]:
+                  - strong [ref=f15e709]: F
+              - cell "—" [ref=f15e710]
+        - navigation "Páginas del detalle diario" [ref=f15e712]:
+          - generic [ref=f15e713]: Mostrando 1–20 de 30 registros
+          - generic [ref=f15e714]:
+            - generic [ref=f15e715]: Página 1 de 2
+            - link "Siguiente" [ref=f15e716] [cursor=pointer]:
+              - /url: "?mes=2026-09&desde=2026-09-01&hasta=2026-09-30&empresa_id=0&trabajador_id=20&pagina=2#detalle-diario"
+        - generic [ref=f15e717]:
+          - generic [ref=f15e718]: Observación general del responsable
+          - paragraph [ref=f15e719]: Sin observaciones.
+        - region "Cierre del reporte mensual" [ref=f15e720]:
+          - generic [ref=f15e721]:
+            - heading "Cierre del reporte · Septiembre 2026" [level=3] [ref=f15e722]
+            - paragraph [ref=f15e723]: El administrador y el trabajador confirman por separado. Una corrección administrativa posterior requerirá que ambos vuelvan a cerrar el mes.
+          - generic [ref=f15e724]:
+            - generic [ref=f15e725]:
+              - generic [ref=f15e726]: Administrador
+              - strong [ref=f15e727]:
+                - generic [ref=f15e728]: 
+                - text: Cerrado por el administrador
+              - generic [ref=f15e729]: Prueba visual administrador · 10/11/2026 21:08
+            - generic [ref=f15e730]:
+              - generic [ref=f15e731]: Trabajador
+              - strong [ref=f15e732]:
+                - generic [ref=f15e733]: 
+                - text: Cerrado por el trabajador
+              - generic [ref=f15e734]: Prueba visual trabajador · 10/11/2026 21:07
+          - generic [ref=f15e735]:
+            - text: Si ambas partes desean revisar este mes, solicite su reapertura al trabajador.
+            - button "Solicitar reapertura" [ref=f15e736] [cursor=pointer]
+          - paragraph [ref=f15e737]:
+            - generic [ref=f15e738]: 
+            - text: Este reporte se corrigió después de un cierre el 10/11/2026 21:06 por Prueba visual administrador. Ambas partes ya confirmaron la versión actual.
+          - paragraph [ref=f15e739]:
+            - generic [ref=f15e740]: 
+            - text: Reporte cerrado por ambas partes. Las correcciones administrativas reabrirán el mes y quedarán auditadas.

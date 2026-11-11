@@ -38,6 +38,33 @@ if ($worker) {
     }
 }
 $reportLocked = (bool) ($closure['fully_closed'] ?? false);
+$lastRevision = null;
+$reopenRequest = null;
+$reopenSchemaAvailable = true;
+if ($worker) {
+    try {
+        $revisionStmt = db()->prepare('SELECT r.created_at, r.correction_date, r.correction_reason, u.name AS corrected_by
+            FROM attendance_report_revisions r LEFT JOIN users u ON u.id = r.corrected_by_user_id
+            WHERE r.worker_id = ? AND r.report_month = ? ORDER BY r.id DESC LIMIT 1');
+        $revisionStmt->execute([$workerId, $month]);
+        $lastRevision = $revisionStmt->fetch() ?: null;
+    } catch (PDOException $error) {
+        if ($error->getCode() !== '42S02') throw $error;
+    }
+    try {
+        $requestStmt = db()->prepare('SELECT r.status, r.reason, r.requested_at, r.approved_at,
+                admin.name AS requested_by, staff.name AS approved_by
+            FROM attendance_report_reopen_requests r
+            LEFT JOIN users admin ON admin.id = r.requested_by_user_id
+            LEFT JOIN users staff ON staff.id = r.approved_by_user_id
+            WHERE r.worker_id = ? AND r.report_month = ? ORDER BY r.id DESC LIMIT 1');
+        $requestStmt->execute([$workerId, $month]);
+        $reopenRequest = $requestStmt->fetch() ?: null;
+    } catch (PDOException $error) {
+        if ($error->getCode() !== '42S02') throw $error;
+        $reopenSchemaAvailable = false;
+    }
+}
 $canEditReport = !$personalView && !$reportLocked;
 $assignment = $report['assignment'] ?? null;
 $summary = $report['summary'] ?? [];
@@ -70,6 +97,15 @@ $monthLabel = $monthNames[(int) substr($month, 5, 2)] . ' ' . substr($month, 0, 
 $previousDate = (new DateTimeImmutable($dateFrom))->modify('-1 month');
 $previousMonthLabel = $monthNames[(int) $previousDate->format('n')] . ' ' . $previousDate->format('Y');
 $rows = $report['individual_rows'] ?? [];
+$regimeDays = [];
+foreach ($rows as $regimeRow) {
+    if (($regimeRow['labor_regime'] ?? 'regular') === '21x7'
+        && (!empty($regimeRow['early_overtime_eligible']) || !empty($regimeRow['exit_after_schedule'])
+            || !empty($regimeRow['regime_entry_overtime_allowed']) || !empty($regimeRow['regime_exit_overtime_allowed']))) {
+        $regimeDays[(string) $regimeRow['date']] = $regimeRow;
+    }
+}
+ksort($regimeDays);
 $rowsPerPage = 20;
 $totalRows = count($rows);
 $totalPages = max(1, (int) ceil($totalRows / $rowsPerPage));
@@ -217,6 +253,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="attendance-reference-rest-types">
                 <div>A cuenta de horas<strong><?= (int) ($monthlyDays['rest_hours'] ?? 0) ?> días</strong></div>
                 <div>Régimen laboral<strong><?= (int) ($monthlyDays['rest_regime'] ?? 0) ?> días</strong></div>
+                <?php if (($monthlyDays['rest_regime_worked'] ?? 0) > 0): ?><div>Trabajados en descanso 21×7<strong><?= (int) $monthlyDays['rest_regime_worked'] ?> días</strong></div><?php endif; ?>
             </div>
             <?php if (($monthlyDays['rest_unclassified'] ?? 0) > 0): ?><div class="attendance-reference-rest-extra">Sin clasificar: <?= (int) $monthlyDays['rest_unclassified'] ?></div><?php endif; ?>
         </div>
@@ -229,11 +266,13 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="attendance-reference-hour-box">
                 <span>H. canjeadas · <?= e($monthLabel) ?></span>
                 <strong><?= e(attendance_report_hours_label((int) ($monthlyHours['redeemed_minutes'] ?? 0))) ?></strong>
+                <small class="attendance-hemp-days"><?= e(attendance_report_days_label((int) ($monthlyHours['redeemed_minutes'] ?? 0))) ?></small>
                 <small><?= (int) ($monthlyHours['redeemed_saturday_days'] ?? 0) ?> sábado(s) × 6 h + <?= (int) (($monthlyHours['redeemed_days'] ?? 0) - ($monthlyHours['redeemed_saturday_days'] ?? 0)) ?> otro(s) día(s) × 8 h 30 min</small>
             </div>
             <div class="attendance-reference-hour-box">
                 <span>HEMP · <?= e($previousMonthLabel) ?></span>
                 <div class="attendance-hemp-value"><strong><?= e(attendance_report_hours_label((int) ($monthlyHours['opening_minutes'] ?? 0))) ?></strong><?php if ($canEditHemp): ?><button class="attendance-hemp-edit" type="button" data-bs-toggle="modal" data-bs-target="#attendanceHempModal" aria-label="Editar HEMP de octubre" title="Editar HEMP de octubre"><i class="fa-solid fa-pen" aria-hidden="true"></i></button><?php endif; ?></div>
+                <small class="attendance-hemp-days"><?= e(attendance_report_days_label((int) ($monthlyHours['opening_minutes'] ?? 0))) ?><?php if ($canEditHemp): ?> <button class="attendance-hemp-edit" type="button" data-bs-toggle="modal" data-bs-target="#attendanceHempModal" aria-label="Editar HEMP en días" title="Editar HEMP en días"><i class="fa-solid fa-pen" aria-hidden="true"></i></button><?php endif; ?></small>
                 <small><?= $hempAdjustment ? 'Saldo ajustado para octubre; septiembre no cambia' : 'Saldo del mes anterior' ?></small>
             </div>
         </div>
@@ -251,6 +290,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="attendance-reference-hour-result">
             <span>Horas extras vigentes</span>
             <strong><?= e(attendance_report_hours_label((int) ($monthlyHours['closing_minutes'] ?? 0))) ?></strong>
+            <small class="attendance-hemp-days"><?= e(attendance_report_days_label((int) ($monthlyHours['closing_minutes'] ?? 0))) ?></small>
             <small>HEMP + extras del mes − horas canjeadas</small>
         </div>
     </div>
@@ -269,7 +309,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <table class="table align-middle individual-report-table">
             <thead><tr><?php if (!$personalView): ?><th class="report-early-overtime-select"><label class="report-early-overtime-check"><input type="checkbox" id="selectAllEarlyOvertime" aria-label="Seleccionar todas las jornadas elegibles"><span>Sel.</span></label></th><?php endif; ?><th>Fecha</th><th>Día</th><th>Horario</th><th>Tolerancia</th><th>Proyecto</th><th>Lugar de entrada</th><th>Lugar de salida</th><th>Entrada</th><th>Salida</th><th>Tardanza</th><th>Horas extras</th><th>Horas trabajadas</th><th>Estado de asistencia</th><th>Estado de jornada</th></tr></thead>
             <tbody>
-            <?php $selectionShown = []; foreach ($visibleRows as $row): $dayTrips = $tripsByDate[(string) $row['date']] ?? []; $earlyEligible = (bool) ($row['early_overtime_eligible'] ?? false) && !isset($selectionShown[(string) $row['date']]); if ($earlyEligible) $selectionShown[(string) $row['date']] = true; $earlyAuthorized = isset($earlyOvertimeAuthorizations[(string) $row['date']]); ?>
+            <?php $selectionShown = []; foreach ($visibleRows as $row): $dayTrips = $tripsByDate[(string) $row['date']] ?? []; $earlyEligible = ($row['labor_regime'] ?? 'regular') === 'regular' && (bool) ($row['early_overtime_eligible'] ?? false) && !isset($selectionShown[(string) $row['date']]); if ($earlyEligible) $selectionShown[(string) $row['date']] = true; $earlyAuthorized = isset($earlyOvertimeAuthorizations[(string) $row['date']]); ?>
                 <tr>
                     <?php if (!$personalView): ?><td class="report-early-overtime-select"><?php if ($earlyEligible): ?><input class="form-check-input early-overtime-day" type="checkbox" value="<?= e($row['date']) ?>" data-authorized="<?= $earlyAuthorized ? '1' : '0' ?>" aria-label="<?= $earlyAuthorized ? 'Retirar' : 'Autorizar' ?> entrada anticipada del <?= e(date('d/m/Y', strtotime($row['date']))) ?>" title="<?= $earlyAuthorized ? e('Autorizado por ' . $earlyOvertimeAuthorizations[(string) $row['date']]['authorized_by_name'] . ' el ' . $earlyOvertimeAuthorizations[(string) $row['date']]['authorized_at'] . '. Marque para retirar.') : 'Marque para autorizar la entrada anticipada' ?>"><?php else: ?><span class="text-muted" title="No hay entrada anticipada elegible">—</span><?php endif; ?></td><?php endif; ?><td><?= e(date('d/m/Y', strtotime($row['date']))) ?><?php if ($earlyAuthorized): ?><small class="report-early-overtime-badge">Entrada autorizada</small><?php endif; ?></td><td><?= e($row['weekday']) ?></td><td class="attendance-time-cell text-nowrap"><?= e($row['schedule']) ?></td><td class="text-nowrap"><?= $row['tolerance_minutes'] !== null ? (int)$row['tolerance_minutes'].' min' : '-' ?></td><td><?= e($row['project'] ?? '-') ?></td><td><span class="report-route-inline"><span><?= e($row['entry_location']) ?></span><?php foreach ($dayTrips as $trip): ?><span class="report-route-step"><span class="report-route-arrow" aria-hidden="true">→</span><?= e($trip['first_destination']) ?></span><?php endforeach; ?></span></td><td><?= e($row['exit_location']) ?></td>
                     <td class="attendance-time-cell"><?= e($row['entry']) ?><?php if ($row['entry_administrative']): ?><small class="d-block text-primary">Administrativa</small><?php endif; ?></td><td class="attendance-time-cell"><?= e($row['exit']) ?><?php if (!empty($row['exit_next_day'])): ?><small class="d-block text-primary">Día siguiente</small><?php endif; ?><?php if ($row['exit_administrative']): ?><small class="d-block text-primary">Administrativa</small><?php endif; ?></td>
@@ -320,6 +360,26 @@ document.addEventListener('DOMContentLoaded', () => {
     </div>
     <?php endif; ?>
 
+    <?php if ($regimeDays): ?>
+    <details class="work-panel report-regime-details mb-3">
+        <summary>Régimen laboral 21×7 <span class="report-regime-count"><?= count($regimeDays) ?> fechas</span></summary>
+        <div class="report-regime-content">
+            <p class="text-muted small mb-3">Las horas extras de entrada y salida no se contabilizan salvo autorización del administrador para cada fecha.</p>
+            <?php foreach ($regimeDays as $regimeDate => $regimeDay): ?>
+                <div class="d-flex flex-wrap align-items-center gap-3 py-2 border-top regime-overtime-day" data-worker-id="<?= (int) $workerId ?>" data-work-date="<?= e($regimeDate) ?>">
+                    <strong><?= e(date('d/m/Y', strtotime($regimeDate))) ?></strong>
+                    <?php if (is_admin() && !$reportLocked): ?>
+                        <label class="form-check-label"><input class="form-check-input me-1 regime-entry-extra" type="checkbox" <?= !empty($regimeDay['regime_entry_overtime_allowed']) ? 'checked' : '' ?>>Autorizar entrada</label>
+                        <label class="form-check-label"><input class="form-check-input me-1 regime-exit-extra" type="checkbox" <?= !empty($regimeDay['regime_exit_overtime_allowed']) ? 'checked' : '' ?>>Autorizar salida</label>
+                        <button class="btn btn-sm btn-outline-primary save-regime-extra" type="button">Guardar</button>
+                    <?php else: ?>
+                        <span class="small">Entrada: <?= !empty($regimeDay['regime_entry_overtime_allowed']) ? 'autorizada' : 'sin autorizar' ?> · Salida: <?= !empty($regimeDay['regime_exit_overtime_allowed']) ? 'autorizada' : 'sin autorizar' ?></span>
+                    <?php endif; ?>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    </details>
+    <?php endif; ?>
     <?php if (!$personalView && !$reportLocked): ?>
     <div class="individual-report-bottom">
         <form id="attendanceReportNoteForm" class="report-note-card report-note-card-full">
@@ -338,7 +398,7 @@ document.addEventListener('DOMContentLoaded', () => {
     <section class="attendance-month-closure" aria-label="Cierre del reporte mensual">
         <div class="attendance-month-closure-heading">
             <h3>Cierre del reporte · <?= e(ucfirst($monthLabel)) ?></h3>
-            <p>El administrador y el trabajador confirman por separado. Cuando ambos cierren, este mes no admitirá correcciones.</p>
+            <p>El administrador y el trabajador confirman por separado. Una corrección administrativa posterior requerirá que ambos vuelvan a cerrar el mes.</p>
         </div>
         <?php if ($closureError): ?>
             <p class="alert alert-warning mb-0">No se pudo consultar el cierre. Instale la actualización SQL del cierre mensual.</p>
@@ -367,7 +427,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     <?php endif; ?>
                 </div>
             </div>
-            <?php if ($reportLocked): ?><p class="attendance-month-closure-complete"><i class="fa-solid fa-lock"></i> Reporte cerrado por ambas partes. No se permiten correcciones de este mes.</p><?php endif; ?>
+            <?php if ($reportLocked && $reopenSchemaAvailable): ?>
+                <div class="alert alert-info mt-3 mb-0">
+                    <?php if (($reopenRequest['status'] ?? '') === 'pending'): ?>
+                        <strong>Reapertura solicitada por <?= e((string) ($reopenRequest['requested_by'] ?: 'el administrador')) ?>.</strong>
+                        <span>Motivo: <?= e((string) $reopenRequest['reason']) ?>. El reporte permanece cerrado hasta que el trabajador acepte.</span>
+                        <?php if ($personalView): ?><button class="btn btn-primary btn-sm ms-2 js-reopen-attendance-month" type="button" data-action="approve" data-worker-id="<?= (int) $workerId ?>" data-month="<?= e($month) ?>">Aceptar reapertura</button><?php endif; ?>
+                    <?php elseif (is_admin()): ?>
+                        <span>Si ambas partes desean revisar este mes, solicite su reapertura al trabajador.</span>
+                        <button class="btn btn-outline-primary btn-sm ms-2 js-reopen-attendance-month" type="button" data-action="request" data-worker-id="<?= (int) $workerId ?>" data-month="<?= e($month) ?>">Solicitar reapertura</button>
+                    <?php else: ?>
+                        <span>El administrador puede iniciar una solicitud de reapertura de este mes.</span>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
+            <?php if (!$reportLocked && ($reopenRequest['status'] ?? '') === 'approved'): ?><p class="alert alert-info mt-3 mb-0">Reporte reabierto por acuerdo del administrador y el trabajador. Revise los cambios y vuelva a cerrarlo cuando corresponda.</p><?php endif; ?>
+            <?php if ($lastRevision): ?><p class="alert alert-warning mt-3 mb-0"><i class="fa-solid fa-clock-rotate-left me-1"></i> Este reporte se corrigió después de un cierre el <?= e(date('d/m/Y H:i', strtotime((string) $lastRevision['created_at']))) ?> por <?= e((string) ($lastRevision['corrected_by'] ?: 'un administrador')) ?>. <?= $reportLocked ? 'Ambas partes ya confirmaron la versión actual.' : 'La versión actual requiere un nuevo cierre de ambas partes.' ?></p><?php endif; ?>
+            <?php if ($reportLocked): ?><p class="attendance-month-closure-complete"><i class="fa-solid fa-lock"></i> Reporte cerrado por ambas partes. Las correcciones administrativas reabrirán el mes y quedarán auditadas.</p><?php endif; ?>
         <?php endif; ?>
     </section>
 </section>
@@ -380,6 +456,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <input type="hidden" name="worker_id" value="<?= (int) $workerId ?>"><input type="hidden" name="month" value="2026-10">
                 <p class="text-muted small">Corrige solo el saldo inicial de octubre. Las horas extras vigentes y los saldos de los meses siguientes se recalcularán automáticamente; septiembre y las marcaciones no cambian.</p>
                 <div class="row g-2"><div class="col-6"><label class="form-label" for="hempHours">Horas</label><input class="form-control" type="number" id="hempHours" name="hours" min="0" max="9999" step="1" value="<?= intdiv(max(0, (int) ($monthlyHours['opening_minutes'] ?? 0)), 60) ?>" required></div><div class="col-6"><label class="form-label" for="hempMinutes">Minutos</label><input class="form-control" type="number" id="hempMinutes" name="minutes" min="0" max="59" step="1" value="<?= max(0, (int) ($monthlyHours['opening_minutes'] ?? 0)) % 60 ?>" required></div></div>
+                <label class="form-label mt-3" for="hempDays">Días (8 h 30 min por día)</label><input class="form-control" type="number" id="hempDays" min="0" max="1176.4" step="0.1" value="<?= e(number_format(((int) ($monthlyHours['opening_minutes'] ?? 0)) / 510, 1, '.', '')) ?>"><div class="form-text">Al editar los días, se convertirán a horas y minutos; el saldo se guarda con precisión de minutos.</div>
                 <label class="form-label mt-3" for="hempReason">Motivo del ajuste</label><textarea class="form-control" id="hempReason" name="reason" maxlength="500" rows="3" required placeholder="Explique por qué se corrige el saldo inicial"></textarea>
                 <?php if ($hempAdjustment): ?><p class="small text-muted mt-2 mb-0">Último ajuste: <?= e((string) ($hempAdjustment['adjusted_by'] ?? 'Administrador')) ?> · <?= e(date('d/m/Y H:i', strtotime((string) $hempAdjustment['adjusted_at']))) ?></p><?php endif; ?>
             </div>

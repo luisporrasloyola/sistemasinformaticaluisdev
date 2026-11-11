@@ -10,6 +10,14 @@ function initQuickAttendanceMarking() {
     const location = document.getElementById('markLocationSelect');
     const schedule = document.getElementById('markScheduleSelect');
     const project = document.getElementById('markProjectSelect');
+    const laborRegime = document.getElementById('markLaborRegime');
+    const laborCycleHint = document.getElementById('markLaborCycleHint');
+    laborRegime?.addEventListener('change', () => {
+        if (!laborCycleHint || !state?.labor_cycle_code) return;
+        laborCycleHint.textContent = laborRegime.value === '21x7'
+            ? `Continúas en el régimen 21×7. Hoy corresponde ${state.labor_cycle_code}.`
+            : 'Al guardar con Regular, se interrumpirá el ciclo 21×7 desde hoy.';
+    });
     const entryButton = document.getElementById('markEntryBtn');
     const exitButton = document.getElementById('markExitBtn');
     const changeSelectionButton = document.getElementById('markChangeSelectionBtn');
@@ -212,6 +220,7 @@ function initQuickAttendanceMarking() {
         selectElements.forEach((select) => {
             select.disabled = selectionLocked || closed || (select === location && (locationsLoading || noAuthorizedLocations));
         });
+        if (laborRegime) laborRegime.disabled = started || closed;
         searchableSelects.forEach((searchable, select) => {
             searchable.prop('disabled', selectionLocked || closed || (select === location && (locationsLoading || noAuthorizedLocations))).trigger('change.select2');
         });
@@ -330,6 +339,7 @@ function initQuickAttendanceMarking() {
     async function loadState(resetSelections=false) {
         if (resetSelections) {
             selectElements.forEach((item) => setSelect(item, ''));
+            if (laborRegime) laborRegime.value = 'regular';
             state = null;
             editingSelection = true;
             syncCurrentLocationOption();
@@ -365,6 +375,10 @@ function initQuickAttendanceMarking() {
         }
 
         state = data;
+        if (laborRegime) laborRegime.value = data.labor_regime === '21x7' ? '21x7' : 'regular';
+        if (laborCycleHint) laborCycleHint.textContent = data.labor_cycle_code
+            ? `Continúas en el régimen 21×7. Hoy corresponde ${data.labor_cycle_code}${data.labor_cycle_code.startsWith('D') ? ' (descanso; si marcas, se contabilizará)' : ''}.`
+            : '';
         editingSelection = !data.has_entry && !data.has_exit;
         const defaults = data.defaults || {};
         if (!selectValue(location) && Number(defaults.location_id) > 0 && Array.from(location.options).some((option) => Number(option.value) === Number(defaults.location_id))) setSelect(location, defaults.location_id);
@@ -402,7 +416,7 @@ function initQuickAttendanceMarking() {
         if(type==='salida'){const answer=await Swal.fire({icon:'question',title:'¿Registrar salida?',text:'Al confirmar, finalizará su jornada de hoy y ya no podrá registrar otros lugares o proyectos.',showCancelButton:true,confirmButtonText:'Sí, marcar salida',cancelButtonText:'Cancelar',reverseButtons:true});if(!answer.isConfirmed)return;}
         const button=type==='entrada'?entryButton:exitButton;const original=button.innerHTML;button.disabled=true;button.innerHTML='<i class="fa-solid fa-spinner fa-spin me-2"></i>Registrando...';
         try { const [position,photo]=await Promise.all([gps(),cameraPhoto()]);const place=selectedLocation();if(map&&place){const current=[position.coords.latitude,position.coords.longitude];if(!currentMarker)currentMarker=L.marker(current).addTo(map);else currentMarker.setLatLng(current);map.fitBounds(L.latLngBounds([[place.latitude,place.longitude],current]).pad(.3));}
-            const body=new FormData();body.append('csrf_token',quickCsrf);body.append('worker_id',selectedWorkerValue());body.append('mark_type',type);body.append('location_id',locationValue);body.append('schedule_id',scheduleValue);body.append('project_id',projectValue);body.append('latitude',position.coords.latitude);body.append('longitude',position.coords.longitude);body.append('accuracy',position.coords.accuracy);body.append('photo_data',photo);body.append('observations','');
+            const body=new FormData();body.append('csrf_token',quickCsrf);body.append('worker_id',selectedWorkerValue());body.append('mark_type',type);body.append('location_id',locationValue);body.append('schedule_id',scheduleValue);body.append('project_id',projectValue);body.append('labor_regime',laborRegime?.value || 'regular');body.append('latitude',position.coords.latitude);body.append('longitude',position.coords.longitude);body.append('accuracy',position.coords.accuracy);body.append('photo_data',photo);body.append('observations','');
             const response=await fetch(`${quickBaseUrl}/servicios/control_personal/registrar_marcacion.php`,{method:'POST',body});const data=await response.json();if(!data.ok)throw new Error(data.message||'No se pudo registrar la marcación.');stopCamera();state={...(state||{}),has_entry:true,has_exit:type==='salida'};editingSelection=false;marksPage=1;renderStatus();await Swal.fire('Marcación registrada',data.message,'success');if(type==='salida')await loadRecent();else await loadState(false);
         } catch(error){Swal.fire('No se pudo registrar',error.message||String(error),'warning');} finally {stopCamera();button.innerHTML=original;renderStatus();}
     }

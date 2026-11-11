@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../includes/attendance_projects.php';
 require_once __DIR__ . '/../../includes/attendance_location_access.php';
 require_once __DIR__ . '/../../includes/attendance_report_closure.php';
 require_once __DIR__ . '/../../includes/attendance_overnight.php';
+require_once __DIR__ . '/../../includes/attendance_labor_cycle.php';
 require_module_access('control_personal.control_asistencia');
 verify_csrf($_POST['csrf_token'] ?? null);
 ensure_quick_attendance_marking_schema();
@@ -15,10 +16,12 @@ $type=(string)($_POST['mark_type']??'');
 $locationId=(int)($_POST['location_id']??0);
 $scheduleId=(int)($_POST['schedule_id']??0);
 $projectId=(int)($_POST['project_id']??0);
+$laborRegime=(string)($_POST['labor_regime']??'regular');
 $latitude=(float)($_POST['latitude']??0); $longitude=(float)($_POST['longitude']??0); $accuracy=(float)($_POST['accuracy']??0);
 $address=trim((string)($_POST['address']??'')); $observations=trim((string)($_POST['observations']??''));
 $photoData=(string)($_POST['photo_data']??'');
 if($workerId<=0 || !in_array($type,['entrada','salida'],true) || $locationId<=0 || $scheduleId<=0 || $projectId<=0) json_response(['ok'=>false,'message'=>'Seleccione lugar de marcación, horario y proyecto.'],400);
+if (!in_array($laborRegime, ['regular', '21x7'], true)) json_response(['ok'=>false,'message'=>'Seleccione un régimen laboral válido.'],400);
 if($latitude < -90 || $latitude > 90 || $longitude < -180 || $longitude > 180 || $accuracy<=0) json_response(['ok'=>false,'message'=>'Ubicación GPS no válida.'],400);
 
 function quick_mark_distance(float $lat1,float $lon1,float $lat2,float $lon2):float { $r=6371000;$dLat=deg2rad($lat2-$lat1);$dLon=deg2rad($lon2-$lon1);$a=sin($dLat/2)**2+cos(deg2rad($lat1))*cos(deg2rad($lat2))*sin($dLon/2)**2;return $r*2*atan2(sqrt($a),sqrt(1-$a)); }
@@ -38,13 +41,15 @@ if ($overnight && $type === 'entrada') {
     json_response(['ok'=>false,'message'=>'Primero debe cerrar la jornada iniciada el día anterior.'],409);
 }
 $workDate = $type === 'salida' && $overnight ? $overnight['work_date'] : $today;
+$cycleHistory = attendance_labor_cycle_history(db(), [$workerId], $workDate);
+$cycleState = attendance_labor_cycle_state($cycleHistory[$workerId] ?? [], $workDate);
 if ($workDate !== $today && $scheduleId !== $overnight['schedule_id']) {
     json_response(['ok'=>false,'message'=>'Para cerrar la jornada nocturna, conserve el horario con el que registró la entrada.'],409);
 }
 if(!attendance_worker_can_use_location(db(),$workerId,$locationId,$workDate)) json_response(['ok'=>false,'title'=>'Lugar no autorizado','message'=>'Este lugar de marcación no está habilitado para el trabajador seleccionado. Actualice la página o comuníquese con el administrador.'],403);
 $day = (int) (new DateTimeImmutable($workDate))->format('N');
 $dayStmt=db()->prepare('SELECT * FROM attendance_schedule_days WHERE schedule_id=:schedule_id AND day_of_week=:day AND status=1 LIMIT 1');$dayStmt->execute(['schedule_id'=>$scheduleId,'day'=>$day]);$scheduleDay=$dayStmt->fetch();
-if(!$scheduleDay) json_response(['ok'=>false,'message'=>'El horario seleccionado no tiene una jornada configurada para esta jornada.'],409);
+if(!$scheduleDay && !($laborRegime === '21x7' && (($cycleState['cycle']['rest'] ?? false) || ($cycleState['cycle']['transition'] ?? false)))) json_response(['ok'=>false,'message'=>'El horario seleccionado no tiene una jornada configurada para esta jornada.'],409);
 try { attendance_report_assert_editable($workerId, $workDate); }
 catch (DomainException $error) { json_response(['ok'=>false,'message'=>$error->getMessage()],409); }
 $state=db()->prepare('SELECT mark_type,location_id FROM attendance_marks WHERE worker_id=:worker AND mark_date=:date ORDER BY marked_at,id');$state->execute(['worker'=>$workerId,'date'=>$workDate]);$markState=$state->fetchAll();
@@ -58,8 +63,19 @@ if($type==='entrada'&&$hasEntry&&$lastEntryLocationId===$locationId) json_respon
 if($type==='entrada'&&!empty($scheduleDay['entry_start'])) { $available=strtotime($workDate.' '.$scheduleDay['entry_start']);$official=$scheduleDay['entry_time']??$scheduleDay['entry_end']??$scheduleDay['entry_start'];if(strtotime($scheduleDay['entry_start'])>strtotime($official))$available=strtotime($workDate.' '.$scheduleDay['entry_start'].' -1 day');if($available!==false&&time()<$available)json_response(['ok'=>false,'message'=>'Este horario permite marcar entrada desde las '.date('H:i',$available).'.'],409); }
 $recent=db()->prepare("SELECT 1 FROM attendance_marks WHERE worker_id=:worker AND mark_date=:date AND mark_type='entrada' AND location_id=:location AND schedule_id=:schedule AND project_id=:project AND marked_at>=DATE_SUB(NOW(),INTERVAL 2 MINUTE) LIMIT 1");$recent->execute(['worker'=>$workerId,'date'=>$workDate,'location'=>$locationId,'schedule'=>$scheduleId,'project'=>$projectId]);if($type==='entrada'&&$recent->fetchColumn())json_response(['ok'=>false,'message'=>'Esta llegada ya fue registrada recientemente.'],409);
 $distance=quick_mark_distance($latitude,$longitude,(float)$selected['latitude'],(float)$selected['longitude']);$within=$distance<=(float)$selected['radius_meters'];if(!$within)json_response(['ok'=>false,'title'=>'Marcación no registrada','message'=>'Está fuera del área de '.$selected['location_name'].'. Distancia actual: '.number_format($distance,2).' m; radio permitido: '.(int)$selected['radius_meters'].' m.'],400);
-$status='puntual';if($type==='entrada'){$limit=strtotime($workDate.' '.($scheduleDay['entry_end']??$scheduleDay['entry_time']));$status=time()<=$limit?'puntual':'tardanza';}else{$exitTime=$scheduleDay['exit_time']??$scheduleDay['exit_start'];$limit=strtotime($workDate.' '.$exitTime);$entryTime=$scheduleDay['entry_time']??$scheduleDay['entry_start'];if($exitTime<=$entryTime)$limit+=86400;$status=time()>=$limit?'salida_valida':'salida_anticipada';}
+$status=$type==='entrada'?'puntual':'salida_valida';
+if($scheduleDay){if($type==='entrada'){$limit=strtotime($workDate.' '.($scheduleDay['entry_end']??$scheduleDay['entry_time']));$status=time()<=$limit?'puntual':'tardanza';}else{$exitTime=$scheduleDay['exit_time']??$scheduleDay['exit_start'];$limit=strtotime($workDate.' '.$exitTime);$entryTime=$scheduleDay['entry_time']??$scheduleDay['entry_start'];if($exitTime<=$entryTime)$limit+=86400;$status=time()>=$limit?'salida_valida':'salida_anticipada';}}
 
 $assignment=db()->prepare('SELECT id FROM attendance_assignments WHERE worker_id=:worker AND location_id=:location AND schedule_id=:schedule AND valid_from<=:date AND (valid_until IS NULL OR valid_until>=:date_until) ORDER BY status DESC,id DESC LIMIT 1');$assignment->execute(['worker'=>$workerId,'location'=>$locationId,'schedule'=>$scheduleId,'date'=>$workDate,'date_until'=>$workDate]);$assignmentId=(int)$assignment->fetchColumn();
 if(!$assignmentId){$create=db()->prepare('INSERT INTO attendance_assignments(worker_id,location_id,schedule_id,activity,instructions,valid_from,valid_until,status,created_by_user_id) VALUES(:worker,:location,:schedule,:activity,:instructions,:date,:date_until,0,:user)');$create->execute(['worker'=>$workerId,'location'=>$locationId,'schedule'=>$scheduleId,'activity'=>$selected['project_name'],'instructions'=>'Registro generado desde marcación directa.','date'=>$workDate,'date_until'=>$workDate,'user'=>(int)(current_user()['id']??0)?:null]);$assignmentId=(int)db()->lastInsertId();}
-try{$photo=quick_mark_photo($photoData);$pdo=db();$pdo->beginTransaction();attendance_report_assert_editable($workerId,$workDate,$pdo,true);$insert=$pdo->prepare('INSERT INTO attendance_marks(assignment_id,program_id,worker_id,location_id,schedule_id,project_id,mark_type,mark_date,mark_time,marked_at,latitude,longitude,accuracy_meters,address,distance_meters,within_radius,schedule_status,location_status,final_status,photo_path,observations) VALUES(:assignment,NULL,:worker,:location,:schedule,:project,:type,:date,:time,:marked_at,:latitude,:longitude,:accuracy,:address,:distance,1,:schedule_status,\'dentro_del_radio\',:final_status,:photo,:observations)');$insert->execute(['assignment'=>$assignmentId,'worker'=>$workerId,'location'=>$locationId,'schedule'=>$scheduleId,'project'=>$projectId,'type'=>$type,'date'=>$workDate,'time'=>$time,'marked_at'=>$now,'latitude'=>$latitude,'longitude'=>$longitude,'accuracy'=>$accuracy,'address'=>$address?:null,'distance'=>round($distance,2),'schedule_status'=>$status,'final_status'=>$status,'photo'=>$photo,'observations'=>$observations?:null]);$clearOverride=$pdo->prepare('DELETE FROM attendance_manual_day_overrides WHERE worker_id=:worker AND mark_date=:date');$clearOverride->execute(['worker'=>$workerId,'date'=>$workDate]);$pdo->commit();json_response(['ok'=>true,'message'=>$type==='entrada'?'Entrada registrada en '.$selected['location_name'].'.':'Salida registrada. La jornada ha finalizado.','status'=>$status]);}catch(Throwable $e){if(isset($pdo)&&$pdo->inTransaction())$pdo->rollBack();json_response(['ok'=>false,'message'=>$e->getMessage()],400);}
+try{$photo=quick_mark_photo($photoData);$pdo=db();$pdo->beginTransaction();attendance_report_assert_editable($workerId,$workDate,$pdo,true);
+$regimeStmt=$pdo->prepare('SELECT regime FROM attendance_labor_regimes WHERE worker_id=:worker AND work_date=:date FOR UPDATE');
+$regimeStmt->execute(['worker'=>$workerId,'date'=>$workDate]);
+$savedRegime=$regimeStmt->fetchColumn();
+if ($savedRegime === false) {
+    $pdo->prepare('INSERT INTO attendance_labor_regimes (worker_id,work_date,regime,selected_by_user_id) VALUES (:worker,:date,:regime,:user)')
+        ->execute(['worker'=>$workerId,'date'=>$workDate,'regime'=>$laborRegime,'user'=>(int)(current_user()['id']??0)?:null]);
+} elseif ($savedRegime !== $laborRegime) {
+    throw new DomainException('El régimen laboral de esta jornada ya está registrado. Actualice la página.');
+}
+$insert=$pdo->prepare('INSERT INTO attendance_marks(assignment_id,program_id,worker_id,location_id,schedule_id,project_id,mark_type,mark_date,mark_time,marked_at,latitude,longitude,accuracy_meters,address,distance_meters,within_radius,schedule_status,location_status,final_status,photo_path,observations) VALUES(:assignment,NULL,:worker,:location,:schedule,:project,:type,:date,:time,:marked_at,:latitude,:longitude,:accuracy,:address,:distance,1,:schedule_status,\'dentro_del_radio\',:final_status,:photo,:observations)');$insert->execute(['assignment'=>$assignmentId,'worker'=>$workerId,'location'=>$locationId,'schedule'=>$scheduleId,'project'=>$projectId,'type'=>$type,'date'=>$workDate,'time'=>$time,'marked_at'=>$now,'latitude'=>$latitude,'longitude'=>$longitude,'accuracy'=>$accuracy,'address'=>$address?:null,'distance'=>round($distance,2),'schedule_status'=>$status,'final_status'=>$status,'photo'=>$photo,'observations'=>$observations?:null]);$clearOverride=$pdo->prepare('DELETE FROM attendance_manual_day_overrides WHERE worker_id=:worker AND mark_date=:date');$clearOverride->execute(['worker'=>$workerId,'date'=>$workDate]);$pdo->commit();json_response(['ok'=>true,'message'=>$type==='entrada'?'Entrada registrada en '.$selected['location_name'].'.':'Salida registrada. La jornada ha finalizado.','status'=>$status]);}catch(Throwable $e){if(isset($pdo)&&$pdo->inTransaction())$pdo->rollBack();if(!empty($photo)&&is_file(UPLOAD_PATH.DIRECTORY_SEPARATOR.'marcaciones'.DIRECTORY_SEPARATOR.basename($photo)))@unlink(UPLOAD_PATH.DIRECTORY_SEPARATOR.'marcaciones'.DIRECTORY_SEPARATOR.basename($photo));json_response(['ok'=>false,'message'=>$e->getMessage()],400);}

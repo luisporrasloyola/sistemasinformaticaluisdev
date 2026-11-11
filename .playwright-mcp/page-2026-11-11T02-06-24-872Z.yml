@@ -1,0 +1,416 @@
+- generic [ref=f5e2]:
+  - complementary [ref=f5e3]:
+    - generic [ref=f5e4]:
+      - generic [ref=f5e5]: 
+      - generic [ref=f5e7]:
+        - generic [ref=f5e8]: Life
+        - generic [ref=f5e9]: Maquinarias
+    - generic [ref=f5e10]: Menú principal
+    - navigation [ref=f5e11]:
+      - link " Dashboard" [ref=f5e12] [cursor=pointer]:
+        - /url: http://localhost/lifemaquinarias/panel.php
+        - generic [ref=f5e13]: 
+        - generic [ref=f5e14]: Dashboard
+      - button " Control de personal " [expanded] [ref=f5e15] [cursor=pointer]:
+        - generic [ref=f5e16]: 
+        - generic [ref=f5e17]: Control de personal
+        - generic [ref=f5e18]: 
+      - generic [ref=f5e20]:
+        - link " Dashboard de asistencia" [ref=f5e21] [cursor=pointer]:
+          - /url: http://localhost/lifemaquinarias/modulos/control_personal/dashboard_asistencia.php
+          - generic [ref=f5e22]: 
+          - generic [ref=f5e23]: Dashboard de asistencia
+        - link " Calendario laboral" [ref=f5e24] [cursor=pointer]:
+          - /url: http://localhost/lifemaquinarias/modulos/control_personal/calendario_laboral.php
+          - generic [ref=f5e25]: 
+          - generic [ref=f5e26]: Calendario laboral
+        - link " Plantillas de horarios" [ref=f5e27] [cursor=pointer]:
+          - /url: http://localhost/lifemaquinarias/modulos/control_personal/horarios.php
+          - generic [ref=f5e28]: 
+          - generic [ref=f5e29]: Plantillas de horarios
+        - link " Lugares de marcación" [ref=f5e30] [cursor=pointer]:
+          - /url: http://localhost/lifemaquinarias/modulos/control_personal/puntos_marcacion.php
+          - generic [ref=f5e31]: 
+          - generic [ref=f5e32]: Lugares de marcación
+        - link " Asignaciones" [ref=f5e33] [cursor=pointer]:
+          - /url: http://localhost/lifemaquinarias/modulos/control_personal/asignaciones.php
+          - generic [ref=f5e34]: 
+          - generic [ref=f5e35]: Asignaciones
+        - link " Clientes" [ref=f5e36] [cursor=pointer]:
+          - /url: http://localhost/lifemaquinarias/modulos/control_personal/proyectos.php
+          - generic [ref=f5e37]: 
+          - generic [ref=f5e38]: Clientes
+        - link " Calendario y programación de jornadas" [ref=f5e39] [cursor=pointer]:
+          - /url: http://localhost/lifemaquinarias/modulos/control_personal/programacion_personal.php
+          - generic [ref=f5e40]: 
+          - generic [ref=f5e41]: Calendario y programación de jornadas
+        - link " Control de asistencia" [ref=f5e42] [cursor=pointer]:
+          - /url: http://localhost/lifemaquinarias/modulos/control_personal/control_asistencia.php
+          - generic [ref=f5e43]: 
+          - generic [ref=f5e44]: Control de asistencia
+        - link " Reporte de marcaciones" [ref=f5e45] [cursor=pointer]:
+          - /url: http://localhost/lifemaquinarias/modulos/control_personal/reportes.php
+          - generic [ref=f5e46]: 
+          - generic [ref=f5e47]: Reporte de marcaciones
+        - link " Reporte de asistencias" [ref=f5e48] [cursor=pointer]:
+          - /url: http://localhost/lifemaquinarias/modulos/control_personal/reporte_asistencias.php
+          - generic [ref=f5e49]: 
+          - generic [ref=f5e50]: Reporte de asistencias
+        - link " Control de asistencia_old" [ref=f5e51] [cursor=pointer]:
+          - /url: http://localhost/lifemaquinarias/modulos/aliados/control_asistencia.php
+          - generic [ref=f5e52]: 
+          - generic [ref=f5e53]: Control de asistencia_old
+      - button " Requisitos " [ref=f5e54] [cursor=pointer]:
+        - generic [ref=f5e55]: 
+        - generic [ref=f5e56]: Requisitos
+        - generic [ref=f5e57]: 
+      - text:   
+      - button " Maquinaria " [ref=f5e58] [cursor=pointer]:
+        - generic [ref=f5e59]: 
+        - generic [ref=f5e60]: Maquinaria
+        - generic [ref=f5e61]: 
+      - text:   
+      - button " Empresa " [ref=f5e62] [cursor=pointer]:
+        - generic [ref=f5e63]: 
+        - generic [ref=f5e64]: Empresa
+        - generic [ref=f5e65]: 
+      - text:     
+      - button " Clientes " [ref=f5e66] [cursor=pointer]:
+        - generic [ref=f5e67]: 
+        - generic [ref=f5e68]: Clientes
+        - generic [ref=f5e69]: 
+      - text:  
+      - button " Cobranzas " [ref=f5e70] [cursor=pointer]:
+        - generic [ref=f5e71]: 
+        - generic [ref=f5e72]: Cobranzas
+        - generic [ref=f5e73]: 
+      - text: 
+      - button " Finanzas " [ref=f5e74] [cursor=pointer]:
+        - generic [ref=f5e75]: 
+        - generic [ref=f5e76]: Finanzas
+        - generic [ref=f5e77]: 
+      - text:  
+      - button " Empresa Maquirenta " [ref=f5e78] [cursor=pointer]:
+        - generic [ref=f5e79]: 
+        - generic [ref=f5e80]: Empresa Maquirenta
+        - generic [ref=f5e81]: 
+      - text:                        
+      - link " Usuarios" [ref=f5e82] [cursor=pointer]:
+        - /url: http://localhost/lifemaquinarias/modulos/usuario/usuarios.php
+        - generic [ref=f5e83]: 
+        - generic [ref=f5e84]: Usuarios
+      - button " Configuración " [ref=f5e85] [cursor=pointer]:
+        - generic [ref=f5e86]: 
+        - generic [ref=f5e87]: Configuración
+        - generic [ref=f5e88]: 
+      - text: 
+      - link " Cerrar sesión" [ref=f5e89] [cursor=pointer]:
+        - /url: http://localhost/lifemaquinarias/salir.php
+        - generic [ref=f5e90]: 
+        - generic [ref=f5e91]: Cerrar sesión
+    - generic [ref=f5e92]:
+      - strong [ref=f5e93]: © 2026 Life Maquinarias
+      - generic [ref=f5e94]: Todos los derechos reservados.
+  - main [ref=f5e95]:
+    - generic [ref=f5e96]:
+      - button "Alternar menú" [ref=f5e97] [cursor=pointer]:
+        - generic [ref=f5e98]: 
+      - generic [ref=f5e99]:
+        - button "Observaciones" [ref=f5e100] [cursor=pointer]:
+          - generic [ref=f5e101]: 
+          - generic [ref=f5e102]: "32"
+        - text:                                 
+      - generic [ref=f5e103]:
+        - button "Notificaciones" [ref=f5e104] [cursor=pointer]:
+          - generic [ref=f5e105]: 
+          - generic [ref=f5e106]: "19"
+        - text:                    
+      - img "Usuario" [ref=f5e109]
+    - generic [ref=f5e110]:
+      - generic [ref=f5e111]:
+        - generic [ref=f5e112]:
+          - heading "Dashboard de asistencia" [level=1] [ref=f5e113]
+          - paragraph [ref=f5e114]: Resumen operativo de asistencias, faltas, tardanzas y cobertura diaria.
+        - generic [ref=f5e115]:
+          - generic [ref=f5e116]:
+            - generic [ref=f5e117]: Por empresa
+            - combobox [aria-hidden] [ref=f5e118]
+            - combobox [ref=f5e121] [cursor=pointer]:
+              - textbox "Todas las empresas" [ref=f5e122]
+          - generic [ref=f5e123]:
+            - generic [ref=f5e124]: Por trabajador
+            - combobox [aria-hidden] [ref=f5e125]
+            - combobox [ref=f5e128] [cursor=pointer]:
+              - textbox "PRUEBA VISUAL 21X7 - 9370bc68df5" [ref=f5e129]
+          - generic [ref=f5e130]:
+            - generic [ref=f5e131]: Desde
+            - textbox "Desde" [ref=f5e132]: 2026-09-01
+          - generic [ref=f5e133]:
+            - generic [ref=f5e134]: Hasta
+            - textbox "Hasta" [ref=f5e135]: 2026-09-30
+          - button " Filtrar" [ref=f5e136] [cursor=pointer]:
+            - generic [ref=f5e137]: 
+            - text: Filtrar
+      - generic [ref=f5e138]:
+        - generic [ref=f5e139]:
+          - generic [ref=f5e140]: Asistencias
+          - strong [ref=f5e141]: "0"
+          - generic [ref=f5e142]: Jornadas sin incidencias
+          - generic [ref=f5e143]: 
+        - generic [ref=f5e144]:
+          - generic [ref=f5e145]: Faltas
+          - strong [ref=f5e146]: "22"
+          - generic [ref=f5e147]: Ausencias del periodo
+          - generic [ref=f5e148]: 
+        - generic [ref=f5e149]:
+          - generic [ref=f5e150]: Tardanzas
+          - strong [ref=f5e151]: "0"
+          - generic [ref=f5e152]: Entradas fuera de tolerancia
+          - generic [ref=f5e153]: 
+        - generic [ref=f5e154]:
+          - generic [ref=f5e155]: Asistió con salida anticipada
+          - strong [ref=f5e156]: "0"
+          - generic [ref=f5e157]: Salidas antes del horario
+          - generic [ref=f5e158]: 
+        - generic [ref=f5e159]:
+          - generic [ref=f5e160]: Asistió con tardanza y salida anticipada
+          - strong [ref=f5e161]: "0"
+          - generic [ref=f5e162]: Jornadas con ambas incidencias
+          - generic [ref=f5e163]: 
+      - generic [ref=f5e164]:
+        - generic [ref=f5e165]:
+          - generic [ref=f5e166]:
+            - heading "Matriz mensual" [level=2] [ref=f5e167]
+            - generic [ref=f5e168]: 01/09/2026 - 30/09/2026 · Página 1 de 1
+          - generic "Leyenda de la matriz mensual" [ref=f5e169]:
+            - generic [ref=f5e170]:
+              - strong [ref=f5e171]: A
+              - text: Asistió
+            - generic [ref=f5e172]:
+              - strong [ref=f5e173]: F
+              - text: Falta
+            - generic [ref=f5e174]:
+              - strong [ref=f5e175]: T
+              - text: Tarde
+            - generic [ref=f5e176]:
+              - strong [ref=f5e177]: ASA
+              - text: Asistió con salida anticipada
+            - generic [ref=f5e178]:
+              - strong [ref=f5e179]: ATSA
+              - text: Asistió con tardanza y salida anticipada
+            - generic [ref=f5e180]:
+              - strong [ref=f5e181]: VAC
+              - text: Vacaciones
+            - generic [ref=f5e182]:
+              - strong [ref=f5e183]: PER
+              - text: Permiso
+            - generic [ref=f5e184]:
+              - strong [ref=f5e185]: D
+              - text: Descanso
+            - generic [ref=f5e186]:
+              - strong [ref=f5e187]: FER
+              - text: Feriado
+            - generic [ref=f5e188]:
+              - strong [ref=f5e189]: NL
+              - text: No laborable
+          - table [ref=f5e191]:
+            - rowgroup [ref=f5e192]:
+              - row [ref=f5e193]:
+                - columnheader "Personal" [ref=f5e194]
+                - columnheader "MA 1" [ref=f5e195]:
+                  - generic [ref=f5e196]: MA
+                  - generic [ref=f5e197]: "1"
+                - columnheader "MI 2" [ref=f5e198]:
+                  - generic [ref=f5e199]: MI
+                  - generic [ref=f5e200]: "2"
+                - columnheader "JU 3" [ref=f5e201]:
+                  - generic [ref=f5e202]: JU
+                  - generic [ref=f5e203]: "3"
+                - columnheader "VI 4" [ref=f5e204]:
+                  - generic [ref=f5e205]: VI
+                  - generic [ref=f5e206]: "4"
+                - columnheader "SA 5" [ref=f5e207]:
+                  - generic [ref=f5e208]: SA
+                  - generic [ref=f5e209]: "5"
+                - columnheader "DO 6" [ref=f5e210]:
+                  - generic [ref=f5e211]: DO
+                  - generic [ref=f5e212]: "6"
+                - columnheader "LU 7" [ref=f5e213]:
+                  - generic [ref=f5e214]: LU
+                  - generic [ref=f5e215]: "7"
+                - columnheader "MA 8" [ref=f5e216]:
+                  - generic [ref=f5e217]: MA
+                  - generic [ref=f5e218]: "8"
+                - columnheader "MI 9" [ref=f5e219]:
+                  - generic [ref=f5e220]: MI
+                  - generic [ref=f5e221]: "9"
+                - columnheader "JU 10" [ref=f5e222]:
+                  - generic [ref=f5e223]: JU
+                  - generic [ref=f5e224]: "10"
+                - columnheader "VI 11" [ref=f5e225]:
+                  - generic [ref=f5e226]: VI
+                  - generic [ref=f5e227]: "11"
+                - columnheader "SA 12" [ref=f5e228]:
+                  - generic [ref=f5e229]: SA
+                  - generic [ref=f5e230]: "12"
+                - columnheader "DO 13" [ref=f5e231]:
+                  - generic [ref=f5e232]: DO
+                  - generic [ref=f5e233]: "13"
+                - columnheader "LU 14" [ref=f5e234]:
+                  - generic [ref=f5e235]: LU
+                  - generic [ref=f5e236]: "14"
+                - columnheader "MA 15" [ref=f5e237]:
+                  - generic [ref=f5e238]: MA
+                  - generic [ref=f5e239]: "15"
+                - columnheader "MI 16" [ref=f5e240]:
+                  - generic [ref=f5e241]: MI
+                  - generic [ref=f5e242]: "16"
+                - columnheader "JU 17" [ref=f5e243]:
+                  - generic [ref=f5e244]: JU
+                  - generic [ref=f5e245]: "17"
+                - columnheader "VI 18" [ref=f5e246]:
+                  - generic [ref=f5e247]: VI
+                  - generic [ref=f5e248]: "18"
+                - columnheader "SA 19" [ref=f5e249]:
+                  - generic [ref=f5e250]: SA
+                  - generic [ref=f5e251]: "19"
+                - columnheader "DO 20" [ref=f5e252]:
+                  - generic [ref=f5e253]: DO
+                  - generic [ref=f5e254]: "20"
+                - columnheader "LU 21" [ref=f5e255]:
+                  - generic [ref=f5e256]: LU
+                  - generic [ref=f5e257]: "21"
+                - columnheader "MA 22" [ref=f5e258]:
+                  - generic [ref=f5e259]: MA
+                  - generic [ref=f5e260]: "22"
+                - columnheader "MI 23" [ref=f5e261]:
+                  - generic [ref=f5e262]: MI
+                  - generic [ref=f5e263]: "23"
+                - columnheader "JU 24" [ref=f5e264]:
+                  - generic [ref=f5e265]: JU
+                  - generic [ref=f5e266]: "24"
+                - columnheader "VI 25" [ref=f5e267]:
+                  - generic [ref=f5e268]: VI
+                  - generic [ref=f5e269]: "25"
+                - columnheader "SA 26" [ref=f5e270]:
+                  - generic [ref=f5e271]: SA
+                  - generic [ref=f5e272]: "26"
+                - columnheader "DO 27" [ref=f5e273]:
+                  - generic [ref=f5e274]: DO
+                  - generic [ref=f5e275]: "27"
+                - columnheader "LU 28" [ref=f5e276]:
+                  - generic [ref=f5e277]: LU
+                  - generic [ref=f5e278]: "28"
+                - columnheader "MA 29" [ref=f5e279]:
+                  - generic [ref=f5e280]: MA
+                  - generic [ref=f5e281]: "29"
+                - columnheader "MI 30" [ref=f5e282]:
+                  - generic [ref=f5e283]: MI
+                  - generic [ref=f5e284]: "30"
+            - rowgroup [ref=f5e285]:
+              - row [ref=f5e286]:
+                - cell "PRUEBA VISUAL 21X7 Life Maquinarias" [ref=f5e287]:
+                  - strong [ref=f5e288]: PRUEBA VISUAL 21X7
+                  - generic [ref=f5e289]: Life Maquinarias
+                - button "Ver detalle de PRUEBA VISUAL 21X7 del 01/09/2026" [ref=f5e290] [cursor=pointer]:
+                  - generic "Faltó" [ref=f5e291]: F
+                - button "Ver detalle de PRUEBA VISUAL 21X7 del 02/09/2026" [ref=f5e292] [cursor=pointer]:
+                  - generic "Faltó" [ref=f5e293]: F
+                - button "Ver detalle de PRUEBA VISUAL 21X7 del 03/09/2026" [ref=f5e294] [cursor=pointer]:
+                  - generic "Faltó" [ref=f5e295]: F
+                - button "Ver detalle de PRUEBA VISUAL 21X7 del 04/09/2026" [ref=f5e296] [cursor=pointer]:
+                  - generic "Faltó" [ref=f5e297]: F
+                - button "Ver detalle de PRUEBA VISUAL 21X7 del 05/09/2026" [ref=f5e298] [cursor=pointer]:
+                  - generic "Faltó" [ref=f5e299]: F
+                - button "Ver detalle de PRUEBA VISUAL 21X7 del 06/09/2026" [ref=f5e300] [cursor=pointer]:
+                  - generic "Faltó" [ref=f5e301]: F
+                - button "Ver detalle de PRUEBA VISUAL 21X7 del 07/09/2026" [ref=f5e302] [cursor=pointer]:
+                  - generic "Faltó" [ref=f5e303]: F
+                - button "Ver detalle de PRUEBA VISUAL 21X7 del 08/09/2026" [ref=f5e304] [cursor=pointer]:
+                  - generic "Faltó" [ref=f5e305]: F
+                - button "Ver detalle de PRUEBA VISUAL 21X7 del 09/09/2026" [ref=f5e306] [cursor=pointer]:
+                  - generic "Faltó" [ref=f5e307]: F
+                - button "Ver detalle de PRUEBA VISUAL 21X7 del 10/09/2026" [ref=f5e308] [cursor=pointer]:
+                  - generic "Faltó" [ref=f5e309]: F
+                - button "Ver detalle de PRUEBA VISUAL 21X7 del 11/09/2026" [ref=f5e310] [cursor=pointer]:
+                  - generic "Faltó" [ref=f5e311]: F
+                - button "Ver detalle de PRUEBA VISUAL 21X7 del 12/09/2026" [ref=f5e312] [cursor=pointer]:
+                  - generic "Faltó" [ref=f5e313]: F
+                - button "Ver detalle de PRUEBA VISUAL 21X7 del 13/09/2026" [ref=f5e314] [cursor=pointer]:
+                  - generic "Faltó" [ref=f5e315]: F
+                - button "Ver detalle de PRUEBA VISUAL 21X7 del 14/09/2026" [ref=f5e316] [cursor=pointer]:
+                  - generic "Faltó" [ref=f5e317]: F
+                - button "Ver detalle de PRUEBA VISUAL 21X7 del 15/09/2026" [ref=f5e318] [cursor=pointer]:
+                  - generic "Faltó" [ref=f5e319]: F
+                - button "Ver detalle de PRUEBA VISUAL 21X7 del 16/09/2026" [ref=f5e320] [cursor=pointer]:
+                  - generic "Faltó" [ref=f5e321]: F
+                - button "Ver detalle de PRUEBA VISUAL 21X7 del 17/09/2026" [ref=f5e322] [cursor=pointer]:
+                  - generic "Faltó" [ref=f5e323]: F
+                - button "Ver detalle de PRUEBA VISUAL 21X7 del 18/09/2026" [ref=f5e324] [cursor=pointer]:
+                  - generic "Faltó" [ref=f5e325]: F
+                - button "Ver detalle de PRUEBA VISUAL 21X7 del 19/09/2026" [ref=f5e326] [cursor=pointer]:
+                  - generic "Faltó" [ref=f5e327]: F
+                - button "Ver detalle de PRUEBA VISUAL 21X7 del 20/09/2026" [ref=f5e328] [cursor=pointer]:
+                  - generic "Faltó" [ref=f5e329]: F
+                - button "Ver detalle de PRUEBA VISUAL 21X7 del 21/09/2026" [ref=f5e330] [cursor=pointer]:
+                  - generic "Faltó" [ref=f5e331]: F
+                - button "Ver detalle de PRUEBA VISUAL 21X7 del 22/09/2026" [ref=f5e332] [cursor=pointer]:
+                  - generic "Día de transición del régimen 21×7" [ref=f5e333]: M
+                - button "Ver detalle de PRUEBA VISUAL 21X7 del 23/09/2026" [ref=f5e334] [cursor=pointer]:
+                  - generic "Descanso del régimen 21×7" [ref=f5e335]: D1
+                - button "Ver detalle de PRUEBA VISUAL 21X7 del 24/09/2026" [ref=f5e336] [cursor=pointer]:
+                  - generic "Descanso del régimen 21×7" [ref=f5e337]: D2
+                - button "Ver detalle de PRUEBA VISUAL 21X7 del 25/09/2026" [ref=f5e338] [cursor=pointer]:
+                  - generic "Descanso del régimen 21×7" [ref=f5e339]: D3
+                - button "Ver detalle de PRUEBA VISUAL 21X7 del 26/09/2026" [ref=f5e340] [cursor=pointer]:
+                  - generic "Descanso del régimen 21×7" [ref=f5e341]: D4
+                - button "Ver detalle de PRUEBA VISUAL 21X7 del 27/09/2026" [ref=f5e342] [cursor=pointer]:
+                  - generic "Descanso del régimen 21×7" [ref=f5e343]: D5
+                - button "Ver detalle de PRUEBA VISUAL 21X7 del 28/09/2026" [ref=f5e344] [cursor=pointer]:
+                  - generic "Descanso del régimen 21×7" [ref=f5e345]: D6
+                - button "Ver detalle de PRUEBA VISUAL 21X7 del 29/09/2026" [ref=f5e346] [cursor=pointer]:
+                  - generic "Descanso del régimen 21×7" [ref=f5e347]: D7
+                - button "Ver detalle de PRUEBA VISUAL 21X7 del 30/09/2026" [ref=f5e348] [cursor=pointer]:
+                  - generic "Faltó" [ref=f5e349]: F
+        - region "Resumen por fechas seleccionadas" [ref=f5e350]:
+          - generic [ref=f5e351]:
+            - generic [ref=f5e352]:
+              - heading "Resumen por fechas seleccionadas" [level=3] [ref=f5e353]
+              - paragraph [ref=f5e354]: Totales por trabajador durante el periodo seleccionado.
+            - generic [ref=f5e355]: 1 trabajador
+          - table [ref=f5e357]:
+            - rowgroup [ref=f5e358]:
+              - row [ref=f5e359]:
+                - columnheader "Personal" [ref=f5e360]
+                - columnheader "Asistencias" [ref=f5e361]
+                - columnheader "Tardanzas" [ref=f5e362]
+                - columnheader "Faltas" [ref=f5e363]
+                - columnheader "Asistió con salida anticipada" [ref=f5e364]
+                - columnheader "Asistió con tardanza y salida anticipada" [ref=f5e365]
+            - rowgroup [ref=f5e366]:
+              - row [ref=f5e367]:
+                - cell "PRUEBA VISUAL 21X7 Life Maquinarias" [ref=f5e368]:
+                  - strong [ref=f5e369]: PRUEBA VISUAL 21X7
+                  - generic [ref=f5e370]: Life Maquinarias
+                - cell [ref=f5e371]:
+                  - generic [ref=f5e372]:
+                    - generic [aria-hidden] [ref=f5e373]: 
+                    - strong [ref=f5e374]: "0"
+                - cell [ref=f5e375]:
+                  - generic [ref=f5e376]:
+                    - generic [aria-hidden] [ref=f5e377]: 
+                    - strong [ref=f5e378]: "0"
+                - cell [ref=f5e379]:
+                  - generic [ref=f5e380]:
+                    - generic [aria-hidden] [ref=f5e381]: 
+                    - strong [ref=f5e382]: "22"
+                - cell [ref=f5e383]:
+                  - generic [ref=f5e384]:
+                    - generic [aria-hidden] [ref=f5e385]: 
+                    - strong [ref=f5e386]: "0"
+                - cell [ref=f5e387]:
+                  - generic [ref=f5e388]:
+                    - generic [aria-hidden] [ref=f5e389]: 
+                    - strong [ref=f5e390]: "0"
+          - generic "Paginación de la matriz y el resumen" [ref=f5e391]: Mostrando 1–1 de 1 trabajadores
+      - text:                       

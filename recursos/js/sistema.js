@@ -2,8 +2,45 @@ const BASE_URL = window.APP_URL || window.location.origin;
 const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
 const personalServiceUrl = (file) => `${window.personalServiceBase || BASE_URL + "/servicios"}/${file}`;
 
+document.querySelectorAll('.save-regime-extra').forEach(button => {
+    button.addEventListener('click', async () => {
+        const row = button.closest('.regime-overtime-day');
+        const body = new FormData();
+        body.append('csrf_token', csrf);
+        body.append('worker_id', row.dataset.workerId);
+        body.append('work_date', row.dataset.workDate);
+        body.append('allow_entry', row.querySelector('.regime-entry-extra').checked ? '1' : '0');
+        body.append('allow_exit', row.querySelector('.regime-exit-extra').checked ? '1' : '0');
+        button.disabled = true;
+        try {
+            const response = await fetch(`${BASE_URL}/servicios/control_personal/guardar_autorizacion_extras_regimen.php`, { method: 'POST', body });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo guardar la autorización.');
+            window.location.reload();
+        } catch (error) {
+            Swal.fire('Atención', error.message || 'No se pudo guardar la autorización.', 'warning');
+            button.disabled = false;
+        }
+    });
+});
+
 const attendanceHempForm = document.getElementById('attendanceHempForm');
 if (attendanceHempForm) {
+    const hempDays = document.getElementById('hempDays');
+    const hempHours = attendanceHempForm.elements.hours;
+    const hempMinutes = attendanceHempForm.elements.minutes;
+    hempDays.addEventListener('input', () => {
+        if (hempDays.value === '' || !hempDays.validity.valid) return;
+        const totalMinutes = Math.round(Number(hempDays.value) * 510);
+        hempHours.value = String(Math.floor(totalMinutes / 60));
+        hempMinutes.value = String(totalMinutes % 60);
+    });
+    const updateHempDays = () => {
+        if (hempHours.value === '' || hempMinutes.value === '') return;
+        hempDays.value = ((Number(hempHours.value) * 60 + Number(hempMinutes.value)) / 510).toFixed(1);
+    };
+    hempHours.addEventListener('input', updateHempDays);
+    hempMinutes.addEventListener('input', updateHempDays);
     attendanceHempForm.addEventListener('submit', async (event) => {
         event.preventDefault();
         if (!attendanceHempForm.reportValidity()) return;
@@ -121,7 +158,7 @@ document.querySelectorAll('.js-close-attendance-month').forEach((button) => {
         const confirmed = await Swal.fire({
             icon: 'warning',
             title: `Cerrar como ${role}`,
-            text: `Se registrará su conformidad para el mes ${button.dataset.month}. Este cierre no se puede deshacer. Cuando ambas partes cierren, ya no se podrán corregir datos del mes.`,
+            text: `Se registrará su conformidad para el mes ${button.dataset.month}. Si luego se corrige el reporte o ambos acuerdan reabrirlo, será necesario cerrarlo nuevamente.`,
             showCancelButton: true,
             confirmButtonText: 'Sí, cerrar mi parte',
             cancelButtonText: 'Cancelar',
@@ -141,6 +178,40 @@ document.querySelectorAll('.js-close-attendance-month').forEach((button) => {
         } catch (error) {
             button.disabled = false;
             Swal.fire('Atención', error.message || 'No se pudo cerrar el reporte.', 'warning');
+        }
+    });
+});
+document.querySelectorAll('.js-reopen-attendance-month').forEach((button) => {
+    button.addEventListener('click', async () => {
+        const requesting = button.dataset.action === 'request';
+        const confirmation = await Swal.fire(requesting ? {
+            icon: 'question', title: 'Solicitar reapertura',
+            text: 'El reporte seguirá cerrado hasta que el trabajador acepte. Indique el motivo de la solicitud.',
+            input: 'textarea', inputPlaceholder: 'Motivo de la reapertura', inputAttributes: { maxlength: '500' },
+            inputValidator: (value) => value.trim() ? undefined : 'Indique el motivo.',
+            showCancelButton: true, confirmButtonText: 'Enviar solicitud', cancelButtonText: 'Cancelar'
+        } : {
+            icon: 'warning', title: 'Aceptar reapertura',
+            text: `El reporte de ${button.dataset.month} volverá a estar abierto y ambos deberán cerrarlo nuevamente.`,
+            showCancelButton: true, confirmButtonText: 'Aceptar reapertura', cancelButtonText: 'Cancelar'
+        });
+        if (!confirmation.isConfirmed) return;
+        const body = new FormData();
+        body.append('csrf_token', csrf);
+        body.append('worker_id', button.dataset.workerId);
+        body.append('month', button.dataset.month);
+        body.append('action', requesting ? 'request' : 'approve');
+        if (requesting) body.append('reason', confirmation.value.trim());
+        button.disabled = true;
+        try {
+            const response = await fetch(`${BASE_URL}/servicios/control_personal/reabrir_reporte_asistencia_mensual.php`, { method: 'POST', body });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo tramitar la reapertura.');
+            await Swal.fire('Reapertura', data.message, 'success');
+            window.location.reload();
+        } catch (error) {
+            button.disabled = false;
+            Swal.fire('Atención', error.message || 'Inténtelo nuevamente.', 'warning');
         }
     });
 });
@@ -183,6 +254,14 @@ function initAttendanceMatrixDetail() {
     if (!modalElement) return;
 
     const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+    const laborRegimeForm = document.getElementById('attendanceLaborRegimeForm');
+    const laborRegimeSelect = document.getElementById('matrixLaborRegime');
+    const laborRegimeReason = document.getElementById('matrixLaborReason');
+    let manualInitialSnapshot = '';
+    let pendingRegimeChange = null;
+    const manualSnapshot = () => Array.from(document.querySelectorAll('#attendanceManualCorrectionForm input, #attendanceManualCorrectionForm select, #attendanceManualCorrectionForm textarea'))
+        .filter((control) => !['worker_id', 'mark_date'].includes(control.name))
+        .map((control) => [control.id || control.name, control.value, control.checked, control.disabled]);
     const fields = {
         date: document.getElementById('matrixDetailDate'),
         worker: document.getElementById('matrixDetailWorker'),
@@ -231,6 +310,17 @@ function initAttendanceMatrixDetail() {
     };
     const adminMarkModalElement = document.getElementById('attendanceAdminMarkModal');
     const adminMarkForm = document.getElementById('attendanceAdminMarkForm');
+    const adminLaborRegime = document.getElementById('adminMarkLaborRegime');
+    const adminLaborReason = document.getElementById('adminMarkLaborReason');
+    const syncAdminLaborRegime = () => {
+        if (!adminLaborRegime || !adminLaborReason) return;
+        const previous = fields.adminMarkOpen?._selectedCell?.dataset.laborRegime === '21x7' ? '21x7' : 'regular';
+        const changed = adminLaborRegime.value !== previous;
+        document.getElementById('adminMarkLaborReasonGroup')?.classList.toggle('d-none', !changed);
+        adminLaborReason.required = changed;
+        if (!changed) adminLaborReason.value = '';
+    };
+    adminLaborRegime?.addEventListener('change', syncAdminLaborRegime);
     const syncAdminMarkResult = () => {
         if (!adminMarkForm) return;
         const typeField = document.getElementById('adminMarkType');
@@ -283,12 +373,16 @@ function initAttendanceMatrixDetail() {
                 });
                 document.getElementById('adminMarkDate').value = cell.dataset.dateIso || '';
                 document.getElementById('adminMarkWorkerLabel').textContent = `${cell.dataset.worker || ''} · ${cell.dataset.date || ''}`;
+                document.getElementById('adminMarkClosedReportWarning')?.classList.toggle('d-none', cell.dataset.reportSigned !== '1');
                 document.getElementById('adminMarkTime').value = new Date().toTimeString().slice(0, 5);
                 document.getElementById('adminMarkSchedule').value = hasEntry ? (cell.dataset.entryScheduleId || cell.dataset.scheduleId || '') : (cell.dataset.scheduleId || '');
                 const suggestedLocationId = hasEntry ? (cell.dataset.exitLocationId || '') : (cell.dataset.entryLocationId || '');
                 locationField.value = allowedLocationIds.has(suggestedLocationId) ? suggestedLocationId : '';
                 document.getElementById('adminMarkProject').value = hasEntry ? (cell.dataset.entryProjectId || '') : '';
                 document.getElementById('adminMarkReason').value = '';
+                adminLaborRegime.value = cell.dataset.laborRegime === '21x7' ? '21x7' : 'regular';
+                adminLaborReason.value = '';
+                syncAdminLaborRegime();
                 adminMarkForm.querySelector('[name="attendance_result"][value="puntual"]').checked = true;
                 syncAdminMarkResult();
                 document.getElementById('adminMarkStatus').innerHTML = `<span class="badge ${hasEntry ? 'text-bg-success' : 'text-bg-secondary'}">${hasEntry ? 'Entrada registrada' : 'Sin marcación de entrada'}</span><span class="badge ${hasExit ? 'text-bg-success' : 'text-bg-secondary'}">${hasExit ? 'Salida registrada' : 'Salida no registrada'}</span>`;
@@ -308,6 +402,11 @@ function initAttendanceMatrixDetail() {
             if (!adminMarkForm.reportValidity()) return;
             const button = adminMarkForm.querySelector('button[type="submit"]');
             const body = new FormData(adminMarkForm);
+            const previousRegime = fields.adminMarkOpen?._selectedCell?.dataset.laborRegime === '21x7' ? '21x7' : 'regular';
+            if (adminLaborRegime?.value === previousRegime) {
+                body.delete('labor_regime');
+                body.delete('labor_reason');
+            }
             body.append('csrf_token', csrf);
             button.disabled = true;
             try {
@@ -437,12 +536,19 @@ function initAttendanceMatrixDetail() {
         setScheduleEditing(fields.manualScheduleSelect.disabled, cell);
     });
     const openDetail = (cell) => {
+        document.getElementById('matrixClosedReportWarning')?.classList.toggle('d-none', cell.dataset.reportSigned !== '1');
+        if (laborRegimeForm) {
+            laborRegimeForm._selectedCell = cell;
+            laborRegimeForm.classList.remove('d-none');
+            laborRegimeSelect.value = cell.dataset.laborRegime === '21x7' ? '21x7' : 'regular';
+            laborRegimeReason.value = '';
+        }
         if (fields.adminMarkOpen) fields.adminMarkOpen._selectedCell = cell;
         fields.date.textContent = cell.dataset.date || '';
         fields.worker.textContent = cell.dataset.worker || '';
         fields.company.textContent = cell.dataset.company || 'Sin empresa';
         const code = cell.dataset.code || '-';
-        const summaryCode = code === 'ASA' ? 'A' : (code === 'ATSA' ? 'T' : code);
+        const summaryCode = /^A\d+$/.test(code) ? 'A' : (code === 'ASA' ? 'A' : (code === 'ATSA' ? 'T' : code));
         fields.status.textContent = ({ A: 'Asistió', T: 'Tarde', F: 'Faltó' })[summaryCode] || cell.dataset.status || 'Sin marcaciones';
         fields.entry.textContent = cell.dataset.entry || '-';
         fields.exit.textContent = cell.dataset.exit || '-';
@@ -466,7 +572,9 @@ function initAttendanceMatrixDetail() {
             fields.permitExitEdit.innerHTML = '<i class="fa-solid fa-pen me-1"></i>Permitir editar';
             const isAbsentResult = cell.dataset.code === 'F';
             const isLateResult = cell.dataset.code === 'T' || cell.dataset.code === 'ATSA';
-            const isAttendanceResult = ['A', 'T', 'ASA', 'ATSA'].includes(cell.dataset.code);
+            const hasRegisteredMark = (cell.dataset.entry && cell.dataset.entry !== '-') || (cell.dataset.exit && cell.dataset.exit !== '-');
+            const isAttendanceResult = ['A', 'T', 'ASA', 'ATSA'].includes(cell.dataset.code)
+                || /^A\d+$/.test(cell.dataset.code || '') || (/^(M|D[1-7])$/.test(cell.dataset.code || '') && hasRegisteredMark);
             fields.manualResultPunctual.checked = isAttendanceResult && !isLateResult;
             fields.manualResultLate.checked = isLateResult;
             const sameDayEdit = cell.dataset.manualLock === 'today' && cell.dataset.manualEnabled === '1';
@@ -519,6 +627,7 @@ function initAttendanceMatrixDetail() {
         else if (summaryCode === 'F') fields.badge.classList.add('detail-badge-danger');
         else fields.badge.classList.add('detail-badge-neutral');
 
+        manualInitialSnapshot = JSON.stringify(manualSnapshot());
         modal.show();
     };
 
@@ -615,8 +724,12 @@ function initAttendanceMatrixDetail() {
                 });
                 if (!confirmation.isConfirmed) return;
             }
-            const button = manualForm.querySelector('button[type="submit"]');
+            const button = laborRegimeForm.querySelector('button[type="submit"]');
             const body = new FormData(manualForm);
+            if (pendingRegimeChange) {
+                body.set('labor_regime', pendingRegimeChange.regime);
+                body.set('labor_reason', pendingRegimeChange.reason);
+            }
             if (calendarOnlyMode) {
                 ['entry_time', 'exit_time', 'entry_location_id', 'exit_location_id', 'project_id', 'schedule_id'].forEach((name) => body.delete(name));
             }
@@ -637,6 +750,7 @@ function initAttendanceMatrixDetail() {
             } catch (error) {
                 Swal.fire('Atención', error.message || 'No se pudo guardar la corrección.', 'warning');
             } finally {
+                pendingRegimeChange = null;
                 button.disabled = false;
             }
         });
@@ -648,6 +762,45 @@ function initAttendanceMatrixDetail() {
             event.preventDefault();
             openDetail(cell);
         });
+    });
+    laborRegimeForm?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const cell = laborRegimeForm._selectedCell;
+        if (!cell) return;
+        const regimeChanged = laborRegimeSelect.value !== (cell.dataset.laborRegime === '21x7' ? '21x7' : 'regular');
+        const attendanceChanged = !manualForm?.classList.contains('d-none')
+            && JSON.stringify(manualSnapshot()) !== manualInitialSnapshot;
+        if (!regimeChanged && !attendanceChanged) {
+            Swal.fire('Sin cambios', 'Modifique la asistencia o el régimen antes de guardar.', 'info');
+            return;
+        }
+        if (regimeChanged && !laborRegimeReason.value.trim()) {
+            laborRegimeReason.setCustomValidity('Indique el motivo del cambio de régimen.');
+            laborRegimeReason.reportValidity();
+            laborRegimeReason.setCustomValidity('');
+            return;
+        }
+        if (attendanceChanged) {
+            pendingRegimeChange = regimeChanged ? { regime: laborRegimeSelect.value, reason: laborRegimeReason.value.trim() } : null;
+            manualForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            return;
+        }
+        const button = laborRegimeForm.querySelector('button[type="submit"]');
+        const body = new FormData(laborRegimeForm);
+        body.append('csrf_token', csrf);
+        body.append('worker_id', cell.dataset.workerId || '');
+        body.append('work_date', cell.dataset.dateIso || '');
+        button.disabled = true;
+        try {
+            const response = await fetch(`${window.APP_URL}/servicios/control_personal/guardar_regimen_laboral.php`, { method: 'POST', body });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo guardar el régimen.');
+            window.location.reload();
+        } catch (error) {
+            Swal.fire('Atención', error.message || 'No se pudo guardar el régimen.', 'warning');
+        } finally {
+            button.disabled = false;
+        }
     });
 }
 

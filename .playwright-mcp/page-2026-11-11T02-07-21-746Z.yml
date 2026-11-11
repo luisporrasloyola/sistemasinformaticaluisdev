@@ -1,0 +1,19 @@
+- main [ref=f7e3]:
+  - generic [ref=f7e6]:
+    - generic [ref=f7e7]: 
+    - generic [ref=f7e10]:
+      - heading "LIFE MAQUINARIAS" [level=1] [ref=f7e11]
+      - paragraph [ref=f7e12]: Gestión de Personal y Requisitos
+    - generic [ref=f7e13]:
+      - generic [ref=f7e14]: Correo Electrónico
+      - generic [ref=f7e15]:
+        - generic [ref=f7e16]: 
+        - textbox [active] [ref=f7e18]
+    - generic [ref=f7e19]:
+      - generic [ref=f7e20]: Contraseña
+      - generic [ref=f7e21]:
+        - generic [ref=f7e22]: 
+        - textbox [ref=f7e24]
+    - button " Ingresar al Panel" [ref=f7e25] [cursor=pointer]:
+      - generic [ref=f7e26]: 
+      - text: Ingresar al Panel

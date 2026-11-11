@@ -1,0 +1,3 @@
+[     131ms] [WARNING] Error with Feature-Policy header: Some features are specified in both Feature-Policy and Permissions-Policy header: camera, geolocation. Values defined in Permissions-Policy header will be used. @ :1
+[     194ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ http://localhost/lifemaquinarias/ingreso.php:1
+[   10573ms] [WARNING] Error with Feature-Policy header: Some features are specified in both Feature-Policy and Permissions-Policy header: camera, geolocation. Values defined in Permissions-Policy header will be used. @ :1
