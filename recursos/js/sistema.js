@@ -366,10 +366,11 @@ function initAttendanceMatrixDetail() {
                 const locationsResponse = await fetch(`${window.APP_URL}/servicios/control_personal/listar_lugares_marcacion_trabajador.php?worker_id=${encodeURIComponent(cell.dataset.workerId || '')}`);
                 const locationsData = await locationsResponse.json();
                 if (!locationsResponse.ok || !locationsData.ok) throw new Error(locationsData.message || 'No se pudieron cargar los lugares autorizados.');
+                if (!locationsData.locations.length) throw new Error('Este trabajador no tiene lugares de marcación autorizados. Asígnele uno en Lugares de marcación.');
                 const allowedLocationIds = new Set(locationsData.locations.map((location) => String(location.id)));
-                Array.from(locationField.options).forEach((option) => {
-                    option.disabled = option.value !== '' && !allowedLocationIds.has(option.value);
-                    option.hidden = option.disabled;
+                locationField.replaceChildren(new Option('Seleccione un lugar', ''));
+                locationsData.locations.forEach((location) => {
+                    locationField.add(new Option(location.name, String(location.id)));
                 });
                 document.getElementById('adminMarkDate').value = cell.dataset.dateIso || '';
                 document.getElementById('adminMarkWorkerLabel').textContent = `${cell.dataset.worker || ''} · ${cell.dataset.date || ''}`;
@@ -539,7 +540,8 @@ function initAttendanceMatrixDetail() {
         document.getElementById('matrixClosedReportWarning')?.classList.toggle('d-none', cell.dataset.reportSigned !== '1');
         if (laborRegimeForm) {
             laborRegimeForm._selectedCell = cell;
-            laborRegimeForm.classList.remove('d-none');
+            // Mientras hoy admita una marcación, el régimen se elige allí.
+            laborRegimeForm.classList.toggle('d-none', cell.dataset.manualLock === 'today' && (!cell.dataset.exit || cell.dataset.exit === '-'));
             laborRegimeSelect.value = cell.dataset.laborRegime === '21x7' ? '21x7' : 'regular';
             laborRegimeReason.value = '';
         }

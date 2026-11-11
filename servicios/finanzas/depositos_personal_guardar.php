@@ -42,7 +42,7 @@ try {
     $newPath = $uploaded['path'];
     db()->prepare('INSERT INTO finance_personal_deposits (deposit_date, creditor, amount, payment_method, image_path, image_original_name, image_sha256, registered_by_user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
         ->execute([$date, $creditor, $amount, $method, $newPath, $uploaded['name'], $hash, (int) (current_user()['id'] ?? 0) ?: null]);
-    deposit_save_reply(201, ['id' => (int) db()->lastInsertId(), 'fecha' => $date, 'acreedor' => $creditor, 'monto' => number_format((float) $amount, 2, '.', ''), 'modo_pago' => $method]);
+    deposit_save_reply(201, ['id' => (int) db()->lastInsertId(), 'fecha' => $date, 'acreedor' => $creditor, 'depositante' => '', 'monto' => number_format((float) $amount, 2, '.', ''), 'modo_pago' => $method]);
 } catch (Throwable $error) {
     if ($newPath) delete_uploaded_file($newPath);
     if ($error instanceof PDOException && $error->getCode() === '23000') deposit_save_reply(409, ['error' => 'Esta foto ya fue registrada.', 'duplicate' => true]);

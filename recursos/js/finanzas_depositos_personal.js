@@ -48,13 +48,14 @@ document.addEventListener('DOMContentLoaded', () => {
         row.dataset.id = String(record.id);
         row.dataset.date = record.fecha;
         row.dataset.creditor = record.acreedor;
+        row.dataset.depositor = record.depositante || '';
         row.dataset.amount = record.monto;
         row.dataset.method = record.modo_pago;
         row.dataset.canManage = record.canManage === undefined ? row.dataset.canManage || '0' : (record.canManage ? '1' : '0');
         row.classList.remove('is-editing');
         row.replaceChildren();
         const [year, month, day] = record.fecha.split('-');
-        for (const value of [`${day}/${month}/${year}`, record.acreedor, `S/ ${Number(record.monto).toFixed(2)}`, record.modo_pago]) {
+        for (const value of [`${day}/${month}/${year}`, record.acreedor, `S/ ${Number(record.monto).toFixed(2)}`, record.modo_pago, record.depositante || '—']) {
             const cell = document.createElement('td');
             cell.textContent = value;
             row.appendChild(cell);
@@ -89,6 +90,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const rows = document.getElementById('personalDepositRows');
+    const totalCell = document.getElementById('personalDepositTotal');
+    function adjustTotal(cents) {
+        const next = Number(totalCell.dataset.cents || 0) + cents;
+        totalCell.dataset.cents = String(next);
+        totalCell.textContent = `S/ ${(next / 100).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    }
     rows.addEventListener('click', async event => {
         const button = event.target.closest('button[data-action]');
         if (!button) return;
@@ -99,18 +106,19 @@ document.addEventListener('DOMContentLoaded', () => {
         if (action === 'edit') {
             if (rows.querySelector('tr.is-editing')) return;
             row.classList.add('is-editing');
-            const values = [row.dataset.date, row.dataset.creditor, row.dataset.amount, row.dataset.method];
-            const types = ['date', 'text', 'number', 'text'];
+            const values = [row.dataset.date, row.dataset.creditor, row.dataset.amount, row.dataset.method, row.dataset.depositor || ''];
+            const types = ['date', 'text', 'number', 'text', 'text'];
             row.querySelectorAll('td').forEach((cell, index) => {
-                if (index > 3) return;
+                if (index > 4) return;
                 const field = document.createElement('input');
                 field.className = 'form-control form-control-sm';
                 field.type = types[index];
                 field.value = values[index];
-                field.required = true;
+                field.required = index !== 4;
                 if (index === 1) field.maxLength = 150;
                 if (index === 2) { field.min = '0.01'; field.step = '0.01'; }
                 if (index === 3) field.maxLength = 100;
+                if (index === 4) { field.maxLength = 150; field.placeholder = 'Depositante (opcional)'; }
                 cell.replaceChildren(field);
             });
             const actions = row.querySelector('.personal-deposit-actions');
@@ -128,7 +136,7 @@ document.addEventListener('DOMContentLoaded', () => {
             row.querySelector('input').focus();
             return;
         }
-        const record = {id: row.dataset.id, fecha: row.dataset.date, acreedor: row.dataset.creditor, monto: row.dataset.amount, modo_pago: row.dataset.method};
+        const record = {id: row.dataset.id, fecha: row.dataset.date, acreedor: row.dataset.creditor, monto: row.dataset.amount, modo_pago: row.dataset.method, depositante: row.dataset.depositor || ''};
         if (action === 'cancel') { renderRow(row, record); return; }
         if (action === 'delete') {
             const confirmed = window.Swal ? (await Swal.fire({title: '¿Eliminar este depósito?', text: 'También se eliminará la foto. Esta acción no se puede deshacer.', icon: 'warning', showCancelButton: true, confirmButtonText: 'Sí, eliminar', cancelButtonText: 'Cancelar', confirmButtonColor: '#dc3545'})).isConfirmed : window.confirm('¿Eliminar este depósito y su foto?');
@@ -137,7 +145,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (action === 'save') {
             const fields = Array.from(row.querySelectorAll('td input'));
             if (!fields.every(field => field.reportValidity())) return;
-            [record.fecha, record.acreedor, record.monto, record.modo_pago] = fields.map(field => field.value.trim());
+            [record.fecha, record.acreedor, record.monto, record.modo_pago, record.depositante] = fields.map(field => field.value.trim());
         }
         button.disabled = true;
         try {
@@ -146,21 +154,13 @@ document.addEventListener('DOMContentLoaded', () => {
             data.append('id', record.id);
             data.append('action', action === 'save' ? 'update' : 'delete');
             if (action === 'save') {
-                for (const key of ['fecha', 'acreedor', 'monto', 'modo_pago']) data.append(key, record[key]);
+                for (const key of ['fecha', 'acreedor', 'monto', 'modo_pago', 'depositante']) data.append(key, record[key]);
             }
             const response = await fetch(settings.actionsEndpoint, {method: 'POST', body: data, credentials: 'same-origin'});
             const result = await response.json();
             if (!response.ok) throw new Error(result.error || 'No se pudo completar la acción.');
-            if (action === 'save') renderRow(row, result);
-            else {
-                row.remove();
-                if (!rows.querySelector('tr[data-id]')) {
-                    const empty = document.createElement('tr');
-                    empty.id = 'personalDepositEmpty';
-                    empty.innerHTML = '<td colspan="5">Aún no hay depósitos registrados.</td>';
-                    rows.appendChild(empty);
-                }
-            }
+            window.location.reload();
+            return;
         } catch (error) {
             if (window.Swal) Swal.fire({icon: 'error', text: error.message});
             else window.alert(error.message);
@@ -294,6 +294,7 @@ document.addEventListener('DOMContentLoaded', () => {
             savedDates.push(result.fecha);
             const visiblePeriod = result.fecha >= settings.periodStart && result.fecha <= settings.periodEnd && settings.page === 1 && !settings.search;
             if (visiblePeriod) {
+                adjustTotal(Math.round(Number(result.monto) * 100));
                 document.getElementById('personalDepositEmpty')?.remove();
                 const row = document.createElement('tr');
                 result.canManage = settings.canManageNew;

@@ -41,15 +41,17 @@ try {
     $creditor = trim((string) ($_POST['acreedor'] ?? ''));
     $amount = trim((string) ($_POST['monto'] ?? ''));
     $method = trim((string) ($_POST['modo_pago'] ?? ''));
+    $depositor = trim((string) ($_POST['depositante'] ?? ''));
     if (is_personal_role() && !personal_deposit_is_own($creditor)) deposit_action_reply(403, ['error' => 'El acreedor debe corresponder al personal vinculado a su cuenta.']);
     $parsedDate = preg_match('/^\d{4}-\d{2}-\d{2}$/D', $date) ? DateTimeImmutable::createFromFormat('!Y-m-d', $date) : false;
     if (!$parsedDate || $parsedDate->format('Y-m-d') !== $date) deposit_action_reply(422, ['error' => 'Ingrese una fecha válida.']);
     if ($creditor === '' || mb_strlen($creditor) > 150) deposit_action_reply(422, ['error' => 'Ingrese el acreedor (máximo 150 caracteres).']);
+    if (mb_strlen($depositor) > 150) deposit_action_reply(422, ['error' => 'El depositante no puede superar 150 caracteres.']);
     if (!preg_match('/^\d{1,9}(?:\.\d{1,2})?$/D', $amount) || (float) $amount <= 0) deposit_action_reply(422, ['error' => 'Ingrese un monto válido en soles.']);
     if (!in_array($method, ['YAPE', 'PLIN', 'Tranferencia Interbank', 'Tranferencia BCP', 'Transferencia'], true)) deposit_action_reply(422, ['error' => 'El modo de pago no corresponde a un modelo configurado.']);
-    $update = db()->prepare('UPDATE finance_personal_deposits SET deposit_date = ?, creditor = ?, amount = ?, payment_method = ? WHERE id = ?' . (is_admin() ? '' : ' AND registered_by_user_id = ?'));
-    $update->execute(is_admin() ? [$date, $creditor, $amount, $method, $id] : [$date, $creditor, $amount, $method, $id, $userId]);
-    deposit_action_reply(200, ['id' => $id, 'fecha' => $date, 'acreedor' => $creditor, 'monto' => number_format((float) $amount, 2, '.', ''), 'modo_pago' => $method]);
+    $update = db()->prepare('UPDATE finance_personal_deposits SET deposit_date = ?, creditor = ?, depositor = ?, amount = ?, payment_method = ? WHERE id = ?' . (is_admin() ? '' : ' AND registered_by_user_id = ?'));
+    $update->execute(is_admin() ? [$date, $creditor, $depositor !== '' ? $depositor : null, $amount, $method, $id] : [$date, $creditor, $depositor !== '' ? $depositor : null, $amount, $method, $id, $userId]);
+    deposit_action_reply(200, ['id' => $id, 'fecha' => $date, 'acreedor' => $creditor, 'depositante' => $depositor, 'monto' => number_format((float) $amount, 2, '.', ''), 'modo_pago' => $method]);
 } catch (Throwable $error) {
     error_log('Error en acciones de depósitos personales: ' . $error->getMessage());
     deposit_action_reply(500, ['error' => 'No se pudo completar la acción. Intente nuevamente.']);
