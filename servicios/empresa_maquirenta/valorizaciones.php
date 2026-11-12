@@ -17,6 +17,7 @@ $sourceTables = [
 $recordId = filter_var($_POST['charla_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
 $field = (string) ($_POST['campo'] ?? '');
 $rawValue = trim((string) ($_POST['valor'] ?? ''));
+$adjustmentFields = ['costo_equipo', 'costo_supervisor', 'total'];
 if ($field === 'bloqueo_masivo') {
     $records = json_decode((string) ($_POST['registros'] ?? ''), true);
     if (($rawValue !== '0' && $rawValue !== '1') || !is_array($records)
@@ -59,18 +60,18 @@ if ($field === 'bloqueo_masivo') {
     json_response(['ok' => true, 'value' => $rawValue]);
 }
 if (!isset($sourceTables[$site]) || !is_int($recordId)
-    || !in_array($field, ['horas_trabajo', 'tarifa_equipo', 'tarifa_supervisor', 'descuento', 'observaciones', 'bloqueado'], true)) {
+    || !in_array($field, ['horas_trabajo', 'tarifa_equipo', 'tarifa_supervisor', 'descuento', 'observaciones', 'movilizacion_desmovilizacion', 'bloqueado', ...$adjustmentFields], true)) {
     json_response(['ok' => false, 'message' => 'Datos de valorización inválidos.'], 422);
 }
 if ($field === 'bloqueado') {
     if ($rawValue !== '0' && $rawValue !== '1') {
         json_response(['ok' => false, 'message' => 'Estado de bloqueo inválido.'], 422);
     }
-} elseif ($field === 'observaciones') {
+} elseif ($field === 'observaciones' || $field === 'movilizacion_desmovilizacion') {
     if (mb_strlen($rawValue, 'UTF-8') > 1000) {
         json_response(['ok' => false, 'message' => 'La observación no puede superar 1000 caracteres.'], 422);
     }
-} else {
+} elseif ($rawValue !== '' || !in_array($field, $adjustmentFields, true)) {
     if (!preg_match('/^\d+(?:\.\d{1,2})?$/', $rawValue)) {
         json_response(['ok' => false, 'message' => 'Ingrese un importe u horas válidos.'], 422);
     }
@@ -96,7 +97,17 @@ try {
             $stmt = db()->prepare('DELETE FROM empresa_maquirenta_valorizacion_bloqueos WHERE central = ? AND charla_id = ?');
             $stmt->execute([$site, $recordId]);
         }
-    } elseif ($field === 'descuento' || $field === 'observaciones') {
+    } elseif (in_array($field, $adjustmentFields, true)) {
+        if ($field === 'costo_equipo') {
+            $stmt = db()->prepare('INSERT INTO empresa_maquirenta_valorizacion_ajustes (central, charla_id, costo_equipo)
+                VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE costo_equipo = VALUES(costo_equipo)');
+            $stmt->execute([$site, $recordId, $rawValue === '' ? null : $rawValue]);
+        } else {
+            $stmt = db()->prepare('INSERT INTO empresa_maquirenta_valorizacion_ajustes_dia (central, fecha, ' . $field . ')
+                VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE ' . $field . ' = VALUES(' . $field . ')');
+            $stmt->execute([$site, $record['fecha'], $rawValue === '' ? null : $rawValue]);
+        }
+    } elseif ($field === 'descuento' || $field === 'observaciones' || $field === 'movilizacion_desmovilizacion') {
         $stmt = db()->prepare("INSERT INTO empresa_maquirenta_valorizacion_detalles
             (central, fecha, {$field}) VALUES (?, ?, ?)
             ON DUPLICATE KEY UPDATE {$field} = VALUES({$field})");

@@ -9,6 +9,7 @@ if (!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $month)) $month = date('Y-m');
 $site = (string) ($_GET['sede'] ?? 'ventanilla');
 if (!in_array($site, ['ventanilla', 'santa_rosa', 'consolidado'], true)) $site = 'ventanilla';
 $siteName = ['ventanilla' => 'Ventanilla', 'santa_rosa' => 'Santa Rosa', 'consolidado' => 'ambas centrales'][$site];
+$showExcluded = is_admin() && ($_GET['mostrar_excluidos'] ?? '') === '1';
 $sources = [
     'ventanilla' => ['charla' => 'empresa_maquirenta_charla_preoperacional', 'equipment' => 'empresa_maquirenta_charla_preoperacional_maquinarias', 'name' => 'Ventanilla'],
     'santa_rosa' => ['charla' => 'empresa_maquirenta_santa_rosa_charla_preoperacional', 'equipment' => 'empresa_maquirenta_santa_rosa_charla_preoperacional_maquinarias', 'name' => 'Santa Rosa'],
@@ -36,6 +37,7 @@ if ($dateFrom !== '' || $dateTo !== '') {
     }
 }
 $chipFilter = ['mes' => $month];
+if ($showExcluded) $chipFilter['mostrar_excluidos'] = '1';
 if ($rangeActive) {
     $chipFilter['desde'] = $dateFrom;
     $chipFilter['hasta'] = $dateTo;
@@ -45,7 +47,8 @@ $queries = [];
 $parameters = [];
 foreach ($selectedSources as $sourceKey => $source) {
     $queries[] = "SELECT c.id, c.fecha, m.nombre AS equipo, COALESCE(u.name, 'Sin usuario') AS registrado_por,
-        v.horas_trabajo, v.tarifa_equipo, s.tarifa_supervisor, d.descuento, d.observaciones,
+        v.horas_trabajo, v.tarifa_equipo, s.tarifa_supervisor, d.descuento, d.observaciones, d.movilizacion_desmovilizacion,
+        ae.costo_equipo AS ajuste_equipo, ad.costo_supervisor AS ajuste_supervisor, ad.total AS ajuste_total,
         COALESCE(b.bloqueado, 0) AS bloqueado,
         '{$source['name']}' AS central
         FROM {$source['charla']} c
@@ -55,7 +58,9 @@ foreach ($selectedSources as $sourceKey => $source) {
         LEFT JOIN empresa_maquirenta_valorizacion_supervisor s ON s.central = '{$sourceKey}' AND s.fecha = c.fecha
         LEFT JOIN empresa_maquirenta_valorizacion_detalles d ON d.central = '{$sourceKey}' AND d.fecha = c.fecha
         LEFT JOIN empresa_maquirenta_valorizacion_bloqueos b ON b.central = '{$sourceKey}' AND b.charla_id = c.id
-        WHERE c.fecha BETWEEN ? AND ?";
+        LEFT JOIN empresa_maquirenta_valorizacion_ajustes ae ON ae.central = '{$sourceKey}' AND ae.charla_id = c.id
+        LEFT JOIN empresa_maquirenta_valorizacion_ajustes_dia ad ON ad.central = '{$sourceKey}' AND ad.fecha = c.fecha
+        WHERE c.fecha BETWEEN ? AND ?" . ($showExcluded ? '' : ' AND COALESCE(b.bloqueado, 0) <> 1');
     array_push($parameters, $start, $end);
 }
 $stmt = db()->prepare(implode(' UNION ALL ', $queries) . ' ORDER BY fecha DESC, central DESC, equipo, id');
@@ -91,7 +96,7 @@ require __DIR__ . '/../../includes/header.php';
 .valuation-period-form .valuation-period-select{width:145px;min-width:145px}
 .valuation-period-form .btn{flex:none}
 .valuation-table-wrap{border:1px solid #dbe4f0;border-radius:12px;overflow:auto}
-.valuation-table{min-width:1480px;margin:0}
+.valuation-table{min-width:1680px;margin:0}
 .valuation-table th{padding:.8rem .55rem;font-size:.7rem;line-height:1.3;text-transform:uppercase;letter-spacing:.025em;color:#425575;background:#f5f8fc;border-bottom:1px solid #cbd8e8;white-space:normal;vertical-align:middle}
 .valuation-table td{padding:.55rem .55rem;vertical-align:middle;border-color:#e0e8f1;font-size:.84rem}
 .valuation-table .valuation-number{width:38px;min-width:38px;padding-left:.2rem;padding-right:.2rem;text-align:center;font-variant-numeric:tabular-nums;font-weight:700;color:#52657f}
@@ -113,6 +118,7 @@ require __DIR__ . '/../../includes/header.php';
 .valuation-table .valuation-equipment.is-blocked>td:not([rowspan]){background:#f3f5f8;color:#64748b}
 .valuation-table .valuation-equipment.is-blocked .valuation-input:disabled{background:#edf0f4;color:#718096;opacity:1}
 .valuation-table .valuation-equipment.is-blocked [data-equipment-cost]{color:#9a3652;font-weight:700}
+.valuation-table .valuation-cost-edit{width:105px;min-width:105px;text-align:right;font-weight:700}
 .valuation-money{white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:700}
 .valuation-supervisor-cost{text-align:center;border-left:1px solid #d4e3f1;border-right:1px solid #d4e3f1}
 .valuation-table [data-day-total]{font-size:.98rem;font-weight:800;text-align:center}
@@ -133,6 +139,9 @@ require __DIR__ . '/../../includes/header.php';
 .valuation-total-amount{font-size:1.55rem;line-height:1.15;font-weight:800;font-variant-numeric:tabular-nums;color:#103e7d}
 .valuation-save-status{min-height:1.25rem;font-size:.8rem;color:#52708f}
 .valuation-save-status.is-error{color:#b42318}
+.valuation-visibility{display:flex;justify-content:flex-end;margin:-.25rem 0 .75rem}
+.valuation-visibility .btn{background:#fff7e6;border-color:#e7b95e;color:#805315;font-weight:700;box-shadow:0 2px 6px rgba(128,83,21,.1)}
+.valuation-visibility .btn:hover,.valuation-visibility .btn:focus-visible{background:#a66b16;border-color:#a66b16;color:#fff}
 @media(max-width:640px){.valuation-toolbar{align-items:stretch;padding:.85rem}.valuation-period-form{width:100%}.valuation-total{padding:.85rem;gap:.5rem}.valuation-total-amount{font-size:1.15rem}}
 </style>
 <div class="page-title"><div><h1>Valorizaciones</h1><p>Costos diarios según Charla preoperacional.</p></div></div>
@@ -145,6 +154,7 @@ require __DIR__ . '/../../includes/header.php';
         </nav></div>
         <form class="valuation-period-form" method="get" id="valuationPeriodForm">
             <input type="hidden" name="sede" value="<?= e($site) ?>">
+            <?php if ($showExcluded): ?><input type="hidden" name="mostrar_excluidos" value="1"><?php endif; ?>
             <div class="valuation-period-fields">
                 <label class="valuation-period-choice" for="valuationPeriodMode">Período <select class="form-select valuation-period-select" id="valuationPeriodMode"><option value="mes"<?= $periodMode === 'mes' ? ' selected' : '' ?>>Por mes</option><option value="rango"<?= $periodMode === 'rango' ? ' selected' : '' ?>>Entre fechas</option></select></label>
                 <label class="valuation-date-field" for="valuationMonth" id="valuationMonthField"<?= $periodMode === 'rango' ? ' hidden' : '' ?>>Mes <input class="form-control" type="month" id="valuationMonth" name="mes" value="<?= e($month) ?>"<?= $periodMode === 'rango' ? '' : ' required' ?>></label>
@@ -158,11 +168,15 @@ require __DIR__ . '/../../includes/header.php';
         </form>
     </div>
     <?php if ($filterError !== ''): ?><div class="alert alert-warning py-2" role="alert"><?= e($filterError) ?> Se muestra el mes seleccionado.</div><?php endif; ?>
+    <?php if (is_admin()): ?>
+    <div class="valuation-visibility"><a class="btn btn-sm btn-outline-secondary" href="?<?= e(http_build_query(['sede' => $site] + array_diff_key($chipFilter, ['mostrar_excluidos' => true]) + ($showExcluded ? [] : ['mostrar_excluidos' => '1']))) ?>"><?= $showExcluded ? 'Ocultar desactivados' : 'Mostrar desactivados' ?></a></div>
+    <?php endif; ?>
     <?php if (!$groups): ?>
         <p class="text-center text-muted py-5 mb-0">No hay charlas preoperacionales de <?= e($siteName) ?> para <?= $rangeActive ? 'las fechas seleccionadas' : 'este mes' ?>.</p>
     <?php else: ?>
+    <p class="small text-muted mb-2">Los costos y el total se calculan automáticamente. Puede ajustarlos directamente; deje un importe vacío para restaurar su cálculo.</p>
     <div class="valuation-table-wrap"><table class="table valuation-table">
-        <thead><tr><th class="valuation-number" scope="col">Nro.</th><th class="valuation-counted-cell" scope="col"><label class="valuation-count-all"><input type="checkbox" data-count-all aria-label="Contabilizar todos los registros visibles" title="Incluir o excluir todos los registros visibles"></label></th><th>Fecha</th><th>Equipo</th><th>Registrado por</th><th>Horas de trabajo</th><th>Costo por hora del equipo</th><th>Costo hora supervisor + RT</th><th>Costo por día del equipo</th><th>Costo día supervisor + RT</th><th>Descuento</th><th>Total</th><th>Observaciones</th></tr></thead>
+        <thead><tr><th class="valuation-number" scope="col">Nro.</th><th class="valuation-counted-cell" scope="col"><label class="valuation-count-all"><input type="checkbox" data-count-all aria-label="Contabilizar todos los registros visibles" title="Incluir o excluir todos los registros visibles"></label></th><th>Fecha</th><th>Equipo</th><th>Registrado por</th><th>Horas de trabajo</th><th>Movilización y Desmovilización</th><th>Costo por hora del equipo</th><th>Costo hora supervisor + RT</th><th>Costo por día del equipo</th><th>Costo día supervisor + RT</th><th>Descuento</th><th>Total</th><th>Observaciones</th></tr></thead>
         <tbody>
         <?php
         $groupTones = ['blue', 'mint', 'amber', 'violet', 'rose', 'cyan'];
@@ -178,7 +192,7 @@ require __DIR__ . '/../../includes/header.php';
             $displayDate = (new DateTimeImmutable($date))->format('d/m/Y');
             $groupTone = $groupTones[$dayIndex % count($groupTones)];
         ?>
-            <tr class="valuation-date-row valuation-group-<?= $groupTone ?>" data-valuation-date="<?= e($groupKey) ?>"><td class="valuation-number" aria-hidden="true"></td><td class="valuation-counted-cell" aria-hidden="true"></td><td colspan="11"><div class="valuation-date-label"><i class="fa-regular fa-calendar" aria-hidden="true"></i><span><?= e($displayDate) ?></span><?php if ($site === 'consolidado'): ?><span class="valuation-count"><?= e($records[0]['central']) ?></span><?php endif; ?><span class="valuation-count"><?= count($records) ?> <?= count($records) === 1 ? 'equipo' : 'equipos' ?></span></div></td></tr>
+            <tr class="valuation-date-row valuation-group-<?= $groupTone ?>" data-valuation-date="<?= e($groupKey) ?>"><td class="valuation-number" aria-hidden="true"></td><td class="valuation-counted-cell" aria-hidden="true"></td><td colspan="12"><div class="valuation-date-label"><i class="fa-regular fa-calendar" aria-hidden="true"></i><span><?= e($displayDate) ?></span><?php if ($site === 'consolidado'): ?><span class="valuation-count"><?= e($records[0]['central']) ?></span><?php endif; ?><span class="valuation-count"><?= count($records) ?> <?= count($records) === 1 ? 'equipo' : 'equipos' ?></span></div></td></tr>
             <?php foreach ($records as $index => $record):
                 $equipmentName = mb_strtolower(trim((string) $record['equipo']), 'UTF-8');
                 $defaultRate = str_contains($equipmentName, 'montacarga') ? 95
@@ -188,9 +202,10 @@ require __DIR__ . '/../../includes/header.php';
             <tr class="valuation-equipment valuation-group-<?= $groupTone ?><?= $blocked ? ' is-blocked' : '' ?>" data-site="<?= $record['central'] === 'Santa Rosa' ? 'santa_rosa' : 'ventanilla' ?>" data-group="<?= e($groupKey) ?>" data-source-id="<?= (int) $record['id'] ?>">
                 <td class="valuation-number"><?= ++$rowNumber ?></td><td class="valuation-counted-cell"><label class="valuation-counted"><input type="checkbox" data-counted <?= $blocked ? '' : 'checked' ?> aria-label="Contabilizar <?= e($record['equipo']) ?> del <?= e($displayDate) ?> en <?= e($record['central']) ?>" title="<?= $blocked ? 'Excluido: marcar para contabilizar' : 'Incluido: desmarcar para excluir' ?>"></label></td><td><?= e($displayDate) ?></td><td class="fw-semibold"><?= e($record['equipo']) ?></td><td><?= e($record['registrado_por']) ?></td>
                 <td><input class="form-control form-control-sm valuation-input" type="number" min="0" max="24" step="0.25" value="<?= e(valuation_input_number($record['horas_trabajo'] ?? 8)) ?>" data-hours aria-label="Horas de <?= e($record['equipo']) ?> el <?= e($displayDate) ?>" <?= $blocked ? 'disabled' : '' ?>></td>
+                <?php if ($index === 0): ?><td rowspan="<?= count($records) ?>"><textarea class="form-control form-control-sm valuation-observations" maxlength="1000" data-mobilization aria-label="Movilización y Desmovilización del <?= e($displayDate) ?> en <?= e($record['central']) ?>"><?= e((string) ($record['movilizacion_desmovilizacion'] ?? '')) ?></textarea></td><?php endif; ?>
                 <td><input class="form-control form-control-sm valuation-input" type="number" min="0" step="0.01" value="<?= e(valuation_input_number($record['tarifa_equipo'] ?? $defaultRate)) ?>" data-equipment-rate aria-label="Tarifa del equipo <?= e($record['equipo']) ?>" <?= $blocked ? 'disabled' : '' ?>></td>
                 <td><input class="form-control form-control-sm valuation-input" type="number" min="0" step="0.01" value="<?= e(valuation_input_number($record['tarifa_supervisor'] ?? 50)) ?>" data-supervisor-rate aria-label="Tarifa supervisor y RT de <?= e($record['equipo']) ?> el <?= e($displayDate) ?>" <?= $blocked ? 'disabled' : '' ?>></td>
-                <td class="valuation-money" data-equipment-cost>—</td><?php if ($index === 0): ?><td class="valuation-money valuation-supervisor-cost" data-supervisor-cost rowspan="<?= count($records) ?>">—</td><td data-day-discount-cell rowspan="<?= count($records) ?>"><input class="form-control form-control-sm valuation-input valuation-discount" type="number" min="0" max="999999.99" step="0.01" value="<?= e(valuation_input_number($record['descuento'] ?? 0)) ?>" data-discount aria-label="Descuento del <?= e($displayDate) ?> en <?= e($record['central']) ?>"></td><td class="valuation-money valuation-supervisor-cost" data-day-total rowspan="<?= count($records) ?>">—</td><td rowspan="<?= count($records) ?>"><textarea class="form-control form-control-sm valuation-observations" maxlength="1000" data-observations aria-label="Observaciones del <?= e($displayDate) ?> en <?= e($record['central']) ?>"><?= e((string) ($record['observaciones'] ?? '')) ?></textarea></td><?php endif; ?>
+                <td><input class="form-control form-control-sm valuation-input valuation-cost-edit" type="number" min="0" max="999999.99" step="0.01" data-equipment-cost value="<?= e($record['ajuste_equipo'] === null ? '' : valuation_input_number($record['ajuste_equipo'])) ?>" data-override="<?= $record['ajuste_equipo'] === null ? '0' : '1' ?>" aria-label="Costo por día de <?= e($record['equipo']) ?> el <?= e($displayDate) ?>" <?= $blocked ? 'disabled' : '' ?>></td><?php if ($index === 0): ?><td class="valuation-supervisor-cost" rowspan="<?= count($records) ?>"><input class="form-control form-control-sm valuation-input valuation-cost-edit" type="number" min="0" max="999999.99" step="0.01" data-supervisor-cost value="<?= e($record['ajuste_supervisor'] === null ? '' : valuation_input_number($record['ajuste_supervisor'])) ?>" data-override="<?= $record['ajuste_supervisor'] === null ? '0' : '1' ?>" aria-label="Costo diario supervisor y RT del <?= e($displayDate) ?> en <?= e($record['central']) ?>"></td><td data-day-discount-cell rowspan="<?= count($records) ?>"><input class="form-control form-control-sm valuation-input valuation-discount" type="number" min="0" max="999999.99" step="0.01" value="<?= e(valuation_input_number($record['descuento'] ?? 0)) ?>" data-discount aria-label="Descuento del <?= e($displayDate) ?> en <?= e($record['central']) ?>"></td><td rowspan="<?= count($records) ?>"><input class="form-control form-control-sm valuation-input valuation-cost-edit" type="number" min="0" max="999999.99" step="0.01" data-day-total value="<?= e($record['ajuste_total'] === null ? '' : valuation_input_number($record['ajuste_total'])) ?>" data-override="<?= $record['ajuste_total'] === null ? '0' : '1' ?>" aria-label="Total del <?= e($displayDate) ?> en <?= e($record['central']) ?>"></td><td rowspan="<?= count($records) ?>"><textarea class="form-control form-control-sm valuation-observations" maxlength="1000" data-observations aria-label="Observaciones del <?= e($displayDate) ?> en <?= e($record['central']) ?>"><?= e((string) ($record['observaciones'] ?? '')) ?></textarea></td><?php endif; ?>
             </tr>
             <?php endforeach; ?>
         <?php endforeach; ?>
@@ -235,7 +250,7 @@ require __DIR__ . '/../../includes/header.php';
         checkbox.checked = included;
         checkbox.title = included ? 'Incluido: desmarcar para excluir' : 'Excluido: marcar para contabilizar';
         row.classList.toggle('is-blocked', !included);
-        row.querySelectorAll('[data-hours], [data-equipment-rate], [data-supervisor-rate]').forEach(input => { input.disabled = !included; });
+        row.querySelectorAll('[data-hours], [data-equipment-rate], [data-supervisor-rate], [data-equipment-cost]').forEach(input => { input.disabled = !included; });
     };
     const update = () => {
         let monthTotal = 0;
@@ -245,22 +260,29 @@ require __DIR__ . '/../../includes/header.php';
             const included = rows.filter(row => row.querySelector('[data-counted]').checked);
             let equipmentTotal = 0;
             rows.forEach(row => {
-                const cost = row.querySelector('[data-counted]').checked
-                    ? value(row.querySelector('[data-hours]')) * value(row.querySelector('[data-equipment-rate]')) : 0;
-                row.querySelector('[data-equipment-cost]').textContent = format.format(cost);
+                const costInput = row.querySelector('[data-equipment-cost]');
+                const calculated = value(row.querySelector('[data-hours]')) * value(row.querySelector('[data-equipment-rate]'));
+                if (costInput.dataset.override !== '1' && document.activeElement !== costInput) costInput.value = calculated.toFixed(2);
+                const cost = row.querySelector('[data-counted]').checked ? (costInput.dataset.override === '1' ? value(costInput) : calculated) : 0;
                 equipmentTotal += cost;
             });
             const supervisorHours = included.length ? Math.max(...included.map(row => value(row.querySelector('[data-hours]')))) : 0;
-            const supervisorCost = included.length ? supervisorHours * value(included[0].querySelector('[data-supervisor-rate]')) : 0;
-            const dayTotal = included.length ? equipmentTotal + supervisorCost - value(rows[0].querySelector('[data-discount]')) : 0;
+            const supervisorInput = rows[0].querySelector('[data-supervisor-cost]');
+            const calculatedSupervisor = included.length ? supervisorHours * value(included[0].querySelector('[data-supervisor-rate]')) : 0;
+            if (supervisorInput.dataset.override !== '1' && document.activeElement !== supervisorInput) supervisorInput.value = calculatedSupervisor.toFixed(2);
+            const supervisorCost = included.length ? (supervisorInput.dataset.override === '1' ? value(supervisorInput) : calculatedSupervisor) : 0;
+            const totalInput = rows[0].querySelector('[data-day-total]');
+            const calculatedTotal = included.length ? equipmentTotal + supervisorCost - value(rows[0].querySelector('[data-discount]')) : 0;
+            if (totalInput.dataset.override !== '1' && document.activeElement !== totalInput) totalInput.value = calculatedTotal.toFixed(2);
+            const dayTotal = included.length ? (totalInput.dataset.override === '1' ? value(totalInput) : calculatedTotal) : 0;
             const dayBlocked = included.length === 0;
             const supervisorCell = rows[0].querySelector('[data-supervisor-cost]');
             const discountCell = rows[0].querySelector('[data-day-discount-cell]');
             const totalCell = rows[0].querySelector('[data-day-total]');
             [supervisorCell, discountCell, totalCell].forEach(cell => cell.classList.toggle('is-day-blocked', dayBlocked));
             discountCell.querySelector('[data-discount]').disabled = dayBlocked;
-            supervisorCell.textContent = format.format(supervisorCost);
-            totalCell.textContent = format.format(dayTotal);
+            supervisorInput.disabled = dayBlocked;
+            totalInput.disabled = dayBlocked;
             monthTotal += dayTotal;
         });
         const total = document.getElementById('valuationMonthTotal');
@@ -274,9 +296,9 @@ require __DIR__ . '/../../includes/header.php';
                 if (row.dataset.group === source.dataset.group && row !== source) row.querySelector('[data-supervisor-rate]').value = event.target.value;
             });
         }
-        if (event.target.matches('[data-hours], [data-equipment-rate], [data-supervisor-rate], [data-discount]')) update();
+        if (event.target.matches('[data-hours], [data-equipment-rate], [data-supervisor-rate], [data-discount], [data-equipment-cost], [data-supervisor-cost], [data-day-total]')) update();
     });
-    panel.querySelectorAll('[data-hours], [data-equipment-rate], [data-supervisor-rate], [data-discount], [data-observations]').forEach(input => {
+    panel.querySelectorAll('[data-hours], [data-equipment-rate], [data-supervisor-rate], [data-discount], [data-observations], [data-mobilization]').forEach(input => {
         input.dataset.savedValue = input.value;
     });
     panel.addEventListener('change', async event => {
@@ -304,6 +326,7 @@ require __DIR__ . '/../../includes/header.php';
             inputs.forEach(input => setIncluded(input.closest('.valuation-equipment'), included));
             update();
             saveStatus.textContent = '';
+            <?php if (!$showExcluded): ?>if (!included) window.location.reload();<?php endif; ?>
         } catch (error) {
             syncCountAll();
             saveStatus.textContent = error.message || 'No se pudieron guardar los cambios.';
@@ -335,6 +358,7 @@ require __DIR__ . '/../../includes/header.php';
             setIncluded(row, included);
             update();
             saveStatus.textContent = '';
+            <?php if (!$showExcluded): ?>if (!included) window.location.reload();<?php endif; ?>
         } catch (error) {
             checkbox.checked = !included;
             saveStatus.textContent = error.message || 'No se pudo guardar el cambio.';
@@ -346,14 +370,14 @@ require __DIR__ . '/../../includes/header.php';
     });
     panel.addEventListener('change', async event => {
         const input = event.target;
-        if (!input.matches('[data-hours], [data-equipment-rate], [data-supervisor-rate], [data-discount], [data-observations]')) return;
+        if (!input.matches('[data-hours], [data-equipment-rate], [data-supervisor-rate], [data-discount], [data-observations], [data-mobilization]')) return;
         const row = input.closest('.valuation-equipment');
         const isSupervisor = input.matches('[data-supervisor-rate]');
-        const isObservations = input.matches('[data-observations]');
+        const isText = input.matches('[data-observations], [data-mobilization]');
         const related = isSupervisor
             ? [...panel.querySelectorAll('.valuation-equipment')].filter(item => item.dataset.group === row.dataset.group).map(item => item.querySelector('[data-supervisor-rate]'))
             : [input];
-        if (!input.checkValidity() || (!isObservations && input.value.trim() === '')) {
+        if (!input.checkValidity() || (!isText && input.value.trim() === '')) {
             related.forEach(item => { item.value = item.dataset.savedValue; });
             update();
             saveStatus.textContent = 'Ingrese un valor válido.';
@@ -364,7 +388,7 @@ require __DIR__ . '/../../includes/header.php';
         body.set('csrf_token', csrfToken);
         body.set('sede', row.dataset.site);
         body.set('charla_id', row.dataset.sourceId);
-        body.set('campo', isSupervisor ? 'tarifa_supervisor' : input.matches('[data-hours]') ? 'horas_trabajo' : input.matches('[data-equipment-rate]') ? 'tarifa_equipo' : input.matches('[data-discount]') ? 'descuento' : 'observaciones');
+        body.set('campo', isSupervisor ? 'tarifa_supervisor' : input.matches('[data-hours]') ? 'horas_trabajo' : input.matches('[data-equipment-rate]') ? 'tarifa_equipo' : input.matches('[data-discount]') ? 'descuento' : input.matches('[data-mobilization]') ? 'movilizacion_desmovilizacion' : 'observaciones');
         body.set('valor', input.value);
         related.forEach(item => { item.disabled = true; });
         saveStatus.classList.remove('is-error');
@@ -373,7 +397,7 @@ require __DIR__ . '/../../includes/header.php';
             const response = await fetch(saveUrl, {method: 'POST', body, credentials: 'same-origin', keepalive: true});
             const result = await response.json();
             if (!response.ok || !result.ok) throw new Error(result.message || 'No se pudo guardar el cambio.');
-            const displayValue = isObservations ? result.value : String(Number(result.value));
+            const displayValue = isText ? result.value : String(Number(result.value));
             related.forEach(item => { item.value = displayValue; item.dataset.savedValue = displayValue; });
             saveStatus.textContent = 'Cambio guardado.';
         } catch (error) {
@@ -385,7 +409,46 @@ require __DIR__ . '/../../includes/header.php';
             related.forEach(item => { item.disabled = false; });
         }
     });
+    panel.addEventListener('change', async event => {
+        const input = event.target;
+        if (!input.matches('[data-equipment-cost], [data-supervisor-cost], [data-day-total]')) return;
+        if (!input.checkValidity()) {
+            input.value = input.dataset.savedValue;
+            saveStatus.textContent = 'Ingrese un importe válido.';
+            saveStatus.classList.add('is-error');
+            return;
+        }
+        const row = input.closest('.valuation-equipment');
+        const field = input.matches('[data-equipment-cost]') ? 'costo_equipo' : input.matches('[data-supervisor-cost]') ? 'costo_supervisor' : 'total';
+        const body = new FormData();
+        body.set('csrf_token', csrfToken);
+        body.set('sede', row.dataset.site);
+        body.set('charla_id', row.dataset.sourceId);
+        body.set('campo', field);
+        body.set('valor', input.value.trim());
+        input.disabled = true;
+        saveStatus.classList.remove('is-error');
+        saveStatus.textContent = 'Guardando ajuste…';
+        try {
+            const response = await fetch(saveUrl, {method: 'POST', body, credentials: 'same-origin'});
+            const result = await response.json();
+            if (!response.ok || !result.ok) throw new Error(result.message || 'No se pudo guardar el ajuste.');
+            input.dataset.override = input.value.trim() === '' ? '0' : '1';
+            input.blur();
+            update();
+            input.dataset.savedValue = input.value;
+            saveStatus.textContent = 'Ajuste guardado. Deje el campo vacío para volver al cálculo automático.';
+        } catch (error) {
+            input.value = input.dataset.savedValue;
+            update();
+            saveStatus.textContent = error.message || 'No se pudo guardar el ajuste.';
+            saveStatus.classList.add('is-error');
+        } finally {
+            input.disabled = false;
+        }
+    });
     update();
+    panel.querySelectorAll('[data-equipment-cost], [data-supervisor-cost], [data-day-total]').forEach(input => { input.dataset.savedValue = input.value; });
 })();
 </script>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>

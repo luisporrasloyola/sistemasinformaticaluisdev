@@ -47,15 +47,17 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderRow(row, record) {
         row.dataset.id = String(record.id);
         row.dataset.date = record.fecha;
+        row.dataset.registration = record.registro || row.dataset.registration || 'gemini';
         row.dataset.creditor = record.acreedor;
         row.dataset.depositor = record.depositante || '';
         row.dataset.amount = record.monto;
         row.dataset.method = record.modo_pago;
+        row.dataset.hasPhoto = record.hasPhoto === undefined ? row.dataset.hasPhoto || '0' : (record.hasPhoto ? '1' : '0');
         row.dataset.canManage = record.canManage === undefined ? row.dataset.canManage || '0' : (record.canManage ? '1' : '0');
         row.classList.remove('is-editing');
         row.replaceChildren();
         const [year, month, day] = record.fecha.split('-');
-        for (const value of [`${day}/${month}/${year}`, record.acreedor, `S/ ${Number(record.monto).toFixed(2)}`, record.modo_pago, record.depositante || '—']) {
+        for (const value of [`${day}/${month}/${year}`, row.dataset.registration === 'manual' || row.dataset.registration === 'Manual' ? 'Manual' : 'Gemini', record.acreedor, `S/ ${Number(record.monto).toFixed(2)}`, record.modo_pago, record.depositante || '—']) {
             const cell = document.createElement('td');
             cell.textContent = value;
             row.appendChild(cell);
@@ -83,7 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
         remove.title = remove.ariaLabel = 'Eliminar depósito';
         remove.innerHTML = '<i class="fa-solid fa-trash" aria-hidden="true"></i>';
         if (row.dataset.canManage === '1') actions.appendChild(edit);
-        actions.appendChild(view);
+        if (row.dataset.hasPhoto === '1') actions.appendChild(view);
         if (row.dataset.canManage === '1') actions.appendChild(remove);
         cell.appendChild(actions);
         row.appendChild(cell);
@@ -91,6 +93,54 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const rows = document.getElementById('personalDepositRows');
     const totalCell = document.getElementById('personalDepositTotal');
+    const manualForm = document.getElementById('personalDepositManualForm');
+    manualForm?.addEventListener('submit', async event => {
+        event.preventDefault();
+        const workerSelect = document.getElementById('manualDepositCreditor');
+        if (!workerSelect.value) {
+            const error = document.getElementById('personalDepositManualError');
+            error.textContent = 'Busque y seleccione al acreedor del depósito.';
+            error.hidden = false;
+            if (window.jQuery && window.jQuery.fn.select2) window.jQuery(workerSelect).select2('open');
+            else workerSelect.focus();
+            return;
+        }
+        if (!manualForm.reportValidity()) return;
+        const photo = manualForm.elements.foto.files[0];
+        if (photo && (!allowed.includes(photo.type) || photo.size > 5 * 1024 * 1024)) {
+            const error = document.getElementById('personalDepositManualError');
+            error.textContent = 'Seleccione una foto JPG, PNG o WEBP de máximo 5 MB.';
+            error.hidden = false;
+            return;
+        }
+        const button = document.getElementById('personalDepositManualSave');
+        const error = document.getElementById('personalDepositManualError');
+        error.hidden = true;
+        button.disabled = true;
+        button.textContent = 'Guardando…';
+        try {
+            const data = new FormData(manualForm);
+            data.set('manual', '1');
+            data.set('csrf_token', settings.csrf);
+            const response = await fetch(settings.saveEndpoint, {method: 'POST', body: data, credentials: 'same-origin'});
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || 'No se pudo guardar el depósito.');
+            const url = new URL(window.location.href);
+            url.searchParams.set('periodo', 'mes');
+            url.searchParams.set('mes', result.fecha.slice(0, 7));
+            url.searchParams.delete('desde');
+            url.searchParams.delete('hasta');
+            url.searchParams.delete('buscar');
+            url.searchParams.delete('pagina');
+            url.hash = 'personalDepositRecordsTitle';
+            window.location.assign(url.toString());
+        } catch (cause) {
+            error.textContent = cause.message || 'No se pudo guardar el depósito.';
+            error.hidden = false;
+            button.disabled = false;
+            button.textContent = 'Guardar depósito';
+        }
+    });
     function adjustTotal(cents) {
         const next = Number(totalCell.dataset.cents || 0) + cents;
         totalCell.dataset.cents = String(next);
@@ -106,19 +156,19 @@ document.addEventListener('DOMContentLoaded', () => {
         if (action === 'edit') {
             if (rows.querySelector('tr.is-editing')) return;
             row.classList.add('is-editing');
-            const values = [row.dataset.date, row.dataset.creditor, row.dataset.amount, row.dataset.method, row.dataset.depositor || ''];
-            const types = ['date', 'text', 'number', 'text', 'text'];
+            const values = [row.dataset.date, null, row.dataset.creditor, row.dataset.amount, row.dataset.method, row.dataset.depositor || ''];
+            const types = ['date', null, 'text', 'number', 'text', 'text'];
             row.querySelectorAll('td').forEach((cell, index) => {
-                if (index > 4) return;
+                if (index === 1 || index > 5) return;
                 const field = document.createElement('input');
                 field.className = 'form-control form-control-sm';
                 field.type = types[index];
                 field.value = values[index];
-                field.required = index !== 4;
-                if (index === 1) field.maxLength = 150;
-                if (index === 2) { field.min = '0.01'; field.step = '0.01'; }
-                if (index === 3) field.maxLength = 100;
-                if (index === 4) { field.maxLength = 150; field.placeholder = 'Depositante (opcional)'; }
+                field.required = index !== 5;
+                if (index === 2) field.maxLength = 150;
+                if (index === 3) { field.min = '0.01'; field.step = '0.01'; }
+                if (index === 4) field.maxLength = 100;
+                if (index === 5) { field.maxLength = 150; field.placeholder = 'Depositante (opcional)'; }
                 cell.replaceChildren(field);
             });
             const actions = row.querySelector('.personal-deposit-actions');
@@ -136,10 +186,10 @@ document.addEventListener('DOMContentLoaded', () => {
             row.querySelector('input').focus();
             return;
         }
-        const record = {id: row.dataset.id, fecha: row.dataset.date, acreedor: row.dataset.creditor, monto: row.dataset.amount, modo_pago: row.dataset.method, depositante: row.dataset.depositor || ''};
+        const record = {id: row.dataset.id, fecha: row.dataset.date, registro: row.dataset.registration, acreedor: row.dataset.creditor, monto: row.dataset.amount, modo_pago: row.dataset.method, depositante: row.dataset.depositor || ''};
         if (action === 'cancel') { renderRow(row, record); return; }
         if (action === 'delete') {
-            const confirmed = window.Swal ? (await Swal.fire({title: '¿Eliminar este depósito?', text: 'También se eliminará la foto. Esta acción no se puede deshacer.', icon: 'warning', showCancelButton: true, confirmButtonText: 'Sí, eliminar', cancelButtonText: 'Cancelar', confirmButtonColor: '#dc3545'})).isConfirmed : window.confirm('¿Eliminar este depósito y su foto?');
+            const confirmed = window.Swal ? (await Swal.fire({title: '¿Eliminar este depósito?', text: row.dataset.hasPhoto === '1' ? 'También se eliminará la foto. Esta acción no se puede deshacer.' : 'Esta acción no se puede deshacer.', icon: 'warning', showCancelButton: true, confirmButtonText: 'Sí, eliminar', cancelButtonText: 'Cancelar', confirmButtonColor: '#dc3545'})).isConfirmed : window.confirm(row.dataset.hasPhoto === '1' ? '¿Eliminar este depósito y su foto?' : '¿Eliminar este depósito?');
             if (!confirmed) return;
         }
         if (action === 'save') {

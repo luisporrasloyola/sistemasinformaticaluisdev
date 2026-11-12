@@ -21,7 +21,7 @@ $action = (string) ($_POST['action'] ?? '');
 if (!$id || !in_array($action, ['update', 'delete'], true)) deposit_action_reply(400, ['error' => 'Acción no válida.']);
 
 try {
-    $stmt = db()->prepare('SELECT id, image_path, creditor, registered_by_user_id FROM finance_personal_deposits WHERE id = ?');
+    $stmt = db()->prepare('SELECT id, image_path, creditor, registration_source, registered_by_user_id FROM finance_personal_deposits WHERE id = ?');
     $stmt->execute([$id]);
     $record = $stmt->fetch();
     if (!$record) deposit_action_reply(404, ['error' => 'El depósito ya no existe. Actualice la página.']);
@@ -48,7 +48,11 @@ try {
     if ($creditor === '' || mb_strlen($creditor) > 150) deposit_action_reply(422, ['error' => 'Ingrese el acreedor (máximo 150 caracteres).']);
     if (mb_strlen($depositor) > 150) deposit_action_reply(422, ['error' => 'El depositante no puede superar 150 caracteres.']);
     if (!preg_match('/^\d{1,9}(?:\.\d{1,2})?$/D', $amount) || (float) $amount <= 0) deposit_action_reply(422, ['error' => 'Ingrese un monto válido en soles.']);
-    if (!in_array($method, ['YAPE', 'PLIN', 'Tranferencia Interbank', 'Tranferencia BCP', 'Transferencia'], true)) deposit_action_reply(422, ['error' => 'El modo de pago no corresponde a un modelo configurado.']);
+    if ($record['registration_source'] === 'manual') {
+        if ($method === '' || mb_strlen($method) > 100) deposit_action_reply(422, ['error' => 'Ingrese un modo de pago (máximo 100 caracteres).']);
+    } elseif (!in_array($method, ['YAPE', 'PLIN', 'Tranferencia Interbank', 'Tranferencia BCP', 'Transferencia'], true)) {
+        deposit_action_reply(422, ['error' => 'El modo de pago no corresponde a un modelo configurado.']);
+    }
     $update = db()->prepare('UPDATE finance_personal_deposits SET deposit_date = ?, creditor = ?, depositor = ?, amount = ?, payment_method = ? WHERE id = ?' . (is_admin() ? '' : ' AND registered_by_user_id = ?'));
     $update->execute(is_admin() ? [$date, $creditor, $depositor !== '' ? $depositor : null, $amount, $method, $id] : [$date, $creditor, $depositor !== '' ? $depositor : null, $amount, $method, $id, $userId]);
     deposit_action_reply(200, ['id' => $id, 'fecha' => $date, 'acreedor' => $creditor, 'depositante' => $depositor, 'monto' => number_format((float) $amount, 2, '.', ''), 'modo_pago' => $method]);
