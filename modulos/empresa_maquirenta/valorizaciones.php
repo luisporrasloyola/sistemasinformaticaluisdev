@@ -174,7 +174,6 @@ require __DIR__ . '/../../includes/header.php';
     <?php if (!$groups): ?>
         <p class="text-center text-muted py-5 mb-0">No hay charlas preoperacionales de <?= e($siteName) ?> para <?= $rangeActive ? 'las fechas seleccionadas' : 'este mes' ?>.</p>
     <?php else: ?>
-    <p class="small text-muted mb-2">Los costos y el total se calculan automáticamente. Puede ajustarlos directamente; deje un importe vacío para restaurar su cálculo.</p>
     <div class="valuation-table-wrap"><table class="table valuation-table">
         <thead><tr><th class="valuation-number" scope="col">Nro.</th><th class="valuation-counted-cell" scope="col"><label class="valuation-count-all"><input type="checkbox" data-count-all aria-label="Contabilizar todos los registros visibles" title="Incluir o excluir todos los registros visibles"></label></th><th>Fecha</th><th>Equipo</th><th>Registrado por</th><th>Movilización y Desmovilización</th><th>Horas de trabajo</th><th>Costo por hora del equipo</th><th>Costo hora supervisor + RT</th><th>Costo por día del equipo</th><th>Costo día supervisor + RT</th><th>Descuento</th><th>Total</th><th>Observaciones</th></tr></thead>
         <tbody>
