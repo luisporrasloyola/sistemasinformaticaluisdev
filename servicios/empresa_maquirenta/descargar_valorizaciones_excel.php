@@ -78,7 +78,7 @@ $sheetRows[] = xlsx_row($rowNumber, [xlsx_cell(1, $rowNumber, 'Central térmica'
 $rowNumber++;
 $sheetRows[] = xlsx_row($rowNumber, [xlsx_cell(1, $rowNumber, 'Generado', 3), xlsx_cell(2, $rowNumber, '', 3), xlsx_cell(3, $rowNumber, date('d/m/Y H:i'), 9), xlsx_cell(4, $rowNumber, '', 9), xlsx_cell(5, $rowNumber, 'Registros', 3), xlsx_cell(6, $rowNumber, $recordCount, 9, true), xlsx_cell(7, $rowNumber, '', 9)], 25);
 $rowNumber += 2;
-$headers = ['Nro.', 'Fecha', 'Central', 'Equipo', 'Registrado por', 'Horas de trabajo', 'Movilización y Desmovilización', 'Costo por hora del equipo (S/)', 'Costo hora supervisor + RT (S/)', 'Costo por día del equipo (S/)', 'Costo día supervisor + RT (S/)', 'Descuento (S/)', 'Total (S/)', 'Observaciones'];
+$headers = ['Nro.', 'Fecha', 'Central', 'Equipo', 'Registrado por', 'Movilización y Desmovilización', 'Horas de trabajo', 'Costo por hora del equipo (S/)', 'Costo hora supervisor + RT (S/)', 'Costo por día del equipo (S/)', 'Costo día supervisor + RT (S/)', 'Descuento (S/)', 'Total (S/)', 'Observaciones'];
 $cells = [];
 foreach ($headers as $index => $header) $cells[] = xlsx_cell($index + 1, $rowNumber, $header, 1);
 $sheetRows[] = xlsx_row($rowNumber++, $cells, 52);
@@ -127,7 +127,7 @@ foreach ($groups as $records) {
         $values = [
             ++$number, $displayDate($date), $central,
             $clean($record['equipo']), $clean($record['registrado_por']),
-            (float) ($record['horas_trabajo'] ?? 8), $index === 0 ? $clean($record['movilizacion_desmovilizacion'] ?? '') : '',
+            $index === 0 ? $clean($record['movilizacion_desmovilizacion'] ?? '') : '', (float) ($record['horas_trabajo'] ?? 8),
             (float) ($record['tarifa_equipo'] ?? $defaultRate),
             (float) ($record['tarifa_supervisor'] ?? 50), round($equipmentCosts[$index], 2),
             $index === 0 ? round($supervisorCost, 2) : null,
@@ -135,7 +135,7 @@ foreach ($groups as $records) {
             $index === 0 ? round($dayTotal, 2) : null,
             $index === 0 ? $clean($record['observaciones'] ?? '') : '',
         ];
-        $numericColumns = [1, 6, 8, 9, 10, 11, 12, 13];
+        $numericColumns = [1, 7, 8, 9, 10, 11, 12, 13];
         $cells = [];
         foreach ($values as $column => $value) {
             $column++;
@@ -148,7 +148,7 @@ foreach ($groups as $records) {
         $sheetRows[] = xlsx_row($rowNumber++, $cells, 25);
     }
     if (count($records) > 1) {
-        foreach (['G', 'K', 'L', 'M', 'N'] as $column) {
+        foreach (['F', 'K', 'L', 'M', 'N'] as $column) {
             $merges[] = $column . $firstEquipmentRow . ':' . $column . ($rowNumber - 1);
         }
     }
@@ -160,7 +160,7 @@ if (!$groups) {
 $sheetRows[] = xlsx_row($rowNumber, [xlsx_cell(12, $rowNumber, 'TOTAL DEL PERÍODO', 1), xlsx_cell(13, $rowNumber, round($periodTotal, 2), 1, true)], 30);
 $lastRow = $rowNumber;
 $mergeXml = implode('', array_map(static fn (string $range): string => '<mergeCell ref="' . $range . '"/>', $merges));
-$sheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:N' . $lastRow . '"/><sheetViews><sheetView workbookViewId="0" showGridLines="0" zoomScale="85"/></sheetViews><cols><col min="1" max="1" width="8" customWidth="1"/><col min="2" max="3" width="16" customWidth="1"/><col min="4" max="4" width="24" customWidth="1"/><col min="5" max="5" width="27" customWidth="1"/><col min="6" max="6" width="17" customWidth="1"/><col min="7" max="7" width="44" customWidth="1"/><col min="8" max="13" width="24" customWidth="1"/><col min="14" max="14" width="44" customWidth="1"/></cols><sheetData>' . implode('', $sheetRows) . '</sheetData><mergeCells count="' . count($merges) . '">' . $mergeXml . '</mergeCells></worksheet>';
+$sheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:N' . $lastRow . '"/><sheetViews><sheetView workbookViewId="0" showGridLines="0" zoomScale="85"/></sheetViews><cols><col min="1" max="1" width="8" customWidth="1"/><col min="2" max="3" width="16" customWidth="1"/><col min="4" max="4" width="24" customWidth="1"/><col min="5" max="5" width="27" customWidth="1"/><col min="6" max="6" width="44" customWidth="1"/><col min="7" max="7" width="17" customWidth="1"/><col min="8" max="13" width="24" customWidth="1"/><col min="14" max="14" width="44" customWidth="1"/></cols><sheetData>' . implode('', $sheetRows) . '</sheetData><mergeCells count="' . count($merges) . '">' . $mergeXml . '</mergeCells></worksheet>';
 $content = xlsx_package($sheet, 'Valorizaciones', true, true);
 $fileName = 'valorizaciones_' . $site . '_' . $start . '_' . $end . '.xlsx';
 header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
