@@ -67,11 +67,11 @@ if ($field === 'bloqueado') {
     if ($rawValue !== '0' && $rawValue !== '1') {
         json_response(['ok' => false, 'message' => 'Estado de bloqueo inválido.'], 422);
     }
-} elseif ($field === 'observaciones' || $field === 'movilizacion_desmovilizacion') {
+} elseif ($field === 'observaciones') {
     if (mb_strlen($rawValue, 'UTF-8') > 1000) {
         json_response(['ok' => false, 'message' => 'La observación no puede superar 1000 caracteres.'], 422);
     }
-} elseif ($rawValue !== '' || !in_array($field, $adjustmentFields, true)) {
+} elseif ($rawValue !== '' || !in_array($field, [...$adjustmentFields, 'movilizacion_desmovilizacion'], true)) {
     if (!preg_match('/^\d+(?:\.\d{1,2})?$/', $rawValue)) {
         json_response(['ok' => false, 'message' => 'Ingrese un importe u horas válidos.'], 422);
     }
@@ -107,7 +107,7 @@ try {
                 VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE ' . $field . ' = VALUES(' . $field . ')');
             $stmt->execute([$site, $record['fecha'], $rawValue === '' ? null : $rawValue]);
         }
-    } elseif ($field === 'descuento' || $field === 'observaciones' || $field === 'movilizacion_desmovilizacion') {
+    } elseif ($field === 'descuento' || $field === 'observaciones') {
         $stmt = db()->prepare("INSERT INTO empresa_maquirenta_valorizacion_detalles
             (central, fecha, {$field}) VALUES (?, ?, ?)
             ON DUPLICATE KEY UPDATE {$field} = VALUES({$field})");
@@ -121,7 +121,7 @@ try {
         $stmt = db()->prepare("INSERT INTO empresa_maquirenta_valorizacion_equipos
             (central, charla_id, {$field}) VALUES (?, ?, ?)
             ON DUPLICATE KEY UPDATE {$field} = VALUES({$field})");
-        $stmt->execute([$site, $recordId, $rawValue]);
+        $stmt->execute([$site, $recordId, $field === 'movilizacion_desmovilizacion' && $rawValue === '' ? null : $rawValue]);
     }
 } catch (PDOException $exception) {
     error_log('Error al guardar valorización: ' . $exception->getMessage());

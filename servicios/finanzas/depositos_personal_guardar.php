@@ -21,6 +21,7 @@ $creditor = trim((string) ($_POST['acreedor'] ?? ''));
 $amount = trim((string) ($_POST['monto'] ?? ''));
 $method = trim((string) ($_POST['modo_pago'] ?? ''));
 $manual = ($_POST['manual'] ?? '') === '1';
+$workerId = null;
 $depositor = $manual ? trim((string) ($_POST['depositante'] ?? '')) : '';
 if ($manual) {
     $workerId = filter_var($_POST['trabajador_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
@@ -32,6 +33,12 @@ if ($manual) {
     if (is_personal_role() && $workerId !== current_user_worker_id()) deposit_save_reply(403, ['error' => 'Solo puede registrar depósitos a su nombre.']);
     $creditor = (string) $workerName;
 }
+if (!$manual) {
+    $workerId = personal_deposit_unique_worker_id($creditor, personal_deposit_workers());
+    if (str_contains($creditor, '*') && $workerId === null) {
+        deposit_save_reply(422, ['error' => 'No se pudo identificar de forma única al trabajador del nombre oculto. Revise el acreedor antes de guardar.']);
+    }
+}
 if (is_personal_role() && !$manual && !personal_deposit_is_own($creditor)) deposit_save_reply(403, ['error' => 'El acreedor debe corresponder al personal vinculado a su cuenta.']);
 $parsedDate = preg_match('/^\d{4}-\d{2}-\d{2}$/D', $date) ? DateTimeImmutable::createFromFormat('!Y-m-d', $date) : false;
 if (!$parsedDate || $parsedDate->format('Y-m-d') !== $date) deposit_save_reply(422, ['error' => 'Ingrese una fecha válida.']);
@@ -40,7 +47,7 @@ if ($manual && ($depositor === '' || mb_strlen($depositor) > 150)) deposit_save_
 if (!preg_match('/^\d{1,9}(?:\.\d{1,2})?$/D', $amount) || (float) $amount <= 0) deposit_save_reply(422, ['error' => 'Ingrese un monto válido en soles.']);
 if ($manual) {
     if ($method === '' || mb_strlen($method) > 100) deposit_save_reply(422, ['error' => 'Ingrese un modo de pago (máximo 100 caracteres).']);
-} elseif (!in_array($method, ['YAPE', 'PLIN', 'Tranferencia Interbank', 'Tranferencia BCP', 'Transferencia'], true)) {
+} elseif (!in_array($method, ['YAPE', 'PLIN', 'Transferencia Interbank', 'Tranferencia Interbank', 'Tranferencia BCP', 'Transferencia'], true)) {
     deposit_save_reply(422, ['error' => 'El modo de pago no corresponde a un modelo configurado.']);
 }
 $photo = $_FILES['foto'] ?? null;
@@ -62,11 +69,14 @@ try {
         $existing = db()->prepare('SELECT id FROM finance_personal_deposits WHERE image_sha256 = ? LIMIT 1');
         $existing->execute([$hash]);
         if ($existing->fetchColumn()) deposit_save_reply(409, ['error' => 'Esta foto ya fue registrada.', 'duplicate' => true]);
+        $batch = db()->prepare('SELECT id FROM finance_personal_deposit_batches WHERE image_sha256 = ? LIMIT 1');
+        $batch->execute([$hash]);
+        if ($batch->fetchColumn()) deposit_save_reply(409, ['error' => 'Esta foto ya fue registrada como lote.', 'duplicate' => true]);
         $uploaded = upload_file($photo, 'finanzas_depositos_personal', ['image/jpeg', 'image/png', 'image/webp']);
         $newPath = $uploaded['path'];
     }
-    db()->prepare('INSERT INTO finance_personal_deposits (deposit_date, registration_source, creditor, depositor, amount, payment_method, image_path, image_original_name, image_sha256, registered_by_user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-        ->execute([$date, $manual ? 'manual' : 'gemini', $creditor, $depositor !== '' ? $depositor : null, $amount, $method, $newPath, $uploaded['name'] ?? null, $hash, (int) (current_user()['id'] ?? 0) ?: null]);
+    db()->prepare('INSERT INTO finance_personal_deposits (deposit_date, registration_source, creditor, depositor, amount, payment_method, image_path, image_original_name, image_sha256, registered_by_user_id, worker_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        ->execute([$date, $manual ? 'manual' : 'gemini', $creditor, $depositor !== '' ? $depositor : null, $amount, $method, $newPath, $uploaded['name'] ?? null, $hash, (int) (current_user()['id'] ?? 0) ?: null, $workerId]);
     deposit_save_reply(201, ['id' => (int) db()->lastInsertId(), 'fecha' => $date, 'registro' => $manual ? 'Manual' : 'Gemini', 'acreedor' => $creditor, 'depositante' => $depositor, 'monto' => number_format((float) $amount, 2, '.', ''), 'modo_pago' => $method, 'hasPhoto' => $hasPhoto]);
 } catch (Throwable $error) {
     if ($newPath) delete_uploaded_file($newPath);

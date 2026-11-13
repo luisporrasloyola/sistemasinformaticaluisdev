@@ -24,16 +24,23 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+    const readable = [...allowed, 'application/pdf'];
     let generation = 0;
     let previewUrls = [];
     let readingQueue = false;
     let savedDates = [];
+    let batchSaved = false;
 
     function showSavedPeriod() {
         if (!savedDates.length) return;
         const last = [...savedDates].sort().at(-1);
         const latestMonth = last.slice(0, 7);
-        if (settings.periodMode === 'mes' && settings.periodMonth === latestMonth && settings.page === 1 && !settings.search) return;
+        if (batchSaved && settings.periodMode === 'mes' && settings.periodMonth === latestMonth
+            && settings.page === 1 && !settings.search) {
+            window.location.reload();
+            return;
+        }
+        if (!batchSaved && settings.periodMode === 'mes' && settings.periodMonth === latestMonth && settings.page === 1 && !settings.search) return;
         const url = new URL(window.location.href);
         url.searchParams.delete('pagina');
         url.searchParams.set('periodo', 'mes');
@@ -53,6 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
         row.dataset.amount = record.monto;
         row.dataset.method = record.modo_pago;
         row.dataset.hasPhoto = record.hasPhoto === undefined ? row.dataset.hasPhoto || '0' : (record.hasPhoto ? '1' : '0');
+        row.dataset.isBatch = record.isBatch === undefined ? row.dataset.isBatch || '0' : (record.isBatch ? '1' : '0');
         row.dataset.canManage = record.canManage === undefined ? row.dataset.canManage || '0' : (record.canManage ? '1' : '0');
         row.classList.remove('is-editing');
         row.replaceChildren();
@@ -165,7 +173,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 field.type = types[index];
                 field.value = values[index];
                 field.required = index !== 5;
-                if (index === 2) field.maxLength = 150;
+                if (index === 2) { field.maxLength = 150; field.readOnly = row.dataset.isBatch === '1' || row.dataset.registration === 'manual'; }
                 if (index === 3) { field.min = '0.01'; field.step = '0.01'; }
                 if (index === 4) field.maxLength = 100;
                 if (index === 5) { field.maxLength = 150; field.placeholder = 'Depositante (opcional)'; }
@@ -279,9 +287,13 @@ document.addEventListener('DOMContentLoaded', () => {
         status.setAttribute('role', 'status');
         status.textContent = 'Esperando lectura…';
         header.append(title, actions);
-        const preview = document.createElement('img');
+        const preview = document.createElement(file.type === 'application/pdf' ? 'iframe' : 'img');
         preview.className = 'personal-deposit-preview';
-        preview.alt = `Foto ${index + 1} del depósito`;
+        if (file.type === 'application/pdf') {
+            preview.title = `PDF ${index + 1} del depósito`;
+            preview.style.height = '300px';
+            preview.style.width = '100%';
+        } else preview.alt = `Foto ${index + 1} del depósito`;
         const url = URL.createObjectURL(file);
         previewUrls.push(url);
         preview.src = url;
@@ -298,7 +310,7 @@ document.addEventListener('DOMContentLoaded', () => {
         );
         card.append(header, status, preview, fields);
         cards.appendChild(card);
-        return {card, status, retry, save, close, file, url, preparedFile: null, saved: false};
+        return {card, status, retry, save, close, file, url, preview, preparedFile: null, saved: false};
     }
 
     function validFields(card) {
@@ -323,7 +335,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const data = new FormData();
             data.append('csrf_token', settings.csrf);
-            data.append('foto', item.preparedFile || item.file, item.preparedFile?.name || item.file.name);
+            data.append('foto', item.file, item.file.name);
             for (const [key, field] of Object.entries(fields)) data.append(key, field.value.trim());
             const response = await fetch(settings.saveEndpoint, {method: 'POST', body: data, credentials: 'same-origin'}).catch(() => {
                 throw new Error('No se pudo conectar para guardar el depósito. Revise su conexión e intente de nuevo.');
@@ -429,7 +441,7 @@ document.addEventListener('DOMContentLoaded', () => {
             let blob = item.preparedFile;
             if (!blob) {
                 try {
-                    blob = await prepareImage(file);
+                    blob = file.type === 'application/pdf' ? file : await prepareImage(file);
                 } catch (decodeError) {
                     if (file.size > 1500000 || !allowed.includes(file.type)) throw decodeError;
                     // Algunos navegadores móviles no pueden dibujar el archivo,
@@ -441,6 +453,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (currentGeneration !== generation) return;
             const data = new FormData();
             data.append('csrf_token', settings.csrf);
+            const hashBytes = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+            data.append('original_hash', [...new Uint8Array(hashBytes)].map(value => value.toString(16).padStart(2, '0')).join(''));
             data.append('imagen', blob, blob === file ? file.name : 'lectura.jpg');
             const response = await fetch(settings.endpoint, {method: 'POST', body: data, credentials: 'same-origin'}).catch(() => {
                 throw new Error('No se pudo conectar para leer la foto. Revise su conexión e intente de nuevo.');
@@ -448,6 +462,18 @@ document.addEventListener('DOMContentLoaded', () => {
             const result = await response.json();
             if (currentGeneration !== generation) return;
             if (!response.ok) throw new Error(result.error || 'No se pudo leer la foto.');
+            if (result.model === 'TRANSFERENCIA_INTERBANK_LOTE') {
+                const saved = await window.personalDepositBatch.save(item, result, currentGeneration, () => generation);
+                if (currentGeneration !== generation) return;
+                savedDates.push(...saved.map(record => record.fecha));
+                batchSaved = true;
+                URL.revokeObjectURL(item.url);
+                item.card.remove();
+                if (!cards.childElementCount) selection.hidden = true;
+                if (!readingQueue) showSavedPeriod();
+                return;
+            }
+            if (file.type === 'application/pdf') throw new Error('El PDF debe contener varios beneficiarios de Interbank para guardarse automáticamente.');
             if (!['YAPE', 'PLIN', 'TRANSFERENCIA_INTERBANK', 'TRANSFERENCIA_BCP', 'TRANSFERENCIA_MOVIMIENTO'].includes(result.model)) {
                 status.textContent = 'Modelo pendiente de configurar. Esta foto aún no se puede guardar.';
                 return;
@@ -486,12 +512,13 @@ document.addEventListener('DOMContentLoaded', () => {
         selection.hidden = true;
         progress.hidden = true;
         savedDates = [];
+        batchSaved = false;
         showError('');
         const files = Array.from(input.files || []);
         if (!files.length) return;
-        if (files.length > 5) showError('Seleccione como máximo 5 fotos.');
-        else if (files.some(file => !allowed.includes(file.type))) showError('Solo se admiten fotos JPG, PNG o WEBP.');
-        else if (files.some(file => file.size > 5 * 1024 * 1024)) showError('Cada foto debe ocupar como máximo 5 MB.');
+        if (files.length > 5) showError('Seleccione como máximo 5 archivos.');
+        else if (files.some(file => !readable.includes(file.type))) showError('Solo se admiten fotos JPG, PNG o WEBP y archivos PDF.');
+        else if (files.some(file => file.size > (file.type === 'application/pdf' ? 1500000 : 5 * 1024 * 1024))) showError('Cada foto debe ocupar como máximo 5 MB y cada PDF 1,5 MB.');
         if (!errorBox.hidden) {
             input.value = '';
             return;

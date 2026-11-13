@@ -47,7 +47,7 @@ $queries = [];
 $parameters = [];
 foreach ($selectedSources as $sourceKey => $source) {
     $queries[] = "SELECT c.id, c.fecha, m.nombre AS equipo, COALESCE(u.name, 'Sin usuario') AS registrado_por,
-        v.horas_trabajo, v.tarifa_equipo, s.tarifa_supervisor, d.descuento, d.observaciones, d.movilizacion_desmovilizacion,
+        v.horas_trabajo, v.tarifa_equipo, v.movilizacion_desmovilizacion, s.tarifa_supervisor, d.descuento, d.observaciones,
         ae.costo_equipo AS ajuste_equipo, ad.costo_supervisor AS ajuste_supervisor, ad.total AS ajuste_total,
         COALESCE(b.bloqueado, 0) AS bloqueado,
         '{$source['name']}' AS central
@@ -200,7 +200,7 @@ require __DIR__ . '/../../includes/header.php';
             ?>
             <tr class="valuation-equipment valuation-group-<?= $groupTone ?><?= $blocked ? ' is-blocked' : '' ?>" data-site="<?= $record['central'] === 'Santa Rosa' ? 'santa_rosa' : 'ventanilla' ?>" data-group="<?= e($groupKey) ?>" data-source-id="<?= (int) $record['id'] ?>">
                 <td class="valuation-number"><?= ++$rowNumber ?></td><td class="valuation-counted-cell"><label class="valuation-counted"><input type="checkbox" data-counted <?= $blocked ? '' : 'checked' ?> aria-label="Contabilizar <?= e($record['equipo']) ?> del <?= e($displayDate) ?> en <?= e($record['central']) ?>" title="<?= $blocked ? 'Excluido: marcar para contabilizar' : 'Incluido: desmarcar para excluir' ?>"></label></td><td><?= e($displayDate) ?></td><td class="fw-semibold"><?= e($record['equipo']) ?></td><td><?= e($record['registrado_por']) ?></td>
-                <?php if ($index === 0): ?><td rowspan="<?= count($records) ?>"><textarea class="form-control form-control-sm valuation-observations" maxlength="1000" data-mobilization aria-label="Movilización y Desmovilización del <?= e($displayDate) ?> en <?= e($record['central']) ?>"><?= e((string) ($record['movilizacion_desmovilizacion'] ?? '')) ?></textarea></td><?php endif; ?>
+                <td><input class="form-control form-control-sm valuation-input" type="number" min="0" max="999999.99" step="0.01" value="<?= $record['movilizacion_desmovilizacion'] === null ? '' : e(valuation_input_number($record['movilizacion_desmovilizacion'])) ?>" data-mobilization aria-label="Movilización y Desmovilización de <?= e($record['equipo']) ?> el <?= e($displayDate) ?>" <?= $blocked ? 'disabled' : '' ?>></td>
                 <td><input class="form-control form-control-sm valuation-input" type="number" min="0" max="24" step="0.25" value="<?= e(valuation_input_number($record['horas_trabajo'] ?? 8)) ?>" data-hours aria-label="Horas de <?= e($record['equipo']) ?> el <?= e($displayDate) ?>" <?= $blocked ? 'disabled' : '' ?>></td>
                 <td><input class="form-control form-control-sm valuation-input" type="number" min="0" step="0.01" value="<?= e(valuation_input_number($record['tarifa_equipo'] ?? $defaultRate)) ?>" data-equipment-rate aria-label="Tarifa del equipo <?= e($record['equipo']) ?>" <?= $blocked ? 'disabled' : '' ?>></td>
                 <td><input class="form-control form-control-sm valuation-input" type="number" min="0" step="0.01" value="<?= e(valuation_input_number($record['tarifa_supervisor'] ?? 50)) ?>" data-supervisor-rate aria-label="Tarifa supervisor y RT de <?= e($record['equipo']) ?> el <?= e($displayDate) ?>" <?= $blocked ? 'disabled' : '' ?>></td>
@@ -249,7 +249,7 @@ require __DIR__ . '/../../includes/header.php';
         checkbox.checked = included;
         checkbox.title = included ? 'Incluido: desmarcar para excluir' : 'Excluido: marcar para contabilizar';
         row.classList.toggle('is-blocked', !included);
-        row.querySelectorAll('[data-hours], [data-equipment-rate], [data-supervisor-rate], [data-equipment-cost]').forEach(input => { input.disabled = !included; });
+        row.querySelectorAll('[data-hours], [data-mobilization], [data-equipment-rate], [data-supervisor-rate], [data-equipment-cost]').forEach(input => { input.disabled = !included; });
     };
     const update = () => {
         let monthTotal = 0;
@@ -258,12 +258,14 @@ require __DIR__ . '/../../includes/header.php';
             const rows = [...panel.querySelectorAll('.valuation-equipment')].filter(row => row.dataset.group === date);
             const included = rows.filter(row => row.querySelector('[data-counted]').checked);
             let equipmentTotal = 0;
+            let mobilizationTotal = 0;
             rows.forEach(row => {
                 const costInput = row.querySelector('[data-equipment-cost]');
                 const calculated = value(row.querySelector('[data-hours]')) * value(row.querySelector('[data-equipment-rate]'));
                 if (costInput.dataset.override !== '1' && document.activeElement !== costInput) costInput.value = calculated.toFixed(2);
                 const cost = row.querySelector('[data-counted]').checked ? (costInput.dataset.override === '1' ? value(costInput) : calculated) : 0;
                 equipmentTotal += cost;
+                if (row.querySelector('[data-counted]').checked) mobilizationTotal += value(row.querySelector('[data-mobilization]'));
             });
             const supervisorHours = included.length ? Math.max(...included.map(row => value(row.querySelector('[data-hours]')))) : 0;
             const supervisorInput = rows[0].querySelector('[data-supervisor-cost]');
@@ -271,7 +273,7 @@ require __DIR__ . '/../../includes/header.php';
             if (supervisorInput.dataset.override !== '1' && document.activeElement !== supervisorInput) supervisorInput.value = calculatedSupervisor.toFixed(2);
             const supervisorCost = included.length ? (supervisorInput.dataset.override === '1' ? value(supervisorInput) : calculatedSupervisor) : 0;
             const totalInput = rows[0].querySelector('[data-day-total]');
-            const calculatedTotal = included.length ? equipmentTotal + supervisorCost - value(rows[0].querySelector('[data-discount]')) : 0;
+            const calculatedTotal = included.length ? equipmentTotal + mobilizationTotal + supervisorCost - value(rows[0].querySelector('[data-discount]')) : 0;
             if (totalInput.dataset.override !== '1' && document.activeElement !== totalInput) totalInput.value = calculatedTotal.toFixed(2);
             const dayTotal = included.length ? (totalInput.dataset.override === '1' ? value(totalInput) : calculatedTotal) : 0;
             const dayBlocked = included.length === 0;
@@ -295,7 +297,7 @@ require __DIR__ . '/../../includes/header.php';
                 if (row.dataset.group === source.dataset.group && row !== source) row.querySelector('[data-supervisor-rate]').value = event.target.value;
             });
         }
-        if (event.target.matches('[data-hours], [data-equipment-rate], [data-supervisor-rate], [data-discount], [data-equipment-cost], [data-supervisor-cost], [data-day-total]')) update();
+        if (event.target.matches('[data-hours], [data-mobilization], [data-equipment-rate], [data-supervisor-rate], [data-discount], [data-equipment-cost], [data-supervisor-cost], [data-day-total]')) update();
     });
     panel.querySelectorAll('[data-hours], [data-equipment-rate], [data-supervisor-rate], [data-discount], [data-observations], [data-mobilization]').forEach(input => {
         input.dataset.savedValue = input.value;
@@ -372,11 +374,11 @@ require __DIR__ . '/../../includes/header.php';
         if (!input.matches('[data-hours], [data-equipment-rate], [data-supervisor-rate], [data-discount], [data-observations], [data-mobilization]')) return;
         const row = input.closest('.valuation-equipment');
         const isSupervisor = input.matches('[data-supervisor-rate]');
-        const isText = input.matches('[data-observations], [data-mobilization]');
+        const isText = input.matches('[data-observations]');
         const related = isSupervisor
             ? [...panel.querySelectorAll('.valuation-equipment')].filter(item => item.dataset.group === row.dataset.group).map(item => item.querySelector('[data-supervisor-rate]'))
             : [input];
-        if (!input.checkValidity() || (!isText && input.value.trim() === '')) {
+        if (!input.checkValidity() || (!isText && !input.matches('[data-mobilization]') && input.value.trim() === '')) {
             related.forEach(item => { item.value = item.dataset.savedValue; });
             update();
             saveStatus.textContent = 'Ingrese un valor válido.';
@@ -396,8 +398,9 @@ require __DIR__ . '/../../includes/header.php';
             const response = await fetch(saveUrl, {method: 'POST', body, credentials: 'same-origin', keepalive: true});
             const result = await response.json();
             if (!response.ok || !result.ok) throw new Error(result.message || 'No se pudo guardar el cambio.');
-            const displayValue = isText ? result.value : String(Number(result.value));
+            const displayValue = isText || result.value === '' ? result.value : String(Number(result.value));
             related.forEach(item => { item.value = displayValue; item.dataset.savedValue = displayValue; });
+            if (input.matches('[data-mobilization]')) update();
             saveStatus.textContent = 'Cambio guardado.';
         } catch (error) {
             related.forEach(item => { item.value = item.dataset.savedValue; });

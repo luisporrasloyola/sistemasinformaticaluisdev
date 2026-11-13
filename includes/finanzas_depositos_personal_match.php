@@ -61,6 +61,68 @@ function personal_deposit_unique_worker_id(string $creditor, array $workers): ?i
     return $match;
 }
 
+/**
+ * Reconcilia nombres que el OCR separa dentro de una palabra (CO RAC -> CORAC)
+ * o que omiten un segundo nombre del trabajador.
+ * @param array<int, array{id:int|string, full_name:string}> $workers
+ * @return array{id:int, creditor:string}|null
+ */
+function personal_deposit_batch_worker(string $creditor, array $workers): ?array
+{
+    // El PDF de Interbank divide nombres entre líneas y a veces Gemini añade
+    // el documento de identidad que figura debajo del beneficiario.
+    $creditor = preg_split('/\b(?:DNI|C\.?E\.?|DOCUMENTO|DOC\.?|RUC)\b\s*[:#.-]?/iu', $creditor, 2)[0] ?? $creditor;
+    $creditor = preg_replace('/\b\d{6,12}\b/u', ' ', $creditor) ?? $creditor;
+    $tokens = personal_deposit_name_tokens($creditor);
+    if (count($tokens) < 2) return null;
+    $collapsed = implode('', array_column($tokens, 'value'));
+    $matches = [];
+    $near = [];
+    $subsetMatches = [];
+    foreach ($workers as $worker) {
+        $workerTokens = personal_deposit_name_tokens((string) $worker['full_name']);
+        if (count($workerTokens) < 2) continue;
+        $workerCollapsed = implode('', array_column($workerTokens, 'value'));
+        // Los nombres completos del padrón son la referencia; los espacios
+        // interiores y saltos de línea del PDF no cambian la identidad.
+        $candidate = [
+            'id' => (int) $worker['id'],
+            'creditor' => (string) $worker['full_name'],
+        ];
+        if ($workerCollapsed === $collapsed) {
+            $matches[(int) $worker['id']] = $candidate;
+            continue;
+        }
+        $wordCount = count($workerTokens);
+        if ($wordCount >= 4 && $wordCount <= 8) {
+            for ($mask = 1; $mask < (1 << $wordCount); $mask++) {
+                if (!($mask & 1) || !($mask & (1 << ($wordCount - 1)))) continue;
+                $selected = [];
+                foreach ($workerTokens as $position => $part) {
+                    if ($mask & (1 << $position)) $selected[] = $part['value'];
+                }
+                if (count($selected) < 3 || $wordCount - count($selected) > 2) continue;
+                if (implode('', $selected) === $collapsed) {
+                    $subsetMatches[$candidate['id']] = $candidate;
+                    break;
+                }
+            }
+        }
+        // Se aceptan pequeñas diferencias de lectura en un nombre largo
+        // únicamente si el primer nombre coincide y el candidato es único.
+        $first = $workerTokens[0]['value'];
+        if ($tokens[0]['value'] !== $first || strlen($first) < 4) continue;
+        $distance = levenshtein($collapsed, $workerCollapsed);
+        $maxDistance = max(2, (int) floor(strlen($workerCollapsed) * .12));
+        if ($distance <= $maxDistance) $near[] = ['distance' => $distance, 'worker' => $candidate];
+    }
+    if ($matches) return count($matches) === 1 ? array_values($matches)[0] : null;
+    if ($subsetMatches) return count($subsetMatches) === 1 ? array_values($subsetMatches)[0] : null;
+    usort($near, static fn(array $a, array $b): int => $a['distance'] <=> $b['distance']);
+    if (!$near || (isset($near[1]) && $near[1]['distance'] - $near[0]['distance'] < 3)) return null;
+    return $near[0]['worker'];
+}
+
 /** @return array<int, array{id:int|string, full_name:string}> */
 function personal_deposit_workers(): array
 {

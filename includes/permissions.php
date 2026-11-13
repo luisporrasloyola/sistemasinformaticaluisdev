@@ -54,6 +54,12 @@ function permission_modules_catalog(): array
                 'clientes.pmi' => 'PMI Clientes',
             ],
         ],
+        'compras' => [
+            'label' => 'Compras',
+            'children' => [
+                'compras.registro' => 'Registro de compras',
+            ],
+        ],
         'cobranzas' => [
             'label' => 'Cobranzas',
             'children' => [

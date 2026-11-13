@@ -30,19 +30,23 @@ if (is_personal_role()) {
     }
     $prefixes = array_values(array_unique($prefixes));
     if (!$prefixes) { http_response_code(403); exit('No se pudo identificar al trabajador vinculado.'); }
-    $personalCandidateWhere = ' AND (' . implode(' OR ', array_fill(0, count($prefixes), 'UPPER(creditor) LIKE ?')) . ')';
-    $personalCandidateParams = array_map(static fn(string $prefix): string => '%' . $prefix . '%', $prefixes);
+    $personalCandidateWhere = ' AND (worker_id = ? OR (worker_id IS NULL AND ('
+        . implode(' OR ', array_fill(0, count($prefixes), 'UPPER(creditor) LIKE ?')) . ')))';
+    $personalCandidateParams = array_merge([(int) $linkedWorkerId], array_map(static fn(string $prefix): string => '%' . $prefix . '%', $prefixes));
 }
 try {
     if (is_personal_role()) {
         $latestDepositDate = null;
         $offset = 0;
         do {
-            $latestStmt = db()->prepare('SELECT deposit_date, creditor FROM finance_personal_deposits WHERE 1=1' . $personalCandidateWhere . ' ORDER BY deposit_date DESC, id DESC LIMIT 100 OFFSET ' . $offset);
+            $latestStmt = db()->prepare('SELECT deposit_date, creditor, worker_id FROM finance_personal_deposits WHERE 1=1' . $personalCandidateWhere . ' ORDER BY deposit_date DESC, id DESC LIMIT 100 OFFSET ' . $offset);
             $latestStmt->execute($personalCandidateParams);
             $candidates = $latestStmt->fetchAll(PDO::FETCH_ASSOC);
             foreach ($candidates as $candidate) {
-                if (personal_deposit_is_own((string) $candidate['creditor'])) { $latestDepositDate = $candidate['deposit_date']; break; }
+                if ((int) $candidate['worker_id'] === (int) $linkedWorkerId
+                    || ($candidate['worker_id'] === null && personal_deposit_is_own((string) $candidate['creditor']))) {
+                    $latestDepositDate = $candidate['deposit_date']; break;
+                }
             }
             $offset += count($candidates);
         } while ($latestDepositDate === null && count($candidates) === 100);
@@ -74,11 +78,12 @@ if (!$depositDbError) {
             $matched = 0;
             $offset = 0;
             do {
-                $depositStmt = db()->prepare('SELECT id, deposit_date, registration_source, creditor, depositor, amount, payment_method, image_path, registered_by_user_id FROM finance_personal_deposits WHERE deposit_date BETWEEN ? AND ?' . $searchWhere . $personalCandidateWhere . ' ORDER BY deposit_date DESC, id DESC LIMIT 100 OFFSET ' . $offset);
+                $depositStmt = db()->prepare('SELECT id, deposit_date, registration_source, creditor, depositor, amount, payment_method, image_path, batch_id, worker_id, registered_by_user_id FROM finance_personal_deposits WHERE deposit_date BETWEEN ? AND ?' . $searchWhere . $personalCandidateWhere . ' ORDER BY deposit_date DESC, id DESC LIMIT 100 OFFSET ' . $offset);
                 $depositStmt->execute(array_merge($searchParams, $personalCandidateParams));
                 $candidates = $depositStmt->fetchAll(PDO::FETCH_ASSOC);
                 foreach ($candidates as $record) {
-                    if (!personal_deposit_is_own((string) $record['creditor'])) continue;
+                    if ($record['worker_id'] !== null && (int) $record['worker_id'] !== (int) $linkedWorkerId) continue;
+                    if ($record['worker_id'] === null && !personal_deposit_is_own((string) $record['creditor'])) continue;
                     $matched++;
                     $depositTotalCents += (int) round((float) $record['amount'] * 100);
                     if ($matched > ($depositPage - 1) * 25 && count($depositRecords) < 26) $depositRecords[] = $record;
@@ -89,7 +94,7 @@ if (!$depositDbError) {
             $totalStmt = db()->prepare('SELECT COALESCE(SUM(amount), 0) FROM finance_personal_deposits WHERE deposit_date BETWEEN ? AND ?' . $searchWhere);
             $totalStmt->execute($searchParams);
             $depositTotalCents = (int) round((float) $totalStmt->fetchColumn() * 100);
-            $depositStmt = db()->prepare('SELECT id, deposit_date, registration_source, creditor, depositor, amount, payment_method, image_path, registered_by_user_id FROM finance_personal_deposits WHERE deposit_date BETWEEN ? AND ?' . $searchWhere . ' ORDER BY deposit_date DESC, id DESC LIMIT 26 OFFSET ' . (($depositPage - 1) * 25));
+            $depositStmt = db()->prepare('SELECT id, deposit_date, registration_source, creditor, depositor, amount, payment_method, image_path, batch_id, registered_by_user_id FROM finance_personal_deposits WHERE deposit_date BETWEEN ? AND ?' . $searchWhere . ' ORDER BY deposit_date DESC, id DESC LIMIT 26 OFFSET ' . (($depositPage - 1) * 25));
             $depositStmt->execute($searchParams);
             $depositRecords = $depositStmt->fetchAll();
         }
@@ -124,6 +129,7 @@ require __DIR__ . '/../../includes/header.php';
 .personal-deposit-model-carousel{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;scroll-behavior:smooth;overscroll-behavior-inline:contain;padding:4px 4px 12px}
 .personal-deposit-model-slide{flex:0 0 100%;min-width:0;scroll-snap-align:start;text-align:center}
 .personal-deposit-model-slide img{display:block;max-width:100%;max-height:min(55vh,450px);width:auto;height:auto;margin:auto;border:1px solid #d9e3ef;border-radius:8px;object-fit:contain}
+.personal-deposit-model-slide iframe{display:block;width:100%;height:min(55vh,450px);margin:auto;border:1px solid #d9e3ef;border-radius:8px;background:#fff}
 .personal-deposit-model-slide figcaption{margin-top:8px;color:#344761;font-size:.85rem;font-weight:700}
 .personal-deposit-model-nav{display:flex;justify-content:center;gap:7px;flex-wrap:wrap;margin-top:4px}
 .personal-deposit-model-nav a{display:inline-grid;place-items:center;width:29px;height:29px;border:1px solid #cbd8eb;border-radius:50%;color:#2563eb;text-decoration:none;font-size:.8rem;font-weight:700}
@@ -164,9 +170,9 @@ require __DIR__ . '/../../includes/header.php';
 </style>
 <section class="work-panel personal-deposit-upload" aria-labelledby="personalDepositUploadTitle">
     <div class="personal-deposit-upload-header">
-        <div><div class="personal-deposit-upload-title mb-1"><h2 class="h5 mb-0" id="personalDepositUploadTitle">Nuevo depósito</h2><button class="personal-deposit-info" type="button" data-bs-toggle="modal" data-bs-target="#personalDepositModelsModal" title="Ver comprobantes compatibles" aria-label="Ver comprobantes compatibles"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></button></div><p class="small text-muted mb-0">Seleccione hasta 5 fotos (JPG, PNG o WEBP; máximo 5 MB por foto). Cada foto corresponde a un depósito.</p></div>
-        <label class="btn btn-primary mb-0" for="personalDepositFile"><i class="fa-solid fa-file-arrow-up me-1" aria-hidden="true"></i>Seleccionar fotos</label>
-        <input class="visually-hidden" type="file" id="personalDepositFile" accept="image/jpeg,image/png,image/webp" multiple aria-label="Seleccionar hasta cinco fotos del depósito">
+        <div><div class="personal-deposit-upload-title mb-1"><h2 class="h5 mb-0" id="personalDepositUploadTitle">Nuevo depósito</h2><button class="personal-deposit-info" type="button" data-bs-toggle="modal" data-bs-target="#personalDepositModelsModal" title="Ver comprobantes compatibles" aria-label="Ver comprobantes compatibles"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></button></div><p class="small text-muted mb-0">Seleccione hasta 5 fotos o PDF (máximo 5 MB por foto y 1,5 MB por PDF). Los depósitos reconocidos se guardan automáticamente, incluso si un archivo contiene varios beneficiarios.</p></div>
+        <label class="btn btn-primary mb-0" for="personalDepositFile"><i class="fa-solid fa-file-arrow-up me-1" aria-hidden="true"></i>Seleccionar fotos o PDF</label>
+        <input class="visually-hidden" type="file" id="personalDepositFile" accept="image/jpeg,image/png,image/webp,application/pdf" multiple aria-label="Seleccionar hasta cinco fotos o PDF del depósito">
     </div>
     <div class="small text-danger mt-2" id="personalDepositFileError" role="alert" hidden></div>
     <div class="mt-3" id="personalDepositProgress" hidden><div class="small fw-semibold mb-1" id="personalDepositProgressText" role="status"></div><div class="progress" role="progressbar" aria-label="Lectura y guardado de depósitos" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="progress-bar progress-bar-striped progress-bar-animated" id="personalDepositProgressBar" style="width:0%"></div></div></div>
@@ -177,11 +183,22 @@ require __DIR__ . '/../../includes/header.php';
         <div class="modal-header"><h2 class="modal-title h5 mb-0" id="personalDepositModelsTitle">Comprobantes compatibles</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
         <div class="modal-body"><p class="text-muted small mb-3">La lectura automática reconoce estos formatos de Yape, Plin y transferencias bancarias.</p>
             <div class="personal-deposit-model-carousel" aria-label="Ejemplos de comprobantes">
-                <?php foreach ([['YAPE.png', 'Yape'], ['PLIN.png', 'Plin'], ['PLIN otro modelo.png', 'Plin'], ['tranferencia interbank.png', 'Transferencia Interbank'], ['tranferencia interbank otro modelo.png', 'Transferencia Interbank'], ['Tranferencia Interbank-otros.png', 'Transferencia Interbank'], ['Transferencia BCP.png', 'Transferencia BCP'], ['Transferencia.png', 'Transferencia']] as $index => [$file, $label]): ?>
-                    <figure class="personal-deposit-model-slide mb-0" id="depositModel<?= $index + 1 ?>"><img src="<?= e(APP_URL . '/img/depositosgemini/' . rawurlencode($file)) ?>" alt="Modelo de comprobante <?= e($label) ?>" loading="lazy" decoding="async"><figcaption><?= e($label) ?></figcaption></figure>
+                <?php $depositModels = [['YAPE.png', 'Yape'], ['PLIN.png', 'Plin'], ['PLIN otro modelo.png', 'Plin'], ['tranferencia interbank.png', 'Transferencia Interbank'], ['tranferencia interbank otro modelo.png', 'Transferencia Interbank'], ['Tranferencia Interbank-otros.png', 'Transferencia Interbank'], ['Transferencia BCP.png', 'Transferencia BCP'], ['Transferencia.png', 'Transferencia']];
+                if (is_admin()) {
+                    $depositModels[] = ['Transferencia Interbank otros.png', 'Transferencia Interbank por lote'];
+                    $depositModels[] = ['Depositos.pdf', 'Transferencia Interbank por lote (PDF)'];
+                    $depositModels[] = ['Depositos.png', 'Transferencia Interbank por lote (foto)'];
+                    $depositModels[] = ['Plin_otros.jpeg', 'Constancia de Pago Plin'];
+                    $depositModels[] = ['transferencia Interbank-Otros.jpg', 'Constancia de transferencia Interbank'];
+                    $depositModels[] = ['Tranferencia Interbank 2.jpeg', 'Transferencia Interbank con destinatario oculto'];
+                }
+                foreach ($depositModels as $index => [$file, $label]):
+                    $modelFormats = [8 => '', 9 => 'pdf', 10 => 'imagen', 11 => 'plin', 12 => 'interbank_constancia', 13 => 'interbank_oculto'];
+                    $modelImageUrl = isset($modelFormats[$index]) ? APP_URL . '/servicios/finanzas/depositos_personal_modelo_lote.php?formato=' . rawurlencode($modelFormats[$index]) : APP_URL . '/img/depositosgemini/' . rawurlencode($file); ?>
+                    <figure class="personal-deposit-model-slide mb-0" id="depositModel<?= $index + 1 ?>"><?php if ($index === 9): ?><iframe src="<?= e($modelImageUrl) ?>#toolbar=0" title="Modelo de comprobante <?= e($label) ?>" loading="lazy"></iframe><?php else: ?><img src="<?= e($modelImageUrl) ?>" alt="Modelo de comprobante <?= e($label) ?>" loading="lazy" decoding="async"><?php endif; ?><figcaption><?= e($label) ?></figcaption></figure>
                 <?php endforeach; ?>
             </div>
-            <nav class="personal-deposit-model-nav" aria-label="Ir a un modelo de comprobante"><?php for ($index = 1; $index <= 8; $index++): ?><a href="#depositModel<?= $index ?>" aria-label="Ver modelo <?= $index ?>"><?= $index ?></a><?php endfor; ?></nav>
+            <nav class="personal-deposit-model-nav" aria-label="Ir a un modelo de comprobante"><?php for ($index = 1; $index <= count($depositModels); $index++): ?><a href="#depositModel<?= $index ?>" aria-label="Ver modelo <?= $index ?>"><?= $index ?></a><?php endfor; ?></nav>
         </div>
         <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button></div>
     </div></div>
@@ -218,13 +235,14 @@ require __DIR__ . '/../../includes/header.php';
         <button class="btn btn-outline-primary" type="submit">Ver</button>
         <button class="btn btn-success ms-auto" type="button" data-bs-toggle="modal" data-bs-target="#personalDepositManualModal"><i class="fa-solid fa-plus me-1" aria-hidden="true"></i>Nuevo Manual</button>
     </form>
-    <div class="table-responsive"><table class="personal-deposit-table"><thead><tr><th>Fecha</th><th>Registro</th><th>Acreedor de depósito</th><th>Monto depositado</th><th>Modo de pago</th><th>Depositante</th><th>Acciones</th></tr></thead><tbody id="personalDepositRows"><?php foreach ($depositRecords as $record): ?><tr data-id="<?= (int) $record['id'] ?>" data-date="<?= e((string) $record['deposit_date']) ?>" data-registration="<?= e((string) $record['registration_source']) ?>" data-creditor="<?= e((string) $record['creditor']) ?>" data-amount="<?= e((string) $record['amount']) ?>" data-method="<?= e((string) $record['payment_method']) ?>" data-depositor="<?= e((string) ($record['depositor'] ?? '')) ?>" data-has-photo="<?= !empty($record['image_path']) ? '1' : '0' ?>" data-can-manage="<?= (is_admin() || (is_personal_role() && (int) $record['registered_by_user_id'] === (int) (current_user()['id'] ?? 0))) ? '1' : '0' ?>"><td><?= e(date('d/m/Y', strtotime((string) $record['deposit_date']))) ?></td><td><?= $record['registration_source'] === 'manual' ? 'Manual' : 'Gemini' ?></td><td><?= e((string) $record['creditor']) ?></td><td>S/ <?= e(number_format((float) $record['amount'], 2)) ?></td><td><?= e((string) $record['payment_method']) ?></td><td><?= e((string) ($record['depositor'] ?: '—')) ?></td><td><div class="personal-deposit-actions"><?php if (is_admin() || (is_personal_role() && (int) $record['registered_by_user_id'] === (int) (current_user()['id'] ?? 0))): ?><button class="personal-deposit-action" type="button" data-action="edit" title="Editar depósito" aria-label="Editar depósito"><i class="fa-solid fa-pen" aria-hidden="true"></i></button><?php endif; ?><?php if (!empty($record['image_path'])): ?><a class="personal-deposit-action is-file" href="<?= e(APP_URL . '/servicios/finanzas/depositos_personal_archivo.php?id=' . (int) $record['id']) ?>" target="_blank" rel="noopener noreferrer" title="Ver foto" aria-label="Ver foto"><i class="fa-solid fa-file-image" aria-hidden="true"></i></a><?php endif; ?><?php if (is_admin() || (is_personal_role() && (int) $record['registered_by_user_id'] === (int) (current_user()['id'] ?? 0))): ?><button class="personal-deposit-action is-delete" type="button" data-action="delete" title="Eliminar depósito" aria-label="Eliminar depósito"><i class="fa-solid fa-trash" aria-hidden="true"></i></button><?php endif; ?></div></td></tr><?php endforeach; ?><?php if (!$depositRecords && !$depositDbError): ?><tr id="personalDepositEmpty"><td colspan="7"><?= $depositSearch !== '' ? 'No se encontraron depósitos para ese acreedor o depositante en el período seleccionado.' : 'Aún no hay depósitos registrados.' ?></td></tr><?php endif; ?></tbody><tfoot><tr><th colspan="3"></th><th id="personalDepositTotal" data-cents="<?= $depositTotalCents ?>">S/ <?= e(number_format($depositTotalCents / 100, 2)) ?></th><th colspan="3"></th></tr></tfoot></table></div>
+    <div class="table-responsive"><table class="personal-deposit-table"><thead><tr><th>Fecha</th><th>Registro</th><th>Acreedor de depósito</th><th>Monto depositado</th><th>Modo de pago</th><th>Depositante</th><th>Acciones</th></tr></thead><tbody id="personalDepositRows"><?php foreach ($depositRecords as $record): ?><tr data-id="<?= (int) $record['id'] ?>" data-date="<?= e((string) $record['deposit_date']) ?>" data-registration="<?= e((string) $record['registration_source']) ?>" data-creditor="<?= e((string) $record['creditor']) ?>" data-amount="<?= e((string) $record['amount']) ?>" data-method="<?= e((string) $record['payment_method']) ?>" data-depositor="<?= e((string) ($record['depositor'] ?? '')) ?>" data-has-photo="<?= !empty($record['image_path']) ? '1' : '0' ?>" data-is-batch="<?= $record['batch_id'] !== null ? '1' : '0' ?>" data-can-manage="<?= (is_admin() || (is_personal_role() && (int) $record['registered_by_user_id'] === (int) (current_user()['id'] ?? 0))) ? '1' : '0' ?>"><td><?= e(date('d/m/Y', strtotime((string) $record['deposit_date']))) ?></td><td><?= $record['registration_source'] === 'manual' ? 'Manual' : 'Gemini' ?></td><td><?= e((string) $record['creditor']) ?></td><td>S/ <?= e(number_format((float) $record['amount'], 2)) ?></td><td><?= e((string) $record['payment_method']) ?></td><td><?= e((string) ($record['depositor'] ?: '—')) ?></td><td><div class="personal-deposit-actions"><?php if (is_admin() || (is_personal_role() && (int) $record['registered_by_user_id'] === (int) (current_user()['id'] ?? 0))): ?><button class="personal-deposit-action" type="button" data-action="edit" title="Editar depósito" aria-label="Editar depósito"><i class="fa-solid fa-pen" aria-hidden="true"></i></button><?php endif; ?><?php if (!empty($record['image_path'])): ?><a class="personal-deposit-action is-file" href="<?= e(APP_URL . '/servicios/finanzas/depositos_personal_archivo.php?id=' . (int) $record['id']) ?>" target="_blank" rel="noopener noreferrer" title="Ver foto" aria-label="Ver foto"><i class="fa-solid fa-file-image" aria-hidden="true"></i></a><?php endif; ?><?php if (is_admin() || (is_personal_role() && (int) $record['registered_by_user_id'] === (int) (current_user()['id'] ?? 0))): ?><button class="personal-deposit-action is-delete" type="button" data-action="delete" title="Eliminar depósito" aria-label="Eliminar depósito"><i class="fa-solid fa-trash" aria-hidden="true"></i></button><?php endif; ?></div></td></tr><?php endforeach; ?><?php if (!$depositRecords && !$depositDbError): ?><tr id="personalDepositEmpty"><td colspan="7"><?= $depositSearch !== '' ? 'No se encontraron depósitos para ese acreedor o depositante en el período seleccionado.' : 'Aún no hay depósitos registrados.' ?></td></tr><?php endif; ?></tbody><tfoot><tr><th colspan="3"></th><th id="personalDepositTotal" data-cents="<?= $depositTotalCents ?>">S/ <?= e(number_format($depositTotalCents / 100, 2)) ?></th><th colspan="3"></th></tr></tfoot></table></div>
     <?php if ($depositPage > 1 || $depositHasMore): ?><nav class="d-flex justify-content-end gap-2 mt-3" aria-label="Páginas de depósitos"><?php if ($depositPage > 1): ?><a class="btn btn-sm btn-outline-secondary" href="?<?= e(http_build_query($depositPeriodQuery + ['pagina' => $depositPage - 1])) ?>">Anterior</a><?php endif; ?><?php if ($depositHasMore): ?><a class="btn btn-sm btn-outline-secondary" href="?<?= e(http_build_query($depositPeriodQuery + ['pagina' => $depositPage + 1])) ?>">Siguiente</a><?php endif; ?></nav><?php endif; ?>
 </section>
 <script>
 window.personalDepositGemini = {
     endpoint: <?= json_encode(APP_URL . '/servicios/finanzas/depositos_personal_gemini.php') ?>,
     saveEndpoint: <?= json_encode(APP_URL . '/servicios/finanzas/depositos_personal_guardar.php') ?>,
+    batchSaveEndpoint: <?= json_encode(APP_URL . '/servicios/finanzas/depositos_personal_guardar_lote.php') ?>,
     fileEndpoint: <?= json_encode(APP_URL . '/servicios/finanzas/depositos_personal_archivo.php') ?>,
     actionsEndpoint: <?= json_encode(APP_URL . '/servicios/finanzas/depositos_personal_acciones.php') ?>,
     periodMode: <?= json_encode($depositPeriod['mode']) ?>,
@@ -237,5 +255,6 @@ window.personalDepositGemini = {
     csrf: <?= json_encode(csrf_token()) ?>
 };
 </script>
-<script src="<?= e(APP_URL . '/recursos/js/finanzas_depositos_personal.js?v=19') ?>" defer></script>
+<script src="<?= e(APP_URL . '/recursos/js/finanzas_depositos_personal_lote.js?v=2') ?>" defer></script>
+<script src="<?= e(APP_URL . '/recursos/js/finanzas_depositos_personal.js?v=21') ?>" defer></script>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>

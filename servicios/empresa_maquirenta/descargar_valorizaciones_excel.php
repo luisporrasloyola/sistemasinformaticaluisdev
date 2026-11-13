@@ -41,7 +41,7 @@ $queries = [];
 $parameters = [];
 foreach (($site === 'consolidado' ? $sources : [$site => $sources[$site]]) as $key => $source) {
     $queries[] = "SELECT c.id, c.fecha, m.nombre AS equipo, COALESCE(u.name, 'Sin usuario') AS registrado_por,
-        v.horas_trabajo, v.tarifa_equipo, s.tarifa_supervisor, d.descuento, d.observaciones, d.movilizacion_desmovilizacion,
+        v.horas_trabajo, v.tarifa_equipo, v.movilizacion_desmovilizacion, s.tarifa_supervisor, d.descuento, d.observaciones,
         ae.costo_equipo AS ajuste_equipo, ad.costo_supervisor AS ajuste_supervisor, ad.total AS ajuste_total,
         COALESCE(b.bloqueado, 0) AS bloqueado, '{$source['name']}' AS central
         FROM {$source['charla']} c
@@ -110,15 +110,17 @@ foreach ($groups as $records) {
     $supervisorCost = $included ? (float) ($records[0]['ajuste_supervisor'] ?? ($supervisorHours * (float) ($included[0]['tarifa_supervisor'] ?? 50))) : 0.0;
     $equipmentCosts = [];
     $equipmentTotal = 0.0;
+    $mobilizationTotal = 0.0;
     foreach ($records as $index => $record) {
         $equipmentName = mb_strtolower(trim((string) $record['equipo']), 'UTF-8');
         $defaultRate = str_contains($equipmentName, 'montacarga') ? 95 : (str_contains($equipmentName, 'tijeral') ? 80 : 125);
         $equipmentCosts[$index] = (int) $record['bloqueado'] === 1 ? 0.0
             : (float) ($record['ajuste_equipo'] ?? ((float) ($record['horas_trabajo'] ?? 8) * (float) ($record['tarifa_equipo'] ?? $defaultRate)));
         $equipmentTotal += $equipmentCosts[$index];
+        if ((int) $record['bloqueado'] !== 1) $mobilizationTotal += (float) ($record['movilizacion_desmovilizacion'] ?? 0);
     }
     $discount = (float) ($records[0]['descuento'] ?? 0);
-    $dayTotal = $included ? (float) ($records[0]['ajuste_total'] ?? ($equipmentTotal + $supervisorCost - $discount)) : 0.0;
+    $dayTotal = $included ? (float) ($records[0]['ajuste_total'] ?? ($equipmentTotal + $mobilizationTotal + $supervisorCost - $discount)) : 0.0;
     $periodTotal += $dayTotal;
 
     foreach ($records as $index => $record) {
@@ -127,7 +129,7 @@ foreach ($groups as $records) {
         $values = [
             ++$number, $displayDate($date), $central,
             $clean($record['equipo']), $clean($record['registrado_por']),
-            $index === 0 ? $clean($record['movilizacion_desmovilizacion'] ?? '') : '', (float) ($record['horas_trabajo'] ?? 8),
+            $record['movilizacion_desmovilizacion'] === null ? null : (float) $record['movilizacion_desmovilizacion'], (float) ($record['horas_trabajo'] ?? 8),
             (float) ($record['tarifa_equipo'] ?? $defaultRate),
             (float) ($record['tarifa_supervisor'] ?? 50), round($equipmentCosts[$index], 2),
             $index === 0 ? round($supervisorCost, 2) : null,
@@ -135,7 +137,7 @@ foreach ($groups as $records) {
             $index === 0 ? round($dayTotal, 2) : null,
             $index === 0 ? $clean($record['observaciones'] ?? '') : '',
         ];
-        $numericColumns = [1, 7, 8, 9, 10, 11, 12, 13];
+        $numericColumns = [1, 6, 7, 8, 9, 10, 11, 12, 13];
         $cells = [];
         foreach ($values as $column => $value) {
             $column++;
@@ -148,7 +150,7 @@ foreach ($groups as $records) {
         $sheetRows[] = xlsx_row($rowNumber++, $cells, 25);
     }
     if (count($records) > 1) {
-        foreach (['F', 'K', 'L', 'M', 'N'] as $column) {
+        foreach (['K', 'L', 'M', 'N'] as $column) {
             $merges[] = $column . $firstEquipmentRow . ':' . $column . ($rowNumber - 1);
         }
     }

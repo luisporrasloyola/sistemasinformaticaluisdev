@@ -9,6 +9,8 @@ $empresaOpen = str_contains($currentPath, '/modulos/empresa/');
 $clientesOpen = str_contains($currentPath, '/modulos/clientes/');
 $clientesInformacionOpen = str_ends_with($currentPath, '/modulos/clientes/informacion.php');
 $clientesPmiOpen = str_ends_with($currentPath, '/modulos/clientes/pmi.php');
+$comprasOpen = str_contains($currentPath, '/modulos/compras/');
+$comprasRegistroOpen = str_ends_with($currentPath, '/modulos/compras/registro.php');
 $cobranzasOpen = str_contains($currentPath, '/modulos/cobranzas/');
 $cobranzasValorizacionOpen = str_ends_with($currentPath, '/modulos/cobranzas/valorizacion.php');
 $finanzasOpen = str_contains($currentPath, '/modulos/finanzas/');
@@ -164,6 +166,13 @@ $isAdmin = is_admin();
                 </div>
             </div>
 
+            <button class="nav-link nav-parent <?= $comprasOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#comprasMenu" aria-expanded="<?= $comprasOpen ? 'true' : 'false' ?>" aria-controls="comprasMenu">
+                <i class="fa-solid fa-cart-shopping"></i><span>Compras</span><i class="fa-solid fa-chevron-down nav-caret"></i>
+            </button>
+            <div class="collapse <?= $comprasOpen ? 'show' : '' ?>" id="comprasMenu"><div class="submenu">
+                <a class="nav-link sub-link <?= $comprasRegistroOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/compras/registro.php"><i class="fa-solid fa-file-invoice"></i><span>Registro de compras</span></a>
+            </div></div>
+
             <button class="nav-link nav-parent <?= $cobranzasOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#cobranzasMenu" aria-expanded="<?= $cobranzasOpen ? 'true' : 'false' ?>" aria-controls="cobranzasMenu">
                 <i class="fa-solid fa-money-bill-transfer"></i><span>Cobranzas</span><i class="fa-solid fa-chevron-down nav-caret"></i>
             </button>
@@ -260,6 +269,12 @@ $isAdmin = is_admin();
                 <div class="collapse <?= $clientesOpen ? 'show' : '' ?>" id="clientesMenuGestor"><div class="submenu">
                     <?php if (current_user_can_module('clientes.informacion')): ?><a class="nav-link sub-link <?= $clientesInformacionOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/clientes/informacion.php"><i class="fa-solid fa-address-card"></i><span>Información de clientes</span></a><?php endif; ?>
                     <?php if (current_user_can_module('clientes.pmi')): ?><a class="nav-link sub-link <?= $clientesPmiOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/clientes/pmi.php"><i class="fa-solid fa-file-shield"></i><span>PMI Clientes</span></a><?php endif; ?>
+                </div></div>
+            <?php endif; ?>
+            <?php if (current_user_can_module('compras') && current_user_can_module('compras.registro')): ?>
+                <button class="nav-link nav-parent <?= $comprasOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#comprasMenuGestor" aria-expanded="<?= $comprasOpen ? 'true' : 'false' ?>" aria-controls="comprasMenuGestor"><i class="fa-solid fa-cart-shopping"></i><span>Compras</span><i class="fa-solid fa-chevron-down nav-caret"></i></button>
+                <div class="collapse <?= $comprasOpen ? 'show' : '' ?>" id="comprasMenuGestor"><div class="submenu">
+                    <a class="nav-link sub-link <?= $comprasRegistroOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/compras/registro.php"><i class="fa-solid fa-file-invoice"></i><span>Registro de compras</span></a>
                 </div></div>
             <?php endif; ?>
             <?php if (current_user_can_module('cobranzas') && current_user_can_module('cobranzas.valorizacion')): ?>
