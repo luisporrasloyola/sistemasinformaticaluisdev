@@ -192,9 +192,10 @@ require __DIR__ . '/../../includes/header.php';
                     $depositModels[] = ['transferencia Interbank-Otros.jpg', 'Constancia de transferencia Interbank'];
                     $depositModels[] = ['Tranferencia Interbank 2.jpeg', 'Transferencia Interbank con destinatario oculto'];
                     $depositModels[] = ['Pago efectivo.jpeg', 'Pago efectivo Interbank'];
+                    $depositModels[] = ['TransferenciaOtros.jpeg', 'Transferencia masiva con un beneficiario'];
                 }
                 foreach ($depositModels as $index => [$file, $label]):
-                    $modelFormats = [8 => '', 9 => 'pdf', 10 => 'imagen', 11 => 'plin', 12 => 'interbank_constancia', 13 => 'interbank_oculto', 14 => 'pago_efectivo'];
+                    $modelFormats = [8 => '', 9 => 'pdf', 10 => 'imagen', 11 => 'plin', 12 => 'interbank_constancia', 13 => 'interbank_oculto', 14 => 'pago_efectivo', 15 => 'transferencia_masiva'];
                     $modelImageUrl = isset($modelFormats[$index]) ? APP_URL . '/servicios/finanzas/depositos_personal_modelo_lote.php?formato=' . rawurlencode($modelFormats[$index]) : APP_URL . '/img/depositosgemini/' . rawurlencode($file); ?>
                     <figure class="personal-deposit-model-slide mb-0" id="depositModel<?= $index + 1 ?>"><?php if ($index === 9): ?><iframe src="<?= e($modelImageUrl) ?>#toolbar=0" title="Modelo de comprobante <?= e($label) ?>" loading="lazy"></iframe><?php else: ?><img src="<?= e($modelImageUrl) ?>" alt="Modelo de comprobante <?= e($label) ?>" loading="lazy" decoding="async"><?php endif; ?><figcaption><?= e($label) ?></figcaption></figure>
                 <?php endforeach; ?>

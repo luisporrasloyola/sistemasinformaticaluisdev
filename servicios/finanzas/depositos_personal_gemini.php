@@ -65,7 +65,7 @@ session_write_close();
 $image = file_get_contents($path);
 if ($image === false) deposit_gemini_reply(400, ['error' => 'No se pudo leer la imagen.']);
 $prompt = <<<'PROMPT'
-Analiza este comprobante peruano. Identifica primero si es un lote con varios beneficiarios (modelo 6); en ese caso devuelve registros y no un importe total. Para modelos individuales devuelve JSON con las claves modelo, fecha, acreedor, monto, modo_pago. Reconoce los modelos descritos:
+Analiza este comprobante peruano. Identifica primero si es un lote del modelo 6 con varios beneficiarios; en ese caso devuelve registros y no un importe total. Si aparece un único beneficiario, devuelve un registro individual aunque el encabezado diga "Pago masivo varios". Para modelos individuales devuelve JSON con las claves modelo, fecha, acreedor, monto, modo_pago. Reconoce los modelos descritos:
 1. YAPE: diseño morado, marca yape y texto "¡Yapeaste!". modelo="YAPE", modo_pago="YAPE". Fecha junto al ícono de calendario. Acreedor: el nombre debajo del importe, copiado literalmente con cualquier asterisco visible. No uses "Santa Rosa de Lima", celular ni destino como acreedor. Monto: la cantidad principal bajo "¡Yapeaste!".
 2. PLIN de Interbank: logotipo plin, texto "¡Pago exitoso!", importe en verde, secciones "Enviado a:" y "Fecha y hora:". modelo="PLIN", modo_pago="PLIN". Fecha: la de "Fecha y hora:". Acreedor: exclusivamente el nombre inmediatamente debajo de "Enviado a:", sin teléfono ni la palabra Plin. Monto: el importe principal en verde debajo de "¡Pago exitoso!".
    Variante PLIN de Interbank: fondo verde, logotipo Interbank, texto "Plineo exitoso", importe verde grande, fecha debajo del importe y sección "Enviado a". También usa modelo="PLIN" y modo_pago="PLIN". Fecha: la que aparece debajo del importe. Acreedor: solo el nombre junto a "Enviado a", antes del teléfono. Monto: el importe verde grande. Si el teléfono del destinatario termina con "- Yape", eso indica el destino, NO el modo de pago: sigue siendo PLIN porque el comprobante dice "Plineo exitoso". Por ejemplo, con "04 Nov 2026", "Jesus R Carrasquel L" y "S/ 200", devuelve fecha="04/11/2026", acreedor="Jesus R Carrasquel L", monto="200" y modo_pago="PLIN".
@@ -83,6 +83,7 @@ Para todos: fecha DD/MM/AAAA; monto como cadena numérica positiva sin S/ ni sep
 Para el modelo 6, enumera los registros estrictamente en el orden visual de arriba hacia abajo de la tabla de beneficiarios. Nunca reordenes por nombre ni por importe.
 Si el archivo es un PDF de Interbank Empresas con "Detalle de solicitud", "Información de lote" y columnas "Beneficiario", "Tipo de abono", "Cuenta", "Monto" y "Estado", aplica el modelo 6 aunque el nombre del lote sea "pago planill" y no diga "PAGOS VARIOS". Devuelve una fila por cada beneficiario procesado de todas las páginas, en el orden visual. Toma la fecha de "Programación de envío" y el monto de la misma fila; no uses "Total soles" ni al creador/autorizador como beneficiario. El nombre del beneficiario puede estar dividido en dos líneas y hasta partir una palabra (por ejemplo "AULA R" o "CO RAC"): conserva esas letras y no mezcles el DNI, la cuenta ni otra fila en el nombre. Para este modelo devuelve modo_pago="Transferencia Interbank" y depositante="Cuenta empresa". Si hay seis beneficiarios, devuelve seis registros. No omitas filas ni inventes datos.
 7. PAGO_EFECTIVO: comprobante de Interbank con check verde, texto "Pagaste", importe grande verde, destinatario "a PAGOEFECTIVO" y secciones "Cuenta cargo", "Servicio: PagoEfectivo", "Recibo", "Datos" y "Fecha y hora". modelo="PAGO_EFECTIVO", acreedor="Pago efectivo" y modo_pago="Pago efectivo". La fecha se toma solamente de "Fecha y hora", nunca de "Vence"; el monto se toma del importe grande debajo de "Pagaste" y debe coincidir con el de "Recibo". No uses "Life Maquinarias" (cuenta cargo) como acreedor, ni el número de servicio, recibo o código de operación como monto. Ejemplo: "10 Nov 2026 05:14 PM" y "S/ 958.85" devuelven fecha="10/11/2026", acreedor="Pago efectivo", monto="958.85" y modo_pago="Pago efectivo". Reconoce este modelo por el texto de pago/servicio, no solo por el logotipo Interbank.
+8. TRANSFERENCIA_MASIVA: captura de banca empresarial con encabezado "Pago masivo varios", panel central "Tu solicitud se está procesando", estado "Realizado", campos "Monto", "Cuenta de cargo", "Fecha y hora" y tabla inferior "Lista de beneficiarios". Si la lista tiene exactamente una persona, devuelve modelo="TRANSFERENCIA_MASIVA" y un registro individual. Acreedor: el nombre completo de esa única fila de beneficiarios; ignora "Hola, [usuario]", la empresa y la cuenta de cargo. Monto: el "Total Soles" de esa fila, que debe coincidir con el monto en soles del panel central; ignora el monto en dólares. Fecha: toma exactamente el día, mes y año impresos junto a "Fecha y hora" en el panel central, sin cambiarlo por zona horaria ni inferir el día anterior. modo_pago="Transferencia". Si hay dos o más beneficiarios en este formato, devuelve modelo="pendiente" y no atribuyas el monto total a una sola persona. Ejemplo: con fecha "11/11/2026", "CAMILA NICOLE GUERRERO PAUCAR" y "S/ 350.00" devuelve fecha="11/11/2026", acreedor="Camila Nicole Guerrero Paucar", monto="350" y modo_pago="Transferencia".
 PROMPT;
 $body = json_encode([
     'contents' => [['role' => 'user', 'parts' => [['text' => $prompt], ['inline_data' => ['mime_type' => $mime, 'data' => base64_encode($image)]]]]],
@@ -145,7 +146,7 @@ if ($model === 'TRANSFERENCIA_INTERBANK_LOTE') {
     session_write_close();
     deposit_gemini_reply(200, ['model' => $model, 'records' => $records, 'batch_token' => $token]);
 }
-if (!in_array($model, ['YAPE', 'PLIN', 'TRANSFERENCIA_INTERBANK', 'TRANSFERENCIA_BCP', 'TRANSFERENCIA_MOVIMIENTO', 'PAGO_EFECTIVO'], true)) deposit_gemini_reply(200, ['model' => 'pendiente', 'fields' => null]);
+if (!in_array($model, ['YAPE', 'PLIN', 'TRANSFERENCIA_INTERBANK', 'TRANSFERENCIA_BCP', 'TRANSFERENCIA_MOVIMIENTO', 'TRANSFERENCIA_MASIVA', 'PAGO_EFECTIVO'], true)) deposit_gemini_reply(200, ['model' => 'pendiente', 'fields' => null]);
 
 $date = is_string($values['fecha'] ?? null) ? trim($values['fecha']) : '';
 $parsedDate = DateTimeImmutable::createFromFormat('!d/m/Y', $date);
@@ -161,6 +162,7 @@ deposit_gemini_reply(200, ['model' => $model, 'fields' => [
         'TRANSFERENCIA_INTERBANK' => 'Transferencia Interbank',
         'TRANSFERENCIA_BCP' => 'Tranferencia BCP',
         'TRANSFERENCIA_MOVIMIENTO' => 'Transferencia',
+        'TRANSFERENCIA_MASIVA' => 'Transferencia',
         'PAGO_EFECTIVO' => 'Pago efectivo',
         default => $model,
     },

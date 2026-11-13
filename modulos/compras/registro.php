@@ -144,6 +144,7 @@ require __DIR__ . '/../../includes/header.php';
                     ['transferencia Interbank-Otros.jpg', 'Constancia de transferencia Interbank', 'interbank_constancia'],
                     ['Tranferencia Interbank 2.jpeg', 'Transferencia Interbank con destinatario oculto', 'interbank_oculto'],
                     ['Pago efectivo.jpeg', 'Pago efectivo Interbank', 'pago_efectivo'],
+                    ['TransferenciaOtros.jpeg', 'Transferencia masiva con un beneficiario', 'transferencia_masiva'],
                 ];
                 foreach ($purchaseModels as $index => $model):
                     [$file, $label] = $model;

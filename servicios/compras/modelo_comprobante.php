@@ -13,6 +13,7 @@ $models = [
     'interbank_constancia' => ['transferencia Interbank-Otros.jpg', 'image/jpeg', 'modelo-interbank-constancia.jpg'],
     'interbank_oculto' => ['Tranferencia Interbank 2.jpeg', 'image/jpeg', 'modelo-interbank-destinatario-oculto.jpeg'],
     'pago_efectivo' => ['Pago efectivo.jpeg', 'image/jpeg', 'modelo-pago-efectivo.jpeg'],
+    'transferencia_masiva' => ['TransferenciaOtros.jpeg', 'image/jpeg', 'modelo-transferencia-masiva.jpeg'],
 ];
 $format = (string) ($_GET['formato'] ?? '');
 if (!isset($models[$format])) {
