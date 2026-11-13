@@ -5479,7 +5479,8 @@ function initDashboardEjecutivo() {
     Chart.defaults.font.weight = '500';
 
     const allDashboardData = window.dashboardEjecutivoData;
-    let data = allDashboardData;
+    const initialCompany = filters.company?.value === '__all__' ? '' : (filters.company?.value || '');
+    let data = initialCompany ? (allDashboardData.byCompany?.[initialCompany] || allDashboardData) : allDashboardData;
     const colors = {
         green: '#198754',      // Verde original
         yellow: '#ffc107',     // Amarillo original
@@ -5838,6 +5839,7 @@ function initDashboardEjecutivo() {
     if (window.jQuery && filters.company) {
         jQuery(filters.company).on('select2:select.dashboardVisuals select2:clear.dashboardVisuals', updateVisualsForCompany);
     }
+    updateVisualsForCompany();
 }
 function initUsuariosModule() {
     const table = document.getElementById('usuariosTable');

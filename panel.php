@@ -115,6 +115,10 @@ foreach (array_keys($companies) as $company) {
         'positions' => ['labels' => array_keys($companyPositions), 'values' => array_values($companyPositions)],
     ];
 }
+$defaultDashboardCompany = isset($companies['Life Maquinarias']) ? 'Life Maquinarias' : '__all__';
+$initialDashboardCounts = $defaultDashboardCompany === '__all__'
+    ? $counts
+    : ($countsByCompany[$defaultDashboardCompany] ?? ['verde' => 0, 'amarillo' => 0, 'rojo' => 0]);
 
 function dashboard_document_status(string $endDate, int $requirementId): array
 {
@@ -209,7 +213,7 @@ require __DIR__ . '/includes/header.php';
             </div>
             <div class="executive-card-body">
                 <span>Total en Verde</span>
-                <strong id="dashboardCountGreen"><?= $counts['verde'] ?></strong>
+                <strong id="dashboardCountGreen"><?= $initialDashboardCounts['verde'] ?></strong>
                 <small>Documentos Aptos</small>
             </div>
         </div>
@@ -224,7 +228,7 @@ require __DIR__ . '/includes/header.php';
             </div>
             <div class="executive-card-body">
                 <span>Total en Amarillo</span>
-                <strong id="dashboardCountYellow"><?= $counts['amarillo'] ?></strong>
+                <strong id="dashboardCountYellow"><?= $initialDashboardCounts['amarillo'] ?></strong>
                 <small>Documentos por vencer</small>
             </div>
         </div>
@@ -240,7 +244,7 @@ require __DIR__ . '/includes/header.php';
             </div>
             <div class="executive-card-body">
                 <span>Total en Rojo</span>
-                <strong id="dashboardCountRed"><?= $counts['rojo'] ?></strong>
+                <strong id="dashboardCountRed"><?= $initialDashboardCounts['rojo'] ?></strong>
                 <small>Documentos vencidos</small>
             </div>
         </div>
@@ -284,9 +288,9 @@ require __DIR__ . '/includes/header.php';
         <div class="dashboard-filter-company">
             <label class="form-label">Empresa</label>
             <select class="form-select select2-searchable" id="dashboardEmpresaFilter" data-placeholder="Buscar empresa" data-no-results="No se encontraron empresas">
-                <option value="__all__">Todas</option>
+                <option value="__all__"<?= $defaultDashboardCompany === '__all__' ? ' selected' : '' ?>>Todas</option>
                 <?php foreach (array_keys($companies) as $company): ?>
-                    <option value="<?= e($company) ?>"><?= e($company) ?></option>
+                    <option value="<?= e($company) ?>"<?= $company === $defaultDashboardCompany ? ' selected' : '' ?>><?= e($company) ?></option>
                 <?php endforeach; ?>
             </select>
         </div>
