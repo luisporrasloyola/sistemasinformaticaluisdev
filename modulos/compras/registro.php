@@ -13,6 +13,6 @@ require __DIR__ . '/../../includes/header.php';
 </div>
 <section class="work-panel">
     <h2 class="h5 mb-2">Registro de compras</h2>
-    <p class="text-muted mb-0">Este módulo está listo para configurar los campos y el flujo de registro de compras.</p>
+    <p class="text-muted mb-0">En desarrollo</p>
 </section>
 <?php require __DIR__ . '/../../includes/footer.php';
