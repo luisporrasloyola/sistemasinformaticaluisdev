@@ -47,7 +47,7 @@ if ($manual && ($depositor === '' || mb_strlen($depositor) > 150)) deposit_save_
 if (!preg_match('/^\d{1,9}(?:\.\d{1,2})?$/D', $amount) || (float) $amount <= 0) deposit_save_reply(422, ['error' => 'Ingrese un monto válido en soles.']);
 if ($manual) {
     if ($method === '' || mb_strlen($method) > 100) deposit_save_reply(422, ['error' => 'Ingrese un modo de pago (máximo 100 caracteres).']);
-} elseif (!in_array($method, ['YAPE', 'PLIN', 'Transferencia Interbank', 'Tranferencia Interbank', 'Tranferencia BCP', 'Transferencia'], true)) {
+} elseif (!in_array($method, ['YAPE', 'PLIN', 'Transferencia Interbank', 'Tranferencia Interbank', 'Tranferencia BCP', 'Transferencia', 'Pago efectivo'], true)) {
     deposit_save_reply(422, ['error' => 'El modo de pago no corresponde a un modelo configurado.']);
 }
 $photo = $_FILES['foto'] ?? null;

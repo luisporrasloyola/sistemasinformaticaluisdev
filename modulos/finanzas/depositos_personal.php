@@ -191,9 +191,10 @@ require __DIR__ . '/../../includes/header.php';
                     $depositModels[] = ['Plin_otros.jpeg', 'Constancia de Pago Plin'];
                     $depositModels[] = ['transferencia Interbank-Otros.jpg', 'Constancia de transferencia Interbank'];
                     $depositModels[] = ['Tranferencia Interbank 2.jpeg', 'Transferencia Interbank con destinatario oculto'];
+                    $depositModels[] = ['Pago efectivo.jpeg', 'Pago efectivo Interbank'];
                 }
                 foreach ($depositModels as $index => [$file, $label]):
-                    $modelFormats = [8 => '', 9 => 'pdf', 10 => 'imagen', 11 => 'plin', 12 => 'interbank_constancia', 13 => 'interbank_oculto'];
+                    $modelFormats = [8 => '', 9 => 'pdf', 10 => 'imagen', 11 => 'plin', 12 => 'interbank_constancia', 13 => 'interbank_oculto', 14 => 'pago_efectivo'];
                     $modelImageUrl = isset($modelFormats[$index]) ? APP_URL . '/servicios/finanzas/depositos_personal_modelo_lote.php?formato=' . rawurlencode($modelFormats[$index]) : APP_URL . '/img/depositosgemini/' . rawurlencode($file); ?>
                     <figure class="personal-deposit-model-slide mb-0" id="depositModel<?= $index + 1 ?>"><?php if ($index === 9): ?><iframe src="<?= e($modelImageUrl) ?>#toolbar=0" title="Modelo de comprobante <?= e($label) ?>" loading="lazy"></iframe><?php else: ?><img src="<?= e($modelImageUrl) ?>" alt="Modelo de comprobante <?= e($label) ?>" loading="lazy" decoding="async"><?php endif; ?><figcaption><?= e($label) ?></figcaption></figure>
                 <?php endforeach; ?>
@@ -256,5 +257,5 @@ window.personalDepositGemini = {
 };
 </script>
 <script src="<?= e(APP_URL . '/recursos/js/finanzas_depositos_personal_lote.js?v=2') ?>" defer></script>
-<script src="<?= e(APP_URL . '/recursos/js/finanzas_depositos_personal.js?v=21') ?>" defer></script>
+<script src="<?= e(APP_URL . '/recursos/js/finanzas_depositos_personal.js?v=22') ?>" defer></script>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>

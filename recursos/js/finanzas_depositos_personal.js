@@ -474,7 +474,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             if (file.type === 'application/pdf') throw new Error('El PDF debe contener varios beneficiarios de Interbank para guardarse automáticamente.');
-            if (!['YAPE', 'PLIN', 'TRANSFERENCIA_INTERBANK', 'TRANSFERENCIA_BCP', 'TRANSFERENCIA_MOVIMIENTO'].includes(result.model)) {
+            if (!['YAPE', 'PLIN', 'TRANSFERENCIA_INTERBANK', 'TRANSFERENCIA_BCP', 'TRANSFERENCIA_MOVIMIENTO', 'PAGO_EFECTIVO'].includes(result.model)) {
                 status.textContent = 'Modelo pendiente de configurar. Esta foto aún no se puede guardar.';
                 return;
             }
@@ -490,7 +490,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 status.textContent = 'Datos detectados. Guardando depósito…';
                 await saveCard(item, currentGeneration);
             } else {
-                const modelName = result.model === 'TRANSFERENCIA_INTERBANK' ? 'Transferencia Interbank' : result.model === 'TRANSFERENCIA_BCP' ? 'Transferencia BCP' : result.model === 'TRANSFERENCIA_MOVIMIENTO' ? 'Transferencia' : result.model === 'PLIN' ? 'Plin' : 'Yape';
+                const modelName = result.model === 'PAGO_EFECTIVO' ? 'Pago efectivo' : result.model === 'TRANSFERENCIA_INTERBANK' ? 'Transferencia Interbank' : result.model === 'TRANSFERENCIA_BCP' ? 'Transferencia BCP' : result.model === 'TRANSFERENCIA_MOVIMIENTO' ? 'Transferencia' : result.model === 'PLIN' ? 'Plin' : 'Yape';
                 status.textContent = `${modelName} reconocido. Revise y complete los datos pendientes.`;
                 item.save.hidden = false;
             }
