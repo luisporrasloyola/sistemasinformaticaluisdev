@@ -114,7 +114,7 @@ require __DIR__ . '/../../includes/header.php';
 </style>
 <section class="work-panel personal-deposit-upload" aria-labelledby="personalDepositUploadTitle">
     <div class="personal-deposit-upload-header">
-        <div><div class="personal-deposit-upload-title mb-1"><h2 class="h5 mb-0" id="personalDepositUploadTitle">Nueva compra</h2></div><p class="small text-muted mb-0">Seleccione hasta 5 fotos o PDF (máximo 5 MB por foto y 1,5 MB por PDF). Los registros reconocidos se guardan automáticamente, incluso si un archivo contiene varios beneficiarios.</p></div>
+        <div><div class="personal-deposit-upload-title mb-1"><h2 class="h5 mb-0" id="personalDepositUploadTitle">Nueva compra</h2><button class="personal-deposit-info" type="button" data-bs-toggle="modal" data-bs-target="#purchaseModelsModal" title="Ver comprobantes compatibles" aria-label="Ver comprobantes compatibles"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></button></div><p class="small text-muted mb-0">Seleccione hasta 5 fotos o PDF (máximo 5 MB por foto y 1,5 MB por PDF). Los registros reconocidos se guardan automáticamente, incluso si un archivo contiene varios beneficiarios.</p></div>
         <label class="btn btn-primary mb-0" for="personalDepositFile"><i class="fa-solid fa-file-arrow-up me-1" aria-hidden="true"></i>Seleccionar fotos o PDF</label>
         <input class="visually-hidden" type="file" id="personalDepositFile" accept="image/jpeg,image/png,image/webp,application/pdf" multiple aria-label="Seleccionar hasta cinco fotos o PDF de compras">
     </div>
@@ -122,6 +122,43 @@ require __DIR__ . '/../../includes/header.php';
     <div class="mt-3" id="personalDepositProgress" hidden><div class="small fw-semibold mb-1" id="personalDepositProgressText" role="status"></div><div class="progress" role="progressbar" aria-label="Lectura y guardado de compras" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="progress-bar progress-bar-striped progress-bar-animated" id="personalDepositProgressBar" style="width:0%"></div></div></div>
     <div class="mt-3" id="personalDepositSelection" hidden><div class="small text-muted mb-2" id="personalDepositFileCount"></div><div id="personalDepositCards"></div></div>
 </section>
+<div class="modal fade personal-deposit-model-modal" id="purchaseModelsModal" tabindex="-1" aria-labelledby="purchaseModelsTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content">
+        <div class="modal-header"><h2 class="modal-title h5 mb-0" id="purchaseModelsTitle">Comprobantes compatibles</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+        <div class="modal-body"><p class="text-muted small mb-3">La lectura automática reconoce estos formatos de Yape, Plin y transferencias bancarias.</p>
+            <div class="personal-deposit-model-carousel" aria-label="Ejemplos de comprobantes">
+                <?php
+                $purchaseModels = [
+                    ['YAPE.png', 'Yape'],
+                    ['PLIN.png', 'Plin'],
+                    ['PLIN otro modelo.png', 'Plin'],
+                    ['tranferencia interbank.png', 'Transferencia Interbank'],
+                    ['tranferencia interbank otro modelo.png', 'Transferencia Interbank'],
+                    ['Tranferencia Interbank-otros.png', 'Transferencia Interbank'],
+                    ['Transferencia BCP.png', 'Transferencia BCP'],
+                    ['Transferencia.png', 'Transferencia'],
+                    ['Transferencia Interbank otros.png', 'Transferencia Interbank por lote', 'lote'],
+                    ['Depositos.pdf', 'Transferencia Interbank por lote (PDF)', 'pdf'],
+                    ['Depositos.png', 'Transferencia Interbank por lote (foto)', 'imagen'],
+                    ['Plin_otros.jpeg', 'Constancia de Pago Plin', 'plin'],
+                    ['transferencia Interbank-Otros.jpg', 'Constancia de transferencia Interbank', 'interbank_constancia'],
+                    ['Tranferencia Interbank 2.jpeg', 'Transferencia Interbank con destinatario oculto', 'interbank_oculto'],
+                    ['Pago efectivo.jpeg', 'Pago efectivo Interbank', 'pago_efectivo'],
+                ];
+                foreach ($purchaseModels as $index => $model):
+                    [$file, $label] = $model;
+                    $modelUrl = isset($model[2])
+                        ? APP_URL . '/servicios/compras/modelo_comprobante.php?formato=' . rawurlencode($model[2])
+                        : APP_URL . '/img/depositosgemini/' . rawurlencode($file);
+                ?>
+                    <figure class="personal-deposit-model-slide mb-0" id="purchaseModel<?= $index + 1 ?>"><?php if ($file === 'Depositos.pdf'): ?><iframe src="<?= e($modelUrl) ?>#toolbar=0" title="Modelo de comprobante <?= e($label) ?>" loading="lazy"></iframe><?php else: ?><img src="<?= e($modelUrl) ?>" alt="Modelo de comprobante <?= e($label) ?>" loading="lazy" decoding="async"><?php endif; ?><figcaption><?= e($label) ?></figcaption></figure>
+                <?php endforeach; ?>
+            </div>
+            <nav class="personal-deposit-model-nav" aria-label="Ir a un modelo de comprobante"><?php for ($index = 1; $index <= count($purchaseModels); $index++): ?><a href="#purchaseModel<?= $index ?>" aria-label="Ver modelo <?= $index ?>"><?= $index ?></a><?php endfor; ?></nav>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button></div>
+    </div></div>
+</div>
 <div class="modal fade personal-deposit-manual-modal" id="personalDepositManualModal" tabindex="-1" aria-labelledby="personalDepositManualTitle" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
         <form id="personalDepositManualForm" enctype="multipart/form-data">
