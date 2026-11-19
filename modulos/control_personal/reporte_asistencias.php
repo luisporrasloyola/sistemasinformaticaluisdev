@@ -71,17 +71,20 @@ $summary = $report['summary'] ?? [];
 $monthlyDays = $report['monthly_day_summary'][$month] ?? [];
 $hoursBook = $worker ? attendance_report_build_hours_ledger($workerId, $month, $report['daily_classification']) : null;
 $monthlyHours = $hoursBook['current'] ?? [];
-$hourPurchases = [];
-if ($worker && ($hoursBook['purchase_schema_available'] ?? false)) {
-    $purchaseStmt = db()->prepare('SELECT p.id, p.purchase_date, p.hours_decimal, p.hourly_rate, p.total_amount, p.purchased_minutes, u.name AS registered_by FROM attendance_hour_purchases p LEFT JOIN users u ON u.id = p.registered_by_user_id WHERE p.worker_id = ? AND p.purchase_date BETWEEN ? AND ? ORDER BY p.purchase_date DESC, p.id DESC');
-    $purchaseStmt->execute([$workerId, $dateFrom, $dateTo]);
-    $hourPurchases = $purchaseStmt->fetchAll();
-}
+$hourPurchases = $worker && ($hoursBook['purchase_schema_available'] ?? false)
+    ? attendance_report_hour_purchases($workerId, $dateFrom, $dateTo)
+    : [];
+$hourDiscounts = $worker && ($hoursBook['discount_schema_available'] ?? false)
+    ? attendance_report_hour_discounts($workerId, $dateFrom, $dateTo)
+    : [];
 $canBuyHours = $worker && is_admin() && !$reportLocked && !$closureError && $dateFrom <= date('Y-m-d') && ($hoursBook['purchase_schema_available'] ?? false);
-if ($canBuyHours) {
+$canDiscountHours = $worker && is_admin() && !$reportLocked && !$closureError && $dateFrom <= date('Y-m-d') && ($hoursBook['discount_schema_available'] ?? false);
+if ($canBuyHours || $canDiscountHours) {
     $laterClosedStmt = db()->prepare('SELECT 1 FROM attendance_report_month_closures WHERE worker_id = ? AND report_month > ? AND admin_closed_at IS NOT NULL AND staff_closed_at IS NOT NULL LIMIT 1');
     $laterClosedStmt->execute([$workerId, $month]);
-    $canBuyHours = !$laterClosedStmt->fetchColumn();
+    $laterClosed = (bool) $laterClosedStmt->fetchColumn();
+    $canBuyHours = $canBuyHours && !$laterClosed;
+    $canDiscountHours = $canDiscountHours && !$laterClosed;
 }
 $hempAdjustment = $month === '2026-10' ? ($hoursBook['opening_adjustment'] ?? null) : null;
 $canEditHemp = $worker && $month === '2026-10' && is_admin() && !$reportLocked && !$closureError
@@ -303,7 +306,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <span>Horas extras vigentes</span>
             <strong><?= e(attendance_report_hours_label((int) ($monthlyHours['closing_minutes'] ?? 0))) ?></strong>
             <small class="attendance-hemp-days"><?= e(attendance_report_days_label((int) ($monthlyHours['closing_minutes'] ?? 0))) ?></small>
-            <small>HEMP + extras del mes − horas canjeadas − horas compradas</small>
+            <small>HEMP + extras del mes − horas canjeadas − horas compradas + horas descontadas</small>
         </div>
     </div>
     <div class="attendance-hour-purchases mt-3">
@@ -312,6 +315,13 @@ document.addEventListener('DOMContentLoaded', () => {
             <?php if ($canBuyHours): ?><button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#attendanceBuyHoursModal"><i class="fa-solid fa-cart-plus me-1" aria-hidden="true"></i>Comprar horas</button><?php endif; ?>
         </div>
         <?php if ($hourPurchases): ?><div class="table-responsive mt-2"><table class="table table-sm align-middle mb-0"><thead><tr><th>Fecha</th><th>Horas decimales</th><th>Precio por hora</th><th>Total</th><th>Registrado por</th><?php if ($canBuyHours): ?><th>Acciones</th><?php endif; ?></tr></thead><tbody><?php foreach ($hourPurchases as $purchase): ?><tr><td><?= e(date('d/m/Y', strtotime((string) $purchase['purchase_date']))) ?></td><td><?= e(number_format((float) $purchase['hours_decimal'], 2, '.', '')) ?> h</td><td>S/ <?= e(number_format((float) $purchase['hourly_rate'], 2, '.', ',')) ?></td><td><strong>S/ <?= e(number_format((float) $purchase['total_amount'], 2, '.', ',')) ?></strong></td><td><?= e((string) ($purchase['registered_by'] ?: '—')) ?></td><?php if ($canBuyHours): ?><td class="text-nowrap"><button class="btn btn-sm btn-outline-primary edit-hour-purchase" type="button" data-bs-toggle="modal" data-bs-target="#attendanceBuyHoursModal" data-id="<?= (int) $purchase['id'] ?>" data-date="<?= e((string) $purchase['purchase_date']) ?>" data-hours="<?= e((string) $purchase['hours_decimal']) ?>" data-rate="<?= e((string) $purchase['hourly_rate']) ?>" title="Editar compra" aria-label="Editar compra de <?= e((string) $purchase['hours_decimal']) ?> horas"><i class="fa-solid fa-pen" aria-hidden="true"></i></button> <button class="btn btn-sm btn-outline-danger delete-hour-purchase" type="button" data-id="<?= (int) $purchase['id'] ?>" data-hours="<?= e((string) $purchase['hours_decimal']) ?>" title="Eliminar compra" aria-label="Eliminar compra de <?= e((string) $purchase['hours_decimal']) ?> horas"><i class="fa-solid fa-trash" aria-hidden="true"></i></button></td><?php endif; ?></tr><?php endforeach; ?></tbody></table></div><?php endif; ?>
+    </div>
+    <div class="attendance-hour-purchases mt-3">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div><strong>Descuento · <?= e($monthLabel) ?></strong><span class="d-block text-muted small"><?= e(attendance_report_hours_label((int) ($monthlyHours['discounted_minutes'] ?? 0))) ?> sumadas al saldo de horas</span></div>
+            <?php if ($canDiscountHours): ?><button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#attendanceDiscountModal"><i class="fa-solid fa-minus me-1" aria-hidden="true"></i>Nuevo descuento</button><?php endif; ?>
+        </div>
+        <?php if ($hourDiscounts): ?><div class="table-responsive mt-2"><table class="table table-sm align-middle mb-0"><thead><tr><th>Fecha</th><th>Cantidad de horas</th><th>Monto de la hora</th><th>Monto a descontar</th><th>Registrado por</th><?php if ($canDiscountHours): ?><th>Acciones</th><?php endif; ?></tr></thead><tbody><?php foreach ($hourDiscounts as $discount): ?><tr><td><?= e(date('d/m/Y', strtotime((string) $discount['discount_date']))) ?></td><td><?= e(number_format((float) $discount['hours_decimal'], 2, '.', '')) ?> h</td><td>S/ <?= e(number_format((float) $discount['hourly_rate'], 2, '.', ',')) ?></td><td><strong>S/ <?= e(number_format((float) $discount['total_amount'], 2, '.', ',')) ?></strong></td><td><?= e((string) ($discount['registered_by'] ?: '—')) ?></td><?php if ($canDiscountHours): ?><td class="text-nowrap"><button class="btn btn-sm btn-outline-primary edit-hour-discount" type="button" data-bs-toggle="modal" data-bs-target="#attendanceDiscountModal" data-id="<?= (int) $discount['id'] ?>" data-date="<?= e((string) $discount['discount_date']) ?>" data-hours="<?= e((string) $discount['hours_decimal']) ?>" data-rate="<?= e((string) $discount['hourly_rate']) ?>" title="Editar descuento" aria-label="Editar descuento"><i class="fa-solid fa-pen" aria-hidden="true"></i></button> <button class="btn btn-sm btn-outline-danger delete-hour-discount" type="button" data-id="<?= (int) $discount['id'] ?>" title="Eliminar descuento" aria-label="Eliminar descuento"><i class="fa-solid fa-trash" aria-hidden="true"></i></button></td><?php endif; ?></tr><?php endforeach; ?></tbody></table></div><?php endif; ?>
     </div>
     <?php if (($monthlyHours['planned_redemption_days'] ?? 0) > 0): ?>
         <p class="attendance-hours-note"><?= (int) $monthlyHours['planned_redemption_days'] ?> día(s) «A cuenta de horas» programado(s) para fechas futuras; se descontarán al llegar esas fechas.</p>
@@ -483,6 +493,21 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
             <div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-primary" type="submit" id="attendancePurchaseSubmit">Guardar compra</button></div>
         </form>
+    </div></div>
+</div>
+<?php endif; ?>
+<?php if ($canDiscountHours): ?>
+<div class="modal fade" id="attendanceDiscountModal" tabindex="-1" aria-labelledby="attendanceDiscountTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header"><h2 class="modal-title h5" id="attendanceDiscountTitle">Nuevo descuento</h2><button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+        <form id="attendanceDiscountForm"><div class="modal-body">
+            <input type="hidden" name="worker_id" value="<?= (int) $workerId ?>"><input type="hidden" name="report_month" value="<?= e($month) ?>"><input type="hidden" name="discount_id" value="">
+            <p class="mb-2"><strong><?= e((string) $worker['full_name']) ?></strong></p>
+            <p class="small text-muted" id="attendanceDiscountBalanceHint" data-current="<?= e(attendance_report_hours_label((int) ($monthlyHours['closing_minutes'] ?? 0))) ?>">Horas extras vigentes: <?= e(attendance_report_hours_label((int) ($monthlyHours['closing_minutes'] ?? 0))) ?>.</p>
+            <label class="form-label" for="attendanceDiscountDate">Fecha</label><input class="form-control" id="attendanceDiscountDate" name="discount_date" type="date" min="<?= e($dateFrom) ?>" max="<?= e(min($dateTo, date('Y-m-d'))) ?>" value="<?= e(min($dateTo, date('Y-m-d'))) ?>" required>
+            <div class="row g-2 mt-1"><div class="col-sm-6"><label class="form-label" for="attendanceDiscountRate">Monto de la hora (S/)</label><input class="form-control" id="attendanceDiscountRate" name="hourly_rate" type="number" min="0.01" max="999999.99" step="0.01" inputmode="decimal" placeholder="15.00" required></div><div class="col-sm-6"><label class="form-label" for="attendanceDiscountHours">Cantidad de horas</label><input class="form-control" id="attendanceDiscountHours" name="hours_decimal" type="number" min="0.01" max="9999.99" step="0.01" inputmode="decimal" placeholder="10.00" required></div></div>
+            <div class="attendance-purchase-total mt-3"><span>Monto a descontar</span><strong id="attendanceDiscountTotal">S/ 0.00</strong></div>
+        </div><div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-primary" type="submit" id="attendanceDiscountSubmit">Guardar descuento</button></div></form>
     </div></div>
 </div>
 <?php endif; ?>

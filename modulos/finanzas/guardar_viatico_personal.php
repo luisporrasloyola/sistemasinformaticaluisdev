@@ -3,6 +3,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/finanzas_depositos_personal_match.php';
+require_once __DIR__ . '/../../includes/finanzas_personal_edicion_autorizacion.php';
 require_module_access('finanzas.gastos_personal');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_response(['ok' => false, 'message' => 'Método no permitido.'], 405);
@@ -87,6 +88,11 @@ try {
     if (mb_strlen($combined) > 10000) json_response(['ok' => false, 'message' => 'El campo de observaciones alcanzó su límite.'], 422);
 
     db()->beginTransaction();
+    $lockedRecord = personal_expense_locked_record(db(), (int) $workerId, [$markDate]);
+    if ($lockedRecord !== null) {
+        db()->rollBack();
+        json_response(['ok' => false, 'message' => personal_expense_locked_message($lockedRecord)], 403);
+    }
     $save = db()->prepare('INSERT INTO finance_personal_per_diem_edits (worker_id, mark_date, amount_override, honorarios, additional_expense, additional_reason, observations, updated_by_user_id)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE amount_override = VALUES(amount_override), honorarios = VALUES(honorarios), additional_expense = VALUES(additional_expense), additional_reason = VALUES(additional_reason), observations = VALUES(observations), updated_by_user_id = VALUES(updated_by_user_id)');

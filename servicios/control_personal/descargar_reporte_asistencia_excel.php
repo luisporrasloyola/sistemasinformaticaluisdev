@@ -40,6 +40,8 @@ $previousMonthLabel = $monthNames[(int) $previousDate->format('n')] . ' ' . $pre
 $days = $report['monthly_day_summary'][$month] ?? [];
 $hoursBook = attendance_report_build_hours_ledger($workerId, $month, $report['daily_classification']);
 $hours = $hoursBook['current'];
+$hourPurchases = attendance_report_hour_purchases($workerId, $dateFrom, $dateTo);
+$hourDiscounts = attendance_report_hour_discounts($workerId, $dateFrom, $dateTo);
 $workedDays = (int) ($days['worked'] ?? 0);
 $completedDays = 0;
 foreach ($report['daily_classification'] as $classifiedDay) {
@@ -62,7 +64,7 @@ $summaryRows[] = xlsx_row(10, [xlsx_cell(1, 10, 'Asistencia regular', 3), xlsx_c
 $summaryRows[] = xlsx_row(11, [xlsx_cell(1, 11, 'Feriados', 3), xlsx_cell(2, 11, $days['holiday'] ?? 0, 9, true), xlsx_cell(3, 11, 'No laborables', 3), xlsx_cell(4, 11, $days['non_working'] ?? 0, 9, true), xlsx_cell(5, 11, 'Vacaciones', 7), xlsx_cell(6, 11, $days['vacation'] ?? 0, 7, true)], 28);
 $summaryRows[] = xlsx_row(12, [xlsx_cell(1, 12, 'Faltas', 6), xlsx_cell(2, 12, $days['absent'] ?? 0, 6, true), xlsx_cell(3, 12, 'Descansos', 3), xlsx_cell(4, 12, $days['rest'] ?? 0, 9, true), xlsx_cell(5, 12, 'Pendientes', 3), xlsx_cell(6, 12, $days['pending'] ?? 0, 9, true)], 28);
 $summaryRows[] = xlsx_row(13, [xlsx_cell(1, 13, 'A cuenta de horas', 3), xlsx_cell(2, 13, $days['rest_hours'] ?? 0, 9, true), xlsx_cell(3, 13, 'Régimen laboral', 3), xlsx_cell(4, 13, $days['rest_regime'] ?? 0, 9, true), xlsx_cell(5, 13, 'Sin clasificar', 3), xlsx_cell(6, 13, $days['rest_unclassified'] ?? 0, 9, true)], 28);
-$summaryRows[] = xlsx_row(14, [xlsx_cell(1, 14, 'Feriado ×2 (horario neto)', 3), xlsx_cell(2, 14, $hoursLabel('holiday_overtime_minutes'), 9), xlsx_cell(3, 14, 'Horas compradas', 3), xlsx_cell(4, 14, $hoursLabel('purchased_minutes'), 9)], 28);
+$summaryRows[] = xlsx_row(14, [xlsx_cell(1, 14, 'Feriado ×2 (horario neto)', 3), xlsx_cell(2, 14, $hoursLabel('holiday_overtime_minutes'), 9), xlsx_cell(3, 14, 'Horas compradas', 3), xlsx_cell(4, 14, $hoursLabel('purchased_minutes'), 9), xlsx_cell(5, 14, 'Horas de descuento (+ saldo)', 3), xlsx_cell(6, 14, $hoursLabel('discounted_minutes'), 9)], 28);
 $summaryRows[] = xlsx_row(15, [xlsx_cell(1, 15, 'LIBRO MENSUAL DE HORAS', 1)], 22);
 $summaryRows[] = xlsx_row(16, [xlsx_cell(1, 16, 'Horas trabajadas', 3), xlsx_cell(2, 16, $hoursLabel('worked_minutes'), 9), xlsx_cell(3, 16, 'Extra por entrada', 3), xlsx_cell(4, 16, $hoursLabel('early_overtime_minutes'), 9), xlsx_cell(5, 16, 'Extra por salida', 3), xlsx_cell(6, 16, $hoursLabel('exit_overtime_minutes'), 9)], 28);
 $summaryRows[] = xlsx_row(17, [xlsx_cell(1, 17, 'HEMP · ' . $previousMonthLabel, 3), xlsx_cell(2, 17, $hoursLabel('opening_minutes'), 9), xlsx_cell(3, 17, 'Extras · ' . $monthLabel, 4), xlsx_cell(4, 17, $hoursLabel('overtime_minutes'), 4), xlsx_cell(5, 17, 'H. canjeadas · ' . $monthLabel, 5), xlsx_cell(6, 17, $hoursLabel('redeemed_minutes'), 5)], 32);
@@ -118,8 +120,68 @@ if ($trips) {
         $summaryRows[]=xlsx_row($excelRow,$cells,mb_strlen(implode(' ',$values))>100?42:28);$excelRow++;
     }
 }
+$purchaseSectionRow = $excelRow + 1;
+$summaryRows[] = xlsx_row($purchaseSectionRow, [
+    xlsx_cell(1, $purchaseSectionRow, 'HORAS COMPRADAS · ' . mb_strtoupper($monthLabel, 'UTF-8'), 1)
+], 24);
+$purchaseMerge = '<mergeCell ref="A' . $purchaseSectionRow . ':E' . $purchaseSectionRow . '"/>';
+$excelRow = $purchaseSectionRow + 1;
+$purchaseHeaders = ['Fecha', 'Horas decimales', 'Precio por hora', 'Total', 'Registrado por'];
+$cells = [];
+foreach ($purchaseHeaders as $index => $header) {
+    $cells[] = xlsx_cell($index + 1, $excelRow, $header, 1);
+}
+$summaryRows[] = xlsx_row($excelRow, $cells, 25);
+$excelRow++;
+if ($hourPurchases) {
+    foreach ($hourPurchases as $purchase) {
+        $values = [
+            date('d/m/Y', strtotime((string) $purchase['purchase_date'])),
+            number_format((float) $purchase['hours_decimal'], 2, '.', '') . ' h',
+            'S/ ' . number_format((float) $purchase['hourly_rate'], 2, '.', ','),
+            'S/ ' . number_format((float) $purchase['total_amount'], 2, '.', ','),
+            (string) ($purchase['registered_by'] ?: '—'),
+        ];
+        $cells = [];
+        foreach ($values as $index => $value) {
+            $cells[] = xlsx_cell($index + 1, $excelRow, $value, 9);
+        }
+        $summaryRows[] = xlsx_row($excelRow, $cells, 25);
+        $excelRow++;
+    }
+} else {
+    $summaryRows[] = xlsx_row($excelRow, [
+        xlsx_cell(1, $excelRow, 'No hay horas compradas en el período seleccionado.', 9)
+    ], 24);
+    $excelRow++;
+}
+$discountSectionRow = $excelRow + 1;
+$summaryRows[] = xlsx_row($discountSectionRow, [xlsx_cell(1, $discountSectionRow, 'DESCUENTOS · ' . mb_strtoupper($monthLabel, 'UTF-8'), 1)], 24);
+$discountMerge = '<mergeCell ref="A' . $discountSectionRow . ':E' . $discountSectionRow . '"/>';
+$excelRow = $discountSectionRow + 1;
+$discountHeaders = ['Fecha', 'Monto de la hora', 'Cantidad de horas', 'Monto a descontar', 'Registrado por'];
+$cells = [];
+foreach ($discountHeaders as $index => $header) $cells[] = xlsx_cell($index + 1, $excelRow, $header, 1);
+$summaryRows[] = xlsx_row($excelRow, $cells, 25);
+$excelRow++;
+foreach ($hourDiscounts as $discount) {
+    $values = [date('d/m/Y', strtotime((string) $discount['discount_date'])),
+        'S/ ' . number_format((float) $discount['hourly_rate'], 2, '.', ','),
+        number_format((float) $discount['hours_decimal'], 2, '.', '') . ' h',
+        'S/ ' . number_format((float) $discount['total_amount'], 2, '.', ','),
+        (string) ($discount['registered_by'] ?: '—')];
+    $cells = [];
+    foreach ($values as $index => $value) $cells[] = xlsx_cell($index + 1, $excelRow, $value, 9);
+    $summaryRows[] = xlsx_row($excelRow, $cells, 25);
+    $excelRow++;
+}
+if (!$hourDiscounts) {
+    $summaryRows[] = xlsx_row($excelRow, [xlsx_cell(1, $excelRow, 'No hay descuentos en el período seleccionado.', 9)], 24);
+    $excelRow++;
+}
 $lastRow = max(25, $excelRow - 1);
-$mergeCount = $trips ? 8 : 7;
+$mergeCount = ($trips ? 8 : 7) + 2;
+$extraMerge .= $purchaseMerge . $discountMerge;
 $sheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:N' . $lastRow . '"/><sheetViews><sheetView workbookViewId="0" showGridLines="0" zoomScale="90"/></sheetViews><cols><col min="1" max="1" width="25" customWidth="1"/><col min="2" max="2" width="20" customWidth="1"/><col min="3" max="3" width="29" customWidth="1"/><col min="4" max="4" width="20" customWidth="1"/><col min="5" max="5" width="42" customWidth="1"/><col min="6" max="7" width="25" customWidth="1"/><col min="8" max="9" width="46" customWidth="1"/><col min="10" max="10" width="18" customWidth="1"/><col min="11" max="11" width="30" customWidth="1"/><col min="12" max="12" width="19" customWidth="1"/><col min="13" max="13" width="25" customWidth="1"/><col min="14" max="14" width="25" customWidth="1"/></cols><sheetData>' . implode('', $summaryRows) . '</sheetData><mergeCells count="'.$mergeCount.'"><mergeCell ref="A1:F1"/><mergeCell ref="A4:F4"/><mergeCell ref="A8:F8"/><mergeCell ref="A15:F15"/><mergeCell ref="A20:F20"/><mergeCell ref="A21:F21"/><mergeCell ref="A23:N23"/>'.$extraMerge.'</mergeCells></worksheet>';
 
 $content = xlsx_package($sheet);

@@ -109,6 +109,75 @@ if (attendanceBuyHoursForm) {
         });
     });
 }
+const attendanceDiscountForm = document.getElementById('attendanceDiscountForm');
+if (attendanceDiscountForm) {
+    const discountModal = document.getElementById('attendanceDiscountModal');
+    const hoursInput = attendanceDiscountForm.elements.hours_decimal;
+    const rateInput = attendanceDiscountForm.elements.hourly_rate;
+    const totalPreview = document.getElementById('attendanceDiscountTotal');
+    const balanceHint = document.getElementById('attendanceDiscountBalanceHint');
+    const endpoint = `${BASE_URL}/servicios/control_personal/guardar_descuento_horas.php`;
+    const updateTotal = () => {
+        const hoursHundredths = Math.round(Number(hoursInput.value) * 100);
+        const rateCents = Math.round(Number(rateInput.value) * 100);
+        const totalCents = hoursInput.value && rateInput.value && hoursInput.validity.valid && rateInput.validity.valid
+            ? Math.round(hoursHundredths * rateCents / 100) : 0;
+        totalPreview.textContent = `S/ ${(totalCents / 100).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    };
+    hoursInput.addEventListener('input', updateTotal);
+    rateInput.addEventListener('input', updateTotal);
+    discountModal.addEventListener('show.bs.modal', (event) => {
+        attendanceDiscountForm.reset();
+        const edit = event.relatedTarget?.closest('.edit-hour-discount');
+        attendanceDiscountForm.elements.discount_id.value = edit?.dataset.id || '';
+        if (edit) {
+            attendanceDiscountForm.elements.discount_date.value = edit.dataset.date;
+            hoursInput.value = edit.dataset.hours;
+            rateInput.value = edit.dataset.rate;
+        }
+        document.getElementById('attendanceDiscountTitle').textContent = edit ? 'Editar descuento' : 'Nuevo descuento';
+        document.getElementById('attendanceDiscountSubmit').textContent = edit ? 'Guardar cambios' : 'Guardar descuento';
+        balanceHint.textContent = edit ? 'Al guardar se reemplazará este descuento y se recalculará el saldo de horas.' : `Horas extras vigentes: ${balanceHint.dataset.current}.`;
+        updateTotal();
+    });
+    attendanceDiscountForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (!attendanceDiscountForm.reportValidity()) return;
+        const button = attendanceDiscountForm.querySelector('[type="submit"]');
+        const body = new FormData(attendanceDiscountForm);
+        body.set('csrf_token', csrf);
+        button.disabled = true;
+        try {
+            const response = await fetch(endpoint, {method: 'POST', body, credentials: 'same-origin'});
+            const result = await response.json();
+            if (!response.ok || !result.ok) throw new Error(result.message || 'No se pudo guardar el descuento.');
+            window.location.reload();
+        } catch (error) {
+            Swal.fire('No se pudo guardar', error.message || 'Inténtelo nuevamente.', 'warning');
+            button.disabled = false;
+        }
+    });
+    document.querySelectorAll('.delete-hour-discount').forEach((button) => button.addEventListener('click', async () => {
+        const answer = await Swal.fire({title: '¿Eliminar este descuento?', text: 'Las horas de este descuento se quitarán del saldo vigente.', icon: 'warning', showCancelButton: true, confirmButtonText: 'Sí, eliminar', cancelButtonText: 'Cancelar', confirmButtonColor: '#dc3545'});
+        if (!answer.isConfirmed) return;
+        const body = new FormData();
+        body.set('csrf_token', csrf);
+        body.set('action', 'delete');
+        body.set('worker_id', attendanceDiscountForm.elements.worker_id.value);
+        body.set('report_month', attendanceDiscountForm.elements.report_month.value);
+        body.set('discount_id', button.dataset.id);
+        button.disabled = true;
+        try {
+            const response = await fetch(endpoint, {method: 'POST', body, credentials: 'same-origin'});
+            const result = await response.json();
+            if (!response.ok || !result.ok) throw new Error(result.message || 'No se pudo eliminar el descuento.');
+            window.location.reload();
+        } catch (error) {
+            Swal.fire('No se pudo eliminar', error.message || 'Inténtelo nuevamente.', 'warning');
+            button.disabled = false;
+        }
+    }));
+}
 if (attendanceHempForm) {
     const hempDays = document.getElementById('hempDays');
     const hempHours = attendanceHempForm.elements.hours;

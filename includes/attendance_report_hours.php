@@ -30,7 +30,8 @@ function attendance_report_hours_ledger(
     int $openingMinutes = 0,
     ?string $asOfDate = null,
     array $openingOverrides = [],
-    array $purchasedMinutesByMonth = []
+    array $purchasedMinutesByMonth = [],
+    array $discountedMinutesByMonth = []
 ): array {
     foreach ([$firstMonth, $lastMonth] as $month) {
         if (!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $month)) {
@@ -57,6 +58,7 @@ function attendance_report_hours_ledger(
             'redeemed_saturday_days' => 0,
             'redeemed_minutes' => 0,
             'purchased_minutes' => 0,
+            'discounted_minutes' => 0,
             'planned_redemption_days' => 0,
             'closing_minutes' => 0,
         ];
@@ -91,7 +93,8 @@ function attendance_report_hours_ledger(
         $totals['opening_minutes'] = $balance;
         $totals['overtime_minutes'] = $totals['holiday_overtime_minutes'] + $totals['early_overtime_minutes'] + $totals['exit_overtime_minutes'];
         $totals['purchased_minutes'] = max(0, (int) ($purchasedMinutesByMonth[$key] ?? 0));
-        $balance += $totals['overtime_minutes'] - $totals['redeemed_minutes'] - $totals['purchased_minutes'];
+        $totals['discounted_minutes'] = max(0, (int) ($discountedMinutesByMonth[$key] ?? 0));
+        $balance += $totals['overtime_minutes'] - $totals['redeemed_minutes'] - $totals['purchased_minutes'] + $totals['discounted_minutes'];
         $totals['closing_minutes'] = $balance;
     }
     unset($totals);

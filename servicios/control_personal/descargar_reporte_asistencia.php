@@ -39,6 +39,8 @@ $previousMonthLabel = $monthNames[(int) $previousDate->format('n')] . ' ' . $pre
 $days = $report['monthly_day_summary'][$month] ?? [];
 $book = attendance_report_build_hours_ledger($workerId, $month, $report['daily_classification']);
 $hours = $book['current'];
+$hourPurchases = attendance_report_hour_purchases($workerId, $dateFrom, $dateTo);
+$hourDiscounts = attendance_report_hour_discounts($workerId, $dateFrom, $dateTo);
 $workedDays = (int) ($days['worked'] ?? 0);
 $completedDays = 0;
 foreach ($report['daily_classification'] as $classifiedDay) {
@@ -100,6 +102,34 @@ if ($trips) {
     }
     $tripSection = '<h2 class="section">Desplazamientos laborales</h2><table class="detail"><thead><tr><th>Fecha</th><th>Horario</th><th>Inicio</th><th>Fin</th><th>Duración</th><th>Origen</th><th>Destino</th><th>Proyecto</th><th>Estado</th></tr></thead><tbody>' . $tripRows . '</tbody></table>';
 }
+$hourPurchaseRows = '';
+foreach ($hourPurchases as $purchase) {
+    $hourPurchaseRows .= '<tr><td>' . date('d/m/Y', strtotime((string) $purchase['purchase_date']))
+        . '</td><td>' . $h(number_format((float) $purchase['hours_decimal'], 2, '.', '')) . ' h</td><td>S/ '
+        . $h(number_format((float) $purchase['hourly_rate'], 2, '.', ',')) . '</td><td>S/ '
+        . $h(number_format((float) $purchase['total_amount'], 2, '.', ',')) . '</td><td>'
+        . $h((string) ($purchase['registered_by'] ?: '—')) . '</td></tr>';
+}
+if ($hourPurchaseRows === '') {
+    $hourPurchaseRows = '<tr><td colspan="5" class="center">No hay horas compradas en el período seleccionado.</td></tr>';
+}
+$hourPurchaseSection = '<h2 class="section">Horas compradas · ' . $h($monthLabel)
+    . '</h2><table class="detail hour-purchases"><thead><tr><th>Fecha</th><th>Horas decimales</th>'
+    . '<th>Precio por hora</th><th>Total</th><th>Registrado por</th></tr></thead><tbody>'
+    . $hourPurchaseRows . '</tbody></table>';
+$hourDiscountRows = '';
+foreach ($hourDiscounts as $discount) {
+    $hourDiscountRows .= '<tr><td>' . date('d/m/Y', strtotime((string) $discount['discount_date']))
+        . '</td><td>S/ ' . $h(number_format((float) $discount['hourly_rate'], 2, '.', ','))
+        . '</td><td>' . $h(number_format((float) $discount['hours_decimal'], 2, '.', '')) . ' h'
+        . '</td><td>S/ ' . $h(number_format((float) $discount['total_amount'], 2, '.', ','))
+        . '</td><td>' . $h((string) ($discount['registered_by'] ?: '—')) . '</td></tr>';
+}
+if ($hourDiscountRows === '') $hourDiscountRows = '<tr><td colspan="5" class="center">No hay descuentos en el período seleccionado.</td></tr>';
+$hourDiscountSection = '<h2 class="section">Descuento · ' . $h($monthLabel)
+    . '</h2><table class="detail"><thead><tr><th>Fecha</th><th>Monto de la hora</th>'
+    . '<th>Cantidad de horas</th><th>Monto a descontar</th><th>Registrado por</th></tr></thead><tbody>'
+    . $hourDiscountRows . '</tbody></table>';
 ob_start();
 ?>
 <table class="monthly-head"><tr>
@@ -152,7 +182,7 @@ ob_start();
             <td><div class="monthly-hour-card monthly-hour-total"><span>Horas extras · <?= $h($monthLabel) ?></span><b><?= $h($hoursLabel('overtime_minutes')) ?></b></div></td>
         </tr></table>
     </td>
-    <td class="monthly-hour-balance"><div class="monthly-hour-card"><span>Horas extras vigentes</span><b><?= $h($hoursLabel('closing_minutes')) ?></b><em class="monthly-hour-days"><?= $h($daysLabel('closing_minutes')) ?></em><small>Horas compradas: <?= $h($hoursLabel('purchased_minutes')) ?></small><small>HEMP + extras del mes − horas canjeadas − horas compradas</small></div></td>
+    <td class="monthly-hour-balance"><div class="monthly-hour-card"><span>Horas extras vigentes</span><b><?= $h($hoursLabel('closing_minutes')) ?></b><em class="monthly-hour-days"><?= $h($daysLabel('closing_minutes')) ?></em><small>Horas compradas: <?= $h($hoursLabel('purchased_minutes')) ?></small><small>Horas de descuento: +<?= $h($hoursLabel('discounted_minutes')) ?></small><small>HEMP + extras del mes − horas canjeadas − horas compradas + horas de descuento</small></div></td>
 </tr></table>
 <?php if ($hours['planned_redemption_days'] > 0): ?><div class="monthly-footnote"><?= (int) $hours['planned_redemption_days'] ?> día(s) «A cuenta de horas» futuros aún no descontados.</div><?php endif; ?>
 <?php
@@ -164,6 +194,8 @@ table.monthly-head,table.monthly-rates,table.monthly-days,table.monthly-hour-led
 </style></head><body>
 <div class="header"><div class="period"><b>Periodo</b><br>' . date('d/m/Y', strtotime($dateFrom)) . ' - ' . date('d/m/Y', strtotime($dateTo)) . '<br><span class="muted">Generado: ' . date('d/m/Y H:i') . '</span></div><h1>REPORTE INDIVIDUAL DE ASISTENCIA</h1><div class="muted">Life Maquinarias · Control de personal</div></div>
 ' . $monthlyHtml . '
+' . $hourPurchaseSection . '
+' . $hourDiscountSection . '
 <div class="muted">Si la salida supera los 15 minutos de tolerancia, se cuenta todo el tiempo desde la hora programada.</div><h2 class="section">Detalle diario</h2><table class="detail"><thead><tr><th>Fecha</th><th>Día</th><th>Horario</th><th>Tolerancia</th><th style="width:10%">Proyecto</th><th>Lugar de entrada</th><th>Lugar de salida</th><th>Entrada</th><th>Salida</th><th>Tardanza</th><th>Horas extras</th><th>Horas trabajadas</th><th>Asistencia</th><th>Jornada</th></tr></thead><tbody>' . $bodyRows . '</tbody></table>
 ' . $tripSection . '
 <div class="note" style="border-left:1px solid #cbd9ea"><b>Observación general del responsable</b><br><br>' . $h($note['observation'] ?? 'Sin observaciones.') . '</div>

@@ -77,6 +77,21 @@ function personal_remaining_balances(int $workerId, array $visibleDates): array
     $stmt->execute(array_merge([$workerId], $rangeParams));
     foreach ($stmt as $row) $additional[(string) $row['mark_date']] = (int) round((float) $row['total'] * 100);
 
+    $hourPurchases = [];
+    $purchaseFilter = str_replace('mark_date', 'purchase_date', $dateFilter);
+    try {
+        $stmt = db()->prepare("SELECT purchase_date, SUM(total_amount) AS total
+            FROM attendance_hour_purchases
+            WHERE worker_id = ? AND ($purchaseFilter)
+            GROUP BY purchase_date");
+        $stmt->execute(array_merge([$workerId], $rangeParams));
+        foreach ($stmt as $row) {
+            $hourPurchases[(string) $row['purchase_date']] = (int) round((float) $row['total'] * 100);
+        }
+    } catch (PDOException $error) {
+        if ($error->getCode() !== '42S02') throw $error;
+    }
+
     $deposits = [];
     $outgoing = [];
     $depositFilter = str_replace('mark_date', 'deposit_date', $dateFilter);
@@ -104,16 +119,16 @@ function personal_remaining_balances(int $workerId, array $visibleDates): array
     $remainingByDate = [];
     foreach ($months as $month) {
         $dates = [];
-        foreach (array_keys($markedDays + $deposits + $outgoing) as $date) {
+        foreach (array_keys($markedDays + $deposits + $outgoing + $hourPurchases) as $date) {
             if (str_starts_with($date, $month . '-')) $dates[$date] = true;
         }
         ksort($dates);
         $balance = $opening[$month] ?? 0;
         foreach ($dates as $date => $_) {
             $balance += $deposits[$date] ?? 0;
-            if (array_key_exists($date, $markedDays) || isset($deposits[$date]) || isset($outgoing[$date])) {
+            if (array_key_exists($date, $markedDays) || isset($deposits[$date]) || isset($outgoing[$date]) || isset($hourPurchases[$date])) {
                 $perDiem = $overrides[$date] ?? (personal_per_diem($markedDays[$date] ?? '', $date) ?? 0) * 100;
-                $balance -= $perDiem + ($additional[$date] ?? 0) + ($outgoing[$date] ?? 0) + ($honorarios[$date] ?? 0);
+                $balance -= $perDiem + ($additional[$date] ?? 0) + ($outgoing[$date] ?? 0) + ($hourPurchases[$date] ?? 0) + ($honorarios[$date] ?? 0);
             }
             if (isset($visible[$date])) $remainingByDate[$date] = $balance;
         }
@@ -147,7 +162,15 @@ if ($workerId > 0) {
     $latestDepositStmt = db()->prepare('SELECT MAX(deposit_date) FROM finance_personal_deposits WHERE worker_id = ?');
     $latestDepositStmt->execute([$workerId]);
     $latestDeposit = $latestDepositStmt->fetchColumn();
-    $latestActivity = max((string) ($latestMark ?: ''), (string) ($latestDeposit ?: ''));
+    $latestPurchase = '';
+    try {
+        $latestPurchaseStmt = db()->prepare('SELECT MAX(purchase_date) FROM attendance_hour_purchases WHERE worker_id = ?');
+        $latestPurchaseStmt->execute([$workerId]);
+        $latestPurchase = (string) ($latestPurchaseStmt->fetchColumn() ?: '');
+    } catch (PDOException $error) {
+        if ($error->getCode() !== '42S02') throw $error;
+    }
+    $latestActivity = max((string) ($latestMark ?: ''), (string) ($latestDeposit ?: ''), $latestPurchase);
     $defaultMonth = $latestActivity !== '' ? substr($latestActivity, 0, 7) : date('Y-m');
     try {
         $period = valorizacion_periodo($_GET, $defaultMonth);
@@ -167,6 +190,7 @@ if ($workerId > 0) {
     $isDateRange = $period['mode'] === 'fechas';
     $workerDeposits = [];
     $workerOutgoingDeposits = [];
+    $workerHourPurchases = [];
     $depositDates = [];
     $allDepositWorkers = personal_deposit_workers();
     $resolvedCreditors = [];
@@ -187,6 +211,22 @@ if ($workerId > 0) {
             $workerOutgoingDeposits[$date][] = $deposit;
             $depositDates[$date] = true;
         }
+    }
+    try {
+        $hourPurchasesStmt = db()->prepare('SELECT p.purchase_date, p.hours_decimal, p.total_amount,
+                COALESCE(u.name, \'\') AS registered_by
+            FROM attendance_hour_purchases p
+            LEFT JOIN users u ON u.id=p.registered_by_user_id
+            WHERE p.worker_id=? AND p.purchase_date BETWEEN ? AND ?
+            ORDER BY p.purchase_date DESC, p.id DESC');
+        $hourPurchasesStmt->execute([$workerId, $period['start'], $period['end']]);
+        foreach ($hourPurchasesStmt as $purchase) {
+            $date = (string) $purchase['purchase_date'];
+            $workerHourPurchases[$date][] = $purchase;
+            $depositDates[$date] = true;
+        }
+    } catch (PDOException $error) {
+        if ($error->getCode() !== '42S02') throw $error;
     }
     $bulkAllPages = $isDateRange && (string) ($_GET['editar_masivo'] ?? '') === '1';
     $pageSize = $bulkAllPages ? 400 : 20;
@@ -230,7 +270,11 @@ if ($workerId > 0) {
     if ($markedDays || $depositDates) {
         $selectedDates = $isDateRange ? $pageDates : array_keys($markedDays + $depositDates);
         $placeholders = implode(',', array_fill(0, count($selectedDates), '?'));
-        $editsStmt = db()->prepare("SELECT e.mark_date, e.amount_override, e.honorarios, e.observations, u.name AS registered_by FROM finance_personal_per_diem_edits e LEFT JOIN users u ON u.id = e.updated_by_user_id WHERE e.worker_id = ? AND e.mark_date IN ($placeholders)");
+        $editsStmt = db()->prepare("SELECT e.mark_date, e.amount_override, e.honorarios, e.observations, e.updated_by_user_id,
+            COALESCE(u.name, '') AS registered_by, COALESCE(u.role, '') AS registered_by_role
+            FROM finance_personal_per_diem_edits e
+            LEFT JOIN users u ON u.id = e.updated_by_user_id
+            WHERE e.worker_id = ? AND e.mark_date IN ($placeholders)");
         $editsStmt->execute(array_merge([$workerId], $selectedDates));
         foreach ($editsStmt as $edit) $savedEdits[(string) $edit['mark_date']] = $edit;
         $expensesStmt = db()->prepare("SELECT mark_date, amount, reason FROM finance_personal_additional_expenses WHERE worker_id = ? AND mark_date IN ($placeholders) ORDER BY mark_date, sort_order, id");
@@ -257,6 +301,17 @@ if ($workerId > 0) {
         foreach ($deposits as $deposit) {
             $outgoingExpensesByDate[$date][] = [
                 'amount' => (string) $deposit['amount'], 'reason' => (string) $deposit['creditor'],
+            ];
+        }
+    }
+    foreach ($workerHourPurchases as $date => $purchases) {
+        if ($isDateRange && !in_array($date, $pageDates, true)) continue;
+        if (!array_key_exists($date, $displayDays)) $displayDays[$date] = null;
+        foreach ($purchases as $purchase) {
+            $outgoingExpensesByDate[$date][] = [
+                'amount' => (string) $purchase['total_amount'],
+                'reason' => 'Compra de ' . number_format((float) $purchase['hours_decimal'], 2, '.', '') . ' h',
+                'source' => 'hour_purchase',
             ];
         }
     }
@@ -294,6 +349,9 @@ if ($workerId > 0) {
         $periodExpenseTotal = $periodPerDiemTotal + (float) $additionalTotalStmt->fetchColumn() + $periodHonorariosTotal;
         foreach ($workerOutgoingDeposits as $deposits) {
             foreach ($deposits as $deposit) $periodExpenseTotal += (float) $deposit['amount'];
+        }
+        foreach ($workerHourPurchases as $purchases) {
+            foreach ($purchases as $purchase) $periodExpenseTotal += (float) $purchase['total_amount'];
         }
         $periodDepositTotalCents = 0;
         foreach ($workerDeposits as $deposits) {
@@ -416,7 +474,7 @@ require __DIR__ . '/../../includes/header.php';
         <table class="table table-hover align-middle mb-0" id="personalPerDiemTable">
             <thead class="table-light"><tr><th>Fecha</th><th>Ubicación</th><th>Proyecto</th><th>Viáticos</th><th>Observaciones</th><th>Gastos adicionales</th><th>Motivo</th><th>Honorarios</th><th>Total</th><th>Depósitos</th><th>Saldo restante</th><th>Registrado por</th><th>Acción</th></tr></thead>
             <tbody>
-                <?php foreach ($displayDays as $date => $mark): $automaticPerDiem = personal_per_diem((string) ($mark['project_name'] ?? ''), $date); $savedEdit = $savedEdits[$date] ?? null; $perDiem = $savedEdit && $savedEdit['amount_override'] !== null ? (float) $savedEdit['amount_override'] : $automaticPerDiem; $honorarios = $savedEdit && $savedEdit['honorarios'] !== null ? (float) $savedEdit['honorarios'] : null; $manualExpenses = $expensesByDate[$date] ?? []; $expenses = array_merge($manualExpenses, $outgoingExpensesByDate[$date] ?? []); $additionalTotal = array_sum(array_map(static fn($item) => (float) $item['amount'], $expenses)); $observations = (string) ($savedEdit['observations'] ?? ''); $total = $perDiem !== null || $expenses || $honorarios !== null ? (float) ($perDiem ?? 0) + $additionalTotal + (float) ($honorarios ?? 0) : null; if (!$isDateRange) { $periodPerDiemTotal += (float) ($perDiem ?? 0); $periodHonorariosTotal += (float) ($honorarios ?? 0); $periodExpenseTotal += (float) ($total ?? 0); } ?>
+                <?php foreach ($displayDays as $date => $mark): $automaticPerDiem = personal_per_diem((string) ($mark['project_name'] ?? ''), $date); $savedEdit = $savedEdits[$date] ?? null; $perDiem = $savedEdit && $savedEdit['amount_override'] !== null ? (float) $savedEdit['amount_override'] : $automaticPerDiem; $honorarios = $savedEdit && $savedEdit['honorarios'] !== null ? (float) $savedEdit['honorarios'] : null; $manualExpenses = $expensesByDate[$date] ?? []; $expenses = array_merge($manualExpenses, $outgoingExpensesByDate[$date] ?? []); $additionalTotal = array_sum(array_map(static fn($item) => (float) $item['amount'], $expenses)); $observations = (string) ($savedEdit['observations'] ?? ''); $editorId = (int) ($savedEdit['updated_by_user_id'] ?? 0); $canEditExpense = !is_personal_role() || $editorId === 0 || $editorId === (int) (current_user()['id'] ?? 0); $editorName = trim((string) ($savedEdit['registered_by'] ?? '')); $editorRole = (string) ($savedEdit['registered_by_role'] ?? ''); $editLockMessage = $editorRole === 'Administrador' ? 'Este registro fue modificado o registrado por el Administrador: ' . ($editorName !== '' ? $editorName : 'el usuario responsable') . '. Para modificarlo, comuníquese con el Administrador.' : 'Este registro fue modificado o registrado por ' . ($editorName !== '' ? $editorName : 'otro usuario') . '. Solo puede modificar los registros que usted mismo realizó.'; $total = $perDiem !== null || $expenses || $honorarios !== null ? (float) ($perDiem ?? 0) + $additionalTotal + (float) ($honorarios ?? 0) : null; if (!$isDateRange) { $periodPerDiemTotal += (float) ($perDiem ?? 0); $periodHonorariosTotal += (float) ($honorarios ?? 0); $periodExpenseTotal += (float) ($total ?? 0); } ?>
                 <tr>
                     <td class="text-nowrap"><?= e(date('d/m/Y', strtotime($date))) ?></td>
                     <td><?= e(($mark['location_name'] ?? null) ?: '—') ?></td>
@@ -430,7 +488,7 @@ require __DIR__ . '/../../includes/header.php';
                     <td class="deposit-amount-cell text-nowrap"><?= isset($depositsByDate[$date]) ? 'S/ ' . number_format($depositsByDate[$date] / 100, 2, '.', ',') : '—' ?></td>
                     <td class="remaining-balance-cell text-nowrap"><?= isset($remainingByDate[$date]) ? 'S/ ' . number_format($remainingByDate[$date] / 100, 2, '.', ',') : '—' ?></td>
                     <td class="registered-by-cell"><?= !empty($savedEdit['registered_by']) ? e($savedEdit['registered_by']) : '—' ?></td>
-                    <td class="per-diem-actions-cell"><div class="d-flex gap-1"><button class="btn btn-sm btn-outline-primary edit-personal-per-diem" type="button" data-mark-date="<?= e($date) ?>" data-automatic="<?= $automaticPerDiem !== null ? (int) $automaticPerDiem : '' ?>" data-override="<?= $savedEdit && $savedEdit['amount_override'] !== null ? e((string) $savedEdit['amount_override']) : '' ?>" data-honorarios="<?= $savedEdit && $savedEdit['honorarios'] !== null ? e((string) $savedEdit['honorarios']) : '' ?>" data-expenses="<?= e(json_encode($manualExpenses, JSON_UNESCAPED_UNICODE)) ?>" data-linked-expenses="<?= e(json_encode($outgoingExpensesByDate[$date] ?? [], JSON_UNESCAPED_UNICODE)) ?>" data-observations="<?= e($observations) ?>" aria-label="Editar gastos del <?= e(date('d/m/Y', strtotime($date))) ?>" title="Editar gastos"><i class="fa-solid fa-pen" aria-hidden="true"></i></button><?php if (!empty($depositPhotosByDate[$date])): ?><button class="btn btn-sm btn-outline-primary view-personal-deposits" type="button" data-bs-toggle="modal" data-bs-target="#personalDepositPhotosModal" data-deposit-photos="<?= e(json_encode($depositPhotosByDate[$date])) ?>" data-date="<?= e(date('d/m/Y', strtotime($date))) ?>" aria-label="Ver comprobantes de depósitos del <?= e(date('d/m/Y', strtotime($date))) ?>" title="Ver comprobantes de depósitos"><i class="fa-solid fa-file-image" aria-hidden="true"></i></button><?php endif; ?></div></td>
+                    <td class="per-diem-actions-cell"><div class="d-flex gap-1"><button class="btn btn-sm btn-outline-primary edit-personal-per-diem" type="button" data-mark-date="<?= e($date) ?>" data-automatic="<?= $automaticPerDiem !== null ? (int) $automaticPerDiem : '' ?>" data-override="<?= $savedEdit && $savedEdit['amount_override'] !== null ? e((string) $savedEdit['amount_override']) : '' ?>" data-honorarios="<?= $savedEdit && $savedEdit['honorarios'] !== null ? e((string) $savedEdit['honorarios']) : '' ?>" data-expenses="<?= e(json_encode($manualExpenses, JSON_UNESCAPED_UNICODE)) ?>" data-linked-expenses="<?= e(json_encode($outgoingExpensesByDate[$date] ?? [], JSON_UNESCAPED_UNICODE)) ?>" data-observations="<?= e($observations) ?>" data-can-edit="<?= $canEditExpense ? '1' : '0' ?>" data-lock-message="<?= e($editLockMessage) ?>" aria-label="<?= $canEditExpense ? 'Editar' : 'Consultar restricción de edición' ?> de gastos del <?= e(date('d/m/Y', strtotime($date))) ?>" title="<?= $canEditExpense ? 'Editar gastos' : 'Edición restringida' ?>"><i class="fa-solid fa-pen" aria-hidden="true"></i></button><?php if (!empty($depositPhotosByDate[$date])): ?><button class="btn btn-sm btn-outline-primary view-personal-deposits" type="button" data-bs-toggle="modal" data-bs-target="#personalDepositPhotosModal" data-deposit-photos="<?= e(json_encode($depositPhotosByDate[$date])) ?>" data-date="<?= e(date('d/m/Y', strtotime($date))) ?>" aria-label="Ver comprobantes de depósitos del <?= e(date('d/m/Y', strtotime($date))) ?>" title="Ver comprobantes de depósitos"><i class="fa-solid fa-file-image" aria-hidden="true"></i></button><?php endif; ?></div></td>
                 </tr>
                 <?php endforeach; ?>
                 <?php if (!$displayDays): ?><tr><td colspan="13" class="text-center text-muted py-4">No hay marcaciones ni depósitos en el periodo seleccionado.</td></tr><?php endif; ?>
@@ -749,7 +807,12 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         if (activeEdit) cancelEdit();
+        const lockedMessages = [];
         for (const button of table.querySelectorAll('.edit-personal-per-diem')) {
+            if (button.dataset.canEdit !== '1') {
+                lockedMessages.push(button.dataset.lockMessage || 'Solo puede modificar los registros que usted mismo realizó.');
+                continue;
+            }
             const row = button.closest('tr');
             const amountCell = row.querySelector('.per-diem-amount-cell');
             const observationsCell = row.querySelector('.per-diem-observations-cell');
@@ -774,7 +837,7 @@ document.addEventListener('DOMContentLoaded', () => {
             for (const linked of JSON.parse(button.dataset.linkedExpenses || '[]')) {
                 const note = document.createElement('div');
                 note.className = 'bulk-linked-expense';
-                note.textContent = `S/ ${Number(linked.amount).toFixed(2)} · Depósito vinculado`;
+                note.textContent = `S/ ${Number(linked.amount).toFixed(2)} · ${linked.source === 'hour_purchase' ? 'Compra de horas' : 'Depósito vinculado'}`;
                 additionalCell.append(note);
                 const reason = document.createElement('div');
                 reason.className = 'bulk-linked-expense';
@@ -782,6 +845,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 reasonCell.append(reason);
             }
             bulkRows.set(edit.date, edit);
+        }
+        if (lockedMessages.length) {
+            Swal.fire('Edición restringida', lockedMessages[0], 'info');
         }
         if (!bulkRows.size) return;
         table.classList.add('per-diem-bulk-mode');
@@ -911,6 +977,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (button.classList.contains('cancel-personal-per-diem')) { cancelEdit(); return; }
         if (button.classList.contains('edit-personal-per-diem')) {
+            if (button.dataset.canEdit !== '1') {
+                Swal.fire(
+                    'Edición restringida',
+                    button.dataset.lockMessage || 'Solo puede modificar los registros que usted mismo realizó.',
+                    'info'
+                );
+                return;
+            }
             cancelEdit();
             const row = button.closest('tr');
             const amountCell = row.querySelector('.per-diem-amount-cell');

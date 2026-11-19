@@ -26,6 +26,49 @@ function attendance_report_trips_by_date(array $trips): array
     return $byDate;
 }
 
+/** Detalle auditable de las horas compradas dentro del período exportado. */
+function attendance_report_hour_purchases(int $workerId, string $dateFrom, string $dateTo): array
+{
+    if ($workerId <= 0 || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom)
+        || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateTo) || $dateFrom > $dateTo) {
+        return [];
+    }
+
+    try {
+        $stmt = db()->prepare('SELECT p.id, p.purchase_date, p.hours_decimal, p.hourly_rate,
+                p.total_amount, p.purchased_minutes, COALESCE(u.name, \'\') AS registered_by
+            FROM attendance_hour_purchases p
+            LEFT JOIN users u ON u.id = p.registered_by_user_id
+            WHERE p.worker_id = ? AND p.purchase_date BETWEEN ? AND ?
+            ORDER BY p.purchase_date DESC, p.id DESC');
+        $stmt->execute([$workerId, $dateFrom, $dateTo]);
+        return $stmt->fetchAll();
+    } catch (PDOException $error) {
+        if ($error->getCode() === '42S02') {
+            return [];
+        }
+        throw $error;
+    }
+}
+
+/** Descuentos de horas registrados en el período. */
+function attendance_report_hour_discounts(int $workerId, string $dateFrom, string $dateTo): array
+{
+    if ($workerId <= 0 || $dateFrom > $dateTo) return [];
+    try {
+        $stmt = db()->prepare('SELECT d.id, d.discount_date, d.hours_decimal, d.hourly_rate,
+                d.total_amount, d.discounted_minutes, COALESCE(u.name, \'\') AS registered_by
+            FROM attendance_hour_discounts d LEFT JOIN users u ON u.id = d.registered_by_user_id
+            WHERE d.worker_id = ? AND d.discount_date BETWEEN ? AND ?
+            ORDER BY d.discount_date DESC, d.id DESC');
+        $stmt->execute([$workerId, $dateFrom, $dateTo]);
+        return $stmt->fetchAll();
+    } catch (PDOException $error) {
+        if ($error->getCode() === '42S02') return [];
+        throw $error;
+    }
+}
+
 function attendance_report_minutes_label(int $minutes): string
 {
     $minutes = max(0, $minutes);
@@ -1057,14 +1100,25 @@ function attendance_report_build_hours_ledger(int $workerId, string $throughMont
         if ($error->getCode() !== '42S02') throw $error;
         $purchaseSchemaAvailable = false;
     }
-    $months = attendance_report_hours_ledger($days, $firstMonth, $throughMonth, 0, null, $openingOverrides, $purchasedMinutesByMonth);
+    $discountedMinutesByMonth = [];
+    $discountSchemaAvailable = true;
+    try {
+        $discountStmt = db()->prepare('SELECT DATE_FORMAT(discount_date, \'%Y-%m\') AS month_key, SUM(discounted_minutes) AS minutes
+            FROM attendance_hour_discounts WHERE worker_id = ? AND discount_date BETWEEN ? AND ? GROUP BY month_key');
+        $discountStmt->execute([$workerId, $firstMonth . '-01', (new DateTimeImmutable($throughMonth . '-01'))->format('Y-m-t')]);
+        foreach ($discountStmt as $discount) $discountedMinutesByMonth[(string) $discount['month_key']] = (int) $discount['minutes'];
+    } catch (PDOException $error) {
+        if ($error->getCode() !== '42S02') throw $error;
+        $discountSchemaAvailable = false;
+    }
+    $months = attendance_report_hours_ledger($days, $firstMonth, $throughMonth, 0, null, $openingOverrides, $purchasedMinutesByMonth, $discountedMinutesByMonth);
     $current = $months[$throughMonth];
     $labels = [];
     foreach (['opening_minutes', 'worked_minutes', 'holiday_overtime_minutes', 'early_overtime_minutes',
-        'exit_overtime_minutes', 'overtime_minutes', 'redeemed_minutes', 'purchased_minutes', 'closing_minutes'] as $field) {
+        'exit_overtime_minutes', 'overtime_minutes', 'redeemed_minutes', 'purchased_minutes', 'discounted_minutes', 'closing_minutes'] as $field) {
         $labels[$field] = attendance_report_hours_label($current[$field]);
     }
     return ['months' => $months, 'current' => $current, 'current_labels' => $labels,
         'opening_adjustment' => $openingAdjustment, 'adjustment_schema_available' => $adjustmentSchemaAvailable,
-        'purchase_schema_available' => $purchaseSchemaAvailable];
+        'purchase_schema_available' => $purchaseSchemaAvailable, 'discount_schema_available' => $discountSchemaAvailable];
 }
