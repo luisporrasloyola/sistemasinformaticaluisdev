@@ -51,17 +51,17 @@ require __DIR__ . '/../../includes/header.php';
             <div class="attendance-quick-selection">
                 <div class="mb-3"><label class="form-label" for="markScheduleSelect">Horario</label><select class="form-select marking-selector" id="markScheduleSelect" data-placeholder="Seleccione un horario"><option value=""></option><?php foreach ($markingSchedules as $schedule): ?><option value="<?= (int)$schedule['id'] ?>"><?= e($schedule['name']) ?></option><?php endforeach; ?></select></div>
                 <div class="mb-3"><label class="form-label" for="markLocationSelect">Lugar de marcación</label><select class="form-select marking-selector" id="markLocationSelect" data-placeholder="Seleccione un lugar"><option value=""></option></select></div>
-                <div class="mb-3"><label class="form-label" for="markProjectSelect">Proyecto</label><select class="form-select marking-selector" id="markProjectSelect" data-placeholder="Seleccione un proyecto"><option value=""></option><?php foreach ($markingProjects as $project): ?><option value="<?= (int)$project['id'] ?>"><?= e($project['name']) ?></option><?php endforeach; ?></select></div>
+                <div class="mb-3"><label class="form-label" for="markProjectSelect">Cliente</label><select class="form-select marking-selector" id="markProjectSelect" data-placeholder="Seleccione un cliente"><option value=""></option><?php foreach ($markingProjects as $project): ?><option value="<?= (int)$project['id'] ?>"><?= e($project['name']) ?></option><?php endforeach; ?></select></div>
                 <div><label class="form-label" for="markLaborRegime">Régimen laboral</label><select class="form-select" id="markLaborRegime"><option value="regular" selected>Regular</option><option value="21x7">Régimen 21×7</option></select><small class="text-muted d-block mt-1" id="markLaborCycleHint" aria-live="polite"></small></div>
             </div>
             <div class="attendance-status-stack mb-3" id="markStatusPanel"><span class="badge text-bg-secondary">Cargando jornada</span></div>
 
             <div class="d-grid gap-3 attendance-primary-mark-action">
                 <button class="btn btn-success" type="button" id="markEntryBtn" disabled><i class="fa-solid fa-circle-check me-2"></i>Registrar marcación</button>
-                <button class="btn btn-outline-primary d-none" type="button" id="markChangeSelectionBtn"><i class="fa-solid fa-pen-to-square me-2"></i>Cambiar lugar / proyecto</button>
+                <button class="btn btn-outline-primary d-none" type="button" id="markChangeSelectionBtn"><i class="fa-solid fa-pen-to-square me-2"></i>Cambiar lugar / cliente</button>
                 <button class="btn btn-primary" type="button" id="markExitBtn" disabled><i class="fa-solid fa-right-from-bracket me-2"></i>Marcar salida</button>
             </div>
-            <div class="form-text mt-3" id="markPermissionHelp">Seleccione lugar, horario y proyecto para registrar su asistencia.</div>
+            <div class="form-text mt-3" id="markPermissionHelp">Seleccione lugar, horario y cliente para registrar su asistencia.</div>
         </div>
     </div>
 
@@ -109,7 +109,7 @@ require __DIR__ . '/../../includes/header.php';
                         <th>Tipo</th>
                         <th>Trabajador</th>
                         <th>Lugar de marcación</th>
-                        <th>Proyecto</th>
+                        <th>Cliente</th>
                         <th>Estado</th>
                         <th>Foto</th>
                     </tr>
@@ -139,7 +139,7 @@ require __DIR__ . '/../../includes/header.php';
 <div class="modal fade" id="myScheduleModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content">
         <div class="modal-header bg-primary text-white">
-            <div><h5 class="modal-title mb-0">Mi programación</h5><small>Calendario de jornadas, horarios, lugares y proyectos.</small></div>
+            <div><h5 class="modal-title mb-0">Mi programación</h5><small>Calendario de jornadas, horarios, lugares y clientes.</small></div>
             <button class="btn-close btn-close-white" type="button" data-bs-dismiss="modal" aria-label="Cerrar"></button>
         </div>
         <div class="modal-body" id="myScheduleContent">

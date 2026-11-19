@@ -57,9 +57,6 @@ if (!$isPdf && (!$info || !in_array($info['mime'] ?? '', ['image/jpeg', 'image/p
 
 $lock = fopen(sys_get_temp_dir() . '/lifemaquinarias_gemini_' . sha1(dirname(__DIR__, 2)) . '.lock', 'c');
 if (!$lock || !flock($lock, LOCK_EX | LOCK_NB)) deposit_gemini_reply(429, ['error' => 'Hay otra lectura en curso. Intente nuevamente en unos momentos.']);
-$last = (int) ($_SESSION['cv_gemini_last'] ?? 0);
-if (time() - $last < 3) deposit_gemini_reply(429, ['error' => 'Espere unos segundos antes de repetir la lectura.']);
-$_SESSION['cv_gemini_last'] = time();
 session_write_close();
 
 $image = file_get_contents($path);
@@ -79,36 +76,92 @@ Analiza este comprobante peruano. Identifica primero si es un lote del modelo 6 
 5. TRANSFERENCIA_MOVIMIENTO: pantalla blanca con título "Detalle de movimiento", importe negativo "-S/" y concepto "Cargo Transferencia". modelo="TRANSFERENCIA_MOVIMIENTO" y modo_pago="Transferencia". Fecha: exclusivamente "Fecha de operación", NO "Fecha de proceso". Acreedor: el texto completo de "Descripción", uniendo sus líneas en orden con un espacio, sin añadir ni reordenar nombres; NO uses "Canal" ni "N. de operación". Monto: el valor absoluto del importe principal negativo, como cadena positiva; por ejemplo "-S/ 300.00" devuelve "300.00". Con "08 nov 2026" y "Nicho Espinoza Franklin" seguido de "Alexan", devuelve fecha="08/11/2026", acreedor="Nicho Espinoza Franklin Alexan", monto="300" y modo_pago="Transferencia".
 El logotipo Interbank por sí solo no identifica el modelo 2 ni 3. Si la foto no coincide claramente con uno de los modelos descritos, devuelve modelo="pendiente" y los otros cuatro campos null.
 Para todos: fecha DD/MM/AAAA; monto como cadena numérica positiva sin S/ ni separadores de miles, con punto decimal solo si corresponde. Copia el nombre tal como aparece, sin inventar ni completar caracteres ocultos. Si un dato es ilegible o ambiguo, devuelve null para ese dato. Ignora hora, comisión, número de operación, número de cuenta y código de seguridad.
-6. TRANSFERENCIA_INTERBANK_LOTE: captura de Interbank Empresas de "PAGOS VARIOS", "Información del lote" y tabla de "Beneficiario", "Monto" y "Estado" con dos o más personas. Devuelve modelo="TRANSFERENCIA_INTERBANK_LOTE" y registros=[{fecha,acreedor,monto,modo_pago,depositante,fila}]. Un registro por cada fila de beneficiario procesada: fecha de "Programación de envío" (no fecha de creación), acreedor = nombre del beneficiario antes del documento DNI, monto = importe de ESA fila (no "Total soles" del lote), modo_pago="Transferencia Interbank", depositante="Cuenta empresa" si el cargo es la cuenta de la empresa. "fila" es el rectángulo completo de la fila del beneficiario en coordenadas normalizadas [izquierda,arriba,derecha,abajo] de 0 a 1000 sobre toda la imagen, abarcando nombre y monto de esa fila, sin incluir otra fila ni información del resumen. Por ejemplo, con Angelo Diego Leon Corac S/950.00 y Fernando Gomero Dolo Res S/1507.70 en una imagen con fecha de envío 02/11/2026, devuelve dos registros independientes por 950 y 1507.70; NO uses el total del lote 2457.70 como depósito. Esta variante tiene prioridad sobre las variantes individuales si aparecen varios beneficiarios.
+6. TRANSFERENCIA_INTERBANK_LOTE: captura de Interbank Empresas de "PAGOS VARIOS", "Información del lote" y tabla de "Beneficiario", "Monto" y "Estado" con dos o más personas. Devuelve modelo="TRANSFERENCIA_INTERBANK_LOTE" y registros=[{fecha,acreedor,monto,modo_pago,depositante,fila}]. Un registro por cada fila de beneficiario procesada: fecha de "Programación de envío" (no fecha de creación), acreedor = nombre del beneficiario antes del documento DNI, monto = importe de ESA fila (no "Total soles" del lote), modo_pago="Transferencia Interbank", depositante="Cuenta soles empresa" si el cargo es la cuenta de la empresa. "fila" es el rectángulo completo de la fila del beneficiario en coordenadas normalizadas [izquierda,arriba,derecha,abajo] de 0 a 1000 sobre toda la imagen, abarcando nombre y monto de esa fila, sin incluir otra fila ni información del resumen. Por ejemplo, con Angelo Diego Leon Corac S/950.00 y Fernando Gomero Dolo Res S/1507.70 en una imagen con fecha de envío 02/11/2026, devuelve dos registros independientes por 950 y 1507.70; NO uses el total del lote 2457.70 como depósito. Esta variante tiene prioridad sobre las variantes individuales si aparecen varios beneficiarios.
 Para el modelo 6, enumera los registros estrictamente en el orden visual de arriba hacia abajo de la tabla de beneficiarios. Nunca reordenes por nombre ni por importe.
-Si el archivo es un PDF de Interbank Empresas con "Detalle de solicitud", "Información de lote" y columnas "Beneficiario", "Tipo de abono", "Cuenta", "Monto" y "Estado", aplica el modelo 6 aunque el nombre del lote sea "pago planill" y no diga "PAGOS VARIOS". Devuelve una fila por cada beneficiario procesado de todas las páginas, en el orden visual. Toma la fecha de "Programación de envío" y el monto de la misma fila; no uses "Total soles" ni al creador/autorizador como beneficiario. El nombre del beneficiario puede estar dividido en dos líneas y hasta partir una palabra (por ejemplo "AULA R" o "CO RAC"): conserva esas letras y no mezcles el DNI, la cuenta ni otra fila en el nombre. Para este modelo devuelve modo_pago="Transferencia Interbank" y depositante="Cuenta empresa". Si hay seis beneficiarios, devuelve seis registros. No omitas filas ni inventes datos.
+Si el archivo es un PDF de Interbank Empresas con "Detalle de solicitud", "Información de lote" y columnas "Beneficiario", "Tipo de abono", "Cuenta", "Monto" y "Estado", aplica el modelo 6 aunque el nombre del lote sea "pago planill" y no diga "PAGOS VARIOS". Devuelve una fila por cada beneficiario procesado de todas las páginas, en el orden visual. Toma la fecha de "Programación de envío" y el monto de la misma fila; no uses "Total soles" ni al creador/autorizador como beneficiario. El nombre del beneficiario puede estar dividido en dos líneas y hasta partir una palabra (por ejemplo "AULA R" o "CO RAC"): conserva esas letras y no mezcles el DNI, la cuenta ni otra fila en el nombre. Para este modelo devuelve modo_pago="Transferencia Interbank" y depositante="Cuenta soles empresa". Si hay seis beneficiarios, devuelve seis registros. No omitas filas ni inventes datos.
 7. PAGO_EFECTIVO: comprobante de Interbank con check verde, texto "Pagaste", importe grande verde, destinatario "a PAGOEFECTIVO" y secciones "Cuenta cargo", "Servicio: PagoEfectivo", "Recibo", "Datos" y "Fecha y hora". modelo="PAGO_EFECTIVO", acreedor="Pago efectivo" y modo_pago="Pago efectivo". La fecha se toma solamente de "Fecha y hora", nunca de "Vence"; el monto se toma del importe grande debajo de "Pagaste" y debe coincidir con el de "Recibo". No uses "Life Maquinarias" (cuenta cargo) como acreedor, ni el número de servicio, recibo o código de operación como monto. Ejemplo: "10 Nov 2026 05:14 PM" y "S/ 958.85" devuelven fecha="10/11/2026", acreedor="Pago efectivo", monto="958.85" y modo_pago="Pago efectivo". Reconoce este modelo por el texto de pago/servicio, no solo por el logotipo Interbank.
-8. TRANSFERENCIA_MASIVA: captura de banca empresarial con encabezado "Pago masivo varios", panel central "Tu solicitud se está procesando", estado "Realizado", campos "Monto", "Cuenta de cargo", "Fecha y hora" y tabla inferior "Lista de beneficiarios". Si la lista tiene exactamente una persona, devuelve modelo="TRANSFERENCIA_MASIVA" y un registro individual. Acreedor: el nombre completo de esa única fila de beneficiarios; ignora "Hola, [usuario]", la empresa y la cuenta de cargo. Monto: el "Total Soles" de esa fila, que debe coincidir con el monto en soles del panel central; ignora el monto en dólares. Fecha: toma exactamente el día, mes y año impresos junto a "Fecha y hora" en el panel central, sin cambiarlo por zona horaria ni inferir el día anterior. modo_pago="Transferencia". Si hay dos o más beneficiarios en este formato, devuelve modelo="pendiente" y no atribuyas el monto total a una sola persona. Ejemplo: con fecha "11/11/2026", "CAMILA NICOLE GUERRERO PAUCAR" y "S/ 350.00" devuelve fecha="11/11/2026", acreedor="Camila Nicole Guerrero Paucar", monto="350" y modo_pago="Transferencia".
+8. TRANSFERENCIA_MASIVA: captura de banca empresarial con encabezado "Pago masivo varios", panel central "Tu solicitud se está procesando", estado "Realizado", campos "Monto", "Cuenta de cargo", "Fecha y hora" y tabla inferior "Lista de beneficiarios". Si la lista tiene exactamente una persona, devuelve modelo="TRANSFERENCIA_MASIVA" y un registro individual. Acreedor: el nombre completo de esa única fila de beneficiarios; ignora "Hola, [usuario]", la empresa y la cuenta de cargo. Monto: el "Total Soles" de esa fila, que debe coincidir con el monto en soles del panel central; ignora el monto en dólares. Fecha: toma exactamente el día, mes y año impresos junto a "Fecha y hora" en el panel central, sin cambiarlo por zona horaria ni inferir el día anterior. modo_pago="Transferencia" y depositante="Cuenta soles empresa". Si hay dos o más beneficiarios en este formato, devuelve modelo="pendiente" y no atribuyas el monto total a una sola persona. Ejemplo: con fecha "11/11/2026", "CAMILA NICOLE GUERRERO PAUCAR" y "S/ 350.00" devuelve fecha="11/11/2026", acreedor="Camila Nicole Guerrero Paucar", monto="350", modo_pago="Transferencia" y depositante="Cuenta soles empresa".
 PROMPT;
+if (!$isPdf && $info[0] >= $info[1] * 1.7) {
+    $prompt = <<<'WIDE_PROMPT'
+Lee esta captura bancaria peruana horizontal. Devuelve SOLO JSON. Primero distingue:
+1) «Pago masivo varios», «Tu solicitud se está procesando», «Lista de beneficiarios»: si hay exactamente un beneficiario, {"modelo":"TRANSFERENCIA_MASIVA","fecha":"DD/MM/AAAA","acreedor":"nombre completo del beneficiario","monto":"importe en soles de su fila","modo_pago":"Transferencia"}. Usa la fecha impresa en «Fecha y hora» del panel central, nunca la del navegador. Ignora «Hola, [usuario]» y el importe en dólares. Para este modelo el depositante es «Cuenta soles empresa». Si hay varios beneficiarios y no se ven importes individuales, devuelve {"modelo":"pendiente"}.
+2) «Detalle de solicitud» o «Información del lote» con tabla Beneficiario/Monto/Estado: devuelve {"modelo":"TRANSFERENCIA_INTERBANK_LOTE","registros":[{"fecha":"DD/MM/AAAA","acreedor":"nombre de la fila","monto":"importe de la fila"}]}. Incluye cada fila procesada en orden visual, fecha de «Programación de envío», sin DNI ni cuentas. No uses el total del lote.
+3) Otro comprobante bancario: identifica YAPE, PLIN, TRANSFERENCIA_INTERBANK, TRANSFERENCIA_BCP, TRANSFERENCIA_MOVIMIENTO o PAGO_EFECTIVO y devuelve {"modelo":"...","fecha":"DD/MM/AAAA","acreedor":"destinatario","monto":"importe","modo_pago":"..."}. Si no se distingue con seguridad, devuelve {"modelo":"pendiente"}.
+Los montos son cadenas positivas sin S/ ni separadores de miles. No inventes datos ilegibles ni completes nombres ocultos.
+WIDE_PROMPT;
+}
+if (!$isPdf && $info[1] > 2000 && $info[0] >= 1000 && $info[0] < $info[1] * .85) {
+    $prompt = <<<'PORTRAIT_BATCH_PROMPT'
+Lee esta captura vertical de Interbank Empresas «Detalle de solicitud». Devuelve SOLO un objeto JSON: {"modelo":"TRANSFERENCIA_INTERBANK_LOTE","registros":[{"fecha":"DD/MM/AAAA","acreedor":"nombre completo","monto":"1234.56"}]}. Cada fila procesada de la tabla Beneficiario/Monto es un registro, en el orden visual. Fecha = «Programación de envío». Monto = el importe en soles de esa fila, nunca el total del lote. Une nombres partidos entre líneas, sin DNI ni cuenta. Incluye todas las filas, sin duplicar ni inventar. Si no es un lote, devuelve {"modelo":"pendiente"}.
+PORTRAIT_BATCH_PROMPT;
+}
+if ($isPdf) {
+    $prompt = <<<'PDF_PROMPT'
+Lee el PDF original de Interbank Empresas «Detalle de solicitud». Devuelve solamente JSON válido, sin explicación, con este esquema: {"modelo":"TRANSFERENCIA_INTERBANK_LOTE","registros":[{"fecha":"DD/MM/AAAA","acreedor":"nombre","monto":"1234.56"}]}. Lee TODAS las páginas y cada fila procesada de la tabla Beneficiario / Monto / Estado. Conserva el orden de arriba abajo. Fecha = «Programación de envío», no creación. Acreedor = nombre completo de la fila, uniendo líneas partidas, sin DNI ni cuenta. Monto = monto en soles de ESA fila, sin S/ ni separador de millares; nunca uses «Total soles». No incluyas creador ni autorizadores como beneficiarios. Si el documento no tiene varias filas procesadas, devuelve {"modelo":"pendiente"}. No inventes valores.
+PDF_PROMPT;
+}
 $body = json_encode([
     'contents' => [['role' => 'user', 'parts' => [['text' => $prompt], ['inline_data' => ['mime_type' => $mime, 'data' => base64_encode($image)]]]]],
-    'generationConfig' => ['responseMimeType' => 'application/json', 'maxOutputTokens' => 2048, 'thinkingConfig' => ['thinkingLevel' => 'MINIMAL']],
+    'generationConfig' => ['responseMimeType' => 'application/json', 'maxOutputTokens' => $isPdf ? 4096 : 2048, 'thinkingConfig' => ['thinkingLevel' => 'MINIMAL']],
 ], JSON_UNESCAPED_UNICODE);
 unset($image);
 if ($body === false) deposit_gemini_reply(500, ['error' => 'No se pudo preparar la lectura.']);
 @set_time_limit(120);
-$handle = curl_init('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent');
-curl_setopt_array($handle, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => $body, CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'x-goog-api-key: ' . $key], CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 8, CURLOPT_TIMEOUT => 110]);
-$response = curl_exec($handle);
-$status = curl_getinfo($handle, CURLINFO_HTTP_CODE);
-curl_close($handle);
-if ($response === false) deposit_gemini_reply(503, ['error' => 'La lectura tardó demasiado o no pudo conectarse.']);
+$response = false;
+$status = 0;
+$curlNumber = 0;
+for ($attempt = 1; $attempt <= 2; $attempt++) {
+    $modelName = $attempt === 1 ? 'gemini-3.1-flash-lite' : 'gemini-3.5-flash-lite';
+    $handle = curl_init('https://generativelanguage.googleapis.com/v1beta/models/' . $modelName . ':generateContent');
+    curl_setopt_array($handle, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => $body, CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'x-goog-api-key: ' . $key], CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 8, CURLOPT_TIMEOUT => 50]);
+    $response = curl_exec($handle);
+    $status = (int) curl_getinfo($handle, CURLINFO_HTTP_CODE);
+    $elapsed = (float) curl_getinfo($handle, CURLINFO_TOTAL_TIME);
+    $curlNumber = curl_errno($handle);
+    curl_close($handle);
+    if ($attempt === 1 && in_array($status, [500, 503], true) && $elapsed < 20) {
+        usleep(random_int(500000, 1200000));
+        continue;
+    }
+    break;
+}
+if ($response === false) {
+    error_log('Depósitos Gemini: cURL ' . $curlNumber . ', HTTP ' . $status);
+    deposit_gemini_reply(503, ['error' => 'No se pudo conectar con la API de Gemini. Reintente la lectura.']);
+}
 $payload = json_decode($response, true);
-if ($status === 429) deposit_gemini_reply(429, ['error' => 'La cuota de Gemini está temporalmente agotada. Intente más tarde.']);
 if (stripos((string) ($payload['error']['message'] ?? ''), 'source image could not be decoded') !== false) {
     deposit_gemini_reply(422, ['error' => 'No se pudo interpretar esta imagen. Compártala o expórtela nuevamente como JPG y vuelva a seleccionarla.']);
 }
-if ($status !== 200 || !is_array($payload) || ($payload['candidates'][0]['finishReason'] ?? '') !== 'STOP') {
-    deposit_gemini_reply(503, ['error' => 'Gemini no pudo completar la lectura.']);
+if ($status !== 200 || !is_array($payload)) {
+    $apiStatus = (string) ($payload['error']['status'] ?? '');
+    $apiStatus = preg_match('/^[A-Z_]{1,40}$/D', $apiStatus) ? $apiStatus : 'SIN_ESTADO';
+    error_log('Depósitos Gemini: API HTTP ' . $status . ', estado ' . $apiStatus);
+    $message = match ($status) {
+        400 => 'Gemini rechazó el archivo o los parámetros de lectura (HTTP 400).',
+        401, 403 => 'La clave de Gemini no tiene acceso al modelo configurado (HTTP ' . $status . ').',
+        402 => 'La cuenta de Gemini requiere revisar su facturación (HTTP 402).',
+        404 => 'El modelo de Gemini configurado no está disponible (HTTP 404).',
+        429 => 'La API de Gemini alcanzó su cuota o límite de solicitudes (HTTP 429). Intente más tarde.',
+        500, 503, 504 => 'La API de Gemini está temporalmente sobrecargada (HTTP ' . $status . '). Reintente la lectura.',
+        default => 'La API de Gemini rechazó la lectura (HTTP ' . $status . ').',
+    };
+    deposit_gemini_reply(in_array($status, [400, 401, 402, 403, 404, 429], true) ? $status : 503, ['error' => $message]);
+}
+$finishReason = (string) ($payload['candidates'][0]['finishReason'] ?? 'SIN_ESTADO');
+if ($finishReason !== 'STOP') {
+    error_log('Depósitos Gemini: respuesta incompleta, estado ' . preg_replace('/[^A-Z_]/', '', $finishReason));
+    deposit_gemini_reply(503, ['error' => $finishReason === 'MAX_TOKENS' ? 'La lectura quedó incompleta por el tamaño del resultado. Reintente o revise el documento.' : 'Gemini devolvió una lectura incompleta. Reintente o complete los datos manualmente.']);
 }
 $raw = implode('', array_column($payload['candidates'][0]['content']['parts'] ?? [], 'text'));
 $values = json_decode($raw, true);
 if (!is_array($values)) deposit_gemini_reply(503, ['error' => 'La lectura no produjo datos utilizables.']);
+if (array_is_list($values) && count($values) >= 2 && count($values) <= 30
+    && array_reduce($values, static fn(bool $valid, mixed $item): bool => $valid && is_array($item)
+        && isset($item['fecha'], $item['acreedor'], $item['monto']), true)) {
+    $values = ['modelo' => 'TRANSFERENCIA_INTERBANK_LOTE', 'registros' => $values];
+}
 $model = $values['modelo'] ?? '';
 if ($model === 'TRANSFERENCIA_INTERBANK_LOTE') {
     if (!is_admin()) deposit_gemini_reply(403, ['error' => 'Los comprobantes con varios beneficiarios deben registrarse desde una cuenta de administrador.']);
@@ -132,7 +185,7 @@ if ($model === 'TRANSFERENCIA_INTERBANK_LOTE') {
         if (!$linkedWorker) deposit_gemini_reply(422, ['error' => 'No se pudo identificar con seguridad a todos los trabajadores del comprobante.']);
         $records[] = [
             'fecha' => $date, 'acreedor' => $linkedWorker['creditor'], 'monto' => $amount,
-            'modo_pago' => 'Transferencia Interbank', 'depositante' => 'Cuenta empresa',
+            'modo_pago' => 'Transferencia Interbank', 'depositante' => 'Cuenta soles empresa',
             'worker_id' => $linkedWorker['id'],
         ];
     }
@@ -158,6 +211,7 @@ deposit_gemini_reply(200, ['model' => $model, 'fields' => [
     'fecha' => $date,
     'acreedor' => $creditor !== '' ? $creditor : null,
     'monto' => $amount,
+    'depositante' => $model === 'TRANSFERENCIA_MASIVA' ? 'Cuenta soles empresa' : null,
     'modo_pago' => match ($model) {
         'TRANSFERENCIA_INTERBANK' => 'Transferencia Interbank',
         'TRANSFERENCIA_BCP' => 'Tranferencia BCP',

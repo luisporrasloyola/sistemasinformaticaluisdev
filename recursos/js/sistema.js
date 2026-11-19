@@ -25,6 +25,90 @@ document.querySelectorAll('.save-regime-extra').forEach(button => {
 });
 
 const attendanceHempForm = document.getElementById('attendanceHempForm');
+const attendanceBuyHoursForm = document.getElementById('attendanceBuyHoursForm');
+if (attendanceBuyHoursForm) {
+    const hoursInput = attendanceBuyHoursForm.elements.hours_decimal;
+    const rateInput = attendanceBuyHoursForm.elements.hourly_rate;
+    const totalPreview = document.getElementById('attendancePurchaseTotal');
+    const purchaseModal = document.getElementById('attendanceBuyHoursModal');
+    const updateTotal = () => {
+        const hoursHundredths = Math.round(Number(hoursInput.value) * 100);
+        const rateCents = Math.round(Number(rateInput.value) * 100);
+        const totalCents = hoursInput.value && rateInput.value && hoursInput.validity.valid && rateInput.validity.valid
+            ? Math.round(hoursHundredths * rateCents / 100) : 0;
+        totalPreview.textContent = `S/ ${(totalCents / 100).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    };
+    hoursInput.addEventListener('input', updateTotal);
+    rateInput.addEventListener('input', updateTotal);
+    purchaseModal.addEventListener('show.bs.modal', (event) => {
+        attendanceBuyHoursForm.reset();
+        const edit = event.relatedTarget?.closest('.edit-hour-purchase');
+        const title = document.getElementById('attendanceBuyHoursTitle');
+        const submit = document.getElementById('attendancePurchaseSubmit');
+        const balanceHint = document.getElementById('attendancePurchaseBalanceHint');
+        if (edit) {
+            attendanceBuyHoursForm.elements.purchase_id.value = edit.dataset.id;
+            attendanceBuyHoursForm.elements.purchase_date.value = edit.dataset.date;
+            hoursInput.value = edit.dataset.hours;
+            rateInput.value = edit.dataset.rate;
+            title.textContent = 'Editar compra de horas';
+            submit.textContent = 'Guardar cambios';
+            balanceHint.textContent = 'La compra anterior se reemplazará y el saldo de horas se recalculará.';
+        } else {
+            title.textContent = 'Comprar horas';
+            submit.textContent = 'Guardar compra';
+            balanceHint.textContent = `Saldo vigente: ${balanceHint.dataset.current}. Las horas compradas se descontarán de este saldo.`;
+        }
+        updateTotal();
+    });
+    attendanceBuyHoursForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (!attendanceBuyHoursForm.reportValidity()) return;
+        const button = attendanceBuyHoursForm.querySelector('[type="submit"]');
+        const body = new FormData(attendanceBuyHoursForm);
+        body.append('csrf_token', csrf);
+        button.disabled = true;
+        try {
+            const response = await fetch(`${BASE_URL}/servicios/control_personal/guardar_compra_horas.php`, { method: 'POST', body, credentials: 'same-origin' });
+            const result = await response.json();
+            if (!response.ok || !result.ok) throw new Error(result.message || 'No se pudo registrar la compra.');
+            window.location.reload();
+        } catch (error) {
+            Swal.fire('No se pudo guardar', error.message || 'Inténtelo nuevamente.', 'warning');
+            button.disabled = false;
+        }
+    });
+    document.querySelectorAll('.delete-hour-purchase').forEach((button) => {
+        button.addEventListener('click', async () => {
+            const confirmation = await Swal.fire({
+                title: '¿Eliminar esta compra de horas?',
+                text: `Se quitarán ${button.dataset.hours} horas de las compras y se recalculará el saldo.`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, eliminar',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#dc3545'
+            });
+            if (!confirmation.isConfirmed) return;
+            const body = new FormData();
+            body.set('csrf_token', csrf);
+            body.set('action', 'delete');
+            body.set('worker_id', attendanceBuyHoursForm.elements.worker_id.value);
+            body.set('report_month', attendanceBuyHoursForm.elements.report_month.value);
+            body.set('purchase_id', button.dataset.id);
+            button.disabled = true;
+            try {
+                const response = await fetch(`${BASE_URL}/servicios/control_personal/guardar_compra_horas.php`, { method: 'POST', body, credentials: 'same-origin' });
+                const result = await response.json();
+                if (!response.ok || !result.ok) throw new Error(result.message || 'No se pudo eliminar la compra.');
+                window.location.reload();
+            } catch (error) {
+                Swal.fire('No se pudo eliminar', error.message || 'Inténtelo nuevamente.', 'warning');
+                button.disabled = false;
+            }
+        });
+    });
+}
 if (attendanceHempForm) {
     const hempDays = document.getElementById('hempDays');
     const hempHours = attendanceHempForm.elements.hours;

@@ -152,7 +152,7 @@ ob_start();
             <td><div class="monthly-hour-card monthly-hour-total"><span>Horas extras · <?= $h($monthLabel) ?></span><b><?= $h($hoursLabel('overtime_minutes')) ?></b></div></td>
         </tr></table>
     </td>
-    <td class="monthly-hour-balance"><div class="monthly-hour-card"><span>Horas extras vigentes</span><b><?= $h($hoursLabel('closing_minutes')) ?></b><em class="monthly-hour-days"><?= $h($daysLabel('closing_minutes')) ?></em><small>HEMP + extras del mes − horas canjeadas</small></div></td>
+    <td class="monthly-hour-balance"><div class="monthly-hour-card"><span>Horas extras vigentes</span><b><?= $h($hoursLabel('closing_minutes')) ?></b><em class="monthly-hour-days"><?= $h($daysLabel('closing_minutes')) ?></em><small>Horas compradas: <?= $h($hoursLabel('purchased_minutes')) ?></small><small>HEMP + extras del mes − horas canjeadas − horas compradas</small></div></td>
 </tr></table>
 <?php if ($hours['planned_redemption_days'] > 0): ?><div class="monthly-footnote"><?= (int) $hours['planned_redemption_days'] ?> día(s) «A cuenta de horas» futuros aún no descontados.</div><?php endif; ?>
 <?php

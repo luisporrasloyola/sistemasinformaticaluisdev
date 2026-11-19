@@ -16,6 +16,7 @@ $cobranzasValorizacionOpen = str_ends_with($currentPath, '/modulos/cobranzas/val
 $finanzasOpen = str_contains($currentPath, '/modulos/finanzas/');
 $finanzasGastosOpen = str_ends_with($currentPath, '/modulos/finanzas/gastos_personal.php');
 $finanzasDepositosOpen = str_ends_with($currentPath, '/modulos/finanzas/depositos_personal.php');
+$finanzasPagosPendientesOpen = str_ends_with($currentPath, '/modulos/finanzas/pagos_pendientes.php');
 $empresaMaquirentaOpen = str_contains($currentPath, '/modulos/empresa_maquirenta/');
 $empresaMaquirentaDashboardOpen = str_ends_with($currentPath, '/modulos/empresa_maquirenta/dashboard.php');
 $valorizacionesOpen = str_ends_with($currentPath, '/modulos/empresa_maquirenta/valorizaciones.php');
@@ -187,7 +188,8 @@ $isAdmin = is_admin();
             </button>
             <div class="collapse <?= $finanzasOpen ? 'show' : '' ?>" id="finanzasMenu"><div class="submenu">
                 <a class="nav-link sub-link <?= $finanzasGastosOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/finanzas/gastos_personal.php"><i class="fa-solid fa-receipt"></i><span>Gastos de personal</span></a>
-                <a class="nav-link sub-link <?= $finanzasDepositosOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/finanzas/depositos_personal.php"><i class="fa-solid fa-money-bill-transfer"></i><span>Depósitos al personal</span></a>
+                <a class="nav-link sub-link <?= $finanzasDepositosOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/finanzas/depositos_personal.php"><i class="fa-solid fa-money-bill-transfer"></i><span>Depósitos al personal</span></a>
+                <a class="nav-link sub-link <?= $finanzasPagosPendientesOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/finanzas/pagos_pendientes.php"><i class="fa-solid fa-clock"></i><span>Pagos pendientes</span></a>
             </div></div>
 
             <button class="nav-link nav-parent <?= $empresaMaquirentaOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#empresaMaquirentaMenu" aria-expanded="<?= $empresaMaquirentaOpen ? 'true' : 'false' ?>" aria-controls="empresaMaquirentaMenu">
@@ -283,11 +285,12 @@ $isAdmin = is_admin();
                     <?php if (current_user_can_module('cobranzas.valorizacion')): ?><a class="nav-link sub-link <?= $cobranzasValorizacionOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/cobranzas/valorizacion.php"><i class="fa-solid fa-file-invoice-dollar"></i><span>Valorización</span></a><?php endif; ?>
                 </div></div>
             <?php endif; ?>
-            <?php if (current_user_can_module('finanzas') && (current_user_can_module('finanzas.gastos_personal') || current_user_can_module('finanzas.depositos_personal'))): ?>
+            <?php if (current_user_can_module('finanzas') && (current_user_can_module('finanzas.gastos_personal') || current_user_can_module('finanzas.depositos_personal') || current_user_can_module('finanzas.pagos_pendientes'))): ?>
                 <button class="nav-link nav-parent <?= $finanzasOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#finanzasMenuGestor" aria-expanded="<?= $finanzasOpen ? 'true' : 'false' ?>" aria-controls="finanzasMenuGestor"><i class="fa-solid fa-coins"></i><span>Finanzas</span><i class="fa-solid fa-chevron-down nav-caret"></i></button>
                 <div class="collapse <?= $finanzasOpen ? 'show' : '' ?>" id="finanzasMenuGestor"><div class="submenu">
                     <?php if (current_user_can_module('finanzas.gastos_personal')): ?><a class="nav-link sub-link <?= $finanzasGastosOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/finanzas/gastos_personal.php"><i class="fa-solid fa-receipt"></i><span>Gastos de personal</span></a><?php endif; ?>
-                    <?php if (current_user_can_module('finanzas.depositos_personal')): ?><a class="nav-link sub-link <?= $finanzasDepositosOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/finanzas/depositos_personal.php"><i class="fa-solid fa-money-bill-transfer"></i><span>Depósitos al personal</span></a><?php endif; ?>
+                    <?php if (current_user_can_module('finanzas.depositos_personal')): ?><a class="nav-link sub-link <?= $finanzasDepositosOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/finanzas/depositos_personal.php"><i class="fa-solid fa-money-bill-transfer"></i><span>Depósitos al personal</span></a><?php endif; ?>
+                    <?php if (current_user_can_module('finanzas.pagos_pendientes')): ?><a class="nav-link sub-link <?= $finanzasPagosPendientesOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/finanzas/pagos_pendientes.php"><i class="fa-solid fa-clock"></i><span>Pagos pendientes</span></a><?php endif; ?>
                 </div></div>
             <?php endif; ?>
             <?php if (current_user_can_module('empresa_maquirenta')): ?>

@@ -70,6 +70,7 @@ function permission_modules_catalog(): array
             'label' => 'Finanzas',
             'children' => [
                 'finanzas.gastos_personal' => 'Gastos de personal',
+                'finanzas.pagos_pendientes' => 'Pagos pendientes',
                 'finanzas.depositos_personal' => 'Depósitos al personal',
             ],
         ],

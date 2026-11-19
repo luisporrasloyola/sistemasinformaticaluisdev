@@ -61,6 +61,23 @@ function personal_deposit_unique_worker_id(string $creditor, array $workers): ?i
     return $match;
 }
 
+/** Resuelve el depositante del padrón y un primer nombre antiguo solo si es único. */
+function personal_expense_depositor_worker_id(string $depositor, array $workers): ?int
+{
+    $tokens = personal_deposit_name_tokens(trim($depositor));
+    if (!$tokens) return null;
+    $parts = array_column($tokens, 'value');
+    $match = null;
+    foreach ($workers as $worker) {
+        $workerParts = array_column(personal_deposit_name_tokens((string) $worker['full_name']), 'value');
+        $same = $parts === $workerParts || (count($parts) === 1 && strlen($parts[0]) >= 4 && ($workerParts[0] ?? '') === $parts[0]);
+        if (!$same) continue;
+        if ($match !== null) return null;
+        $match = (int) $worker['id'];
+    }
+    return $match;
+}
+
 /**
  * Reconcilia nombres que el OCR separa dentro de una palabra (CO RAC -> CORAC)
  * o que omiten un segundo nombre del trabajador.

@@ -43,7 +43,7 @@ if (is_personal_role() && $deposit['batch_id'] !== null) {
             $rowIndex = array_search($id, $batchIds, true);
             if ($rowIndex !== false) {
                 $safe = personal_deposit_batch_redacted_pdf($path, $rowIndex, count($batchIds),
-                    date('d/m/Y', strtotime((string) $deposit['deposit_date'])));
+                    date('d/m/Y', strtotime((string) $deposit['deposit_date'])), (string) $deposit['creditor']);
             }
         }
         if ($safe === null) {

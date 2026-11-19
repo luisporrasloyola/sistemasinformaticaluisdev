@@ -31,6 +31,37 @@ document.addEventListener('DOMContentLoaded', () => {
     let savedDates = [];
     let batchSaved = false;
 
+    function depositorSelect(value, className = 'form-select form-select-sm') {
+        const select = document.createElement('select');
+        select.className = `${className} select2-searchable`;
+        select.dataset.placeholder = 'Buscar depositante';
+        select.dataset.noResults = 'No se encontró personal';
+        select.setAttribute('aria-label', 'Depositante');
+        const choices = [...settings.depositorOptions];
+        if (value && !choices.includes(value)) choices.unshift(value);
+        for (const name of ['', ...choices]) {
+            const option = document.createElement('option');
+            option.value = name;
+            option.textContent = name || '—';
+            option.selected = name === value;
+            select.appendChild(option);
+        }
+        return select;
+    }
+
+    function activateDepositorSearch(select) {
+        if (!window.jQuery?.fn?.select2 || !select.isConnected) return;
+        const field = window.jQuery(select);
+        if (field.hasClass('select2-hidden-accessible')) return;
+        const modal = field.closest('.modal');
+        field.select2({
+            theme: 'bootstrap4', width: '100%', minimumResultsForSearch: 0,
+            dropdownParent: modal.length ? modal : window.jQuery(document.body),
+            placeholder: 'Buscar depositante',
+            language: {noResults: () => 'No se encontró personal'}
+        });
+    }
+
     function showSavedPeriod() {
         if (!savedDates.length) return;
         const last = [...savedDates].sort().at(-1);
@@ -57,6 +88,7 @@ document.addEventListener('DOMContentLoaded', () => {
         row.dataset.registration = record.registro || row.dataset.registration || 'gemini';
         row.dataset.creditor = record.acreedor;
         row.dataset.depositor = record.depositante || '';
+        row.dataset.registeredBy = record.registrado_por === undefined ? row.dataset.registeredBy || '' : record.registrado_por;
         row.dataset.amount = record.monto;
         row.dataset.method = record.modo_pago;
         row.dataset.hasPhoto = record.hasPhoto === undefined ? row.dataset.hasPhoto || '0' : (record.hasPhoto ? '1' : '0');
@@ -65,11 +97,17 @@ document.addEventListener('DOMContentLoaded', () => {
         row.classList.remove('is-editing');
         row.replaceChildren();
         const [year, month, day] = record.fecha.split('-');
-        for (const value of [`${day}/${month}/${year}`, row.dataset.registration === 'manual' || row.dataset.registration === 'Manual' ? 'Manual' : 'Gemini', record.acreedor, `S/ ${Number(record.monto).toFixed(2)}`, record.modo_pago, record.depositante || '—']) {
+        for (const value of [`${day}/${month}/${year}`, row.dataset.registration === 'manual' || row.dataset.registration === 'Manual' ? 'Manual' : 'Gemini', record.acreedor, `S/ ${Number(record.monto).toFixed(2)}`, record.modo_pago, record.depositante || '—', row.dataset.registeredBy || '—']) {
             const cell = document.createElement('td');
             cell.textContent = value;
             row.appendChild(cell);
         }
+        const depositorCell = row.cells[5];
+        const select = depositorSelect(row.dataset.depositor);
+        select.classList.add('personal-deposit-depositor-select');
+        select.disabled = row.dataset.canManage !== '1';
+        depositorCell.replaceChildren(select);
+        activateDepositorSearch(select);
         const cell = document.createElement('td');
         const actions = document.createElement('div');
         actions.className = 'personal-deposit-actions';
@@ -154,16 +192,53 @@ document.addEventListener('DOMContentLoaded', () => {
         totalCell.dataset.cents = String(next);
         totalCell.textContent = `S/ ${(next / 100).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
     }
+    async function saveDepositorChange(event) {
+        const select = event.target.closest('.personal-deposit-depositor-select');
+        if (!select) return;
+        const row = select.closest('tr[data-id]');
+        if (!row || row.dataset.canManage !== '1') return;
+        const previous = row.dataset.depositor || '';
+        if (select.value === previous) return;
+        select.disabled = true;
+        try {
+            const data = new FormData();
+            data.append('csrf_token', settings.csrf);
+            data.append('id', row.dataset.id);
+            data.append('action', 'set_depositor');
+            data.append('depositante', select.value);
+            const response = await fetch(settings.actionsEndpoint, {method: 'POST', body: data, credentials: 'same-origin'});
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || 'No se pudo guardar el depositante.');
+            row.dataset.depositor = result.depositante;
+            row.dataset.registeredBy = result.registrado_por;
+            row.cells[6].textContent = result.registrado_por || '—';
+        } catch (error) {
+            select.value = previous;
+            if (window.jQuery?.fn?.select2) window.jQuery(select).trigger('change.select2');
+            if (window.Swal) Swal.fire({icon: 'error', text: error.message});
+            else window.alert(error.message);
+        } finally {
+            select.disabled = false;
+        }
+    }
+    // Select2 emite eventos mediante jQuery; addEventListener no recibe esos cambios.
+    if (window.jQuery) window.jQuery(rows).on('change', '.personal-deposit-depositor-select', saveDepositorChange);
+    else rows.addEventListener('change', saveDepositorChange);
     rows.addEventListener('click', async event => {
         const button = event.target.closest('button[data-action]');
         if (!button) return;
         const row = button.closest('tr[data-id]');
         if (!row) return;
         const action = button.dataset.action;
+        if (!['edit', 'save', 'cancel', 'delete'].includes(action)) return;
         if (row.dataset.canManage !== '1') return;
         if (action === 'edit') {
             if (rows.querySelector('tr.is-editing')) return;
             row.classList.add('is-editing');
+            const depositorField = row.querySelector('.personal-deposit-depositor-select');
+            if (depositorField && window.jQuery?.fn?.select2 && window.jQuery(depositorField).hasClass('select2-hidden-accessible')) {
+                window.jQuery(depositorField).select2('destroy');
+            }
             const values = [row.dataset.date, null, row.dataset.creditor, row.dataset.amount, row.dataset.method, row.dataset.depositor || ''];
             const types = ['date', null, 'text', 'number', 'text', 'text'];
             row.querySelectorAll('td').forEach((cell, index) => {
@@ -173,7 +248,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 field.type = types[index];
                 field.value = values[index];
                 field.required = index !== 5;
-                if (index === 2) { field.maxLength = 150; field.readOnly = row.dataset.isBatch === '1' || row.dataset.registration === 'manual'; }
+                if (index === 2) {
+                    field.maxLength = 150;
+                    field.readOnly = row.dataset.isBatch === '1';
+                    if (row.dataset.registration === 'manual') field.setAttribute('list', 'personalDepositWorkerNames');
+                }
                 if (index === 3) { field.min = '0.01'; field.step = '0.01'; }
                 if (index === 4) field.maxLength = 100;
                 if (index === 5) { field.maxLength = 150; field.placeholder = 'Depositante (opcional)'; }
@@ -194,7 +273,7 @@ document.addEventListener('DOMContentLoaded', () => {
             row.querySelector('input').focus();
             return;
         }
-        const record = {id: row.dataset.id, fecha: row.dataset.date, registro: row.dataset.registration, acreedor: row.dataset.creditor, monto: row.dataset.amount, modo_pago: row.dataset.method, depositante: row.dataset.depositor || ''};
+        const record = {id: row.dataset.id, fecha: row.dataset.date, registro: row.dataset.registration, acreedor: row.dataset.creditor, monto: row.dataset.amount, modo_pago: row.dataset.method, depositante: row.dataset.depositor || '', registrado_por: row.dataset.registeredBy || ''};
         if (action === 'cancel') { renderRow(row, record); return; }
         if (action === 'delete') {
             const confirmed = window.Swal ? (await Swal.fire({title: '¿Eliminar este depósito?', text: row.dataset.hasPhoto === '1' ? 'También se eliminará la foto. Esta acción no se puede deshacer.' : 'Esta acción no se puede deshacer.', icon: 'warning', showCancelButton: true, confirmButtonText: 'Sí, eliminar', cancelButtonText: 'Cancelar', confirmButtonColor: '#dc3545'})).isConfirmed : window.confirm(row.dataset.hasPhoto === '1' ? '¿Eliminar este depósito y su foto?' : '¿Eliminar este depósito?');
@@ -243,9 +322,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const wrapper = document.createElement('div');
         const caption = document.createElement('label');
         caption.textContent = label;
-        const field = document.createElement('input');
-        field.className = 'form-control';
-        field.type = type;
+        const field = key === 'depositante'
+            ? depositorSelect(settings.defaultDepositor, 'form-select')
+            : document.createElement('input');
+        if (key !== 'depositante') {
+            field.className = 'form-control';
+            field.type = type;
+        }
         field.dataset.field = key;
         if (maxLength) field.maxLength = maxLength;
         if (type === 'number') {
@@ -306,17 +389,19 @@ document.addEventListener('DOMContentLoaded', () => {
             makeField('Fecha', 'date', 'fecha'),
             makeField('Acreedor de depósito', 'text', 'acreedor', 150),
             makeField('Monto depositado (S/)', 'number', 'monto'),
-            makeField('Modo de pago', 'text', 'modo_pago', 100)
+            makeField('Modo de pago', 'text', 'modo_pago', 100),
+            makeField('Depositante', 'text', 'depositante', 150)
         );
         card.append(header, status, preview, fields);
         cards.appendChild(card);
+        activateDepositorSearch(fields.querySelector('[data-field="depositante"]'));
         return {card, status, retry, save, close, file, url, preview, preparedFile: null, saved: false};
     }
 
     function validFields(card) {
         const fields = Object.fromEntries(Array.from(card.querySelectorAll('[data-field]')).map(field => [field.dataset.field, field]));
         for (const field of Object.values(fields)) {
-            field.required = true;
+            field.required = field.dataset.field !== 'depositante';
             if (!field.reportValidity()) return null;
         }
         return fields;
@@ -350,7 +435,7 @@ document.addEventListener('DOMContentLoaded', () => {
             item.saved = true;
             item.save.hidden = true;
             item.retry.hidden = true;
-            item.card.querySelectorAll('[data-field]').forEach(field => { field.readOnly = true; });
+            item.card.querySelectorAll('[data-field]').forEach(field => { field.readOnly = true; field.disabled = true; });
             item.status.classList.remove('is-error');
             item.status.textContent = 'Depósito guardado correctamente.';
             savedDates.push(result.fecha);
@@ -387,6 +472,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function prepareImage(file) {
+        if (allowed.includes(file.type) && file.size <= 1500000) {
+            const dimensions = await createImageBitmap(file).catch(() => null);
+            if (dimensions) {
+                const fits = Math.max(dimensions.width, dimensions.height) <= 2000;
+                dimensions.close();
+                if (fits) return file;
+            }
+        }
         let source;
         let release = () => {};
         try {
@@ -436,10 +529,34 @@ document.addEventListener('DOMContentLoaded', () => {
         const {card, status, retry, file} = item;
         retry.disabled = true;
         status.classList.remove('is-error');
-        status.textContent = 'Leyendo foto con Gemini…';
+        status.textContent = file.type === 'application/pdf' ? 'Leyendo PDF con Gemini…' : 'Leyendo foto con Gemini…';
         try {
+            const hashBytes = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+            const originalHash = [...new Uint8Array(hashBytes)].map(value => value.toString(16).padStart(2, '0')).join('');
+            let result = null;
+            if (file.type === 'application/pdf' && settings.pdfTextEndpoint) {
+                status.textContent = 'Extrayendo texto del PDF…';
+                try {
+                    const {extractInterbankTextPdf} = await import(settings.pdfTextModule);
+                    const reading = await extractInterbankTextPdf(file);
+                    if (reading && currentGeneration === generation) {
+                        const localData = new FormData();
+                        localData.append('csrf_token', settings.csrf);
+                        localData.append('original_hash', originalHash);
+                        localData.append('lectura', JSON.stringify(reading));
+                        localData.append('pdf', file, file.name);
+                        status.textContent = 'Validando beneficiarios del PDF…';
+                        const localResponse = await fetch(settings.pdfTextEndpoint, {method: 'POST', body: localData, credentials: 'same-origin'});
+                        if (localResponse.ok) result = await localResponse.json();
+                    }
+                } catch {
+                    // PDF escaneado, sin texto seleccionable o no verificable: Gemini sigue disponible.
+                }
+            }
+            if (currentGeneration !== generation) return;
+            if (!result) status.textContent = file.type === 'application/pdf' ? 'Leyendo PDF con Gemini…' : 'Leyendo foto con Gemini…';
             let blob = item.preparedFile;
-            if (!blob) {
+            if (!result && !blob) {
                 try {
                     blob = file.type === 'application/pdf' ? file : await prepareImage(file);
                 } catch (decodeError) {
@@ -449,19 +566,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     blob = file;
                 }
             }
-            item.preparedFile = blob;
+            if (!result) item.preparedFile = blob;
             if (currentGeneration !== generation) return;
-            const data = new FormData();
-            data.append('csrf_token', settings.csrf);
-            const hashBytes = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
-            data.append('original_hash', [...new Uint8Array(hashBytes)].map(value => value.toString(16).padStart(2, '0')).join(''));
-            data.append('imagen', blob, blob === file ? file.name : 'lectura.jpg');
-            const response = await fetch(settings.endpoint, {method: 'POST', body: data, credentials: 'same-origin'}).catch(() => {
-                throw new Error('No se pudo conectar para leer la foto. Revise su conexión e intente de nuevo.');
-            });
-            const result = await response.json();
+            if (!result) {
+                const data = new FormData();
+                data.append('csrf_token', settings.csrf);
+                data.append('original_hash', originalHash);
+                data.append('imagen', blob, blob === file ? file.name : 'lectura.jpg');
+                const response = await fetch(settings.endpoint, {method: 'POST', body: data, credentials: 'same-origin'}).catch(() => {
+                    throw new Error('No se pudo conectar para leer el archivo. Revise su conexión e intente de nuevo.');
+                });
+                result = await response.json();
+                if (!response.ok) throw new Error(result.error || 'No se pudo leer el archivo.');
+            }
             if (currentGeneration !== generation) return;
-            if (!response.ok) throw new Error(result.error || 'No se pudo leer la foto.');
             if (result.model === 'TRANSFERENCIA_INTERBANK_LOTE') {
                 const saved = await window.personalDepositBatch.save(item, result, currentGeneration, () => generation);
                 if (currentGeneration !== generation) return;
@@ -481,9 +599,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const values = result.fields || {};
             const date = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(values.fecha || '');
             if (date) card.querySelector('[data-field="fecha"]').value = `${date[3]}-${date[2]}-${date[1]}`;
-            for (const key of ['acreedor', 'monto', 'modo_pago']) {
+            for (const key of ['acreedor', 'monto', 'modo_pago', 'depositante']) {
                 const field = card.querySelector(`[data-field="${key}"]`);
-                if (values[key] !== null && values[key] !== undefined) field.value = values[key];
+                if (key === 'depositante') {
+                    if (values[key] === 'Cuenta soles empresa') field.value = values[key];
+                } else if (values[key] !== null && values[key] !== undefined) field.value = values[key];
             }
             const complete = date && values.acreedor && values.monto && values.modo_pago;
             if (complete) {
@@ -541,10 +661,9 @@ document.addEventListener('DOMContentLoaded', () => {
             for (let index = 0; index < items.length; index++) {
                 if (currentGeneration !== generation) break;
                 const item = items[index];
-                showProgress(`Leyendo foto ${index + 1} de ${items.length} con Gemini…`, Math.round(index * 100 / items.length + 20 / items.length));
+                showProgress(`Leyendo archivo ${index + 1} de ${items.length} con Gemini…`, Math.round(index * 100 / items.length + 20 / items.length));
                 await readCard(item, currentGeneration);
                 showProgress(`${index + 1} de ${items.length} fotos procesadas`, Math.round((index + 1) * 100 / items.length));
-                if (index < items.length - 1) await new Promise(resolve => setTimeout(resolve, 3200));
             }
         } finally {
             readingQueue = false;

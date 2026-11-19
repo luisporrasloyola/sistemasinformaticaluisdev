@@ -1046,13 +1046,25 @@ function attendance_report_build_hours_ledger(int $workerId, string $throughMont
             $adjustmentSchemaAvailable = false;
         }
     }
-    $months = attendance_report_hours_ledger($days, $firstMonth, $throughMonth, 0, null, $openingOverrides);
+    $purchasedMinutesByMonth = [];
+    $purchaseSchemaAvailable = true;
+    try {
+        $purchasesStmt = db()->prepare('SELECT DATE_FORMAT(purchase_date, \'%Y-%m\') AS month_key, SUM(purchased_minutes) AS minutes
+            FROM attendance_hour_purchases WHERE worker_id = ? AND purchase_date BETWEEN ? AND ? GROUP BY month_key');
+        $purchasesStmt->execute([$workerId, $firstMonth . '-01', (new DateTimeImmutable($throughMonth . '-01'))->format('Y-m-t')]);
+        foreach ($purchasesStmt as $purchase) $purchasedMinutesByMonth[(string) $purchase['month_key']] = (int) $purchase['minutes'];
+    } catch (PDOException $error) {
+        if ($error->getCode() !== '42S02') throw $error;
+        $purchaseSchemaAvailable = false;
+    }
+    $months = attendance_report_hours_ledger($days, $firstMonth, $throughMonth, 0, null, $openingOverrides, $purchasedMinutesByMonth);
     $current = $months[$throughMonth];
     $labels = [];
     foreach (['opening_minutes', 'worked_minutes', 'holiday_overtime_minutes', 'early_overtime_minutes',
-        'exit_overtime_minutes', 'overtime_minutes', 'redeemed_minutes', 'closing_minutes'] as $field) {
+        'exit_overtime_minutes', 'overtime_minutes', 'redeemed_minutes', 'purchased_minutes', 'closing_minutes'] as $field) {
         $labels[$field] = attendance_report_hours_label($current[$field]);
     }
     return ['months' => $months, 'current' => $current, 'current_labels' => $labels,
-        'opening_adjustment' => $openingAdjustment, 'adjustment_schema_available' => $adjustmentSchemaAvailable];
+        'opening_adjustment' => $openingAdjustment, 'adjustment_schema_available' => $adjustmentSchemaAvailable,
+        'purchase_schema_available' => $purchaseSchemaAvailable];
 }

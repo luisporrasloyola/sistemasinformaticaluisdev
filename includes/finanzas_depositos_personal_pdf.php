@@ -6,7 +6,7 @@ declare(strict_types=1);
  * otros beneficiarios. Solo admite este formato simple, de una página y con
  * contenido FlateDecode; ante cualquier duda devuelve null.
  */
-function personal_deposit_batch_redacted_pdf(string $path, int $rowIndex, int $rowCount, string $date): ?string
+function personal_deposit_batch_redacted_pdf(string $path, int $rowIndex, int $rowCount, string $date, string $creditor = ''): ?string
 {
     if ($rowCount < 2 || $rowCount > 30 || $rowIndex < 0 || $rowIndex >= $rowCount) return null;
     $source = @file_get_contents($path);
@@ -47,16 +47,33 @@ function personal_deposit_batch_redacted_pdf(string $path, int $rowIndex, int $r
     $nameLines = [];
     foreach ($nameMatches as $match) {
         $y = (float) $match[1];
-        if ($y > 100 && $y < 355 && trim($match[2]) !== '') $nameLines[] = $y;
+        if ($y > 100 && $y < 355 && trim($match[2]) !== '') $nameLines[] = ['y' => $y, 'text' => $match[2]];
     }
     if (!$nameLines) return null;
     $groups = [];
-    foreach ($nameLines as $y) {
+    foreach ($nameLines as $line) {
+        $y = $line['y'];
         $last = count($groups) - 1;
-        if ($last >= 0 && $groups[$last][1] - $y < 15) $groups[$last][1] = $y;
-        else $groups[] = [$y, $y];
+        if ($last >= 0 && $groups[$last][1] - $y < 15) {
+            $groups[$last][1] = $y;
+            $groups[$last][2][] = $line['text'];
+        } else $groups[] = [$y, $y, [$line['text']]];
     }
-    if (count($groups) !== $rowCount) return null;
+    if (count($groups) < $rowCount || count($groups) > 30) return null;
+    if ($creditor !== '') {
+        $normalize = static function (string $value): string {
+            $ascii = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value);
+            return preg_replace('/[^A-Z0-9]/', '', strtoupper($ascii === false ? $value : $ascii));
+        };
+        $wanted = $normalize($creditor);
+        $matches = [];
+        foreach ($groups as $index => $group) {
+            $name = implode('', array_filter($group[2], static fn(string $line): bool => !preg_match('/^\s*(?:DNI|CE)\s*\d/i', $line)));
+            if ($normalize($name) === $wanted) $matches[] = $index;
+        }
+        if (count($matches) !== 1) return null;
+        $rowIndex = $matches[0];
+    } elseif (count($groups) !== $rowCount) return null;
     $upper = $rowIndex === 0 ? 352.0 : ($groups[$rowIndex - 1][1] + $groups[$rowIndex][0]) / 2;
     $lower = $rowIndex === $rowCount - 1 ? $groups[$rowIndex][1] - 10 : ($groups[$rowIndex][1] + $groups[$rowIndex + 1][0]) / 2;
     if ($upper <= $lower || $upper - $lower > 75) return null;

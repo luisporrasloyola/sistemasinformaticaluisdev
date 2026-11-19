@@ -324,6 +324,7 @@ function default_user_landing_path(): string
         'cobranzas.valorizacion' => 'modulos/cobranzas/valorizacion.php',
         'finanzas.gastos_personal' => 'modulos/finanzas/gastos_personal.php',
         'finanzas.depositos_personal' => 'modulos/finanzas/depositos_personal.php',
+        'finanzas.pagos_pendientes' => 'modulos/finanzas/pagos_pendientes.php',
         'empresa_maquirenta.dashboard' => 'modulos/empresa_maquirenta/dashboard.php',
         'empresa_maquirenta.datos_generales' => 'modulos/empresa_maquirenta/datos_generales.php',
         'empresa_maquirenta.valorizaciones' => 'modulos/empresa_maquirenta/valorizaciones.php',

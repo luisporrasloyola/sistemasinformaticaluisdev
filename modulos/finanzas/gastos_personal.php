@@ -23,6 +23,17 @@ function personal_per_diem(string $projectName, string $markDate): ?int
     return $weekday <= 5 ? $rule['weekday'] : $rule['weekend'];
 }
 
+/** Prioriza el trabajador vinculado al depósito y solo usa nombres para registros antiguos. */
+function personal_expense_deposit_is_worker(array $deposit, int $workerId, array $workers, array &$resolvedNames): bool
+{
+    if ($deposit['worker_id'] !== null) return (int) $deposit['worker_id'] === $workerId;
+    $creditor = (string) $deposit['creditor'];
+    if (!array_key_exists($creditor, $resolvedNames)) {
+        $resolvedNames[$creditor] = personal_deposit_unique_worker_id($creditor, $workers);
+    }
+    return $resolvedNames[$creditor] === $workerId;
+}
+
 /** Calcula el saldo al final de cada día visible; cada mes comienza con su saldo inicial. */
 function personal_remaining_balances(int $workerId, array $visibleDates): array
 {
@@ -53,9 +64,13 @@ function personal_remaining_balances(int $workerId, array $visibleDates): array
     }
 
     $overrides = [];
-    $stmt = db()->prepare("SELECT mark_date, amount_override FROM finance_personal_per_diem_edits WHERE worker_id = ? AND ($dateFilter)");
+    $stmt = db()->prepare("SELECT mark_date, amount_override, honorarios FROM finance_personal_per_diem_edits WHERE worker_id = ? AND ($dateFilter)");
     $stmt->execute(array_merge([$workerId], $rangeParams));
-    foreach ($stmt as $row) if ($row['amount_override'] !== null) $overrides[(string) $row['mark_date']] = (int) round((float) $row['amount_override'] * 100);
+    $honorarios = [];
+    foreach ($stmt as $row) {
+        if ($row['amount_override'] !== null) $overrides[(string) $row['mark_date']] = (int) round((float) $row['amount_override'] * 100);
+        if ($row['honorarios'] !== null) $honorarios[(string) $row['mark_date']] = (int) round((float) $row['honorarios'] * 100);
+    }
 
     $additional = [];
     $stmt = db()->prepare("SELECT mark_date, SUM(amount) AS total FROM finance_personal_additional_expenses WHERE worker_id = ? AND ($dateFilter) GROUP BY mark_date");
@@ -63,33 +78,42 @@ function personal_remaining_balances(int $workerId, array $visibleDates): array
     foreach ($stmt as $row) $additional[(string) $row['mark_date']] = (int) round((float) $row['total'] * 100);
 
     $deposits = [];
+    $outgoing = [];
     $depositFilter = str_replace('mark_date', 'deposit_date', $dateFilter);
-    $stmt = db()->prepare("SELECT deposit_date, creditor, amount FROM finance_personal_deposits WHERE ($depositFilter)");
+    $stmt = db()->prepare("SELECT deposit_date, creditor, depositor, amount, worker_id FROM finance_personal_deposits WHERE ($depositFilter)");
     $stmt->execute($rangeParams);
     $workers = personal_deposit_workers();
     $resolvedNames = [];
+    $resolvedDepositors = [];
     foreach ($stmt as $row) {
-        $creditor = (string) $row['creditor'];
-        if (!array_key_exists($creditor, $resolvedNames)) $resolvedNames[$creditor] = personal_deposit_unique_worker_id($creditor, $workers);
-        if ($resolvedNames[$creditor] !== $workerId) continue;
         $date = (string) $row['deposit_date'];
-        $deposits[$date] = ($deposits[$date] ?? 0) + (int) round((float) $row['amount'] * 100);
+        $amountCents = (int) round((float) $row['amount'] * 100);
+        if (personal_expense_deposit_is_worker($row, $workerId, $workers, $resolvedNames)) {
+            $deposits[$date] = ($deposits[$date] ?? 0) + $amountCents;
+        }
+        $depositor = (string) ($row['depositor'] ?? '');
+        if (!array_key_exists($depositor, $resolvedDepositors)) {
+            $resolvedDepositors[$depositor] = personal_expense_depositor_worker_id($depositor, $workers);
+        }
+        if ($resolvedDepositors[$depositor] === $workerId) {
+            $outgoing[$date] = ($outgoing[$date] ?? 0) + $amountCents;
+        }
     }
 
     $visible = array_fill_keys($visibleDates, true);
     $remainingByDate = [];
     foreach ($months as $month) {
         $dates = [];
-        foreach (array_keys($markedDays + $deposits) as $date) {
+        foreach (array_keys($markedDays + $deposits + $outgoing) as $date) {
             if (str_starts_with($date, $month . '-')) $dates[$date] = true;
         }
         ksort($dates);
         $balance = $opening[$month] ?? 0;
         foreach ($dates as $date => $_) {
             $balance += $deposits[$date] ?? 0;
-            if (array_key_exists($date, $markedDays)) {
-                $perDiem = $overrides[$date] ?? (personal_per_diem($markedDays[$date], $date) ?? 0) * 100;
-                $balance -= $perDiem + ($additional[$date] ?? 0);
+            if (array_key_exists($date, $markedDays) || isset($deposits[$date]) || isset($outgoing[$date])) {
+                $perDiem = $overrides[$date] ?? (personal_per_diem($markedDays[$date] ?? '', $date) ?? 0) * 100;
+                $balance -= $perDiem + ($additional[$date] ?? 0) + ($outgoing[$date] ?? 0) + ($honorarios[$date] ?? 0);
             }
             if (isset($visible[$date])) $remainingByDate[$date] = $balance;
         }
@@ -120,7 +144,11 @@ if ($workerId > 0) {
     $latestMarkStmt = db()->prepare('SELECT MAX(mark_date) FROM attendance_marks WHERE worker_id = ?');
     $latestMarkStmt->execute([$workerId]);
     $latestMark = $latestMarkStmt->fetchColumn();
-    $defaultMonth = $latestMark ? substr((string) $latestMark, 0, 7) : date('Y-m');
+    $latestDepositStmt = db()->prepare('SELECT MAX(deposit_date) FROM finance_personal_deposits WHERE worker_id = ?');
+    $latestDepositStmt->execute([$workerId]);
+    $latestDeposit = $latestDepositStmt->fetchColumn();
+    $latestActivity = max((string) ($latestMark ?: ''), (string) ($latestDeposit ?: ''));
+    $defaultMonth = $latestActivity !== '' ? substr($latestActivity, 0, 7) : date('Y-m');
     try {
         $period = valorizacion_periodo($_GET, $defaultMonth);
     } catch (InvalidArgumentException $error) {
@@ -137,25 +165,46 @@ if ($workerId > 0) {
     $monthNames = [1 => 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
     $openingBalanceMonthLabel = $monthNames[(int) substr($period['month'], 5, 2)] . ' de ' . substr($period['month'], 0, 4);
     $isDateRange = $period['mode'] === 'fechas';
-    $pageSize = 20;
+    $workerDeposits = [];
+    $workerOutgoingDeposits = [];
+    $depositDates = [];
+    $allDepositWorkers = personal_deposit_workers();
+    $resolvedCreditors = [];
+    $resolvedDepositors = [];
+    $allDepositsStmt = db()->prepare('SELECT d.id, d.deposit_date, d.creditor, d.depositor, d.amount, d.worker_id, d.image_path, d.image_original_name, COALESCE(editor.name, author.name) AS registered_by FROM finance_personal_deposits d LEFT JOIN users author ON author.id = d.registered_by_user_id LEFT JOIN users editor ON editor.id = d.last_edited_by_user_id WHERE d.deposit_date BETWEEN ? AND ? ORDER BY d.deposit_date DESC, d.id DESC');
+    $allDepositsStmt->execute([$period['start'], $period['end']]);
+    foreach ($allDepositsStmt as $deposit) {
+        $date = (string) $deposit['deposit_date'];
+        if (personal_expense_deposit_is_worker($deposit, $workerId, $allDepositWorkers, $resolvedCreditors)) {
+            $workerDeposits[$date][] = $deposit;
+            $depositDates[$date] = true;
+        }
+        $depositor = (string) ($deposit['depositor'] ?? '');
+        if (!array_key_exists($depositor, $resolvedDepositors)) {
+            $resolvedDepositors[$depositor] = personal_expense_depositor_worker_id($depositor, $allDepositWorkers);
+        }
+        if ($resolvedDepositors[$depositor] === $workerId) {
+            $workerOutgoingDeposits[$date][] = $deposit;
+            $depositDates[$date] = true;
+        }
+    }
+    $bulkAllPages = $isDateRange && (string) ($_GET['editar_masivo'] ?? '') === '1';
+    $pageSize = $bulkAllPages ? 400 : 20;
     $page = max(1, (int) ($_GET['pagina'] ?? 1));
     $totalDays = 0;
     $totalPages = 1;
     $pageDates = [];
     if ($isDateRange) {
-        $countStmt = db()->prepare('SELECT COUNT(DISTINCT mark_date) FROM attendance_marks WHERE worker_id = ? AND mark_date BETWEEN ? AND ?');
-        $countStmt->execute([$workerId, $period['start'], $period['end']]);
-        $totalDays = (int) $countStmt->fetchColumn();
+        $datesStmt = db()->prepare('SELECT DISTINCT mark_date FROM attendance_marks WHERE worker_id = ? AND mark_date BETWEEN ? AND ?');
+        $datesStmt->execute([$workerId, $period['start'], $period['end']]);
+        $allDates = $depositDates;
+        foreach ($datesStmt->fetchAll(PDO::FETCH_COLUMN) as $date) $allDates[(string) $date] = true;
+        $pageDates = array_keys($allDates);
+        rsort($pageDates);
+        $totalDays = count($pageDates);
         $totalPages = max(1, (int) ceil($totalDays / $pageSize));
         $page = min($page, $totalPages);
-        $datesStmt = db()->prepare('SELECT DISTINCT mark_date FROM attendance_marks WHERE worker_id = ? AND mark_date BETWEEN ? AND ? ORDER BY mark_date DESC LIMIT ? OFFSET ?');
-        $datesStmt->bindValue(1, $workerId, PDO::PARAM_INT);
-        $datesStmt->bindValue(2, $period['start']);
-        $datesStmt->bindValue(3, $period['end']);
-        $datesStmt->bindValue(4, $pageSize, PDO::PARAM_INT);
-        $datesStmt->bindValue(5, ($page - 1) * $pageSize, PDO::PARAM_INT);
-        $datesStmt->execute();
-        $pageDates = $datesStmt->fetchAll(PDO::FETCH_COLUMN);
+        $pageDates = array_slice($pageDates, ($page - 1) * $pageSize, $pageSize);
     }
     // Una fila por día marcado. Si hay varias marcaciones, se toma primero la entrada.
     $markedDays = [];
@@ -175,43 +224,55 @@ if ($workerId > 0) {
     }
     $savedEdits = [];
     $expensesByDate = [];
+    $outgoingExpensesByDate = [];
     $depositsByDate = [];
     $depositPhotosByDate = [];
-    if ($markedDays) {
-        $selectedDates = array_keys($markedDays);
+    if ($markedDays || $depositDates) {
+        $selectedDates = $isDateRange ? $pageDates : array_keys($markedDays + $depositDates);
         $placeholders = implode(',', array_fill(0, count($selectedDates), '?'));
-        $editsStmt = db()->prepare("SELECT e.mark_date, e.amount_override, e.observations, u.name AS registered_by FROM finance_personal_per_diem_edits e LEFT JOIN users u ON u.id = e.updated_by_user_id WHERE e.worker_id = ? AND e.mark_date IN ($placeholders)");
+        $editsStmt = db()->prepare("SELECT e.mark_date, e.amount_override, e.honorarios, e.observations, u.name AS registered_by FROM finance_personal_per_diem_edits e LEFT JOIN users u ON u.id = e.updated_by_user_id WHERE e.worker_id = ? AND e.mark_date IN ($placeholders)");
         $editsStmt->execute(array_merge([$workerId], $selectedDates));
         foreach ($editsStmt as $edit) $savedEdits[(string) $edit['mark_date']] = $edit;
         $expensesStmt = db()->prepare("SELECT mark_date, amount, reason FROM finance_personal_additional_expenses WHERE worker_id = ? AND mark_date IN ($placeholders) ORDER BY mark_date, sort_order, id");
         $expensesStmt->execute(array_merge([$workerId], $selectedDates));
         foreach ($expensesStmt as $expense) $expensesByDate[(string) $expense['mark_date']][] = ['amount' => (string) $expense['amount'], 'reason' => (string) $expense['reason']];
-        $depositsStmt = db()->prepare("SELECT id, deposit_date, creditor, amount FROM finance_personal_deposits WHERE deposit_date IN ($placeholders)");
-        $depositsStmt->execute($selectedDates);
-        $deposits = $depositsStmt->fetchAll();
-        if ($deposits) {
-            $allWorkers = personal_deposit_workers();
-            $resolvedCreditors = [];
-            foreach ($deposits as $deposit) {
-                $creditor = (string) $deposit['creditor'];
-                if (!array_key_exists($creditor, $resolvedCreditors)) {
-                    $resolvedCreditors[$creditor] = personal_deposit_unique_worker_id($creditor, $allWorkers);
-                }
-                if ($resolvedCreditors[$creditor] !== $workerId) continue;
-                $depositDate = (string) $deposit['deposit_date'];
-                $depositsByDate[$depositDate] = ($depositsByDate[$depositDate] ?? 0) + (int) round((float) $deposit['amount'] * 100);
-                $depositPhotosByDate[$depositDate][] = ['id' => (int) $deposit['id'], 'amount' => (string) $deposit['amount']];
+    }
+    $displayDays = $markedDays;
+    foreach ($workerDeposits as $date => $deposits) {
+        if ($isDateRange && !in_array($date, $pageDates, true)) continue;
+        if (!isset($displayDays[$date])) $displayDays[$date] = null;
+        foreach ($deposits as $deposit) {
+            $depositsByDate[$date] = ($depositsByDate[$date] ?? 0) + (int) round((float) $deposit['amount'] * 100);
+            if (!empty($deposit['image_path'])) {
+                $depositPhotosByDate[$date][] = [
+                    'id' => (int) $deposit['id'], 'amount' => (string) $deposit['amount'],
+                    'isPdf' => strtolower(pathinfo((string) $deposit['image_original_name'], PATHINFO_EXTENSION)) === 'pdf',
+                ];
             }
         }
     }
+    foreach ($workerOutgoingDeposits as $date => $deposits) {
+        if ($isDateRange && !in_array($date, $pageDates, true)) continue;
+        if (!array_key_exists($date, $displayDays)) $displayDays[$date] = null;
+        foreach ($deposits as $deposit) {
+            $outgoingExpensesByDate[$date][] = [
+                'amount' => (string) $deposit['amount'], 'reason' => (string) $deposit['creditor'],
+            ];
+        }
+    }
+    krsort($displayDays);
     $periodExpenseTotal = 0.0;
     $periodPerDiemTotal = 0.0;
+    $periodHonorariosTotal = 0.0;
     $periodDepositTotalCents = array_sum($depositsByDate);
     if ($isDateRange && $totalDays > 0) {
-        $overridesStmt = db()->prepare('SELECT mark_date, amount_override FROM finance_personal_per_diem_edits WHERE worker_id = ? AND mark_date BETWEEN ? AND ?');
+        $overridesStmt = db()->prepare('SELECT mark_date, amount_override, honorarios FROM finance_personal_per_diem_edits WHERE worker_id = ? AND mark_date BETWEEN ? AND ?');
         $overridesStmt->execute([$workerId, $period['start'], $period['end']]);
         $periodOverrides = [];
-        foreach ($overridesStmt as $edit) $periodOverrides[(string) $edit['mark_date']] = $edit['amount_override'];
+        foreach ($overridesStmt as $edit) {
+            $periodOverrides[(string) $edit['mark_date']] = $edit['amount_override'];
+            $periodHonorariosTotal += (float) ($edit['honorarios'] ?? 0);
+        }
         $totalMarksStmt = db()->prepare("SELECT am.mark_date, p.name AS project_name FROM attendance_marks am
             LEFT JOIN attendance_projects p ON p.id = am.project_id
             WHERE am.worker_id = ? AND am.mark_date BETWEEN ? AND ?
@@ -225,24 +286,76 @@ if ($workerId > 0) {
             $override = $periodOverrides[$date] ?? null;
             $periodPerDiemTotal += $override !== null ? (float) $override : (float) (personal_per_diem((string) ($mark['project_name'] ?? ''), $date) ?? 0);
         }
-        $additionalTotalStmt = db()->prepare('SELECT COALESCE(SUM(a.amount), 0) FROM finance_personal_additional_expenses a WHERE a.worker_id = ? AND a.mark_date BETWEEN ? AND ? AND EXISTS (SELECT 1 FROM attendance_marks am WHERE am.worker_id = a.worker_id AND am.mark_date = a.mark_date)');
+        foreach (array_keys($workerDeposits + $workerOutgoingDeposits) as $date) {
+            if (!isset($countedDates[$date]) && isset($periodOverrides[$date])) $periodPerDiemTotal += (float) $periodOverrides[$date];
+        }
+        $additionalTotalStmt = db()->prepare('SELECT COALESCE(SUM(a.amount), 0) FROM finance_personal_additional_expenses a WHERE a.worker_id = ? AND a.mark_date BETWEEN ? AND ?');
         $additionalTotalStmt->execute([$workerId, $period['start'], $period['end']]);
-        $periodExpenseTotal = $periodPerDiemTotal + (float) $additionalTotalStmt->fetchColumn();
+        $periodExpenseTotal = $periodPerDiemTotal + (float) $additionalTotalStmt->fetchColumn() + $periodHonorariosTotal;
+        foreach ($workerOutgoingDeposits as $deposits) {
+            foreach ($deposits as $deposit) $periodExpenseTotal += (float) $deposit['amount'];
+        }
         $periodDepositTotalCents = 0;
-        $periodDepositsStmt = db()->prepare('SELECT d.creditor, d.amount FROM finance_personal_deposits d WHERE d.deposit_date BETWEEN ? AND ? AND EXISTS (SELECT 1 FROM attendance_marks am WHERE am.worker_id = ? AND am.mark_date = d.deposit_date)');
-        $periodDepositsStmt->execute([$period['start'], $period['end'], $workerId]);
-        $allWorkers = personal_deposit_workers();
-        $resolvedCreditors = [];
-        foreach ($periodDepositsStmt as $deposit) {
-            $creditor = (string) $deposit['creditor'];
-            if (!array_key_exists($creditor, $resolvedCreditors)) $resolvedCreditors[$creditor] = personal_deposit_unique_worker_id($creditor, $allWorkers);
-            if ($resolvedCreditors[$creditor] === $workerId) $periodDepositTotalCents += (int) round((float) $deposit['amount'] * 100);
+        foreach ($workerDeposits as $deposits) {
+            foreach ($deposits as $deposit) $periodDepositTotalCents += (int) round((float) $deposit['amount'] * 100);
         }
     }
-    $remainingByDate = personal_remaining_balances($workerId, array_keys($markedDays));
+    $remainingByDate = personal_remaining_balances($workerId, array_keys($displayDays));
 } else {
-    $stmt = db()->query('SELECT w.id, w.full_name, w.document_type, w.document_number, c.name AS company FROM workers w LEFT JOIN companies c ON c.id = w.company_id ORDER BY c.name, w.full_name, w.id');
+    $companies = db()->query('SELECT id, name FROM companies ORDER BY name, id')->fetchAll(PDO::FETCH_ASSOC);
+    $lifeCompanyId = null;
+    foreach ($companies as $company) {
+        if (mb_strtolower(trim((string) $company['name']), 'UTF-8') === 'life maquinarias') {
+            $lifeCompanyId = (int) $company['id'];
+            break;
+        }
+    }
+    $requestedCompany = (string) ($_GET['empresa_id'] ?? ($lifeCompanyId ?? ''));
+    $selectedCompanyId = $requestedCompany === '' ? null : filter_var($requestedCompany, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+    if ($selectedCompanyId !== null && $selectedCompanyId !== false && !in_array((int) $selectedCompanyId, array_map(static fn(array $company): int => (int) $company['id'], $companies), true)) {
+        $selectedCompanyId = false;
+    }
+    if ($selectedCompanyId === false) $selectedCompanyId = $lifeCompanyId;
+    $sql = 'SELECT w.id, w.full_name, w.document_type, w.document_number, c.name AS company FROM workers w LEFT JOIN companies c ON c.id = w.company_id';
+    if ($selectedCompanyId !== null) $sql .= ' WHERE w.company_id = ?';
+    $sql .= ' ORDER BY c.name, w.full_name, w.id';
+    $stmt = db()->prepare($sql);
+    $stmt->execute($selectedCompanyId === null ? [] : [(int) $selectedCompanyId]);
     $workers = $stmt->fetchAll();
+    $listBalances = [];
+    if ($workers) {
+        $workerIds = array_fill_keys(array_map(static fn(array $person): int => (int) $person['id'], $workers), true);
+        $latestDates = [];
+        $marksStmt = db()->query('SELECT worker_id, MAX(mark_date) AS latest_date FROM attendance_marks GROUP BY worker_id');
+        foreach ($marksStmt as $mark) {
+            $id = (int) $mark['worker_id'];
+            if (isset($workerIds[$id])) $latestDates[$id] = (string) $mark['latest_date'];
+        }
+        $depositWorkers = personal_deposit_workers();
+        $resolvedCreditors = [];
+        $resolvedDepositors = [];
+        $depositsStmt = db()->query('SELECT deposit_date, creditor, depositor, worker_id FROM finance_personal_deposits');
+        foreach ($depositsStmt as $deposit) {
+            $creditor = (string) $deposit['creditor'];
+            if ($deposit['worker_id'] === null && !array_key_exists($creditor, $resolvedCreditors)) {
+                $resolvedCreditors[$creditor] = personal_deposit_unique_worker_id($creditor, $depositWorkers);
+            }
+            $creditorWorkerId = $deposit['worker_id'] !== null ? (int) $deposit['worker_id'] : $resolvedCreditors[$creditor];
+            $depositor = (string) ($deposit['depositor'] ?? '');
+            if (!array_key_exists($depositor, $resolvedDepositors)) {
+                $resolvedDepositors[$depositor] = personal_expense_depositor_worker_id($depositor, $depositWorkers);
+            }
+            foreach ([$creditorWorkerId, $resolvedDepositors[$depositor]] as $id) {
+                if ($id !== null && isset($workerIds[$id])) {
+                    $latestDates[$id] = max($latestDates[$id] ?? '', (string) $deposit['deposit_date']);
+                }
+            }
+        }
+        foreach ($latestDates as $id => $date) {
+            $balance = personal_remaining_balances((int) $id, [$date]);
+            if (isset($balance[$date])) $listBalances[$id] = $balance[$date];
+        }
+    }
 }
 require __DIR__ . '/../../includes/header.php';
 ?>
@@ -287,30 +400,42 @@ require __DIR__ . '/../../includes/header.php';
         <div class="personal-expense-period-field" id="expensePeriodFromField" <?= $period['mode'] !== 'fechas' ? 'hidden' : '' ?>><label for="expensePeriodFrom">Desde</label><input class="form-control form-control-sm" id="expensePeriodFrom" name="desde" type="date" value="<?= e($period['from'] ?: $period['start']) ?>" <?= $period['mode'] === 'fechas' ? 'required' : 'disabled' ?>></div>
         <div class="personal-expense-period-field" id="expensePeriodToField" <?= $period['mode'] !== 'fechas' ? 'hidden' : '' ?>><label for="expensePeriodTo">Hasta</label><input class="form-control form-control-sm" id="expensePeriodTo" name="hasta" type="date" value="<?= e($period['to'] ?: $period['end']) ?>" <?= $period['mode'] === 'fechas' ? 'required' : 'disabled' ?>></div>
         <button class="btn btn-outline-primary" type="submit">Ver</button>
+        <button class="btn btn-outline-primary" type="button" id="bulkEditPersonalExpenses"><i class="fa-solid fa-pen-to-square me-1" aria-hidden="true"></i>Editar masivamente</button>
+        <button class="btn btn-outline-primary" type="button" id="bulkAssignHonorarios"><i class="fa-solid fa-coins me-1" aria-hidden="true"></i>Asignar honorarios</button>
+        <button class="btn btn-primary" type="button" id="bulkSavePersonalExpenses" hidden><i class="fa-solid fa-check me-1" aria-hidden="true"></i>Guardar</button>
+        <button class="btn btn-outline-secondary" type="button" id="bulkCancelPersonalExpenses" hidden>Cancelar</button>
     </form>
+    <div class="personal-honorarios-toolbar mb-3" id="bulkHonorariosToolbar" hidden>
+        <label for="bulkHonorariosAmount">Honorarios para las fechas seleccionadas (S/)</label>
+        <input class="form-control form-control-sm" id="bulkHonorariosAmount" type="number" min="0" max="999999.99" step="0.01" inputmode="decimal" placeholder="Ej. 150.00">
+        <strong id="bulkHonorariosCurrent" class="personal-honorarios-current"></strong>
+        <span id="bulkHonorariosCount" aria-live="polite"></span>
+        <small>El importe nuevo reemplaza al anterior en las fechas marcadas. Desmarque las fechas que no deben recibir honorarios y pulse Guardar.</small>
+    </div>
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0" id="personalPerDiemTable">
-            <thead class="table-light"><tr><th>Fecha</th><th>Ubicación</th><th>Proyecto</th><th>Viáticos</th><th>Observaciones</th><th>Gastos adicionales</th><th>Motivo</th><th>Total</th><th>Depósitos</th><th>Saldo restante</th><th>Registrado por</th><th>Acción</th></tr></thead>
+            <thead class="table-light"><tr><th>Fecha</th><th>Ubicación</th><th>Proyecto</th><th>Viáticos</th><th>Observaciones</th><th>Gastos adicionales</th><th>Motivo</th><th>Honorarios</th><th>Total</th><th>Depósitos</th><th>Saldo restante</th><th>Registrado por</th><th>Acción</th></tr></thead>
             <tbody>
-                <?php foreach ($markedDays as $date => $mark): $automaticPerDiem = personal_per_diem((string) ($mark['project_name'] ?? ''), $date); $savedEdit = $savedEdits[$date] ?? null; $perDiem = $savedEdit && $savedEdit['amount_override'] !== null ? (float) $savedEdit['amount_override'] : $automaticPerDiem; $expenses = $expensesByDate[$date] ?? []; $additionalTotal = array_sum(array_map(static fn($item) => (float) $item['amount'], $expenses)); $observations = (string) ($savedEdit['observations'] ?? ''); $total = $perDiem !== null || $expenses ? (float) ($perDiem ?? 0) + $additionalTotal : null; if (!$isDateRange) { $periodPerDiemTotal += (float) ($perDiem ?? 0); $periodExpenseTotal += (float) ($total ?? 0); } ?>
+                <?php foreach ($displayDays as $date => $mark): $automaticPerDiem = personal_per_diem((string) ($mark['project_name'] ?? ''), $date); $savedEdit = $savedEdits[$date] ?? null; $perDiem = $savedEdit && $savedEdit['amount_override'] !== null ? (float) $savedEdit['amount_override'] : $automaticPerDiem; $honorarios = $savedEdit && $savedEdit['honorarios'] !== null ? (float) $savedEdit['honorarios'] : null; $manualExpenses = $expensesByDate[$date] ?? []; $expenses = array_merge($manualExpenses, $outgoingExpensesByDate[$date] ?? []); $additionalTotal = array_sum(array_map(static fn($item) => (float) $item['amount'], $expenses)); $observations = (string) ($savedEdit['observations'] ?? ''); $total = $perDiem !== null || $expenses || $honorarios !== null ? (float) ($perDiem ?? 0) + $additionalTotal + (float) ($honorarios ?? 0) : null; if (!$isDateRange) { $periodPerDiemTotal += (float) ($perDiem ?? 0); $periodHonorariosTotal += (float) ($honorarios ?? 0); $periodExpenseTotal += (float) ($total ?? 0); } ?>
                 <tr>
                     <td class="text-nowrap"><?= e(date('d/m/Y', strtotime($date))) ?></td>
-                    <td><?= e($mark['location_name'] ?: '—') ?></td>
-                    <td><?= e($mark['project_name'] ?: '—') ?></td>
+                    <td><?= e(($mark['location_name'] ?? null) ?: '—') ?></td>
+                    <td><?= e(($mark['project_name'] ?? null) ?: '—') ?></td>
                     <td class="text-nowrap per-diem-amount-cell"><?= $perDiem !== null ? 'S/ ' . number_format((float) $perDiem, ((float) $perDiem == (int) $perDiem ? 0 : 2), '.', ',') : '—' ?></td>
                     <td class="per-diem-observations-cell" style="white-space:pre-line"><?= $observations !== '' ? e($observations) : '—' ?></td>
                     <td class="additional-expense-cell text-nowrap"><?php if ($expenses): foreach ($expenses as $expense): ?><div class="expense-display-line">S/ <?= number_format((float) $expense['amount'], 2, '.', ',') ?></div><?php endforeach; else: ?>—<?php endif; ?></td>
                     <td class="additional-reason-cell"><?php if ($expenses): foreach ($expenses as $expense): ?><div class="expense-display-line"><?= $expense['reason'] !== '' ? e($expense['reason']) : '—' ?></div><?php endforeach; else: ?>—<?php endif; ?></td>
+                    <td class="honorarios-cell text-nowrap"><?= $honorarios !== null ? 'S/ ' . number_format($honorarios, 2, '.', ',') : '—' ?></td>
                     <td class="total-expense-cell text-nowrap"><?= $total !== null ? 'S/ ' . number_format($total, 2, '.', ',') : '—' ?></td>
                     <td class="deposit-amount-cell text-nowrap"><?= isset($depositsByDate[$date]) ? 'S/ ' . number_format($depositsByDate[$date] / 100, 2, '.', ',') : '—' ?></td>
                     <td class="remaining-balance-cell text-nowrap"><?= isset($remainingByDate[$date]) ? 'S/ ' . number_format($remainingByDate[$date] / 100, 2, '.', ',') : '—' ?></td>
                     <td class="registered-by-cell"><?= !empty($savedEdit['registered_by']) ? e($savedEdit['registered_by']) : '—' ?></td>
-                    <td class="per-diem-actions-cell"><div class="d-flex gap-1"><button class="btn btn-sm btn-outline-primary edit-personal-per-diem" type="button" data-mark-date="<?= e($date) ?>" data-automatic="<?= $automaticPerDiem !== null ? (int) $automaticPerDiem : '' ?>" data-override="<?= $savedEdit && $savedEdit['amount_override'] !== null ? e((string) $savedEdit['amount_override']) : '' ?>" data-expenses="<?= e(json_encode($expenses, JSON_UNESCAPED_UNICODE)) ?>" data-observations="<?= e($observations) ?>" aria-label="Editar gastos del <?= e(date('d/m/Y', strtotime($date))) ?>" title="Editar gastos"><i class="fa-solid fa-pen" aria-hidden="true"></i></button><?php if (!empty($depositPhotosByDate[$date])): ?><button class="btn btn-sm btn-outline-primary view-personal-deposits" type="button" data-bs-toggle="modal" data-bs-target="#personalDepositPhotosModal" data-deposit-photos="<?= e(json_encode($depositPhotosByDate[$date])) ?>" data-date="<?= e(date('d/m/Y', strtotime($date))) ?>" aria-label="Ver comprobantes de depósitos del <?= e(date('d/m/Y', strtotime($date))) ?>" title="Ver comprobantes de depósitos"><i class="fa-solid fa-file-image" aria-hidden="true"></i></button><?php endif; ?></div></td>
+                    <td class="per-diem-actions-cell"><div class="d-flex gap-1"><button class="btn btn-sm btn-outline-primary edit-personal-per-diem" type="button" data-mark-date="<?= e($date) ?>" data-automatic="<?= $automaticPerDiem !== null ? (int) $automaticPerDiem : '' ?>" data-override="<?= $savedEdit && $savedEdit['amount_override'] !== null ? e((string) $savedEdit['amount_override']) : '' ?>" data-honorarios="<?= $savedEdit && $savedEdit['honorarios'] !== null ? e((string) $savedEdit['honorarios']) : '' ?>" data-expenses="<?= e(json_encode($manualExpenses, JSON_UNESCAPED_UNICODE)) ?>" data-linked-expenses="<?= e(json_encode($outgoingExpensesByDate[$date] ?? [], JSON_UNESCAPED_UNICODE)) ?>" data-observations="<?= e($observations) ?>" aria-label="Editar gastos del <?= e(date('d/m/Y', strtotime($date))) ?>" title="Editar gastos"><i class="fa-solid fa-pen" aria-hidden="true"></i></button><?php if (!empty($depositPhotosByDate[$date])): ?><button class="btn btn-sm btn-outline-primary view-personal-deposits" type="button" data-bs-toggle="modal" data-bs-target="#personalDepositPhotosModal" data-deposit-photos="<?= e(json_encode($depositPhotosByDate[$date])) ?>" data-date="<?= e(date('d/m/Y', strtotime($date))) ?>" aria-label="Ver comprobantes de depósitos del <?= e(date('d/m/Y', strtotime($date))) ?>" title="Ver comprobantes de depósitos"><i class="fa-solid fa-file-image" aria-hidden="true"></i></button><?php endif; ?></div></td>
                 </tr>
                 <?php endforeach; ?>
-                <?php if (!$markedDays): ?><tr><td colspan="12" class="text-center text-muted py-4">No hay marcaciones en el periodo seleccionado.</td></tr><?php endif; ?>
+                <?php if (!$displayDays): ?><tr><td colspan="13" class="text-center text-muted py-4">No hay marcaciones ni depósitos en el periodo seleccionado.</td></tr><?php endif; ?>
             </tbody>
-            <?php if ($markedDays): ?><tfoot><tr><td colspan="3"></td><td class="text-nowrap" aria-label="Total de viáticos">S/ <?= number_format($periodPerDiemTotal, 2, '.', ',') ?></td><td colspan="3"></td><td class="text-nowrap" aria-label="Total de gastos">S/ <?= number_format($periodExpenseTotal, 2, '.', ',') ?></td><td class="text-nowrap" aria-label="Total de depósitos">S/ <?= number_format($periodDepositTotalCents / 100, 2, '.', ',') ?></td><td colspan="3"></td></tr></tfoot><?php endif; ?>
+            <?php if ($displayDays): ?><tfoot><tr><td colspan="3"></td><td class="text-nowrap" aria-label="Total de viáticos">S/ <?= number_format($periodPerDiemTotal, 2, '.', ',') ?></td><td colspan="3"></td><td class="text-nowrap" aria-label="Total de honorarios">S/ <?= number_format($periodHonorariosTotal, 2, '.', ',') ?></td><td class="text-nowrap" aria-label="Total de gastos">S/ <?= number_format($periodExpenseTotal, 2, '.', ',') ?></td><td class="text-nowrap" aria-label="Total de depósitos">S/ <?= number_format($periodDepositTotalCents / 100, 2, '.', ',') ?></td><td colspan="3"></td></tr></tfoot><?php endif; ?>
         </table>
     </div>
     <?php if ($isDateRange && $totalPages > 1): ?>
@@ -359,10 +484,17 @@ require __DIR__ . '/../../includes/header.php';
 .personal-expense-period .form-control,.personal-expense-period .form-select { border-color:#cbd9eb; background:#fff; }
 .personal-expense-period .form-control:focus,.personal-expense-period .form-select:focus { border-color:#4f83e6; box-shadow:0 0 0 3px rgba(37,99,235,.12); }
 .personal-expense-period [hidden] { display:none!important; }
+.personal-honorarios-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px; padding:12px 14px; border:1px solid #cbd8eb; border-radius:9px; background:#f7f9fc; }
+.personal-honorarios-toolbar[hidden] { display:none!important; }
+.personal-honorarios-toolbar label { color:#172b4d; font-size:.8rem; font-weight:700; }
+.personal-honorarios-toolbar input { width:145px; }
+.personal-honorarios-toolbar span { color:#0b3b80; font-size:.78rem; font-weight:700; }
+.personal-honorarios-toolbar .personal-honorarios-current { color:#485a70; font-size:.78rem; }
+.personal-honorarios-toolbar small { flex-basis:100%; color:#526b91; }
 .personal-expense-records-panel .table-responsive { border:1px solid #d7e2f0; border-radius:7px; }
 .personal-expense-pagination { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-top:14px; color:#526b91; font-size:.78rem; }
 .personal-expense-pagination .btn { border-radius:7px; }
-#personalPerDiemTable { width:100%; min-width:930px; table-layout:fixed; color:#172b4d; }
+#personalPerDiemTable { width:100%; min-width:1030px; table-layout:fixed; color:#172b4d; }
 #personalPerDiemTable thead th { padding:.65rem .25rem; background:#f7f9fc; border-bottom:1px solid #cbd8eb; color:#0f172a; font-size:.62rem; font-weight:800; text-transform:uppercase; vertical-align:middle; white-space:normal; overflow-wrap:anywhere; }
 #personalPerDiemTable thead th:nth-child(1) { width:7%; }
 #personalPerDiemTable thead th:nth-child(2) { width:8%; }
@@ -372,10 +504,11 @@ require __DIR__ . '/../../includes/header.php';
 #personalPerDiemTable thead th:nth-child(6) { width:8%; }
 #personalPerDiemTable thead th:nth-child(7) { width:8%; }
 #personalPerDiemTable thead th:nth-child(8) { width:8%; }
-#personalPerDiemTable thead th:nth-child(9) { width:9%; }
+#personalPerDiemTable thead th:nth-child(9) { width:8%; }
 #personalPerDiemTable thead th:nth-child(10) { width:9%; }
 #personalPerDiemTable thead th:nth-child(11) { width:9%; }
-#personalPerDiemTable thead th:nth-child(12) { width:8%; }
+#personalPerDiemTable thead th:nth-child(12) { width:9%; }
+#personalPerDiemTable thead th:nth-child(13) { width:8%; }
 #personalPerDiemTable tbody td { padding:.5rem .25rem; border-bottom:1px solid #dce5f0; font-size:.72rem; vertical-align:middle; overflow-wrap:anywhere; }
 #personalPerDiemTable:has(.per-diem-editing) { min-width:1350px; table-layout:auto; }
 #personalPerDiemTable tbody tr:hover:not(.per-diem-editing) td { background:#f8fbff; }
@@ -395,9 +528,17 @@ require __DIR__ . '/../../includes/header.php';
 #personalPerDiemTable tr.per-diem-editing > td:first-child { box-shadow:inset 3px 0 #2563eb; }
 #personalPerDiemTable tr.per-diem-editing .form-control { border-color:#cbd9eb; background:#fff; }
 #personalPerDiemTable tr.per-diem-editing .form-control:focus { border-color:#4f83e6; box-shadow:0 0 0 3px rgba(37,99,235,.12); }
+#personalPerDiemTable tr.per-diem-bulk-editing > td { background:#f3f7fd; }
+#personalPerDiemTable tr.per-diem-bulk-editing > td:first-child { box-shadow:inset 3px 0 #2563eb; }
+#personalPerDiemTable.per-diem-bulk-mode { min-width:1350px; table-layout:auto; }
+#personalPerDiemTable.per-diem-bulk-mode .per-diem-actions-cell .edit-personal-per-diem { display:none; }
+#personalPerDiemTable .bulk-linked-expense { padding:4px 0; color:#52627a; font-size:.76rem; white-space:normal; }
 #personalPerDiemTable .per-diem-observations-cell:has(textarea) { min-width:260px; white-space:normal!important; }
 #personalPerDiemTable .additional-expense-cell:has(input) { min-width:155px; }
 #personalPerDiemTable .additional-reason-cell:has(textarea) { min-width:220px; white-space:normal!important; }
+#personalPerDiemTable .honorarios-cell:has(input) { min-width:130px; }
+#personalPerDiemTable .bulk-honorarios-toggle { display:flex; align-items:center; gap:5px; margin-bottom:4px; font-size:.72rem; white-space:nowrap; }
+#personalPerDiemTable .bulk-honorarios-toggle input { margin:0; }
 #personalPerDiemTable .expense-display-line { min-height:2rem; padding:.25rem 0; border-bottom:1px solid #e5eaf0; }
 #personalPerDiemTable .expense-display-line:last-child { border-bottom:0; }
 #personalPerDiemTable .expense-edit-line { min-height:2.75rem; margin-bottom:.35rem; }
@@ -460,10 +601,16 @@ document.addEventListener('DOMContentLoaded', () => {
         for (const [index, photo] of photos.entries()) {
             const figure = document.createElement('figure');
             figure.className = 'personal-deposit-photo';
-            const image = document.createElement('img');
+            const image = document.createElement(photo.isPdf ? 'iframe' : 'img');
             image.src = `${photoEndpoint}?id=${encodeURIComponent(photo.id)}`;
-            image.alt = `Comprobante ${index + 1} del ${trigger.dataset.date}`;
-            image.loading = index === 0 ? 'eager' : 'lazy';
+            if (photo.isPdf) {
+                image.title = `Comprobante PDF ${index + 1} del ${trigger.dataset.date}`;
+                image.style.width = '100%';
+                image.style.height = '65vh';
+            } else {
+                image.alt = `Comprobante ${index + 1} del ${trigger.dataset.date}`;
+                image.loading = index === 0 ? 'eager' : 'lazy';
+            }
             const caption = document.createElement('figcaption');
             caption.textContent = `Depósito ${index + 1} de ${photos.length} · S/ ${Number(photo.amount).toFixed(2)}`;
             figure.append(image, caption);
@@ -521,6 +668,206 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     const table = document.getElementById('personalPerDiemTable');
     let activeEdit = null;
+    const bulkButton = document.getElementById('bulkEditPersonalExpenses');
+    const assignHonorariosButton = document.getElementById('bulkAssignHonorarios');
+    const bulkSave = document.getElementById('bulkSavePersonalExpenses');
+    const bulkCancel = document.getElementById('bulkCancelPersonalExpenses');
+    const honorariosToolbar = document.getElementById('bulkHonorariosToolbar');
+    const commonHonorarios = document.getElementById('bulkHonorariosAmount');
+    const currentHonorarios = document.getElementById('bulkHonorariosCurrent');
+    const honorariosCount = document.getElementById('bulkHonorariosCount');
+    let honorariosRequested = false;
+    const bulkRows = new Map();
+    const updateHonorariosCount = () => {
+        const selected = [...bulkRows.values()].filter(edit => edit.honorariosCell.querySelector('.bulk-honorarios-enabled')?.checked).length;
+        const newAmount = Number(commonHonorarios.value);
+        honorariosCount.textContent = `${selected} de ${bulkRows.size} fechas seleccionadas` +
+            (commonHonorarios.value !== '' && commonHonorarios.validity.valid ? ` · Nuevo: S/ ${newAmount.toFixed(2)} por fecha` : '');
+    };
+    commonHonorarios.addEventListener('input', () => {
+        updateHonorariosCount();
+        if (commonHonorarios.value === '' || !commonHonorarios.validity.valid) return;
+        for (const edit of bulkRows.values()) {
+            if (edit.honorariosCell.querySelector('.bulk-honorarios-enabled').checked) {
+                edit.honorariosCell.querySelector('.bulk-honorarios').value = commonHonorarios.value;
+            }
+        }
+    });
+    table.addEventListener('change', event => {
+        if (!event.target.matches('.bulk-honorarios-enabled')) return;
+        const input = event.target.closest('.honorarios-cell').querySelector('.bulk-honorarios');
+        input.disabled = !event.target.checked;
+        input.value = event.target.checked ? (commonHonorarios.value !== '' && commonHonorarios.validity.valid ? commonHonorarios.value : (bulkRows.get(event.target.closest('tr').querySelector('.edit-personal-per-diem').dataset.markDate)?.initial.honorarios || '')) : '';
+        updateHonorariosCount();
+    });
+    const addBulkExpense = (edit, amount = '', reason = '') => {
+        const amounts = edit.additionalCell.querySelector('.bulk-expense-amounts');
+        const reasons = edit.reasonCell.querySelector('.bulk-expense-reasons');
+        if (amounts.children.length >= 30) return;
+        const amountLine = document.createElement('div');
+        amountLine.className = 'expense-edit-line d-flex gap-1';
+        amountLine.innerHTML = '<input class="form-control form-control-sm bulk-expense-amount" type="number" min="0" max="999999.99" step="0.01" inputmode="decimal" aria-label="Importe del gasto adicional"><button class="btn btn-sm btn-outline-danger bulk-remove-expense" type="button" aria-label="Quitar gasto"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>';
+        amountLine.querySelector('input').value = amount;
+        const reasonLine = document.createElement('div');
+        reasonLine.className = 'expense-edit-line';
+        reasonLine.innerHTML = '<textarea class="form-control form-control-sm bulk-expense-reason" rows="1" maxlength="1000" aria-label="Motivo del gasto adicional"></textarea>';
+        reasonLine.querySelector('textarea').value = reason;
+        amounts.append(amountLine);
+        reasons.append(reasonLine);
+    };
+    const closeBulk = () => {
+        for (const edit of bulkRows.values()) {
+            for (const [cell, html] of edit.original) cell.innerHTML = html;
+            edit.observationsCell.style.whiteSpace = 'pre-line';
+            edit.reasonCell.style.whiteSpace = 'pre-line';
+            edit.row.classList.remove('per-diem-bulk-editing');
+        }
+        bulkRows.clear();
+        table.classList.remove('per-diem-bulk-mode');
+        bulkButton.hidden = false;
+        assignHonorariosButton.hidden = false;
+        bulkSave.hidden = true;
+        bulkCancel.hidden = true;
+        honorariosToolbar.hidden = true;
+        commonHonorarios.value = '';
+        currentHonorarios.textContent = '';
+        honorariosRequested = false;
+    };
+    assignHonorariosButton.addEventListener('click', () => {
+        honorariosRequested = true;
+        if (!bulkRows.size) bulkButton.click();
+        if (!bulkRows.size) return;
+        commonHonorarios.focus();
+    });
+    bulkButton.addEventListener('click', () => {
+        if (<?= $isDateRange && $totalPages > 1 && !$bulkAllPages ? 'true' : 'false' ?>) {
+            const url = new URL(window.location.href);
+            url.searchParams.set('editar_masivo', '1');
+            if (honorariosRequested) url.searchParams.set('asignar_honorarios', '1');
+            url.searchParams.delete('pagina');
+            window.location.assign(url.toString());
+            return;
+        }
+        if (activeEdit) cancelEdit();
+        for (const button of table.querySelectorAll('.edit-personal-per-diem')) {
+            const row = button.closest('tr');
+            const amountCell = row.querySelector('.per-diem-amount-cell');
+            const observationsCell = row.querySelector('.per-diem-observations-cell');
+            const additionalCell = row.querySelector('.additional-expense-cell');
+            const reasonCell = row.querySelector('.additional-reason-cell');
+            const honorariosCell = row.querySelector('.honorarios-cell');
+            const original = [amountCell, observationsCell, additionalCell, reasonCell, honorariosCell].map(cell => [cell, cell.innerHTML]);
+            const edit = {row, amountCell, observationsCell, additionalCell, reasonCell, honorariosCell, original, date:button.dataset.markDate,
+                initial:{amount:button.dataset.override, honorarios:button.dataset.honorarios, observations:button.dataset.observations, expenses:JSON.parse(button.dataset.expenses || '[]')}};
+            row.classList.add('per-diem-bulk-editing');
+            amountCell.innerHTML = '<input class="form-control form-control-sm bulk-per-diem-amount" type="number" min="0" max="999999.99" step="0.01" inputmode="decimal" aria-label="Viáticos en soles">';
+            amountCell.querySelector('input').value = button.dataset.override !== '' ? button.dataset.override : button.dataset.automatic;
+            observationsCell.style.whiteSpace = 'normal';
+            observationsCell.innerHTML = '<textarea class="form-control form-control-sm bulk-per-diem-observations" rows="2" maxlength="10000" aria-label="Observaciones"></textarea>';
+            observationsCell.querySelector('textarea').value = button.dataset.observations;
+            additionalCell.innerHTML = '<div class="bulk-expense-amounts"></div><button class="btn btn-sm btn-outline-primary bulk-add-expense mt-1" type="button"><i class="fa-solid fa-plus me-1" aria-hidden="true"></i>Agregar gasto</button>';
+            reasonCell.style.whiteSpace = 'normal';
+            reasonCell.innerHTML = '<div class="bulk-expense-reasons"></div>';
+            honorariosCell.innerHTML = '<label class="bulk-honorarios-toggle"><input class="form-check-input bulk-honorarios-enabled" type="checkbox" checked> Aplicar</label><input class="form-control form-control-sm bulk-honorarios" type="number" min="0" max="999999.99" step="0.01" inputmode="decimal" aria-label="Honorarios en soles">';
+            honorariosCell.querySelector('.bulk-honorarios').value = button.dataset.honorarios;
+            for (const expense of edit.initial.expenses) addBulkExpense(edit, expense.amount, expense.reason);
+            for (const linked of JSON.parse(button.dataset.linkedExpenses || '[]')) {
+                const note = document.createElement('div');
+                note.className = 'bulk-linked-expense';
+                note.textContent = `S/ ${Number(linked.amount).toFixed(2)} · Depósito vinculado`;
+                additionalCell.append(note);
+                const reason = document.createElement('div');
+                reason.className = 'bulk-linked-expense';
+                reason.textContent = linked.reason;
+                reasonCell.append(reason);
+            }
+            bulkRows.set(edit.date, edit);
+        }
+        if (!bulkRows.size) return;
+        table.classList.add('per-diem-bulk-mode');
+        bulkButton.hidden = true;
+        assignHonorariosButton.hidden = true;
+        bulkSave.hidden = false;
+        bulkCancel.hidden = false;
+        honorariosToolbar.hidden = false;
+        const previous = [...bulkRows.values()].map(edit => edit.initial.honorarios).filter(value => value !== '');
+        const previousTotal = previous.reduce((sum, value) => sum + Number(value), 0);
+        currentHonorarios.textContent = previous.length
+            ? `Actual: S/ ${previousTotal.toFixed(2)} en ${previous.length} ${previous.length === 1 ? 'fecha' : 'fechas'}`
+            : 'Actual: sin honorarios registrados';
+        updateHonorariosCount();
+    });
+    bulkCancel.addEventListener('click', () => {
+        if (<?= $bulkAllPages ? 'true' : 'false' ?>) {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('editar_masivo');
+            url.searchParams.delete('asignar_honorarios');
+            window.location.assign(url.toString());
+            return;
+        }
+        closeBulk();
+    });
+    table.addEventListener('click', event => {
+        const add = event.target.closest('.bulk-add-expense');
+        if (add) { const edit = bulkRows.get(add.closest('tr').querySelector('.edit-personal-per-diem').dataset.markDate); if (edit) addBulkExpense(edit); return; }
+        const remove = event.target.closest('.bulk-remove-expense');
+        if (!remove) return;
+        const edit = bulkRows.get(remove.closest('tr').querySelector('.edit-personal-per-diem').dataset.markDate);
+        if (!edit) return;
+        const line = remove.closest('.expense-edit-line');
+        const index = [...edit.additionalCell.querySelector('.bulk-expense-amounts').children].indexOf(line);
+        line.remove();
+        edit.reasonCell.querySelector('.bulk-expense-reasons').children[index]?.remove();
+    });
+    bulkSave.addEventListener('click', async () => {
+        if (!commonHonorarios.reportValidity()) return;
+        const changes = [];
+        for (const edit of bulkRows.values()) {
+            const amountInput = edit.amountCell.querySelector('input');
+            if (!amountInput.reportValidity()) return;
+            const honorariosInput = edit.honorariosCell.querySelector('.bulk-honorarios');
+            if (!honorariosInput.reportValidity()) return;
+            const amounts = [...edit.additionalCell.querySelectorAll('.bulk-expense-amount')];
+            const reasons = [...edit.reasonCell.querySelectorAll('.bulk-expense-reason')];
+            const expenses = [];
+            for (let i = 0; i < amounts.length; i++) {
+                if (!amounts[i].reportValidity()) return;
+                reasons[i].setCustomValidity(amounts[i].value === '' && reasons[i].value.trim() ? 'Ingrese el importe o quite este gasto.' : '');
+                if (!reasons[i].reportValidity()) return;
+                if (amounts[i].value !== '') expenses.push({amount:amounts[i].value, reason:reasons[i].value.trim()});
+            }
+            const observations = edit.observationsCell.querySelector('textarea').value.trim();
+            const amount = amountInput.value.trim();
+            const initialAmount = edit.initial.amount !== '' ? edit.initial.amount : edit.row.querySelector('.edit-personal-per-diem').dataset.automatic;
+            if (amount !== initialAmount || honorariosInput.value.trim() !== edit.initial.honorarios || observations !== edit.initial.observations.trim() || JSON.stringify(expenses) !== JSON.stringify(edit.initial.expenses)) {
+                changes.push({mark_date:edit.date, amount_override:amount, honorarios:honorariosInput.value.trim(), observations, additional_expenses:expenses});
+            }
+        }
+        if (!changes.length) { bulkCancel.click(); return; }
+        const data = new FormData();
+        data.set('csrf_token', <?= json_encode(csrf_token()) ?>);
+        data.set('worker_id', <?= (int) $workerId ?>);
+        data.set('rows', JSON.stringify(changes));
+        bulkSave.disabled = true;
+        try {
+            const response = await fetch(<?= json_encode(APP_URL . '/modulos/finanzas/guardar_viaticos_personal_masivo.php') ?>, {method:'POST', body:data, credentials:'same-origin'});
+            const result = await response.json();
+            if (!response.ok || !result.ok) throw new Error(result.message || 'No se pudieron guardar los cambios.');
+            if (<?= $bulkAllPages ? 'true' : 'false' ?>) {
+                const url = new URL(window.location.href);
+                url.searchParams.delete('editar_masivo');
+                url.searchParams.delete('asignar_honorarios');
+                window.location.assign(url.toString());
+            } else window.location.reload();
+        } catch (error) {
+            Swal.fire('Atención', error.message, 'warning');
+            bulkSave.disabled = false;
+        }
+    });
+    if (<?= $bulkAllPages ? 'true' : 'false' ?>) {
+        if (new URL(window.location.href).searchParams.has('asignar_honorarios')) assignHonorariosButton.click();
+        else bulkButton.click();
+    }
     function addExpenseLine(amount = '', reason = '') {
         if (!activeEdit) return;
         const amountList = activeEdit.additionalCell.querySelector('.additional-expense-list');
@@ -539,11 +886,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     function cancelEdit() {
         if (!activeEdit) return;
-        const {row, amountCell, observationsCell, additionalCell, reasonCell, totalCell, actionsCell, original} = activeEdit;
+        const {row, amountCell, observationsCell, additionalCell, reasonCell, honorariosCell, totalCell, actionsCell, original} = activeEdit;
         amountCell.innerHTML = original.amount;
         observationsCell.innerHTML = original.observations;
         additionalCell.innerHTML = original.additional;
         reasonCell.innerHTML = original.reason;
+        honorariosCell.innerHTML = original.honorarios;
         totalCell.innerHTML = original.total;
         actionsCell.innerHTML = original.actions;
         observationsCell.style.whiteSpace = 'pre-line';
@@ -569,9 +917,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const observationsCell = row.querySelector('.per-diem-observations-cell');
             const additionalCell = row.querySelector('.additional-expense-cell');
             const reasonCell = row.querySelector('.additional-reason-cell');
+            const honorariosCell = row.querySelector('.honorarios-cell');
             const totalCell = row.querySelector('.total-expense-cell');
             const actionsCell = row.querySelector('.per-diem-actions-cell');
-            const original = {amount: amountCell.innerHTML, observations: observationsCell.innerHTML, additional: additionalCell.innerHTML, reason: reasonCell.innerHTML, total: totalCell.innerHTML, actions: actionsCell.innerHTML};
+            const original = {amount: amountCell.innerHTML, observations: observationsCell.innerHTML, additional: additionalCell.innerHTML, reason: reasonCell.innerHTML, honorarios: honorariosCell.innerHTML, total: totalCell.innerHTML, actions: actionsCell.innerHTML};
             const markDate = button.dataset.markDate;
             const automatic = button.dataset.automatic;
             const override = button.dataset.override;
@@ -587,17 +936,21 @@ document.addEventListener('DOMContentLoaded', () => {
             additionalCell.innerHTML = '<div class="additional-expense-list"></div><button class="btn btn-sm btn-outline-primary add-additional-expense mt-1" type="button"><i class="fa-solid fa-plus me-1" aria-hidden="true"></i>Agregar gasto</button>';
             reasonCell.style.whiteSpace = 'normal';
             reasonCell.innerHTML = '<div class="additional-reason-list"></div>';
+            honorariosCell.innerHTML = '<input class="form-control form-control-sm honorarios-input" type="number" min="0" max="999999.99" step="0.01" inputmode="decimal" aria-label="Honorarios en soles">';
+            honorariosCell.querySelector('input').value = button.dataset.honorarios;
             actionsCell.innerHTML = '<div class="d-flex gap-1"><button class="btn btn-sm btn-primary save-personal-per-diem" type="button" title="Guardar" aria-label="Guardar cambios"><i class="fa-solid fa-check" aria-hidden="true"></i></button><button class="btn btn-sm btn-outline-secondary cancel-personal-per-diem" type="button" title="Cancelar" aria-label="Cancelar edición"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div>';
-            activeEdit = {row, amountCell, observationsCell, additionalCell, reasonCell, totalCell, actionsCell, original, markDate};
+            activeEdit = {row, amountCell, observationsCell, additionalCell, reasonCell, honorariosCell, totalCell, actionsCell, original, markDate};
             expenses.forEach(expense => addExpenseLine(expense.amount, expense.reason));
             amountInput.focus();
             return;
         }
         if (!button.classList.contains('save-personal-per-diem') || !activeEdit) return;
-        const {amountCell, observationsCell, additionalCell, reasonCell, markDate} = activeEdit;
+        const {amountCell, observationsCell, additionalCell, reasonCell, honorariosCell, markDate} = activeEdit;
         const amountInput = amountCell.querySelector('input');
         const observationsInput = observationsCell.querySelector('.per-diem-observations-input');
         if (!amountInput.reportValidity()) return;
+        const honorariosInput = honorariosCell.querySelector('input');
+        if (!honorariosInput.reportValidity()) return;
         const additionalInputs = [...additionalCell.querySelectorAll('.additional-expense-input')];
         const reasonInputs = [...reasonCell.querySelectorAll('.additional-reason-input')];
         const expenses = [];
@@ -614,6 +967,7 @@ document.addEventListener('DOMContentLoaded', () => {
         data.set('worker_id', <?= (int) $workerId ?>);
         data.set('mark_date', markDate);
         data.set('amount_override', amountInput.value);
+        data.set('honorarios', honorariosInput.value.trim());
         data.set('additional_expenses', JSON.stringify(expenses));
         data.set('observations_direct', observationsInput.value.trim());
         button.disabled = true;
@@ -631,14 +985,28 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 <?php else: ?>
 <div class="work-panel">
+    <form id="personalExpensesCompanyForm" method="get" action="<?= e(APP_URL . '/modulos/finanzas/gastos_personal.php') ?>">
+        <label class="form-label" for="personalExpensesCompany">Empresa</label>
+        <select class="form-select select2-searchable" id="personalExpensesCompany" name="empresa_id" data-placeholder="Buscar empresa">
+            <option value="" <?= $selectedCompanyId === null ? 'selected' : '' ?>>Todas las empresas</option>
+            <?php foreach ($companies as $company): ?><option value="<?= (int) $company['id'] ?>" <?= $selectedCompanyId === (int) $company['id'] ? 'selected' : '' ?>><?= e($company['name']) ?></option><?php endforeach; ?>
+        </select>
+    </form>
     <div class="table-responsive">
         <table class="table table-hover align-middle data-table mb-0" id="gastosPersonalTable">
-            <thead><tr><th>Empresa</th><th>Personal</th><th class="text-end" data-orderable="false">Acción</th></tr></thead>
+            <thead><tr><th>Empresa</th><th>Personal</th><th>Saldo restante</th><th class="text-end" data-orderable="false">Acción</th></tr></thead>
             <tbody>
+                <?php if ($selectedCompanyId === null || $selectedCompanyId === $lifeCompanyId): ?><tr>
+                    <td>Life Maquinarias</td>
+                    <td><strong>Cuenta soles empresa</strong></td>
+                    <td>—</td>
+                    <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="<?= APP_URL ?>/modulos/finanzas/gastos_cuenta_empresa.php" aria-label="Ver gastos de Cuenta soles empresa"><i class="fa-solid fa-eye me-1" aria-hidden="true"></i>Ver gastos</a></td>
+                </tr><?php endif; ?>
                 <?php foreach ($workers as $person): ?>
                 <tr>
                     <td><?= e($person['company'] ?: 'Sin empresa') ?></td>
                     <td><strong><?= e($person['full_name']) ?></strong><small class="d-block text-muted"><?= e(($person['document_type'] ?: 'Documento') . ': ' . $person['document_number']) ?></small></td>
+                    <td class="text-nowrap" data-order="<?= isset($listBalances[(int) $person['id']]) ? (int) $listBalances[(int) $person['id']] : '' ?>"><?= isset($listBalances[(int) $person['id']]) ? 'S/ ' . number_format($listBalances[(int) $person['id']] / 100, 2, '.', ',') : '—' ?></td>
                     <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="<?= APP_URL ?>/modulos/finanzas/gastos_personal.php?trabajador_id=<?= (int) $person['id'] ?>" aria-label="Ver gastos de <?= e($person['full_name']) ?>"><i class="fa-solid fa-eye me-1" aria-hidden="true"></i>Ver gastos</a></td>
                 </tr>
                 <?php endforeach; ?>
@@ -646,5 +1014,37 @@ document.addEventListener('DOMContentLoaded', () => {
         </table>
     </div>
 </div>
+<style>
+#gastosPersonalTable_wrapper > .row:first-child > .col-md-6:last-child { flex:0 0 72%; max-width:72%; }
+#gastosPersonalTable_wrapper > .row:first-child > .col-md-6:first-child { flex:0 0 28%; max-width:28%; }
+#gastosPersonalTable_filter { display:flex; align-items:center; justify-content:end; gap:30px; flex-wrap:wrap; }
+#personalExpensesCompanyForm { display:flex; align-items:center; gap:9px; width:auto; text-align:left; }
+#personalExpensesCompanyForm .form-label { flex:none; margin:0; font:inherit; color:inherit; font-weight:400; }
+#personalExpensesCompanyForm .form-select,#personalExpensesCompanyForm .select2-container { width:240px!important; max-width:100%; }
+#personalExpensesCompanyForm .select2-container--bootstrap4 .select2-selection--single { height:34px; min-height:34px; }
+@media(max-width:767px) { #gastosPersonalTable_wrapper > .row:first-child > .col-md-6 { flex:0 0 100%!important; max-width:100%!important; } #gastosPersonalTable_filter { justify-content:flex-start; } }
+</style>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    if (!window.jQuery) return;
+    window.jQuery('#gastosPersonalTable').on('init.dt', () => {
+        const filter = document.getElementById('gastosPersonalTable_filter');
+        const form = document.getElementById('personalExpensesCompanyForm');
+        if (filter && form) {
+            filter.prepend(form);
+            const searchLabel = filter.querySelector(':scope > label');
+            const companyLabel = form.querySelector('label');
+            if (searchLabel && companyLabel) {
+                const style = window.getComputedStyle(searchLabel);
+                companyLabel.style.fontFamily = style.fontFamily;
+                companyLabel.style.fontSize = style.fontSize;
+                companyLabel.style.fontWeight = style.fontWeight;
+                companyLabel.style.color = style.color;
+            }
+        }
+    });
+    window.jQuery('#personalExpensesCompany').on('change', function () { this.form.requestSubmit(); });
+});
+</script>
 <?php endif; ?>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>

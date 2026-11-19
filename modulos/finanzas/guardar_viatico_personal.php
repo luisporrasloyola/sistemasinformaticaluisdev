@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../includes/finanzas_depositos_personal_match.php';
 require_module_access('finanzas.gastos_personal');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_response(['ok' => false, 'message' => 'Método no permitido.'], 405);
@@ -11,6 +12,7 @@ $workerId = filter_var($_POST['worker_id'] ?? null, FILTER_VALIDATE_INT, ['optio
 if (is_personal_role()) require_personal_own_worker((int) $workerId);
 $markDate = (string) ($_POST['mark_date'] ?? '');
 $amountText = trim((string) ($_POST['amount_override'] ?? ''));
+$honorariosText = trim((string) ($_POST['honorarios'] ?? ''));
 $additionalText = trim((string) ($_POST['additional_expense'] ?? ''));
 $additionalReason = trim((string) ($_POST['additional_reason'] ?? ''));
 $observations = trim((string) ($_POST['observations'] ?? ''));
@@ -40,6 +42,9 @@ if (!$workerId || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $markDate) || DateTimeImm
 if ($amountText !== '' && (!preg_match('/^\d{1,6}(?:\.\d{1,2})?$/', $amountText) || (float) $amountText > 999999.99)) {
     json_response(['ok' => false, 'message' => 'Ingrese un importe válido de hasta dos decimales.'], 422);
 }
+if ($honorariosText !== '' && (!preg_match('/^\d{1,6}(?:\.\d{1,2})?$/', $honorariosText) || (float) $honorariosText > 999999.99)) {
+    json_response(['ok' => false, 'message' => 'Ingrese honorarios válidos de hasta dos decimales.'], 422);
+}
 if ($additionalText !== '' && (!preg_match('/^\d{1,6}(?:\.\d{1,2})?$/', $additionalText) || (float) $additionalText > 999999.99)) {
     json_response(['ok' => false, 'message' => 'Ingrese un gasto adicional válido de hasta dos decimales.'], 422);
 }
@@ -56,7 +61,21 @@ if ($directObservations === null && (mb_strlen($newObservation) > 1000 || mb_str
 try {
     $mark = db()->prepare('SELECT 1 FROM attendance_marks WHERE worker_id = ? AND mark_date = ? LIMIT 1');
     $mark->execute([$workerId, $markDate]);
-    if (!$mark->fetchColumn()) json_response(['ok' => false, 'message' => 'La marcación ya no existe para esa fecha.'], 404);
+    if (!$mark->fetchColumn()) {
+        $depositStmt = db()->prepare('SELECT creditor, depositor, worker_id FROM finance_personal_deposits WHERE deposit_date = ?');
+        $depositStmt->execute([$markDate]);
+        $workers = personal_deposit_workers();
+        $hasDeposit = false;
+        foreach ($depositStmt as $deposit) {
+            $isCreditor = $deposit['worker_id'] !== null ? (int) $deposit['worker_id'] === $workerId
+                : personal_deposit_unique_worker_id((string) $deposit['creditor'], $workers) === $workerId;
+            if ($isCreditor || personal_expense_depositor_worker_id((string) ($deposit['depositor'] ?? ''), $workers) === $workerId) {
+                $hasDeposit = true;
+                break;
+            }
+        }
+        if (!$hasDeposit) json_response(['ok' => false, 'message' => 'No hay marcación ni depósito para esa fecha.'], 404);
+    }
 
     if ($directObservations !== null) {
         $combined = $directObservations;
@@ -68,10 +87,10 @@ try {
     if (mb_strlen($combined) > 10000) json_response(['ok' => false, 'message' => 'El campo de observaciones alcanzó su límite.'], 422);
 
     db()->beginTransaction();
-    $save = db()->prepare('INSERT INTO finance_personal_per_diem_edits (worker_id, mark_date, amount_override, additional_expense, additional_reason, observations, updated_by_user_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE amount_override = VALUES(amount_override), additional_expense = VALUES(additional_expense), additional_reason = VALUES(additional_reason), observations = VALUES(observations), updated_by_user_id = VALUES(updated_by_user_id)');
-    $save->execute([$workerId, $markDate, $amountText === '' ? null : number_format((float) $amountText, 2, '.', ''), $expenseItems !== null || $additionalText === '' ? null : number_format((float) $additionalText, 2, '.', ''), $expenseItems !== null || $additionalReason === '' ? null : $additionalReason, $combined, (int) (current_user()['id'] ?? 0) ?: null]);
+    $save = db()->prepare('INSERT INTO finance_personal_per_diem_edits (worker_id, mark_date, amount_override, honorarios, additional_expense, additional_reason, observations, updated_by_user_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE amount_override = VALUES(amount_override), honorarios = VALUES(honorarios), additional_expense = VALUES(additional_expense), additional_reason = VALUES(additional_reason), observations = VALUES(observations), updated_by_user_id = VALUES(updated_by_user_id)');
+    $save->execute([$workerId, $markDate, $amountText === '' ? null : number_format((float) $amountText, 2, '.', ''), $honorariosText === '' ? null : number_format((float) $honorariosText, 2, '.', ''), $expenseItems !== null || $additionalText === '' ? null : number_format((float) $additionalText, 2, '.', ''), $expenseItems !== null || $additionalReason === '' ? null : $additionalReason, $combined, (int) (current_user()['id'] ?? 0) ?: null]);
     if ($expenseItems !== null) {
         $delete = db()->prepare('DELETE FROM finance_personal_additional_expenses WHERE worker_id = ? AND mark_date = ?');
         $delete->execute([$workerId, $markDate]);

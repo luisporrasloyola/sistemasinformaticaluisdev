@@ -22,7 +22,7 @@ $amount = trim((string) ($_POST['monto'] ?? ''));
 $method = trim((string) ($_POST['modo_pago'] ?? ''));
 $manual = ($_POST['manual'] ?? '') === '1';
 $workerId = null;
-$depositor = $manual ? trim((string) ($_POST['depositante'] ?? '')) : '';
+$depositor = trim((string) ($_POST['depositante'] ?? ''));
 if ($manual) {
     $workerId = filter_var($_POST['trabajador_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
     if (!$workerId) deposit_save_reply(422, ['error' => 'Seleccione un trabajador.']);
@@ -35,15 +35,13 @@ if ($manual) {
 }
 if (!$manual) {
     $workerId = personal_deposit_unique_worker_id($creditor, personal_deposit_workers());
-    if (str_contains($creditor, '*') && $workerId === null) {
-        deposit_save_reply(422, ['error' => 'No se pudo identificar de forma única al trabajador del nombre oculto. Revise el acreedor antes de guardar.']);
-    }
 }
 if (is_personal_role() && !$manual && !personal_deposit_is_own($creditor)) deposit_save_reply(403, ['error' => 'El acreedor debe corresponder al personal vinculado a su cuenta.']);
 $parsedDate = preg_match('/^\d{4}-\d{2}-\d{2}$/D', $date) ? DateTimeImmutable::createFromFormat('!Y-m-d', $date) : false;
 if (!$parsedDate || $parsedDate->format('Y-m-d') !== $date) deposit_save_reply(422, ['error' => 'Ingrese una fecha válida.']);
 if ($creditor === '' || mb_strlen($creditor) > 150) deposit_save_reply(422, ['error' => 'Ingrese el acreedor (máximo 150 caracteres).']);
 if ($manual && ($depositor === '' || mb_strlen($depositor) > 150)) deposit_save_reply(422, ['error' => 'Ingrese el depositante (máximo 150 caracteres).']);
+if (!$manual && mb_strlen($depositor) > 150) deposit_save_reply(422, ['error' => 'El depositante no puede superar 150 caracteres.']);
 if (!preg_match('/^\d{1,9}(?:\.\d{1,2})?$/D', $amount) || (float) $amount <= 0) deposit_save_reply(422, ['error' => 'Ingrese un monto válido en soles.']);
 if ($manual) {
     if ($method === '' || mb_strlen($method) > 100) deposit_save_reply(422, ['error' => 'Ingrese un modo de pago (máximo 100 caracteres).']);
@@ -77,7 +75,7 @@ try {
     }
     db()->prepare('INSERT INTO finance_personal_deposits (deposit_date, registration_source, creditor, depositor, amount, payment_method, image_path, image_original_name, image_sha256, registered_by_user_id, worker_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
         ->execute([$date, $manual ? 'manual' : 'gemini', $creditor, $depositor !== '' ? $depositor : null, $amount, $method, $newPath, $uploaded['name'] ?? null, $hash, (int) (current_user()['id'] ?? 0) ?: null, $workerId]);
-    deposit_save_reply(201, ['id' => (int) db()->lastInsertId(), 'fecha' => $date, 'registro' => $manual ? 'Manual' : 'Gemini', 'acreedor' => $creditor, 'depositante' => $depositor, 'monto' => number_format((float) $amount, 2, '.', ''), 'modo_pago' => $method, 'hasPhoto' => $hasPhoto]);
+    deposit_save_reply(201, ['id' => (int) db()->lastInsertId(), 'fecha' => $date, 'registro' => $manual ? 'Manual' : 'Gemini', 'acreedor' => $creditor, 'depositante' => $depositor, 'registrado_por' => (string) (current_user()['name'] ?? ''), 'monto' => number_format((float) $amount, 2, '.', ''), 'modo_pago' => $method, 'hasPhoto' => $hasPhoto]);
 } catch (Throwable $error) {
     if ($newPath) delete_uploaded_file($newPath);
     if ($error instanceof PDOException && $error->getCode() === '23000') deposit_save_reply(409, ['error' => 'Esta foto ya fue registrada.', 'duplicate' => true]);
