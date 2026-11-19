@@ -152,16 +152,15 @@ if ($clientId) {
             $inlineEdit = $existing && ($_POST['inline_edit'] ?? '') === '1';
             $manualTotal = trim((string) ($_POST['horas_total'] ?? ''));
             $manualMinutes = null;
-            if ($inlineEdit && preg_match('/^([01]\d|2[0-3]):([0-5]\d)$/D', $manualTotal, $totalParts)) {
-                $manualMinutes = (int) $totalParts[1] * 60 + (int) $totalParts[2];
+            if ($inlineEdit && preg_match('/^([01]?\d|2[0-3])(?::([0-5]\d))?$/D', $manualTotal, $totalParts)) {
+                $manualMinutes = (int) $totalParts[1] * 60 + (int) ($totalParts[2] ?? 0);
             }
-            $elapsedMinutes = $minutes === null ? null : $minutes + 60;
             if (($_POST['record_id'] ?? '') !== '' && !$existing) $error = 'No se encontró el registro.';
             elseif ($equipment === '' || mb_strlen($equipment, 'UTF-8') > 120) $error = 'Ingrese el equipo (máximo 120 caracteres).';
             elseif (mb_strlen($operator, 'UTF-8') > 150) $error = 'El nombre del operador no puede superar 150 caracteres.';
             elseif (!$parsedDate || $parsedDate->format('Y-m-d') !== $date) $error = 'Seleccione una fecha válida.';
             elseif ($minutes === null) $error = 'Ingrese horas válidas: el turno debe durar más de una hora para descontar el refrigerio. Se admite cruzar la medianoche.';
-            elseif ($inlineEdit && ($manualMinutes === null || $manualMinutes < 1 || $manualMinutes > $elapsedMinutes)) $error = 'Ingrese las horas totales en formato HH:MM, mayores que cero y sin superar el tiempo entre inicio y fin.';
+            elseif ($inlineEdit && ($manualMinutes === null || $manualMinutes < 1)) $error = 'Ingrese las horas totales mayores que cero. Puede usar 9, 11 o el formato HH:MM.';
             elseif (mb_strlen($notes, 'UTF-8') > 2000) $error = 'Las observaciones no pueden superar 2000 caracteres.';
             elseif (!$existing && ($_FILES['adjunto']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) $error = 'Adjunte la imagen o PDF original.';
             elseif (($_FILES['adjunto']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK && (int) ($_FILES['adjunto']['size'] ?? 0) > 5 * 1024 * 1024) $error = 'El archivo supera 5 MB. Reduzca la imagen o seleccione un PDF más pequeño.';
@@ -697,18 +696,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const updateRowTotal = (recalculate = false) => {
             const validTime = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
             let minutes = null;
-            let elapsed = null;
             if (validTime.test(start.value) && validTime.test(end.value)) {
                 const [h1,m1] = start.value.split(':').map(Number), [h2,m2] = end.value.split(':').map(Number);
-                elapsed = (h2*60+m2-h1*60-m1+1440)%1440;
+                const elapsed = (h2*60+m2-h1*60-m1+1440)%1440;
                 if (elapsed > 60) minutes = elapsed - 60;
             }
             if (recalculate) total.value = minutes === null ? '' : String(Math.floor(minutes/60)).padStart(2,'0') + ':' + String(minutes%60).padStart(2,'0');
-            const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(total.value);
-            const entered = match ? Number(match[1])*60 + Number(match[2]) : 0;
-            const validTotal = minutes !== null && entered > 0 && entered <= elapsed;
+            const match = /^([01]?\d|2[0-3])(?::([0-5]\d))?$/.exec(total.value.trim());
+            const entered = match ? Number(match[1])*60 + Number(match[2] || 0) : 0;
+            const validTotal = minutes !== null && entered > 0;
             end.setCustomValidity(minutes === null ? 'El turno debe durar más de una hora.' : '');
-            total.setCustomValidity(validTotal ? '' : 'Ingrese HH:MM, mayor que cero y sin superar el turno.');
+            total.setCustomValidity(validTotal ? '' : 'Ingrese horas mayores que cero: 9, 11 o HH:MM.');
             save.disabled = !validTotal;
         };
         row.querySelector('.cv-inline-edit').addEventListener('click', () => {
@@ -721,6 +719,11 @@ document.addEventListener('DOMContentLoaded', () => {
         start.addEventListener('input', () => updateRowTotal(true));
         end.addEventListener('input', () => updateRowTotal(true));
         total.addEventListener('input', () => updateRowTotal());
+        total.addEventListener('blur', () => {
+            const match = /^([01]?\d|2[0-3])(?::([0-5]\d))?$/.exec(total.value.trim());
+            if (match) total.value = String(Number(match[1])).padStart(2, '0') + ':' + String(Number(match[2] || 0)).padStart(2, '0');
+            updateRowTotal();
+        });
         if (row.classList.contains('cv-editing')) updateRowTotal();
     });
     document.querySelectorAll('.cvDelete').forEach(form=>form.addEventListener('submit',async event=>{event.preventDefault();const result=await Swal.fire({title:'¿Eliminar este registro?',text:'También se eliminará el archivo original. Esta acción no se puede deshacer.',icon:'warning',showCancelButton:true,confirmButtonText:'Sí, eliminar',cancelButtonText:'Cancelar',confirmButtonColor:'#dc3545',reverseButtons:true});if(result.isConfirmed)form.submit();}));
