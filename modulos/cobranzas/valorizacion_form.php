@@ -15,10 +15,15 @@
                 <div class="col-md-3"><label class="form-label" for="cvEquipment">Equipo</label><input class="form-control" id="cvEquipment" name="equipo" maxlength="120" required placeholder="Ejemplo: Camión Grúa"></div>
                 <div class="col-md-3"><label class="form-label" for="cvOperator">Operador <span class="text-muted fw-normal">(Elaborado por)</span></label><input class="form-control" id="cvOperator" name="operador" maxlength="150" placeholder="Nombre del operador"></div>
                 <div class="col-md-3"><label class="form-label" for="cvDate">Fecha del servicio</label><input class="form-control" type="date" id="cvDate" name="fecha_servicio" required></div>
+                <?php if ($mobilityActive): ?>
+                <div class="col-md-3"><label class="form-label" for="cvMobilization">Movilización</label><input class="form-control" type="number" id="cvMobilization" name="movilizacion" min="0" max="9999999999.99" step="0.01" inputmode="decimal" placeholder="0.00"></div>
+                <div class="col-md-3"><label class="form-label" for="cvDemobilization">Desmovilización</label><input class="form-control" type="number" id="cvDemobilization" name="desmovilizacion" min="0" max="9999999999.99" step="0.01" inputmode="decimal" placeholder="0.00"></div>
+                <?php endif; ?>
                 <div class="col-md-3"><label class="form-label" for="cvTotal">Horas en total</label><input class="form-control" id="cvTotal" readonly value="—"></div>
                 <div class="col-md-3"><label class="form-label" for="cvStart">Hora de inicio</label><input class="form-control" type="time" id="cvStart" name="hora_inicio" required></div>
                 <div class="col-md-3"><label class="form-label" for="cvEnd">Hora final</label><input class="form-control" type="time" id="cvEnd" name="hora_final" required></div>
                 <div class="col-md-6"><label class="form-label" for="cvNotes">Observaciones <span class="text-muted fw-normal">(manual)</span></label><textarea class="form-control" id="cvNotes" name="observaciones" rows="1" maxlength="2000" placeholder="Opcional"></textarea></div>
+                <div class="col-md-6"><label class="form-label" for="cvHoursReason">Motivo de cambios de horas total <span class="text-muted fw-normal">(solo PDF Interno)</span></label><textarea class="form-control" id="cvHoursReason" name="motivo_cambio_horas" rows="2" maxlength="1000" placeholder="Explique por qué se modificaron las horas, si corresponde"></textarea></div>
             </div>
             <div id="cvTimeFeedback" class="small mt-2" role="status" aria-live="polite"></div>
         </div>

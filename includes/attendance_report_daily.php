@@ -17,9 +17,10 @@ function attendance_report_classify_day(array $row, ?string $asOfDate = null): a
     $journey = (string) ($row['journey_key'] ?? '');
     $calendarType = (string) ($row['calendar_event_type'] ?? '');
     $calendarName = trim((string) ($row['calendar_event_name'] ?? ''));
+    $restJustified = !empty($row['rest_justified']);
 
     $restKind = null;
-    if ($calendarType === 'rest') {
+    if ($calendarType === 'rest' && !$restJustified) {
         $normalized = mb_strtolower(preg_replace('/\s+/u', ' ', $calendarName) ?? $calendarName, 'UTF-8');
         $restKind = match ($normalized) {
             'a cuenta de horas' => 'hours',
@@ -30,7 +31,7 @@ function attendance_report_classify_day(array $row, ?string $asOfDate = null): a
     $laborCode = (string) ($row['labor_cycle_code'] ?? '');
     $cycleRest = preg_match('/^D[1-7]$/', $laborCode) === 1
         && ($calendarType === '' || $calendarType === 'rest');
-    if ($cycleRest) $restKind = 'regime';
+    if ($cycleRest && !$restJustified) $restKind = 'regime';
 
     $worked = $hasEntry && $state !== 'absent';
     $incomplete = ($hasEntry && !$hasExit && $journey !== 'active') || (!$hasEntry && $hasExit);
@@ -57,6 +58,7 @@ function attendance_report_classify_day(array $row, ?string $asOfDate = null): a
         'calendar_type' => $calendarType,
         'calendar_event_id' => (int) ($row['calendar_event_id'] ?? 0),
         'rest_kind' => $restKind,
+        'rest_justified' => $restJustified,
         'labor_cycle_rest' => $cycleRest,
         'labor_cycle_rest_worked' => $cycleRest && $worked,
         'worked_minutes' => max(0, (int) ($row['worked_minutes'] ?? 0)),
@@ -115,7 +117,7 @@ function attendance_report_summarize_monthly_days(array $days): array
         if (in_array($calendarType, ['holiday', 'non_working', 'vacation'], true)) {
             $months[$month][$calendarType]++;
         }
-        if ($calendarType === 'rest' || !empty($day['labor_cycle_rest'])) {
+        if (empty($day['rest_justified']) && ($calendarType === 'rest' || !empty($day['labor_cycle_rest']))) {
             $months[$month]['rest']++;
             $restKey = match ($day['rest_kind'] ?? null) {
                 'hours' => 'rest_hours',

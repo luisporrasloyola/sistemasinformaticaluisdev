@@ -9,18 +9,26 @@ $editingFailure = $error !== '' && ($_POST['action'] ?? '') === 'save' && ($_POS
 $rowEquipment = $editingFailure ? (string) ($_POST['equipo'] ?? '') : (string) $record['equipo_completo'];
 $rowOperator = $editingFailure ? (string) ($_POST['operador'] ?? '') : (string) ($record['operador'] ?? '');
 $rowDate = $editingFailure ? (string) ($_POST['fecha_servicio'] ?? '') : (string) $record['fecha_servicio'];
+$rowMobilization = $editingFailure ? (string) ($_POST['movilizacion'] ?? '') : (string) ($record['movilizacion'] ?? '');
+$rowDemobilization = $editingFailure ? (string) ($_POST['desmovilizacion'] ?? '') : (string) ($record['desmovilizacion'] ?? '');
 $rowStart = $editingFailure ? (string) ($_POST['hora_inicio'] ?? '') : $startValue;
 $rowEnd = $editingFailure ? (string) ($_POST['hora_final'] ?? '') : $endValue;
 $rowTotal = $editingFailure ? (string) ($_POST['horas_total'] ?? '') : sprintf('%02d:%02d', intdiv($displayMinutes, 60), $displayMinutes % 60);
 $rowNotes = $editingFailure ? (string) ($_POST['observaciones'] ?? '') : (string) ($record['observaciones'] ?? '');
+$rowHoursReason = $editingFailure ? (string) ($_POST['motivo_cambio_horas'] ?? '') : (string) ($record['motivo_cambio_horas'] ?? '');
 ?>
-<tr class="cv-record<?= $editingFailure ? ' cv-editing' : '' ?>">
+<tr class="cv-record<?= $editingFailure ? ' cv-editing' : '' ?>" data-record-id="<?= $recordId ?>">
     <td class="fw-semibold"><span class="cv-view"><?= e($record['equipo_completo']) ?></span><input class="form-control form-control-sm cv-input" form="<?= $formId ?>" name="equipo" value="<?= e($rowEquipment) ?>" maxlength="120" required aria-label="Equipo y placa o serie"></td>
     <td><span class="cv-view"><?= $record['operador'] ? e((string) $record['operador']) : '<span class="text-muted">—</span>' ?></span><input class="form-control form-control-sm cv-input" form="<?= $formId ?>" name="operador" value="<?= e($rowOperator) ?>" maxlength="150" aria-label="Operador"></td>
     <td><span class="cv-view"><?= e(date('d/m/Y', strtotime((string) $record['fecha_servicio']))) ?></span><input class="form-control form-control-sm cv-input" form="<?= $formId ?>" type="date" name="fecha_servicio" value="<?= e($rowDate) ?>" required aria-label="Fecha del servicio"></td>
+    <?php if ($mobilityActive): ?>
+    <td><span class="cv-view"><?= $record['movilizacion'] !== null ? e(number_format((float) $record['movilizacion'], 2, '.', ',')) : '<span class="text-muted">—</span>' ?></span><input class="form-control form-control-sm cv-input" form="<?= $formId ?>" type="number" name="movilizacion" value="<?= e($rowMobilization) ?>" min="0" max="9999999999.99" step="0.01" inputmode="decimal" placeholder="0.00" aria-label="Movilización"></td>
+    <td><span class="cv-view"><?= $record['desmovilizacion'] !== null ? e(number_format((float) $record['desmovilizacion'], 2, '.', ',')) : '<span class="text-muted">—</span>' ?></span><input class="form-control form-control-sm cv-input" form="<?= $formId ?>" type="number" name="desmovilizacion" value="<?= e($rowDemobilization) ?>" min="0" max="9999999999.99" step="0.01" inputmode="decimal" placeholder="0.00" aria-label="Desmovilización"></td>
+    <?php endif; ?>
     <td><span class="cv-view"><?= e($startValue) ?></span><input class="form-control form-control-sm cv-input cv-inline-time" form="<?= $formId ?>" type="time" name="hora_inicio" value="<?= e($rowStart) ?>" required aria-label="Hora de inicio"></td>
     <td><span class="cv-view"><?= e($endValue) ?></span><input class="form-control form-control-sm cv-input cv-inline-time" form="<?= $formId ?>" type="time" name="hora_final" value="<?= e($rowEnd) ?>" required aria-label="Hora final"></td>
     <td class="fw-semibold"><span class="cv-view"><?= $displayMinutes > 0 ? sprintf('%02d:%02d', intdiv($displayMinutes, 60), $displayMinutes % 60) : '<span class="text-warning">Revisar horas</span>' ?></span><input class="form-control form-control-sm cv-input cv-inline-total" form="<?= $formId ?>" type="text" name="horas_total" value="<?= e($rowTotal) ?>" inputmode="numeric" maxlength="5" placeholder="HH:MM" required aria-label="Horas en total"></td>
+    <td><span class="cv-view"><?= $rowHoursReason !== '' ? nl2br(e($rowHoursReason)) : '<span class="text-muted">—</span>' ?></span><textarea class="form-control form-control-sm cv-input" form="<?= $formId ?>" name="motivo_cambio_horas" rows="2" maxlength="1000" placeholder="Explique el cambio de horas" aria-label="Motivo de cambios de horas total"><?= e($rowHoursReason) ?></textarea></td>
     <td><span class="cv-view"><?= $record['observaciones'] ? nl2br(e((string) $record['observaciones'])) : '<span class="text-muted">—</span>' ?></span><textarea class="form-control form-control-sm cv-input" form="<?= $formId ?>" name="observaciones" rows="2" maxlength="2000" aria-label="Observaciones"><?= e($rowNotes) ?></textarea></td>
     <td><?= $record['registrado_por'] !== '' ? e((string) $record['registrado_por']) : '<span class="text-muted">—</span>' ?></td>
     <td><div class="cv-row-actions">

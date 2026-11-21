@@ -26,6 +26,19 @@ function attendance_report_trips_by_date(array $trips): array
     return $byDate;
 }
 
+function attendance_report_rest_justifications_available(): bool
+{
+    static $available = null;
+    if ($available !== null) return $available;
+    try {
+        db()->query('SELECT id FROM attendance_rest_justifications LIMIT 1');
+        return $available = true;
+    } catch (PDOException $error) {
+        if ($error->getCode() === '42S02') return $available = false;
+        throw $error;
+    }
+}
+
 /** Detalle auditable de las horas compradas dentro del período exportado. */
 function attendance_report_hour_purchase_days_available(): bool
 {
@@ -122,6 +135,7 @@ function attendance_report_state(string $key): array
         'vacation' => ['code' => 'VAC', 'label' => 'Vacaciones', 'class' => 'legend-vacation'],
         'permission' => ['code' => 'PER', 'label' => 'Permiso', 'class' => 'legend-permission'],
         'rest' => ['code' => 'D', 'label' => 'Descanso', 'class' => 'legend-rest'],
+        'rest_justified' => ['code' => 'DJ', 'label' => 'Descanso justificado', 'class' => 'legend-rest-justified'],
         'unscheduled' => ['code' => 'SHC', 'label' => 'Sin horario configurado', 'class' => 'report-state-unscheduled'],
         'holiday' => ['code' => 'FER', 'label' => 'Feriado', 'class' => 'legend-holiday'],
         'non_working' => ['code' => 'NL', 'label' => 'No laborable', 'class' => 'legend-non-working'],
@@ -295,6 +309,21 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
     $stmt = db()->prepare($workersSql);
     $stmt->execute($workerId > 0 ? ['worker_id' => $workerId] : []);
     $workers = $stmt->fetchAll();
+
+    $restJustifications = [];
+    if ($workers && attendance_report_rest_justifications_available()) {
+        try {
+            $justificationWorkerIds = array_map(static fn(array $worker): int => (int) $worker['id'], $workers);
+            $placeholders = implode(',', array_fill(0, count($justificationWorkerIds), '?'));
+            $stmt = db()->prepare("SELECT worker_id, rest_date, file_path, original_file_name
+                FROM attendance_rest_justifications
+                WHERE worker_id IN ({$placeholders}) AND rest_date BETWEEN ? AND ?");
+            $stmt->execute([...$justificationWorkerIds, $dateFrom, $dateTo]);
+            foreach ($stmt->fetchAll() as $justification) {
+                $restJustifications[(int) $justification['worker_id']][(string) $justification['rest_date']] = $justification;
+            }
+        } catch (PDOException $error) { throw $error; }
+    }
 
     $assignmentByWorker = [];
     $assignmentsByWorker = [];
@@ -902,6 +931,20 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
         return strcmp($timeB, $timeA) ?: strcasecmp((string) $a['worker'], (string) $b['worker']);
     });
     $selectedWorker = $workerId > 0 ? ($workers[0] ?? null) : null;
+    foreach ($rows as &$row) {
+        $justification = $restJustifications[(int) $row['worker_id']][(string) $row['date']] ?? null;
+        $row['rest_justified'] = (string) ($row['state_key'] ?? '') === 'rest' && $justification !== null;
+        $row['rest_justification_file_path'] = $row['rest_justified'] ? (string) $justification['file_path'] : '';
+        $row['rest_justification_file_name'] = $row['rest_justified'] ? (string) $justification['original_file_name'] : '';
+        if ($row['rest_justified']) {
+            $state = attendance_report_state('rest_justified');
+            $row['state_code'] = $state['code'];
+            $row['state_label'] = $state['label'];
+            $row['state_class'] = $state['class'];
+        }
+    }
+    unset($row);
+
     $individualRows = $workerId > 0 ? array_values(array_filter($rows, static fn(array $row): bool => $row['worker_id'] === $workerId)) : [];
     $classificationRows = $individualRows;
     if ($selectedWorker && !empty($assignmentsByWorker[$workerId])) {

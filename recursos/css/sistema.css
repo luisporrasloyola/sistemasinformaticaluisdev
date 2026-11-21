@@ -1352,6 +1352,11 @@ body {
     color: #1e293b !important;
 }
 
+.matrix-rest-justified {
+    background: #dcfce7 !important;
+    color: #166534 !important;
+}
+
 .matrix-holiday {
     background: #cffafe !important;
     color: #0e7490 !important;
@@ -1384,6 +1389,7 @@ body {
 .attendance-matrix .matrix-vacation > span { background: #2563eb; }
 .attendance-matrix .matrix-permission > span { background: #7c3aed; }
 .attendance-matrix .matrix-rest > span { background: #334155; }
+.attendance-matrix .matrix-rest-justified > span { background: #168a4c; }
 .attendance-matrix .matrix-holiday > span { background: #0891b2; }
 .attendance-matrix .matrix-non-working > span { background: #78716c; }
 
@@ -1654,6 +1660,12 @@ body {
 .attendance-matrix-legend .legend-rest strong,
 .calendar-event-chip.legend-rest strong,
 .attendance-report-state.legend-rest strong { background: #334155; }
+.attendance-matrix-legend .legend-rest-justified,
+.calendar-event-chip.legend-rest-justified,
+.attendance-report-state.legend-rest-justified { background: #ddf8e7; border-color: #43ae72; color: #11653a; }
+.attendance-matrix-legend .legend-rest-justified strong,
+.calendar-event-chip.legend-rest-justified strong,
+.attendance-report-state.legend-rest-justified strong { background: #168a4c; }
 .attendance-matrix-legend .legend-holiday,
 .calendar-event-chip.legend-holiday,
 .attendance-report-state.legend-holiday { background: #cffafe; border-color: #67e8f9; color: #0e7490; }
@@ -7582,3 +7594,5 @@ input[type="checkbox"]:active {
 @media(max-width:575px){.overtime-summary-card{min-height:126px;padding:15px}.overtime-summary-card>strong{font-size:28px}}
 
 .attendance-hour-purchases .overtime-day-mark-column{background:linear-gradient(90deg,#f4fcf7 0%,#e6f7ed 100%)!important;border-left:1px solid #c8ead7;border-right:1px solid #c8ead7}.attendance-hour-purchases thead .overtime-day-mark-column{background:linear-gradient(90deg,#dff4e8 0%,#ccebd9 100%)!important;color:#175a3c;text-align:center}
+.attendance-report-state.legend-rest-justified{background:#ddf8e7;border-color:#43ae72;color:#11653a}.attendance-report-state.legend-rest-justified strong{background:#168a4c}.report-rest-state-cell{white-space:nowrap}.report-rest-file-link,.report-rest-justify-button{display:inline-grid!important;width:26px;height:26px;margin-left:5px;place-items:center;border:1px solid #91d6ad;border-radius:7px;background:#effcf4;color:#13723e;text-decoration:none;vertical-align:middle}.report-rest-file-link:hover,.report-rest-justify-button:hover{border-color:#198754;background:#198754;color:#fff}.report-rest-justify-button{padding:0;border-color:#bdd1e9;background:#f6f9fd;color:#315a8a}.report-rest-justify-button:hover{border-color:#2468e8;background:#2468e8}
+.report-rest-justification-modal{overflow:hidden;border:0;box-shadow:0 22px 55px rgba(16,48,84,.22)}.report-rest-justification-modal .modal-header{border:0;background:linear-gradient(120deg,#f1fbf5,#e6f7ed)}.report-rest-justification-intro{display:flex;gap:11px;align-items:flex-start;margin-bottom:18px;padding:13px;border:1px solid #b8e4ca;border-radius:11px;background:#f1fbf5;color:#16653b}.report-rest-justification-intro>i{display:grid;width:32px;height:32px;flex:0 0 32px;place-items:center;border-radius:9px;background:#1d9854;color:#fff}.report-rest-justification-intro strong,.report-rest-justification-intro span{display:block}.report-rest-justification-intro span{margin-top:3px;font-size:13px;line-height:1.4;color:#407056}.report-rest-current-file{display:inline-flex;align-items:center;gap:3px;margin-top:12px;color:#197143;font-size:13px;font-weight:700;text-decoration:none}.report-rest-current-file:hover{text-decoration:underline}

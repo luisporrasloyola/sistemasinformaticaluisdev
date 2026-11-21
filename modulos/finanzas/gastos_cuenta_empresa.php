@@ -81,9 +81,10 @@ require __DIR__ . '/../../includes/header.php';
         <button class="btn btn-sm btn-outline-primary" type="submit">Ver</button>
     </form>
     <?php if (!$databaseReady): ?><div class="alert alert-warning mb-0">Para usar esta cuenta, ejecute primero <strong>database/finance_company_sole_account.sql</strong> en la base de datos.</div><?php else: ?>
-    <div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead class="table-light"><tr><th>Fecha</th><th>Gastos</th><th>Concepto Gastos</th><th>Depósito</th><th>Concepto Depósito</th><?php if ($canManage): ?><th>Acciones</th><?php endif; ?></tr></thead><tbody>
+    <?php if ($canManage && $records): ?><div class="d-flex justify-content-end gap-2 mb-3"><button class="btn btn-sm btn-outline-primary" type="button" id="companyBulkEdit"><i class="fa-solid fa-pen-to-square me-1" aria-hidden="true"></i>Editar masivamente</button><div id="companyBulkActions" class="d-flex gap-2" hidden><button class="btn btn-sm btn-primary" type="button" id="companyBulkSave"><i class="fa-solid fa-check me-1" aria-hidden="true"></i>Guardar</button><button class="btn btn-sm btn-outline-secondary" type="button" id="companyBulkCancel">Cancelar</button></div></div><?php endif; ?>
+    <div class="table-responsive"><table id="companyMovementsTable" class="table table-hover align-middle mb-0"><thead class="table-light"><tr><th>Fecha</th><th>Gastos</th><th>Concepto Gastos</th><th>Depósito</th><th>Concepto Depósito</th><?php if ($canManage): ?><th>Acciones</th><?php endif; ?></tr></thead><tbody>
     <?php foreach ($records as $record): ?>
-    <tr>
+    <tr class="company-movement-row" data-record="<?= e(json_encode($record, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE)) ?>">
         <td class="text-nowrap"><?= e(date('d/m/Y', strtotime((string) $record['movement_date']))) ?></td>
         <td class="text-nowrap"><?= (float) $record['expense'] > 0 ? e($money((int) round((float) $record['expense'] * 100))) : '—' ?></td>
         <td><?= e((string) ($record['expense_concept'] ?: '—')) ?></td>
@@ -137,6 +138,13 @@ require __DIR__ . '/../../includes/header.php';
 .company-opening-value .btn:hover{background:#fff0d4;border-color:#d6ac62;color:#75480d}
 @media(max-width:800px){.company-account-panel{flex-wrap:wrap}.company-opening-balance{width:100%}}
 @media(max-width:520px){.company-account-details{grid-template-columns:1fr}.company-opening-value strong{font-size:1.25rem}}
+#companyBulkActions[hidden],#companyBulkEdit[hidden]{display:none!important}
+#companyMovementsTable.bulk-editing .company-movement-row{background:#f4f8ff}
+#companyMovementsTable.bulk-editing .company-movement-row td{min-width:110px}
+#companyMovementsTable.bulk-editing .company-movement-row td:nth-child(3),#companyMovementsTable.bulk-editing .company-movement-row td:nth-child(5){min-width:175px}
+#companyMovementsTable.bulk-editing .company-movement-row td:last-child{min-width:105px}
+#companyMovementsTable.bulk-editing .company-movement-row .form-control{min-width:0}
+#companyMovementsTable.bulk-editing .company-movement-row .company-edit,#companyMovementsTable.bulk-editing .company-movement-row .company-delete,#companyMovementsTable.bulk-editing .company-movement-row .company-source-edit,#companyMovementsTable.bulk-editing .company-movement-row .company-source-delete{display:none}
 </style>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
@@ -145,6 +153,78 @@ document.addEventListener('DOMContentLoaded', () => {
     const endpoint = <?= json_encode(APP_URL . '/servicios/finanzas/cuenta_soles_empresa_guardar.php') ?>;
     const sourceEndpoint = <?= json_encode(APP_URL . '/servicios/finanzas/cuenta_soles_empresa_deposito.php') ?>;
     const csrf = <?= json_encode(csrf_token()) ?>;
+    const bulkEdit = document.getElementById('companyBulkEdit');
+    const bulkActions = document.getElementById('companyBulkActions');
+    const bulkSave = document.getElementById('companyBulkSave');
+    const bulkCancel = document.getElementById('companyBulkCancel');
+    const bulkTable = document.getElementById('companyMovementsTable');
+    const bulkRows = [...(bulkTable?.querySelectorAll('.company-movement-row') ?? [])];
+    let bulkOriginal = [];
+    const bulkFields = ['movement_date', 'expense', 'expense_concept', 'deposit', 'deposit_concept'];
+    const buildBulkInput = (field, value, source) => {
+        const input = document.createElement('input');
+        input.className = 'form-control form-control-sm';
+        input.dataset.bulkField = field;
+        input.value = value ?? '';
+        input.setAttribute('aria-label', {movement_date: 'Fecha', expense: 'Gastos', expense_concept: 'Concepto Gastos', deposit: 'Depósito', deposit_concept: 'Concepto Depósito'}[field]);
+        if (field === 'movement_date') { input.type = 'date'; input.required = true; }
+        if (field === 'expense' || field === 'deposit') { input.type = 'number'; input.min = '0'; input.max = '9999999999.99'; input.step = '0.01'; }
+        if (field === 'expense_concept' || field === 'deposit_concept') input.maxLength = field === 'expense_concept' && source === 'personal_deposit' ? 150 : 500;
+        return input;
+    };
+    bulkEdit?.addEventListener('click', () => {
+        bulkOriginal = bulkRows.map(row => [...row.cells].slice(0, 5).map(cell => cell.innerHTML));
+        bulkRows.forEach(row => {
+            const record = JSON.parse(row.dataset.record);
+            bulkFields.forEach((field, index) => row.cells[index].replaceChildren(buildBulkInput(field, record[field], record.source)));
+        });
+        bulkTable.classList.add('bulk-editing');
+        bulkEdit.hidden = true;
+        bulkActions.hidden = false;
+        bulkRows[0]?.querySelector('[data-bulk-field]')?.focus();
+    });
+    bulkCancel?.addEventListener('click', () => {
+        bulkRows.forEach((row, index) => [...row.cells].slice(0, 5).forEach((cell, column) => { cell.innerHTML = bulkOriginal[index][column]; }));
+        bulkTable.classList.remove('bulk-editing');
+        bulkActions.hidden = true;
+        bulkEdit.hidden = false;
+    });
+    bulkSave?.addEventListener('click', async () => {
+        const changes = [];
+        for (const row of bulkRows) {
+            const original = JSON.parse(row.dataset.record);
+            const values = {};
+            for (const field of bulkFields) {
+                const input = row.querySelector(`[data-bulk-field="${field}"]`);
+                if (!input.reportValidity()) return;
+                values[field] = input.value.trim();
+            }
+            const changed = bulkFields.some(field => {
+                const before = original[field] == null ? '' : String(original[field]);
+                return (field === 'expense' || field === 'deposit') ? Number(values[field] || 0) !== Number(before || 0) : values[field] !== before;
+            });
+            if (!changed) continue;
+            const expense = Number(values.expense || 0);
+            const deposit = Number(values.deposit || 0);
+            if (original.source === 'manual' && ((expense <= 0 && deposit <= 0) || (expense > 0 && deposit > 0))) { Swal.fire('Revise los importes', 'Ingrese solo un gasto o un depósito mayor que cero por movimiento.', 'warning'); return; }
+            if (original.source === 'personal_deposit' && expense <= 0) { Swal.fire('Revise el gasto', 'El gasto vinculado debe ser mayor que cero.', 'warning'); return; }
+            changes.push({source: original.source, id: Number(original.id), ...values});
+        }
+        if (!changes.length) { Swal.fire('Sin cambios', 'Modifique al menos un movimiento antes de guardar.', 'info'); return; }
+        const data = new FormData();
+        data.set('csrf_token', csrf);
+        data.set('rows', JSON.stringify(changes));
+        bulkSave.disabled = true;
+        try {
+            const response = await fetch(<?= json_encode(APP_URL . '/servicios/finanzas/cuenta_soles_empresa_edicion_masiva.php') ?>, {method: 'POST', body: data, credentials: 'same-origin', headers: {Accept: 'application/json'}});
+            const result = await response.json();
+            if (!response.ok || !result.ok || result.updated !== changes.length) throw new Error(result.message || 'No se pudieron guardar todos los movimientos.');
+            location.reload();
+        } catch (error) {
+            Swal.fire('Atención', error.message || 'No se pudieron guardar los movimientos.', 'warning');
+            bulkSave.disabled = false;
+        }
+    });
     async function submit(data, button) {
         data.set('csrf_token', csrf); button.disabled = true;
         try { const response = await fetch(endpoint, {method: 'POST', body: data, credentials: 'same-origin'}); const result = await response.json(); if (!response.ok || !result.ok) throw new Error(result.message || 'No se pudo guardar.'); location.reload(); }
@@ -180,8 +260,7 @@ document.addEventListener('DOMContentLoaded', () => {
         sourceForm.elements.monto.value = row.expense;
         sourceForm.elements.deposit.value = row.deposit;
         sourceForm.elements.deposit_concept.value = row.deposit_concept;
-        const batch = row.batch_id !== null;
-        sourceForm.elements.acreedor.readOnly = batch;
+        sourceForm.elements.acreedor.readOnly = false;
     });
     sourceForm.addEventListener('submit', event => {
         event.preventDefault();

@@ -68,9 +68,6 @@ try {
     $linkedStmt = $pdo->prepare('SELECT 1 FROM finance_pending_payment_abonos WHERE deposit_id = ? LIMIT 1');
     $linkedStmt->execute([$id]);
     if ($linkedStmt->fetchColumn()) throw new DomainException('Este depósito está aplicado a un pago pendiente. Desvincúlelo desde Ver pagos antes de editarlo.');
-    if ($source['batch_id'] !== null && $creditor !== (string) $source['creditor']) {
-        throw new DomainException('El nombre de un beneficiario de comprobante grupal no se puede cambiar aquí.');
-    }
     $workerId = $source['batch_id'] === null ? personal_deposit_unique_worker_id($creditor, personal_deposit_workers()) : null;
     $params = [$date, $creditor, number_format($expenseCents / 100, 2, '.', ''), (int) (current_user()['id'] ?? 0)];
     if ($source['batch_id'] === null) {

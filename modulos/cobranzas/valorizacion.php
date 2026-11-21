@@ -18,6 +18,15 @@ function valor_minutes(string $start, string $end): ?int
     return $minutes > 60 ? $minutes - 60 : null;
 }
 
+function valor_decimal_input(mixed $value): string|false|null
+{
+    $value = trim((string) $value);
+    if ($value === '') return null;
+    if (!preg_match('/^\d{1,10}(?:\.\d{1,2})?$/D', $value)) return false;
+    [$whole, $fraction] = array_pad(explode('.', $value, 2), 2, '');
+    return $whole . '.' . str_pad($fraction, 2, '0');
+}
+
 function valor_equipo_completo(string $equipment, string $plate): string
 {
     $equipment = trim($equipment);
@@ -55,11 +64,12 @@ if (!$valuationId) {
     require __DIR__ . '/valorizacion_listado.php';
     exit;
 }
-$valuationStmt = db()->prepare('SELECT id, client_id, lugar_servicio, equipo, capacidad, periodo FROM cobranzas_valorizaciones WHERE id = ?');
+$valuationStmt = db()->prepare('SELECT id, client_id, lugar_servicio, equipo, capacidad, periodo, movilizacion_activa FROM cobranzas_valorizaciones WHERE id = ?');
 $valuationStmt->execute([$valuationId]);
 $valuation = $valuationStmt->fetch();
 if (!$valuation) { http_response_code(404); exit('Valorización no encontrada.'); }
 $clientId = (int) $valuation['client_id'];
+$mobilityActive = (bool) $valuation['movilizacion_activa'];
 $client = null;
 $commercialContact = null;
 $serviceLocation = '';
@@ -70,9 +80,14 @@ $headerPeriodFrom = '';
 $headerPeriodTo = '';
 $records = [];
 $totalMinutes = 0;
+$mobilizationTotal = 0.0;
+$demobilizationTotal = 0.0;
 $firstServiceDate = null;
 $lastServiceDate = null;
 $totalPriceCents = 0;
+$mobilityCents = 0;
+$subtotalCents = 0;
+$igvCents = 0;
 $currency = ($_GET['moneda'] ?? 'PEN') === 'USD' ? 'USD' : 'PEN';
 $currencySymbol = $currency === 'USD' ? '$' : 'S/.';
 $equipmentRates = [];
@@ -123,6 +138,11 @@ if ($clientId) {
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         verify_csrf($_POST['csrf_token'] ?? null);
         $action = (string) ($_POST['action'] ?? '');
+        if ($action === 'activate_mobility') {
+            if (is_personal_role()) { http_response_code(403); exit('No tiene permiso para activar estos campos.'); }
+            db()->prepare('UPDATE cobranzas_valorizaciones SET movilizacion_activa = 1 WHERE id = ?')->execute([$valuationId]);
+            redirect($pageUrl);
+        }
         $recordId = filter_var($_POST['record_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
         $existing = null;
         if ($recordId) {
@@ -147,6 +167,9 @@ if ($clientId) {
             $start = (string) ($_POST['hora_inicio'] ?? '');
             $end = (string) ($_POST['hora_final'] ?? '');
             $notes = trim((string) ($_POST['observaciones'] ?? ''));
+            $hoursReason = trim((string) ($_POST['motivo_cambio_horas'] ?? ''));
+            $mobilization = $mobilityActive ? valor_decimal_input($_POST['movilizacion'] ?? '') : null;
+            $demobilization = $mobilityActive ? valor_decimal_input($_POST['desmovilizacion'] ?? '') : null;
             $parsedDate = preg_match('/^\d{4}-\d{2}-\d{2}$/D', $date) ? DateTimeImmutable::createFromFormat('!Y-m-d', $date) : false;
             $minutes = valor_minutes($start, $end);
             $inlineEdit = $existing && ($_POST['inline_edit'] ?? '') === '1';
@@ -162,6 +185,8 @@ if ($clientId) {
             elseif ($minutes === null) $error = 'Ingrese horas válidas: el turno debe durar más de una hora para descontar el refrigerio. Se admite cruzar la medianoche.';
             elseif ($inlineEdit && ($manualMinutes === null || $manualMinutes < 1)) $error = 'Ingrese las horas totales mayores que cero. Puede usar 9, 11 o el formato HH:MM.';
             elseif (mb_strlen($notes, 'UTF-8') > 2000) $error = 'Las observaciones no pueden superar 2000 caracteres.';
+            elseif (mb_strlen($hoursReason, 'UTF-8') > 1000) $error = 'El motivo de cambios de horas no puede superar 1000 caracteres.';
+            elseif ($mobilization === false || $demobilization === false) $error = 'Ingrese importes decimales válidos para movilización y desmovilización.';
             elseif (!$existing && ($_FILES['adjunto']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) $error = 'Adjunte la imagen o PDF original.';
             elseif (($_FILES['adjunto']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK && (int) ($_FILES['adjunto']['size'] ?? 0) > 5 * 1024 * 1024) $error = 'El archivo supera 5 MB. Reduzca la imagen o seleccione un PDF más pequeño.';
             else {
@@ -171,16 +196,16 @@ if ($clientId) {
                     $file = upload_file($_FILES['adjunto'] ?? [], 'cobranzas_valorizacion', document_attachment_mimes());
                     $newPath = $file['path'];
                     if ($existing) {
-                        $sql = 'UPDATE cobranzas_valorizacion_registros SET equipo = ?, operador = ?, fecha_servicio = ?, hora_inicio = ?, hora_final = ?, horas_total_minutos = ?, observaciones = ?';
-                        $values = [$equipment, $operator ?: null, $date, $start, $end, $minutes, $notes ?: null];
+                        $sql = 'UPDATE cobranzas_valorizacion_registros SET equipo = ?, operador = ?, fecha_servicio = ?, movilizacion = ?, desmovilizacion = ?, hora_inicio = ?, hora_final = ?, horas_total_minutos = ?, motivo_cambio_horas = ?, observaciones = ?';
+                        $values = [$equipment, $operator ?: null, $date, $mobilization, $demobilization, $start, $end, $minutes, $hoursReason ?: null, $notes ?: null];
                         if ($newPath) { $sql .= ', archivo_path = ?, archivo_nombre_original = ?'; array_push($values, $newPath, $file['name']); }
                         $sql .= ' WHERE id = ? AND valorizacion_id = ?';
                         array_push($values, $recordId, $valuationId);
                         db()->prepare($sql)->execute($values);
                         if ($newPath) delete_uploaded_file($existing['archivo_path']);
                     } else {
-                        db()->prepare('INSERT INTO cobranzas_valorizacion_registros (client_id, valorizacion_id, equipo, placa_serie, operador, fecha_servicio, hora_inicio, hora_final, horas_total_minutos, observaciones, registered_by_user_id, archivo_path, archivo_nombre_original) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-                            ->execute([$clientId, $valuationId, $equipment, $plate, $operator ?: null, $date, $start, $end, $minutes, $notes ?: null, (int) (current_user()['id'] ?? 0) ?: null, $newPath, $file['name']]);
+                        db()->prepare('INSERT INTO cobranzas_valorizacion_registros (client_id, valorizacion_id, equipo, placa_serie, operador, fecha_servicio, movilizacion, desmovilizacion, hora_inicio, hora_final, horas_total_minutos, motivo_cambio_horas, observaciones, registered_by_user_id, archivo_path, archivo_nombre_original) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+                            ->execute([$clientId, $valuationId, $equipment, $plate, $operator ?: null, $date, $mobilization, $demobilization, $start, $end, $minutes, $hoursReason ?: null, $notes ?: null, (int) (current_user()['id'] ?? 0) ?: null, $newPath, $file['name']]);
                     }
                     db()->prepare('UPDATE cobranzas_valorizaciones SET registered_by_user_id = COALESCE(registered_by_user_id, ?) WHERE id = ?')
                         ->execute([(int) (current_user()['id'] ?? 0) ?: null, $valuationId]);
@@ -210,7 +235,7 @@ if ($clientId) {
     }
     try {
         $offset = ($page - 1) * 25;
-        $stmt = db()->prepare('SELECT r.id, r.equipo, r.placa_serie, r.operador, r.fecha_servicio, r.hora_inicio, r.hora_final, r.horas_total_minutos, r.observaciones, r.archivo_path, COALESCE(u.name, \'\') AS registrado_por FROM cobranzas_valorizacion_registros r LEFT JOIN users u ON u.id = r.registered_by_user_id WHERE r.valorizacion_id = ?' . $periodWhere . ' ORDER BY r.fecha_servicio DESC, r.id DESC LIMIT 26 OFFSET ' . $offset);
+        $stmt = db()->prepare('SELECT r.id, r.equipo, r.placa_serie, r.operador, r.fecha_servicio, r.movilizacion, r.desmovilizacion, r.hora_inicio, r.hora_final, r.horas_total_minutos, r.motivo_cambio_horas, r.observaciones, r.archivo_path, COALESCE(u.name, \'\') AS registrado_por FROM cobranzas_valorizacion_registros r LEFT JOIN users u ON u.id = r.registered_by_user_id WHERE r.valorizacion_id = ?' . $periodWhere . ' ORDER BY r.fecha_servicio DESC, r.id DESC LIMIT 26 OFFSET ' . $offset);
         $stmt->execute(array_merge([$valuationId], $periodParams));
         $records = $stmt->fetchAll();
         $hasMore = count($records) > 25;
@@ -224,9 +249,12 @@ if ($clientId) {
         $dates = $datesStmt->fetch();
         $firstServiceDate = $dates['first_date'] ?? null;
         $lastServiceDate = $dates['last_date'] ?? null;
-        $hoursStmt = db()->prepare('SELECT COALESCE(SUM(horas_total_minutos), 0) FROM cobranzas_valorizacion_registros WHERE valorizacion_id = ?' . $periodWhere);
+        $hoursStmt = db()->prepare('SELECT COALESCE(SUM(horas_total_minutos), 0) AS total_minutos, COALESCE(SUM(movilizacion), 0) AS total_movilizacion, COALESCE(SUM(desmovilizacion), 0) AS total_desmovilizacion FROM cobranzas_valorizacion_registros WHERE valorizacion_id = ?' . $periodWhere);
         $hoursStmt->execute(array_merge([$valuationId], $periodParams));
-        $totalMinutes = (int) $hoursStmt->fetchColumn();
+        $periodTotals = $hoursStmt->fetch();
+        $totalMinutes = (int) ($periodTotals['total_minutos'] ?? 0);
+        $mobilizationTotal = (float) ($periodTotals['total_movilizacion'] ?? 0);
+        $demobilizationTotal = (float) ($periodTotals['total_desmovilizacion'] ?? 0);
         $equipmentKey = valorizacion_clave_tarifa($headerEquipment);
         if ($totalMinutes > 0 && $equipmentKey !== '') {
             $equipmentRates[$equipmentKey] = ['name' => valorizacion_nombre_tarifa($headerEquipment), 'price' => '37.50', 'minutes' => $totalMinutes];
@@ -238,6 +266,11 @@ if ($clientId) {
         foreach ($equipmentRates as $rate) {
             $totalPriceCents += (int) round(((float) $rate['price']) * 100 * $rate['minutes'] / 60);
         }
+        $mobilityCents = $mobilityActive
+            ? (int) round($mobilizationTotal * 100) + (int) round($demobilizationTotal * 100)
+            : 0;
+        $subtotalCents = $totalPriceCents + $mobilityCents;
+        $igvCents = (int) round($subtotalCents * 18 / 100);
     } catch (PDOException $exception) {
         error_log('Error al listar Cobranzas Valorización: ' . $exception->getMessage());
         $error = 'No se pudieron cargar los registros. Ejecute database/cobranzas_valorizaciones_multiples.sql en la base de datos.';
@@ -248,6 +281,7 @@ require __DIR__ . '/../../includes/header.php';
 <style>
 .cv-panel.work-panel{padding:16px 18px!important;margin-bottom:12px!important}.cv-client-layout{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(260px,1fr);gap:24px}.cv-client-layout.cv-client-layout-empty{grid-template-columns:1fr}.cv-client-main,.cv-client-supplier{min-width:0}.cv-client-row{display:grid;grid-template-columns:124px minmax(0,1fr);align-items:center;gap:10px;min-height:38px;margin-bottom:8px}.cv-client-row:last-child{margin-bottom:0}.cv-client-row label,.cv-client-row .cv-client-detail-label{margin:0;color:#344761;font-size:.83rem;font-weight:700}.cv-client-row-value{min-width:0}.cv-client-row-value .select2-container{width:100%!important}.cv-client-row .form-control{height:38px}.cv-client-detail-value{display:block;min-width:0;overflow-wrap:anywhere;font-weight:600}.cv-detail-error{display:block;color:#b42318;font-size:.75rem;margin-top:3px}@media(max-width:900px){.cv-client-layout{grid-template-columns:1fr;gap:8px}.cv-client-supplier{padding-top:10px;border-top:1px solid #e2e8f0}}@media(max-width:600px){.cv-client-row{grid-template-columns:1fr;gap:3px;margin-bottom:12px}}
 .cv-table{min-width:0;width:100%;table-layout:fixed}.cv-table th{background:#f4f7fb;color:#415474;font-size:.68rem;text-transform:uppercase}.cv-table td,.cv-table th{padding:.55rem .35rem;vertical-align:middle;overflow-wrap:anywhere}.cv-preview{display:flex;align-items:center;justify-content:center;min-height:45vh;background:#f8fafc}.cv-preview img{max-width:100%;max-height:72vh;object-fit:contain}.cv-preview iframe{width:100%;height:72vh;border:0}
+.cv-table.cv-with-mobility{min-width:1400px}.cv-table.cv-with-mobility input[type=number]{min-width:72px}
 .cv-preview.cv-preview-image{display:block;overflow:auto;max-height:72vh;text-align:center}.cv-preview.cv-preview-image img{display:block;width:auto;height:auto;max-width:100%;max-height:68vh;margin:auto;object-fit:contain}.cv-preview.cv-preview-image img.is-zoomed{max-width:none;max-height:none;margin:0 auto}.cv-zoom-tools[hidden]{display:none!important}
 @media(max-width:575px){#cvFileModal .modal-header{flex-wrap:wrap;gap:8px}#cvFileModal .modal-header .btn-close{margin-left:auto}#cvFileDownload{margin-right:0!important}}
 @media(max-width:767px){.cv-table{min-width:1000px}.cv-table td,.cv-table th{overflow-wrap:normal;word-break:normal}.cv-table tbody td{white-space:nowrap}.cv-table tbody td:nth-child(2),.cv-table tbody td:nth-child(7),.cv-table tbody td:nth-child(8){white-space:normal;overflow-wrap:anywhere}.cv-panel .table-responsive{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}}
@@ -255,6 +289,8 @@ require __DIR__ . '/../../includes/header.php';
 .cv-visual-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.cv-visual-card{min-width:0;padding:7px;background:#fff;border:1px solid #d9e3ef;border-radius:7px;cursor:text}.cv-visual-card span{display:block;margin-bottom:4px;color:#334155}.cv-visual-card canvas{display:block;width:100%;height:auto;max-height:96px;object-fit:contain;object-position:left center;background:#fff}.cv-visual-card:first-child{grid-column:1/-1}@media(max-width:575px){.cv-visual-grid{grid-template-columns:1fr}.cv-visual-card:first-child{grid-column:auto}}
 .cv-entry[hidden],.cv-upload #cvProgressBox[hidden]{display:none!important}.cv-hidden-source,#cvReviewSuggestions{display:none}.cv-entry.needs-file .cv-hidden-source,.cv-entry.editing .cv-hidden-source{display:block;margin-bottom:12px}.cv-entry.needs-file #cvPreviewHost,.cv-entry.editing #cvPreviewHost{display:none}.cv-entry .cv-review-fields .row{margin-left:0;margin-right:0}.cv-upload .progress{height:10px}.cv-entry{scroll-margin-top:20px}
 .cv-record .cv-input{display:none}.cv-record.cv-editing .cv-view{display:none}.cv-record.cv-editing .cv-input{display:block}.cv-record.cv-editing button.cv-input{display:inline-flex}.cv-record.cv-editing{background:#eef5ff}.cv-record .cv-row-actions{display:flex;align-items:center;gap:5px;white-space:nowrap}.cv-record .cv-inline-form{display:none}.cv-record .cv-inline-total{min-width:50px}.cv-record .form-control-sm{min-width:0;width:100%}
+.cv-table.cv-bulk-editing .cv-record{background:#f5f9ff}.cv-table.cv-bulk-editing .cv-record .cv-view{display:none}.cv-table.cv-bulk-editing .cv-record .cv-input{display:block}.cv-table.cv-bulk-editing .cv-record button.cv-input{display:inline-flex}.cv-table.cv-bulk-editing .cv-inline-edit,.cv-table.cv-bulk-editing .cv-inline-save,.cv-table.cv-bulk-editing .cv-inline-cancel,.cv-table.cv-bulk-editing .cvDelete{display:none!important}
+.cv-bulk-actions[hidden]{display:none!important}
 .cv-table th:last-child,.cv-table td:last-child{text-align:center}
 .cv-table tfoot td{background:#f4f7fb;border-top:1px solid #d7e2f0;color:#0f172a;font-weight:800}.cv-table tfoot .cv-hours-label{text-align:right;font-size:.85rem;white-space:nowrap;font-weight:800}.cv-table tfoot .cv-hours-value{font-size:1.05rem;color:#0b3b80;font-weight:800}
 .cv-table tfoot .cv-rate-label{text-align:right;font-size:.85rem}.cv-table tfoot .input-group{flex-wrap:nowrap}.cv-table tfoot .cv-rate-input{flex:1 1 0;width:1%;min-width:0;padding:.3rem .35rem;font-weight:700}.cv-table tfoot .input-group-text{flex:0 0 auto;padding:.25rem .35rem}.cv-table tfoot .cv-rate-status{font-size:.75rem;font-weight:600;color:#08764d}.cv-table tfoot .cv-rate-status.is-error{color:#b42318}
@@ -304,6 +340,7 @@ require __DIR__ . '/../../includes/header.php';
 @media(max-width:900px){.cv-client-panel .cv-client-layout{grid-template-columns:1fr;gap:12px}.cv-client-panel .cv-client-supplier{padding:10px 0 0;border:0;border-top:1px solid #dedbd4}.cv-client-panel .cv-client-supplier .cv-client-row{grid-template-columns:124px minmax(0,1fr)}}
 @media(max-width:600px){.cv-client-panel .cv-client-row,.cv-client-panel .cv-client-supplier .cv-client-row{grid-template-columns:1fr;gap:3px}.cv-upload .d-flex>label.btn-primary{width:100%;margin-top:6px}.cv-upload .d-flex>div{width:100%}}
 @media(max-width:600px){.cv-client-panel .cv-equipment-fields{grid-template-columns:1fr;gap:8px}}
+.cv-operator-bulk-modal .modal-header{border:0;background:linear-gradient(120deg,#f2f7ff,#eefcf5)}.cv-operator-bulk-intro{display:flex;gap:11px;align-items:flex-start;margin-bottom:18px;padding:13px;border:1px solid #cfe0f8;border-radius:11px;background:#f7faff;color:#24466f}.cv-operator-bulk-intro>i{display:grid;width:32px;height:32px;flex:0 0 32px;place-items:center;border-radius:9px;background:#2563eb;color:#fff}.cv-operator-bulk-intro strong,.cv-operator-bulk-intro span{display:block}.cv-operator-bulk-intro span{margin-top:3px;font-size:.82rem;line-height:1.4;color:#58708f}.cv-operator-bulk-review{display:flex;gap:12px;align-items:flex-start;padding:16px;border:1px solid #f0c36d;border-radius:11px;background:linear-gradient(120deg,#fffaf0,#fff4d9);color:#664400}.cv-operator-bulk-review>i{display:grid;width:34px;height:34px;flex:0 0 34px;place-items:center;border-radius:10px;background:#c77c08;color:#fff}.cv-operator-bulk-review small,.cv-operator-bulk-review strong{display:block}.cv-operator-bulk-review strong{margin-top:4px;color:#8a5600;font-size:1.05rem;overflow-wrap:anywhere}.cv-operator-bulk-review p{margin:7px 0 0;font-size:.82rem;line-height:1.4;color:#7c5a1f}
 </style>
 <div class="page-title"><div><h1>Valorización</h1><p>Cobranzas por cliente.</p></div><a class="btn btn-outline-secondary" href="<?= e(APP_URL . '/modulos/cobranzas/valorizacion.php') ?>"><i class="fa-solid fa-arrow-left me-1" aria-hidden="true"></i>Volver al listado</a></div>
 <section class="work-panel cv-panel cv-client-panel"><div class="cv-client-layout<?= $client ? '' : ' cv-client-layout-empty' ?>">
@@ -332,19 +369,83 @@ require __DIR__ . '/../../includes/header.php';
 <?php require __DIR__ . '/valorizacion_form.php'; ?>
 <section class="work-panel cv-panel"><div class="mb-3"><h2 class="h5 mb-0">Registros de valorización</h2></div><div class="cv-period-actions mb-3"><form class="cv-period-tools" id="cvPeriodForm" method="get" action="<?= e(APP_URL . '/modulos/cobranzas/valorizacion.php') ?>"><input type="hidden" name="valorizacion_id" value="<?= (int) $valuationId ?>"><div class="cv-period-field"><label for="cvPeriodMode">Periodo</label><select class="form-select form-select-sm" id="cvPeriodMode" name="periodo"><option value="mes" <?= $period['mode'] === 'mes' ? 'selected' : '' ?>>Por mes</option><option value="fechas" <?= $period['mode'] === 'fechas' ? 'selected' : '' ?>>Entre fechas</option></select></div><div class="cv-period-field" id="cvPeriodMonthField" <?= $period['mode'] !== 'mes' ? 'hidden' : '' ?>><label for="cvPeriodMonth">Mes</label><input class="form-control form-control-sm" id="cvPeriodMonth" name="mes" type="month" value="<?= e($period['month']) ?>" <?= $period['mode'] === 'mes' ? 'required' : 'disabled' ?>></div><div class="cv-period-field" id="cvPeriodFromField" <?= $period['mode'] !== 'fechas' ? 'hidden' : '' ?>><label for="cvPeriodFrom">Desde</label><input class="form-control form-control-sm" id="cvPeriodFrom" name="desde" type="date" value="<?= e($period['from']) ?>" <?= $period['mode'] === 'fechas' ? 'required' : 'disabled' ?>></div><div class="cv-period-field" id="cvPeriodToField" <?= $period['mode'] !== 'fechas' ? 'hidden' : '' ?>><label for="cvPeriodTo">Hasta</label><input class="form-control form-control-sm" id="cvPeriodTo" name="hasta" type="date" value="<?= e($period['to']) ?>" <?= $period['mode'] === 'fechas' ? 'required' : 'disabled' ?>></div><button class="btn btn-outline-primary" type="submit">Ver</button></form><?php if (!is_personal_role()): ?><button class="btn btn-primary cv-export-pdf" id="cvExportPdf" type="button" data-url="<?= e(APP_URL . '/servicios/cobranzas/valorizacion_reporte_datos.php?' . http_build_query($periodQuery)) ?>" <?= $totalMinutes <= 0 ? 'disabled' : '' ?>><i class="fa-solid fa-file-pdf me-1" aria-hidden="true"></i>PDF Interno</button><button class="btn btn-danger cv-export-pdf" id="cvExportPdfCobranzas" type="button" data-mode="cobranzas" data-url="<?= e(APP_URL . '/servicios/cobranzas/valorizacion_reporte_datos.php?' . http_build_query($periodQuery)) ?>" <?= $totalMinutes <= 0 ? 'disabled' : '' ?>><i class="fa-solid fa-file-pdf me-1" aria-hidden="true"></i>PDF Cobranzas</button><?php endif; ?><div class="cv-period-field"><label for="cvCurrency">Moneda</label><select class="form-select form-select-sm" id="cvCurrency" name="moneda" form="cvPeriodForm"><option value="PEN" <?= $currency === 'PEN' ? 'selected' : '' ?>>Soles (S/.)</option><option value="USD" <?= $currency === 'USD' ? 'selected' : '' ?>>Dólares ($)</option></select></div></div>
 <?php if ($error !== '' && (($_POST['action'] ?? '') !== 'save' || ($_POST['inline_edit'] ?? '') === '1')): ?><div class="alert alert-danger py-2" role="alert"><?= e($error) ?></div><?php endif; ?>
-<div class="table-responsive border rounded"><table class="table table-hover align-middle mb-0 cv-table"><colgroup><col style="width:18%"><col style="width:14%"><col style="width:10%"><col style="width:8%"><col style="width:7%"><col style="width:9%"><col style="width:12%"><col style="width:10%"><col style="width:12%"></colgroup><thead><tr><th>Equipo</th><th>Operador</th><th>Fecha del servicio</th><th>Hora de inicio</th><th>Hora final</th><th>Horas en total</th><th>Observaciones</th><th>Registrado por</th><th>Acciones</th></tr></thead><tbody>
-<?php if (!$records): ?><tr><td colspan="9" class="text-center text-muted py-4">No hay registros en el periodo seleccionado.</td></tr><?php endif; ?>
+<div class="d-flex justify-content-end gap-2 flex-wrap mb-3">
+    <?php if (!$mobilityActive && !is_personal_role()): ?><button class="btn btn-outline-success btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#cvMobilityModal"><i class="fa-solid fa-truck-fast me-1" aria-hidden="true"></i>Activar Movilización y Desmovilización</button><?php endif; ?>
+    <?php if ($mobilityActive): ?><span class="badge text-bg-success align-self-center">Movilización y Desmovilización activadas</span><?php endif; ?>
+    <button class="btn btn-outline-primary btn-sm" id="cvBulkEdit" type="button"><i class="fa-solid fa-pen-to-square me-1" aria-hidden="true"></i>Editar masivamente</button>
+    <div class="d-flex gap-2 cv-bulk-actions" id="cvBulkActions" hidden>
+        <button class="btn btn-primary btn-sm" id="cvBulkSave" type="button"><i class="fa-solid fa-check me-1" aria-hidden="true"></i>Guardar</button>
+        <button class="btn btn-outline-secondary btn-sm" id="cvBulkCancel" type="button">Cancelar</button>
+    </div>
+    <button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#cvOperatorBulkModal">
+        <i class="fa-solid fa-users-gear me-1" aria-hidden="true"></i>Corregir operador masivamente
+    </button>
+</div>
+<?php if (!$mobilityActive && !is_personal_role()): ?>
+<div class="modal fade" id="cvMobilityModal" tabindex="-1" aria-labelledby="cvMobilityTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header"><h2 class="modal-title h5" id="cvMobilityTitle">Activar Movilización y Desmovilización</h2><button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+        <div class="modal-body"><p class="mb-0">Se habilitarán dos campos junto a la fecha de servicio en los registros de esta valorización. Podrá ingresar sus valores decimales manualmente.</p></div>
+        <div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancelar</button><form method="post" action="<?= e(APP_URL . '/' . $pageUrl) ?>"><input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="activate_mobility"><button class="btn btn-success" type="submit">Sí, activar campos</button></form></div>
+    </div></div>
+</div>
+<?php endif; ?>
+<div class="modal fade" id="cvOperatorBulkModal" tabindex="-1" aria-labelledby="cvOperatorBulkTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form class="modal-content cv-operator-bulk-modal" id="cvOperatorBulkForm"
+              data-endpoint="<?= e(APP_URL . '/servicios/cobranzas/valorizacion_operador_masivo.php') ?>">
+            <div class="modal-header">
+                <h2 class="modal-title h5" id="cvOperatorBulkTitle">Corregir operador masivamente</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3" id="cvBulkEntryStep">
+                    <label class="form-label" for="cvBulkNewOperator">Nombre correcto del operador</label>
+                    <input class="form-control" id="cvBulkNewOperator" name="operador_nuevo" maxlength="150" autocomplete="off" placeholder="Ejemplo: Franklin Picha Quispe" required autofocus>
+                </div>
+                <div id="cvBulkReviewStep" hidden>
+                    <div class="cv-operator-bulk-review">
+                        <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+                        <div>
+                            <small>Se aplicará este nombre a todos los registros</small>
+                            <strong id="cvBulkOperatorPreview"></strong>
+                            <p>Esta acción reemplaza toda la columna Operador de esta valorización. Las horas, montos, archivos y demás datos no se modificarán.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="alert alert-danger mt-3 mb-0" id="cvBulkOperatorError" role="alert" hidden></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancelar</button>
+                <button class="btn btn-outline-primary" id="cvBulkBack" type="button" hidden><i class="fa-solid fa-arrow-left me-1" aria-hidden="true"></i>Volver</button>
+                <button class="btn btn-primary" id="cvBulkSubmit" type="submit"><i class="fa-solid fa-arrow-right me-1" aria-hidden="true"></i>Continuar</button>
+            </div>
+            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+            <input type="hidden" name="valorizacion_id" value="<?= (int) $valuationId ?>">
+        </form>
+    </div>
+</div>
+<div class="table-responsive border rounded"><table class="table table-hover align-middle mb-0 cv-table<?= $mobilityActive ? ' cv-with-mobility' : '' ?>"><colgroup>
+<?php if ($mobilityActive): ?><col style="width:12%"><col style="width:9%"><col style="width:9%"><col style="width:8%"><col style="width:8%"><col style="width:6%"><col style="width:6%"><col style="width:6%"><col style="width:10%"><col style="width:8%"><col style="width:8%"><col style="width:10%">
+<?php else: ?><col style="width:16%"><col style="width:12%"><col style="width:10%"><col style="width:8%"><col style="width:7%"><col style="width:8%"><col style="width:13%"><col style="width:10%"><col style="width:8%"><col style="width:8%"><?php endif; ?>
+</colgroup><thead><tr><th>Equipo</th><th>Operador</th><th>Fecha del servicio</th><?php if ($mobilityActive): ?><th>Movilización</th><th>Desmovilización</th><?php endif; ?><th>Hora de inicio</th><th>Hora final</th><th>Horas en total</th><th>Motivo de cambios de horas total</th><th>Observaciones</th><th>Registrado por</th><th>Acciones</th></tr></thead><tbody>
+<?php if (!$records): ?><tr><td colspan="<?= $mobilityActive ? 12 : 10 ?>" class="text-center text-muted py-4">No hay registros en el periodo seleccionado.</td></tr><?php endif; ?>
 <?php foreach ($records as $record): require __DIR__ . '/valorizacion_row.php'; endforeach; ?>
 </tbody><tfoot>
-<tr><td colspan="5" class="cv-hours-label">Horas totales:</td><td colspan="2" class="cv-hours-value"><?= sprintf('%02d:%02d', intdiv($totalMinutes, 60), $totalMinutes % 60) ?></td><td colspan="2"></td></tr>
+<tr><td colspan="<?= $mobilityActive ? 7 : 5 ?>" class="cv-hours-label">Horas totales:</td><td colspan="2" class="cv-hours-value"><?= sprintf('%02d:%02d', intdiv($totalMinutes, 60), $totalMinutes % 60) ?></td><td colspan="3"></td></tr>
 <?php if (!is_personal_role()): ?>
 <?php foreach ($equipmentRates as $equipmentKey => $rate): ?>
-<tr><td colspan="5" class="cv-rate-label">Precio por hora <?= e($rate['name']) ?>:</td><td colspan="2"><div class="input-group input-group-sm"><span class="input-group-text cv-currency-symbol"><?= e($currencySymbol) ?></span><input class="form-control form-control-sm cv-rate-input" type="number" name="precio_hora" value="<?= e($rate['price']) ?>" data-minutes="<?= (int) $rate['minutes'] ?>" data-saved-price="<?= e($rate['price']) ?>" data-client-id="<?= (int) $clientId ?>" data-valuation-id="<?= (int) $valuationId ?>" data-equipment-key="<?= e($equipmentKey) ?>" data-csrf="<?= e(csrf_token()) ?>" data-endpoint="<?= e(APP_URL . '/servicios/cobranzas/valorizacion_precio.php') ?>" min="0" max="9999999999.99" step="0.01" required aria-label="Precio por hora <?= e($rate['name']) ?>"></div></td><td colspan="2"><span class="cv-rate-status" role="status" aria-live="polite"></span></td></tr>
+<tr><td colspan="<?= $mobilityActive ? 7 : 5 ?>" class="cv-rate-label">Precio por hora <?= e($rate['name']) ?>:</td><td colspan="2"><div class="input-group input-group-sm"><span class="input-group-text cv-currency-symbol"><?= e($currencySymbol) ?></span><input class="form-control form-control-sm cv-rate-input" type="number" name="precio_hora" value="<?= e($rate['price']) ?>" data-minutes="<?= (int) $rate['minutes'] ?>" data-saved-price="<?= e($rate['price']) ?>" data-client-id="<?= (int) $clientId ?>" data-valuation-id="<?= (int) $valuationId ?>" data-equipment-key="<?= e($equipmentKey) ?>" data-csrf="<?= e(csrf_token()) ?>" data-endpoint="<?= e(APP_URL . '/servicios/cobranzas/valorizacion_precio.php') ?>" min="0" max="9999999999.99" step="0.01" required aria-label="Precio por hora <?= e($rate['name']) ?>"></div></td><td colspan="3"><span class="cv-rate-status" role="status" aria-live="polite"></span></td></tr>
 <?php endforeach; ?>
 <?php if ($firstServiceDate && $lastServiceDate): ?>
-<tr><td colspan="5" class="cv-period-label">Precio del <?= e(date('d/m/Y', strtotime($firstServiceDate))) ?> al <?= e(date('d/m/Y', strtotime($lastServiceDate))) ?>:</td><td colspan="2" class="cv-period-value" id="cvPeriodPrice"><span class="cv-currency-symbol"><?= e($currencySymbol) ?></span> <span class="cv-money-amount"><?= number_format($totalPriceCents / 100, 2, '.', ',') ?></span></td><td colspan="2"></td></tr>
-<tr><td colspan="5" class="cv-period-label">IGV (18 %):</td><td colspan="2" class="cv-period-value" id="cvPeriodIgv"><span class="cv-currency-symbol"><?= e($currencySymbol) ?></span> <span class="cv-money-amount"><?= number_format(round($totalPriceCents * 18 / 100) / 100, 2, '.', ',') ?></span></td><td colspan="2"></td></tr>
-<tr><td colspan="5" class="cv-period-label">Monto total:</td><td colspan="2" class="cv-period-value" id="cvGrandTotal"><span class="cv-currency-symbol"><?= e($currencySymbol) ?></span> <span class="cv-money-amount"><?= number_format(($totalPriceCents + (int) round($totalPriceCents * 18 / 100)) / 100, 2, '.', ',') ?></span></td><td colspan="2"></td></tr>
+<tr><td colspan="<?= $mobilityActive ? 7 : 5 ?>" class="cv-period-label">Precio del <?= e(date('d/m/Y', strtotime($firstServiceDate))) ?> al <?= e(date('d/m/Y', strtotime($lastServiceDate))) ?>:</td><td colspan="2" class="cv-period-value" id="cvPeriodPrice"><span class="cv-currency-symbol"><?= e($currencySymbol) ?></span> <span class="cv-money-amount"><?= number_format($totalPriceCents / 100, 2, '.', ',') ?></span></td><td colspan="3"></td></tr>
+<?php if ($mobilityActive): ?>
+<tr><td colspan="7" class="cv-period-label">Total de movilización<span class="cv-mobility-equipment"><?= $headerEquipment !== '' ? ' ' . e($headerEquipment) : '' ?></span>:</td><td colspan="2" class="cv-period-value"><span class="cv-currency-symbol"><?= e($currencySymbol) ?></span> <?= number_format($mobilizationTotal, 2, '.', ',') ?></td><td colspan="3"></td></tr>
+<tr><td colspan="7" class="cv-period-label">Total de desmovilización<span class="cv-mobility-equipment"><?= $headerEquipment !== '' ? ' ' . e($headerEquipment) : '' ?></span>:</td><td colspan="2" class="cv-period-value"><span class="cv-currency-symbol"><?= e($currencySymbol) ?></span> <?= number_format($demobilizationTotal, 2, '.', ',') ?></td><td colspan="3"></td></tr>
+<tr><td colspan="7" class="cv-period-label">Subtotal:</td><td colspan="2" class="cv-period-value" id="cvSubtotal" data-mobility-cents="<?= $mobilityCents ?>"><span class="cv-currency-symbol"><?= e($currencySymbol) ?></span> <span class="cv-money-amount"><?= number_format($subtotalCents / 100, 2, '.', ',') ?></span></td><td colspan="3"></td></tr>
+<?php endif; ?>
+<tr><td colspan="<?= $mobilityActive ? 7 : 5 ?>" class="cv-period-label">IGV (18 %):</td><td colspan="2" class="cv-period-value" id="cvPeriodIgv"><span class="cv-currency-symbol"><?= e($currencySymbol) ?></span> <span class="cv-money-amount"><?= number_format($igvCents / 100, 2, '.', ',') ?></span></td><td colspan="3"></td></tr>
+<tr><td colspan="<?= $mobilityActive ? 7 : 5 ?>" class="cv-period-label">Monto total:</td><td colspan="2" class="cv-period-value" id="cvGrandTotal"><span class="cv-currency-symbol"><?= e($currencySymbol) ?></span> <span class="cv-money-amount"><?= number_format(($subtotalCents + $igvCents) / 100, 2, '.', ',') ?></span></td><td colspan="3"></td></tr>
 <?php endif; ?>
 <?php endif; ?>
 </tfoot></table></div><?php if ($page > 1 || $hasMore): ?><nav class="d-flex justify-content-end gap-2 mt-3" aria-label="Páginas de registros"><?php if ($page > 1): ?><a class="btn btn-sm btn-outline-primary" href="<?= e(APP_URL . '/' . $pageUrl . '&pagina=' . ($page - 1)) ?>">Anterior</a><?php endif; ?><?php if ($hasMore): ?><a class="btn btn-sm btn-outline-primary" href="<?= e(APP_URL . '/' . $pageUrl . '&pagina=' . ($page + 1)) ?>">Siguiente</a><?php endif; ?></nav><?php endif; ?></section>
@@ -353,7 +454,7 @@ require __DIR__ . '/../../includes/header.php';
 <?php endif; ?>
 <script type="module" src="<?= e(APP_URL . '/recursos/js/cobranzas_valorizacion_archivo.js?v=8') ?>"></script>
 <script type="module" src="<?= e(APP_URL . '/recursos/js/cobranzas_valorizacion_ocr.js?v=22') ?>"></script>
-<script type="module" src="<?= e(APP_URL . '/recursos/js/cobranzas_valorizacion_reporte.js?v=33') ?>"></script>
+<script type="module" src="<?= e(APP_URL . '/recursos/js/cobranzas_valorizacion_reporte.js?v=35') ?>"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     const periodMode = document.getElementById('cvPeriodMode');
@@ -425,6 +526,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const result = await response.json();
             if (!response.ok || !result.ok) throw new Error(result.message || 'No se pudo guardar el dato.');
             input.value = data.get('valor');
+            if (input.dataset.field === 'equipo') {
+                document.querySelectorAll('.cv-mobility-equipment').forEach(label => {
+                    label.textContent = input.value ? ` ${input.value}` : '';
+                });
+            }
         } catch (exception) {
             error.textContent = exception.message || 'No se pudo guardar el dato.';
         } finally {
@@ -465,6 +571,69 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         from.addEventListener('change', savePeriod);
         to.addEventListener('change', savePeriod);
+    }
+    const bulkOperatorForm = document.getElementById('cvOperatorBulkForm');
+    if (bulkOperatorForm) {
+        const newOperator = document.getElementById('cvBulkNewOperator');
+        const submit = document.getElementById('cvBulkSubmit');
+        const back = document.getElementById('cvBulkBack');
+        const entryStep = document.getElementById('cvBulkEntryStep');
+        const reviewStep = document.getElementById('cvBulkReviewStep');
+        const preview = document.getElementById('cvBulkOperatorPreview');
+        const error = document.getElementById('cvBulkOperatorError');
+        let reviewingBulkChange = false;
+        const setError = message => { error.textContent = message; error.hidden = !message; };
+        const showBulkEntry = (focus = true) => {
+            reviewingBulkChange = false;
+            entryStep.hidden = false;
+            reviewStep.hidden = true;
+            back.hidden = true;
+            submit.className = 'btn btn-primary';
+            submit.innerHTML = '<i class="fa-solid fa-arrow-right me-1" aria-hidden="true"></i>Continuar';
+            if (focus) newOperator.focus();
+        };
+        const showBulkReview = () => {
+            reviewingBulkChange = true;
+            entryStep.hidden = true;
+            reviewStep.hidden = false;
+            preview.textContent = newOperator.value.trim();
+            back.hidden = false;
+            submit.className = 'btn btn-danger';
+            submit.innerHTML = '<i class="fa-solid fa-check me-1" aria-hidden="true"></i>Sí, reemplazar todo';
+        };
+        back.addEventListener('click', showBulkEntry);
+        bulkOperatorForm.addEventListener('submit', async event => {
+            event.preventDefault();
+            if (!bulkOperatorForm.reportValidity()) return;
+            if (!reviewingBulkChange) {
+                setError('');
+                showBulkReview();
+                return;
+            }
+            const originalLabel = submit.innerHTML;
+            submit.disabled = true;
+            setError('');
+            try {
+                const response = await fetch(bulkOperatorForm.dataset.endpoint, {
+                    method: 'POST', body: new FormData(bulkOperatorForm), credentials: 'same-origin', headers: {Accept: 'application/json'}
+                });
+                if (!(response.headers.get('content-type') || '').includes('application/json')) throw new Error('La sesión venció. Actualice la página e ingrese nuevamente.');
+                const result = await response.json();
+                if (!response.ok || !result.ok) throw new Error(result.message || 'No se pudo actualizar el operador.');
+                submit.innerHTML = '<i class="fa-solid fa-check me-1" aria-hidden="true"></i>Actualizado';
+                window.setTimeout(() => window.location.reload(), 350);
+            } catch (exception) {
+                setError(exception.message || 'No se pudo actualizar el operador.');
+                submit.innerHTML = originalLabel;
+                submit.disabled = false;
+            }
+        });
+        document.getElementById('cvOperatorBulkModal').addEventListener('hidden.bs.modal', () => {
+            bulkOperatorForm.reset();
+            setError('');
+            submit.disabled = false;
+            showBulkEntry(false);
+        });
     }
     const formElement = document.getElementById('cvFormModal');
     const quickFile = document.getElementById('cvQuickFile');
@@ -562,7 +731,7 @@ document.addEventListener('DOMContentLoaded', () => {
         formElement.dispatchEvent(new Event('shown.bs.modal'));
         if (visible) formElement.scrollIntoView({behavior:'smooth', block:'start'});
     };
-    const fields = {id:document.getElementById('cvId'),equipo:document.getElementById('cvEquipment'),operador:document.getElementById('cvOperator'),fecha_servicio:document.getElementById('cvDate'),hora_inicio:document.getElementById('cvStart'),hora_final:document.getElementById('cvEnd'),observaciones:document.getElementById('cvNotes')};
+    const fields = {id:document.getElementById('cvId'),equipo:document.getElementById('cvEquipment'),operador:document.getElementById('cvOperator'),fecha_servicio:document.getElementById('cvDate'),hora_inicio:document.getElementById('cvStart'),hora_final:document.getElementById('cvEnd'),motivo_cambio_horas:document.getElementById('cvHoursReason'),observaciones:document.getElementById('cvNotes')};
     const updateTotal = () => {
         const start = fields.hora_inicio.value, end = fields.hora_final.value;
         const total = document.getElementById('cvTotal'), feedback = document.getElementById('cvTimeFeedback');
@@ -652,11 +821,15 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         const moneyFormatter = new Intl.NumberFormat('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
         periodPrice.textContent = moneyFormatter.format(totalCents / 100);
+        const subtotalElement = document.getElementById('cvSubtotal');
+        const subtotalCents = totalCents + Number(subtotalElement?.dataset.mobilityCents || 0);
+        const subtotalAmount = subtotalElement?.querySelector('.cv-money-amount');
+        if (subtotalAmount) subtotalAmount.textContent = moneyFormatter.format(subtotalCents / 100);
         const periodIgv = document.querySelector('#cvPeriodIgv .cv-money-amount');
-        const igvCents = Math.round(totalCents * 18 / 100);
+        const igvCents = Math.round(subtotalCents * 18 / 100);
         if (periodIgv) periodIgv.textContent = moneyFormatter.format(igvCents / 100);
         const grandTotal = document.querySelector('#cvGrandTotal .cv-money-amount');
-        if (grandTotal) grandTotal.textContent = moneyFormatter.format((totalCents + igvCents) / 100);
+        if (grandTotal) grandTotal.textContent = moneyFormatter.format((subtotalCents + igvCents) / 100);
     };
     document.querySelectorAll('.cv-rate-input').forEach(priceInput => {
         const status = priceInput.closest('tr').querySelector('.cv-rate-status');
@@ -727,6 +900,53 @@ document.addEventListener('DOMContentLoaded', () => {
         if (row.classList.contains('cv-editing')) updateRowTotal();
     });
     document.querySelectorAll('.cvDelete').forEach(form=>form.addEventListener('submit',async event=>{event.preventDefault();const result=await Swal.fire({title:'¿Eliminar este registro?',text:'También se eliminará el archivo original. Esta acción no se puede deshacer.',icon:'warning',showCancelButton:true,confirmButtonText:'Sí, eliminar',cancelButtonText:'Cancelar',confirmButtonColor:'#dc3545',reverseButtons:true});if(result.isConfirmed)form.submit();}));
+    const bulkEdit = document.getElementById('cvBulkEdit');
+    const bulkActions = document.getElementById('cvBulkActions');
+    const bulkSave = document.getElementById('cvBulkSave');
+    const bulkCancel = document.getElementById('cvBulkCancel');
+    const bulkTable = document.querySelector('.cv-table');
+    if (bulkEdit && bulkTable) {
+        const leaveBulkEdit = () => {
+            document.querySelectorAll('.cv-inline-form').forEach(form => form.reset());
+            bulkTable.classList.remove('cv-bulk-editing');
+            bulkEdit.hidden = false;
+            bulkActions.hidden = true;
+        };
+        bulkEdit.addEventListener('click', () => {
+            bulkTable.classList.add('cv-bulk-editing');
+            bulkEdit.hidden = true;
+            bulkActions.hidden = false;
+            bulkTable.querySelector('.cv-record [name="equipo"]')?.focus();
+        });
+        bulkCancel.addEventListener('click', leaveBulkEdit);
+        bulkSave.addEventListener('click', async () => {
+            if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+            await new Promise(resolve => window.requestAnimationFrame(resolve));
+            const rows = [];
+            for (const row of bulkTable.querySelectorAll('.cv-record')) {
+                const names = ['equipo','operador','fecha_servicio','hora_inicio','hora_final','horas_total','motivo_cambio_horas','observaciones'];
+                if (<?= $mobilityActive ? 'true' : 'false' ?>) names.splice(3, 0, 'movilizacion', 'desmovilizacion');
+                const fields = Object.fromEntries(names.map(name => [name, row.querySelector(`[name="${name}"]`)]));
+                if (Object.values(fields).some(field => !field.reportValidity())) return;
+                rows.push({id:Number(row.dataset.recordId), ...Object.fromEntries(Object.entries(fields).map(([name, field]) => [name, field.value]))});
+            }
+            if (!rows.length) return;
+            bulkSave.disabled = true;
+            try {
+                const data = new FormData();
+                data.set('csrf_token', <?= json_encode(csrf_token()) ?>);
+                data.set('valorizacion_id', <?= (int) $valuationId ?>);
+                data.set('rows', JSON.stringify(rows));
+                const response = await fetch(<?= json_encode(APP_URL . '/servicios/cobranzas/valorizacion_edicion_masiva.php') ?>, {method:'POST', body:data, credentials:'same-origin', headers:{Accept:'application/json'}});
+                const result = await response.json();
+                if (!response.ok || !result.ok) throw new Error(result.message || 'No se pudieron guardar los cambios.');
+                window.location.reload();
+            } catch (error) {
+                Swal.fire('Atención', error.message || 'No se pudieron guardar los cambios.', 'warning');
+                bulkSave.disabled = false;
+            }
+        });
+    }
     const fileModal=document.getElementById('cvFileModal'),fileBody=document.getElementById('cvFileBody'),fileDownload=document.getElementById('cvFileDownload');
     const zoomTools=document.getElementById('cvZoomTools'),zoomOut=document.getElementById('cvZoomOut'),zoomReset=document.getElementById('cvZoomReset'),zoomIn=document.getElementById('cvZoomIn');
     let zoom=1,baseImageWidth=0;
@@ -755,7 +975,7 @@ document.addEventListener('DOMContentLoaded', () => {
         bootstrap.Modal.getOrCreateInstance(fileModal).show();
     }));
     <?php if ($error !== '' && ($_POST['action'] ?? '') === 'save' && ($_POST['inline_edit'] ?? '') !== '1'): ?>
-    const attempted=<?= json_encode(['record_id'=>(string)($_POST['record_id']??''),'equipo'=>(string)($_POST['equipo']??''),'operador'=>(string)($_POST['operador']??''),'fecha_servicio'=>(string)($_POST['fecha_servicio']??''),'hora_inicio'=>(string)($_POST['hora_inicio']??''),'hora_final'=>(string)($_POST['hora_final']??''),'observaciones'=>(string)($_POST['observaciones']??'')],JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT) ?>;fields.id.value=attempted.record_id;for(const key of ['equipo','operador','fecha_servicio','hora_inicio','hora_final','observaciones'])fields[key].value=attempted[key];document.getElementById('cvFile').required=!fields.id.value;if(!fields.id.value){formElement.classList.add('needs-file');document.getElementById('cvSelectedFile').textContent='Seleccione nuevamente el archivo para poder guardar.';}document.getElementById('cvFormTitle').textContent=fields.id.value?'Editar valorización':'Registrar valorización';updateTotal();openPanel();
+    const attempted=<?= json_encode(['record_id'=>(string)($_POST['record_id']??''),'equipo'=>(string)($_POST['equipo']??''),'operador'=>(string)($_POST['operador']??''),'fecha_servicio'=>(string)($_POST['fecha_servicio']??''),'hora_inicio'=>(string)($_POST['hora_inicio']??''),'hora_final'=>(string)($_POST['hora_final']??''),'motivo_cambio_horas'=>(string)($_POST['motivo_cambio_horas']??''),'observaciones'=>(string)($_POST['observaciones']??'')],JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT) ?>;fields.id.value=attempted.record_id;for(const key of ['equipo','operador','fecha_servicio','hora_inicio','hora_final','motivo_cambio_horas','observaciones'])fields[key].value=attempted[key];document.getElementById('cvFile').required=!fields.id.value;if(!fields.id.value){formElement.classList.add('needs-file');document.getElementById('cvSelectedFile').textContent='Seleccione nuevamente el archivo para poder guardar.';}document.getElementById('cvFormTitle').textContent=fields.id.value?'Editar valorización':'Registrar valorización';updateTotal();openPanel();
     <?php endif; ?>
     <?php endif; ?>
 });

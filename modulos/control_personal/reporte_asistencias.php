@@ -66,6 +66,7 @@ if ($worker) {
     }
 }
 $canEditReport = !$personalView && !$reportLocked;
+$canJustifyRest = $worker && is_admin() && !$reportLocked && !$closureError && attendance_report_rest_justifications_available();
 $assignment = $report['assignment'] ?? null;
 $summary = $report['summary'] ?? [];
 $monthlyDays = $report['monthly_day_summary'][$month] ?? [];
@@ -348,7 +349,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td><?= $row['late_minutes'] > 0 ? e(attendance_report_minutes_label((int) $row['late_minutes'])) : '-' ?></td>
                     <td class="report-overtime-cell"><?= $row['overtime_minutes'] > 0 ? e(attendance_report_minutes_label((int) $row['overtime_minutes'])) : '-' ?><?php if ($row['overtime_minutes'] > 0): ?><small><?php if (!empty($row['holiday_overtime_minutes'])): ?>Feriado ×2: <?= e(attendance_report_minutes_label((int) $row['holiday_overtime_minutes'])) ?><br>Según horario neto<br><?php endif; ?>Entrada<?= !empty($row['holiday_double_applied']) && $row['early_overtime_minutes'] > 0 ? ' ×2' : '' ?>: <?= e(attendance_report_minutes_label((int) $row['early_overtime_minutes'])) ?><br>Salida<?= !empty($row['holiday_double_applied']) && $row['exit_overtime_minutes'] > 0 ? ' ×2' : '' ?>: <?= e(attendance_report_minutes_label((int) $row['exit_overtime_minutes'])) ?></small><?php endif; ?></td>
                     <td class="attendance-time-cell text-nowrap"><?= ($row['entry'] !== '-' && $row['exit'] !== '-') || !empty($row['holiday_schedule_credit']) ? e(attendance_report_minutes_label((int) $row['worked_minutes'])) : '-' ?><?php if (($row['entry'] !== '-' && $row['exit'] !== '-') && ($row['calendar_event_type'] ?? '') === 'holiday'): ?><small class="d-block text-primary">Marcación neta</small><?php elseif (!empty($row['holiday_double_applied']) && !empty($row['holiday_schedule_credit'])): ?><small class="d-block text-primary">Horario ×2 por feriado</small><?php endif; ?><?php if (!empty($row['holiday_schedule_credit'])): ?><small class="d-block text-muted">Crédito de feriado según horario</small><?php endif; ?><?php if (!empty($row['lunch_deduction_minutes'])): ?><small class="d-block text-muted">Almuerzo −<?= e(attendance_report_minutes_label((int) $row['lunch_deduction_minutes'])) ?></small><?php endif; ?></td>
-                    <td><span class="attendance-report-state report-state-code-only <?= e($row['state_class']) ?>" title="<?= e($row['state_label']) ?>" aria-label="<?= e($row['state_label']) ?>"><strong><?= e($row['state_code']) ?></strong></span></td>
+                    <td class="report-rest-state-cell"><span class="attendance-report-state report-state-code-only <?= e($row['state_class']) ?>" title="<?= e($row['state_label']) ?>" aria-label="<?= e($row['state_label']) ?>"><strong><?= e($row['state_code']) ?></strong></span><?php if (!empty($row['rest_justification_file_path'])): ?><a class="report-rest-file-link" href="<?= e(APP_URL . '/' . ltrim((string) $row['rest_justification_file_path'], '/')) ?>" target="_blank" rel="noopener" title="Ver justificante: <?= e((string) $row['rest_justification_file_name']) ?>" aria-label="Ver justificante del descanso"><i class="fa-solid fa-paperclip" aria-hidden="true"></i></a><?php endif; ?><?php if ($canJustifyRest && (string) $row['state_key'] === 'rest'): ?><button class="btn btn-sm report-rest-justify-button" type="button" data-bs-toggle="modal" data-bs-target="#restJustificationModal" data-worker-id="<?= (int) $workerId ?>" data-rest-date="<?= e((string) $row['date']) ?>" data-file-url="<?= !empty($row['rest_justification_file_path']) ? e(APP_URL . '/' . ltrim((string) $row['rest_justification_file_path'], '/')) : '' ?>" data-file-name="<?= e((string) ($row['rest_justification_file_name'] ?? '')) ?>" title="<?= !empty($row['rest_justified']) ? 'Reemplazar justificante' : 'Adjuntar justificante' ?>"><i class="fa-solid <?= !empty($row['rest_justified']) ? 'fa-arrows-rotate' : 'fa-file-arrow-up' ?>" aria-hidden="true"></i></button><?php endif; ?></td>
                     <td><span class="journey-state <?= e($row['journey_class']) ?>"><?= e($row['journey_label']) ?></span></td>
                 </tr>
             <?php endforeach; ?>
@@ -356,6 +357,67 @@ document.addEventListener('DOMContentLoaded', () => {
             </tbody>
         </table>
     </div>
+
+    <?php if ($canJustifyRest): ?>
+    <div class="modal fade" id="restJustificationModal" tabindex="-1" aria-labelledby="restJustificationTitle" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <form class="modal-content report-rest-justification-modal" id="restJustificationForm" action="<?= APP_URL ?>/servicios/control_personal/guardar_justificante_descanso.php" method="post" enctype="multipart/form-data">
+                <div class="modal-header"><div><h2 class="modal-title h5 mb-1" id="restJustificationTitle">Justificar descanso</h2><p class="mb-0 small text-muted" id="restJustificationDate"></p></div><button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+                <div class="modal-body">
+                    <div class="report-rest-justification-intro"><i class="fa-solid fa-circle-check" aria-hidden="true"></i><div><strong>El descanso cambiará a DJ</strong><span>El descanso justificado deja de sumar como descanso y no descuenta horas ni días del saldo vigente.</span></div></div>
+                    <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>"><input type="hidden" name="worker_id" id="restJustificationWorkerId"><input type="hidden" name="rest_date" id="restJustificationRestDate">
+                    <label class="form-label fw-semibold" for="restJustificationFile">Archivo justificable</label>
+                    <input class="form-control" id="restJustificationFile" name="justification_file" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" required>
+                    <div class="form-text">PDF, JPG, PNG o WEBP. Máximo 10 MB.</div>
+                    <a class="report-rest-current-file d-none" id="restJustificationCurrentFile" target="_blank" rel="noopener"><i class="fa-solid fa-paperclip me-1" aria-hidden="true"></i>Ver archivo actual</a>
+                </div>
+                <div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-success" id="restJustificationSubmit" type="submit"><i class="fa-solid fa-cloud-arrow-up me-2" aria-hidden="true"></i>Guardar justificante</button></div>
+            </form>
+        </div>
+    </div>
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const modal = document.getElementById('restJustificationModal');
+        const form = document.getElementById('restJustificationForm');
+        if (!modal || !form) return;
+        const worker = document.getElementById('restJustificationWorkerId');
+        const date = document.getElementById('restJustificationRestDate');
+        const caption = document.getElementById('restJustificationDate');
+        const currentFile = document.getElementById('restJustificationCurrentFile');
+        const submit = document.getElementById('restJustificationSubmit');
+        modal.addEventListener('show.bs.modal', event => {
+            const trigger = event.relatedTarget;
+            form.reset();
+            worker.value = trigger?.dataset.workerId || '';
+            date.value = trigger?.dataset.restDate || '';
+            const dateParts = date.value.split('-');
+            caption.textContent = dateParts.length === 3 ? `Descanso del ${dateParts[2]}/${dateParts[1]}/${dateParts[0]}` : '';
+            const fileUrl = trigger?.dataset.fileUrl || '';
+            const fileName = trigger?.dataset.fileName || 'archivo actual';
+            currentFile.classList.toggle('d-none', !fileUrl);
+            currentFile.href = fileUrl || '#';
+            currentFile.lastChild.textContent = `Ver archivo actual: ${fileName}`;
+        });
+        form.addEventListener('submit', async event => {
+            event.preventDefault();
+            const file = form.elements.justification_file.files[0];
+            if (!file) { Swal.fire('Adjunte un archivo', 'Seleccione un PDF o imagen para justificar el descanso.', 'info'); return; }
+            submit.disabled = true;
+            try {
+                const response = await fetch(form.action, { method: 'POST', body: new FormData(form), credentials: 'same-origin' });
+                const data = await response.json();
+                if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo guardar el justificante.');
+                bootstrap.Modal.getInstance(modal)?.hide();
+                await Swal.fire({ icon: 'success', title: 'Descanso justificado', text: data.message, timer: 2200, showConfirmButton: false });
+                window.location.reload();
+            } catch (error) {
+                Swal.fire('No se pudo guardar', error.message || 'Inténtelo nuevamente.', 'warning');
+                submit.disabled = false;
+            }
+        });
+    });
+    </script>
+    <?php endif; ?>
 
     <?php if ($totalPages > 1): ?>
     <nav class="report-pagination" aria-label="Páginas del detalle diario">

@@ -73,7 +73,7 @@ function attendance_report_hours_ledger(
         $ledger[$key]['holiday_overtime_minutes'] += max(0, (int) ($day['holiday_overtime_minutes'] ?? 0));
         $ledger[$key]['early_overtime_minutes'] += max(0, (int) ($day['early_overtime_minutes'] ?? 0));
         $ledger[$key]['exit_overtime_minutes'] += max(0, (int) ($day['exit_overtime_minutes'] ?? 0));
-        if (($day['calendar_type'] ?? '') === 'rest' && ($day['rest_kind'] ?? '') === 'hours') {
+        if (empty($day['rest_justified']) && ($day['calendar_type'] ?? '') === 'rest' && ($day['rest_kind'] ?? '') === 'hours') {
             if ($date <= $asOfDate) {
                 $ledger[$key]['redeemed_days']++;
                 $isSaturday = (int) (new DateTimeImmutable($date))->format('N') === 6;

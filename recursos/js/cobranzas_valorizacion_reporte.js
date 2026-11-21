@@ -101,11 +101,12 @@ if (exportButtons.length) {
             });
         };
         const isCobranzas = mode === 'cobranzas';
-        const widths = isCobranzas ? [146, 72, 77, 67, 49, tableWidth - 411] : [96, 80, 58, 62, 54, 43, 84, tableWidth - 477];
+        const widths = isCobranzas ? [146, 72, 77, 67, 49, tableWidth - 411] : [82, 65, 52, 49, 45, 40, 90, 70, tableWidth - 493];
         const labels = isCobranzas
             ? ['Equipo', 'Fecha', 'Hora de inicio', 'Hora final', 'Horas', 'Observaciones']
-            : ['Equipo', 'Operador', 'Fecha', 'Hora de inicio', 'Hora final', 'Horas', 'Observaciones', 'Registrado por'];
-        const notesIndex = isCobranzas ? 5 : 6;
+            : ['Equipo', 'Operador', 'Fecha', 'Hora de inicio', 'Hora final', 'Horas', 'Motivo de cambios de horas total', 'Observaciones', 'Registrado por'];
+        const reasonIndex = isCobranzas ? -1 : 6;
+        const notesIndex = isCobranzas ? 5 : 7;
         const rowLineHeight = 7.5;
         const minRowHeight = 13;
         const totalLineHeight = 11;
@@ -125,10 +126,13 @@ if (exportButtons.length) {
         };
 
         function drawTableHeader(top) {
-            page.drawRectangle({x: left, y: top - 16, width: tableWidth, height: 16, color: tableHeaderFill, borderColor: tableLine, borderWidth: 0.85});
-            labels.forEach((label, index) => drawFitted(label, columns[index] + 6, top - 11, widths[index] - 12, isCobranzas ? 6.5 : 6, bold, tableText));
-            for (let i = 1; i < columns.length - 1; i++) drawLine(columns[i], top, columns[i], top - 16, tableLine);
-            return top - 16;
+            const headerLines = isCobranzas ? null : labels.map((label, index) => wrapText(label, bold, 6, widths[index] - 12));
+            const headerHeight = isCobranzas ? 16 : Math.max(23, 8 + Math.max(...headerLines.map(lines => lines.length)) * 7);
+            page.drawRectangle({x: left, y: top - headerHeight, width: tableWidth, height: headerHeight, color: tableHeaderFill, borderColor: tableLine, borderWidth: 0.85});
+            if (isCobranzas) labels.forEach((label, index) => drawFitted(label, columns[index] + 6, top - 11, widths[index] - 12, 6.5, bold, tableText));
+            else headerLines.forEach((lines, index) => lines.forEach((line, lineIndex) => drawFitted(line, columns[index] + 6, top - 9 - lineIndex * 7, widths[index] - 12, 6, bold, tableText)));
+            for (let i = 1; i < columns.length - 1; i++) drawLine(columns[i], top, columns[i], top - headerHeight, tableLine);
+            return top - headerHeight;
         }
 
         function addSummaryPage() {
@@ -166,42 +170,47 @@ if (exportButtons.length) {
         for (let rowIndex = 0; rowIndex < data.records.length; rowIndex++) {
             const row = data.records[rowIndex];
             const notes = wrapText(row.notes, regular, 6.5, widths[notesIndex] - 12);
+            const reasonLines = isCobranzas ? [] : wrapText(row.hours_change_reason, regular, 6.5, widths[reasonIndex] - 12);
             const operatorLines = isCobranzas ? [] : wrapText(row.operator || '-', regular, 6.5, widths[1] - 12);
-            const registeredLines = isCobranzas ? [] : wrapText(row.registered_by || '-', regular, 6.5, widths[7] - 12);
+            const registeredLines = isCobranzas ? [] : wrapText(row.registered_by || '-', regular, 6.5, widths[8] - 12);
             const remainingRows = data.records.length - rowIndex;
-            const totalsHeight = 14 + (4 + data.rates.length) * totalLineHeight + 11;
-            let noteIndex = 0;
-            while (noteIndex < notes.length) {
-                const nameHeight = noteIndex === 0 ? Math.max(operatorLines.length, registeredLines.length) * rowLineHeight + 5 : minRowHeight;
+            const totalsHeight = 14 + (4 + data.rates.length + (data.mobility_active ? 3 : 0)) * totalLineHeight + 11;
+            const textLineCount = Math.max(notes.length, reasonLines.length);
+            let lineIndex = 0;
+            while (lineIndex < textLineCount) {
+                const nameHeight = lineIndex === 0 ? Math.max(operatorLines.length, registeredLines.length) * rowLineHeight + 5 : minRowHeight;
                 if (y - Math.max(minRowHeight, nameHeight) < contentBottom) { addSummaryPage(); continue; }
                 const linesOnPage = Math.floor((y - contentBottom - 5) / rowLineHeight);
-                const segment = notes.slice(noteIndex, noteIndex + linesOnPage);
-                const rowHeight = Math.max(minRowHeight, segment.length * rowLineHeight + 5, nameHeight);
-                const isLastSegment = noteIndex + segment.length === notes.length;
+                const segmentCount = Math.min(linesOnPage, textLineCount - lineIndex);
+                const notesSegment = notes.slice(lineIndex, lineIndex + segmentCount);
+                const reasonSegment = reasonLines.slice(lineIndex, lineIndex + segmentCount);
+                const rowHeight = Math.max(minRowHeight, segmentCount * rowLineHeight + 5, nameHeight);
+                const isLastSegment = lineIndex + segmentCount === textLineCount;
                 if (isLastSegment && remainingRows <= 5 && y - rowHeight - totalsHeight < contentBottom && y < 300) {
                     addSummaryPage();
                     continue;
                 }
                 page.drawRectangle({x: left, y: y - rowHeight, width: tableWidth, height: rowHeight, color: tableRowFill, borderColor: tableLine, borderWidth: 0.65});
                 for (let i = 1; i < columns.length - 1; i++) drawLine(columns[i], y, columns[i], y - rowHeight, tableLine);
-                const values = noteIndex === 0
+                const values = lineIndex === 0
                     ? (isCobranzas
                         ? [row.equipment, dateText(row.date), row.start, row.end, hoursText(row.minutes)]
                         : [row.equipment, '', dateText(row.date), row.start, row.end, hoursText(row.minutes)])
                     : [`${row.equipment} (cont.)`, ...Array(notesIndex - 1).fill('')];
                 values.forEach((value, index) => drawFitted(value, columns[index] + 6, y - 9, widths[index] - 12, 6.5, index === 0 ? bold : regular, tableText));
-                if (!isCobranzas && noteIndex === 0) {
+                if (!isCobranzas && lineIndex === 0) {
                     operatorLines.forEach((value, index) => drawFitted(value, columns[1] + 6, y - 9 - index * rowLineHeight, widths[1] - 12, 6.5, regular, tableText));
-                    registeredLines.forEach((value, index) => drawFitted(value, columns[7] + 6, y - 9 - index * rowLineHeight, widths[7] - 12, 6.5, regular, tableText));
+                    registeredLines.forEach((value, index) => drawFitted(value, columns[8] + 6, y - 9 - index * rowLineHeight, widths[8] - 12, 6.5, regular, tableText));
                 }
-                segment.forEach((note, index) => drawFitted(note, columns[notesIndex] + 6, y - 9 - index * rowLineHeight, widths[notesIndex] - 12, 6.5, regular, tableText));
+                if (!isCobranzas) reasonSegment.forEach((reason, index) => drawFitted(reason, columns[reasonIndex] + 6, y - 9 - index * rowLineHeight, widths[reasonIndex] - 12, 6.5, regular, tableText));
+                notesSegment.forEach((note, index) => drawFitted(note, columns[notesIndex] + 6, y - 9 - index * rowLineHeight, widths[notesIndex] - 12, 6.5, regular, tableText));
                 y -= rowHeight;
-                noteIndex += segment.length;
-                if (noteIndex < notes.length) addSummaryPage();
+                lineIndex += segmentCount;
+                if (lineIndex < textLineCount) addSummaryPage();
             }
         }
 
-        const summaryLines = 4 + data.rates.length;
+        const summaryLines = 4 + data.rates.length + (data.mobility_active ? 3 : 0);
         if (y - 14 - summaryLines * totalLineHeight - 11 < contentBottom) addSummaryPage();
         y -= 14;
         const totalLabelX = 215;
@@ -218,7 +227,13 @@ if (exportButtons.length) {
         const moneyWithCurrency = cents => `${currencySymbol} ${money(cents)}`;
         drawTotal('Horas totales', hoursText(data.total_minutes));
         data.rates.forEach(rate => drawTotal(`Precio por hora ${rate.name}`, moneyWithCurrency(Math.round(Number(rate.price) * 100))));
-        drawTotal(`Precio del ${dateText(data.first_date)} al ${dateText(data.last_date)}`, moneyWithCurrency(data.subtotal_cents));
+        drawTotal(`Precio del ${dateText(data.first_date)} al ${dateText(data.last_date)}`, moneyWithCurrency(data.price_cents));
+        if (data.mobility_active) {
+            const equipmentName = data.client.equipment ? ` ${data.client.equipment}` : '';
+            drawTotal(`Total de movilización${equipmentName}`, moneyWithCurrency(data.mobilization_cents));
+            drawTotal(`Total de desmovilización${equipmentName}`, moneyWithCurrency(data.demobilization_cents));
+            drawTotal('Subtotal', moneyWithCurrency(data.subtotal_cents));
+        }
         drawTotal('IGV (18 %)', moneyWithCurrency(data.igv_cents));
         y -= 5;
         drawLine(totalLabelX, y + 9, totalValueRight, y + 9, tableLine);

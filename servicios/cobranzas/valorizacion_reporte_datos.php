@@ -11,7 +11,7 @@ if (is_personal_role()) json_response(['ok' => false, 'message' => 'El rol Perso
 header('Content-Type: application/json; charset=utf-8');
 $valuationId = filter_var($_GET['valorizacion_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
 if (!$valuationId) json_response(['ok' => false, 'message' => 'Seleccione una valorización válida.'], 422);
-$valuationStmt = db()->prepare('SELECT client_id, lugar_servicio, equipo, capacidad, periodo FROM cobranzas_valorizaciones WHERE id = ?');
+$valuationStmt = db()->prepare('SELECT client_id, lugar_servicio, equipo, capacidad, periodo, movilizacion_activa FROM cobranzas_valorizaciones WHERE id = ?');
 $valuationStmt->execute([$valuationId]);
 $valuation = $valuationStmt->fetch();
 if (!$valuation) json_response(['ok' => false, 'message' => 'Valorización no encontrada.'], 404);
@@ -68,15 +68,21 @@ try {
     $periodDates = preg_match('/^(\d{4}-\d{2}-\d{2})\|(\d{4}-\d{2}-\d{2})$/D', $headerPeriod, $periodMatch)
         ? ['from' => $periodMatch[1], 'to' => $periodMatch[2]] : null;
 
-    $stmt = db()->prepare('SELECT r.id, r.equipo, r.placa_serie, r.operador, r.fecha_servicio, r.hora_inicio, r.hora_final, r.horas_total_minutos, r.observaciones, COALESCE(u.name, \'\') AS registered_by FROM cobranzas_valorizacion_registros r LEFT JOIN users u ON u.id = r.registered_by_user_id WHERE r.valorizacion_id = ?' . $periodWhere . ' ORDER BY r.fecha_servicio DESC, r.id DESC');
+    $stmt = db()->prepare('SELECT r.id, r.equipo, r.placa_serie, r.operador, r.fecha_servicio, r.movilizacion, r.desmovilizacion, r.hora_inicio, r.hora_final, r.horas_total_minutos, r.motivo_cambio_horas, r.observaciones, COALESCE(u.name, \'\') AS registered_by FROM cobranzas_valorizacion_registros r LEFT JOIN users u ON u.id = r.registered_by_user_id WHERE r.valorizacion_id = ?' . $periodWhere . ' ORDER BY r.fecha_servicio DESC, r.id DESC');
     $stmt->execute(array_merge([$valuationId], $periodParams));
     $records = [];
     $groups = [];
     $totalMinutes = 0;
+    $mobilizationCents = 0;
+    $demobilizationCents = 0;
     foreach ($stmt as $row) {
         $equipment = reporte_equipo_completo((string) $row['equipo'], (string) $row['placa_serie']);
         $minutes = (int) $row['horas_total_minutos'];
         $totalMinutes += $minutes;
+        if ((bool) $valuation['movilizacion_activa']) {
+            $mobilizationCents += (int) round((float) ($row['movilizacion'] ?? 0) * 100);
+            $demobilizationCents += (int) round((float) ($row['desmovilizacion'] ?? 0) * 100);
+        }
         $records[] = [
             'equipment' => $equipment,
             'operator' => (string) ($row['operador'] ?? ''),
@@ -85,6 +91,7 @@ try {
             'start' => substr((string) $row['hora_inicio'], 0, 5),
             'end' => substr((string) $row['hora_final'], 0, 5),
             'minutes' => $minutes,
+            'hours_change_reason' => (string) ($row['motivo_cambio_horas'] ?? ''),
             'notes' => (string) ($row['observaciones'] ?? ''),
             'file_url' => APP_URL . '/servicios/cobranzas/valorizacion_archivo.php?id=' . (int) $row['id'],
         ];
@@ -99,8 +106,9 @@ try {
         $savedPrice = $stmt->fetchColumn();
         if ($savedPrice !== false) $groups[$key]['price'] = number_format((float) $savedPrice, 2, '.', '');
     }
-    $subtotalCents = 0;
-    foreach ($groups as $group) $subtotalCents += (int) round((float) $group['price'] * 100 * $group['minutes'] / 60);
+    $priceCents = 0;
+    foreach ($groups as $group) $priceCents += (int) round((float) $group['price'] * 100 * $group['minutes'] / 60);
+    $subtotalCents = $priceCents + $mobilizationCents + $demobilizationCents;
     $igvCents = (int) round($subtotalCents * 18 / 100);
 
     json_response([
@@ -112,6 +120,10 @@ try {
         'first_date' => $records[count($records) - 1]['date'],
         'last_date' => $records[0]['date'],
         'total_minutes' => $totalMinutes,
+        'mobility_active' => (bool) $valuation['movilizacion_activa'],
+        'price_cents' => $priceCents,
+        'mobilization_cents' => $mobilizationCents,
+        'demobilization_cents' => $demobilizationCents,
         'subtotal_cents' => $subtotalCents,
         'igv_cents' => $igvCents,
         'total_cents' => $subtotalCents + $igvCents,

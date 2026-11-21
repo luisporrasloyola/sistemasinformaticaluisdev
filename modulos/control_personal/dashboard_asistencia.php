@@ -289,6 +289,19 @@ foreach ($stmt->fetchAll() as $row) {
         }
     }
 }
+$restJustificationsByWorkerDate = [];
+if ($matrixRows && attendance_report_rest_justifications_available()) {
+    foreach (array_chunk(array_keys($matrixRows), 500) as $workerIds) {
+        $placeholders = implode(',', array_fill(0, count($workerIds), '?'));
+        $justificationStmt = db()->prepare("SELECT worker_id, rest_date
+            FROM attendance_rest_justifications
+            WHERE rest_date BETWEEN ? AND ? AND worker_id IN ($placeholders)");
+        $justificationStmt->execute([$monthStart, $monthEnd, ...$workerIds]);
+        foreach ($justificationStmt->fetchAll() as $justificationRow) {
+            $restJustificationsByWorkerDate[(int) $justificationRow['worker_id']][(string) $justificationRow['rest_date']] = true;
+        }
+    }
+}
 $laborCycleDates = [];
 try {
     $laborCycleDates = attendance_labor_cycle_range(
@@ -622,6 +635,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <span class="legend-vacation"><strong>VAC</strong> Vacaciones</span>
         <span class="legend-permission"><strong>PER</strong> Permiso</span>
         <span class="legend-rest"><strong>D</strong> Descanso</span>
+        <span class="legend-rest-justified"><strong>DJ</strong> Descanso justificado</span>
         <span class="legend-holiday"><strong>FER</strong> Feriado</span>
         <span class="legend-non-working"><strong>NL</strong> No laborable</span>
     </div>
@@ -729,12 +743,20 @@ document.addEventListener('DOMContentLoaded', () => {
                             $incidents = [];
                         }
 
+                        $restJustified = isset($restJustificationsByWorkerDate[(int) $worker['worker_id']][$cellDate])
+                            && ($attendanceCode === 'D' || ($attendanceCode === '' && $calendarEventType === 'rest'));
+                        if ($restJustified) {
+                            $attendanceCode = 'DJ';
+                            $attendanceLabel = 'Descanso justificado';
+                        }
+
                         $cellClass = match ($attendanceCode) {
                             'F' => 'matrix-absent',
                             'T' => 'matrix-attendance-warning',
                             'ASA' => 'matrix-early-exit',
                             'ATSA' => 'matrix-attendance-critical',
                             'A' => 'matrix-ok',
+                            'DJ' => 'matrix-rest-justified',
                             default => match ($calendarEventType) {
                                 'vacation' => 'matrix-vacation',
                                 'permission' => 'matrix-permission',
