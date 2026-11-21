@@ -24,6 +24,7 @@ foreach ([
     'attendance_hour_purchases p',
     "COALESCE(u.name, \\'\\') AS registered_by",
     'p.purchase_date BETWEEN ? AND ?',
+    'p.purchase_unit, p.quantity_decimal',
 ] as $required) {
     hour_purchase_export_check(str_contains($data, $required), 'Falta la consulta segura de horas compradas: ' . $required);
 }
@@ -32,7 +33,7 @@ hour_purchase_export_check(
     'La pantalla debe usar la misma consulta de horas compradas.'
 );
 foreach ([$excel, $pdf] as $export) {
-    foreach (['Horas compradas', 'Horas decimales', 'Precio por hora', 'Registrado por'] as $required) {
+    foreach (['Cantidad', 'Precio por unidad', 'Registrado por', 'purchase_unit'] as $required) {
         hour_purchase_export_check(str_contains($export, $required), 'Falta la columna exportable: ' . $required);
     }
     hour_purchase_export_check(

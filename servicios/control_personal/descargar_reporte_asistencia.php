@@ -104,31 +104,35 @@ if ($trips) {
 }
 $hourPurchaseRows = '';
 foreach ($hourPurchases as $purchase) {
+    $purchaseIsDay = (string) ($purchase['purchase_unit'] ?? 'hour') === 'day';
+    $purchaseQuantity = (float) ($purchase['quantity_decimal'] ?? $purchase['hours_decimal']);
     $hourPurchaseRows .= '<tr><td>' . date('d/m/Y', strtotime((string) $purchase['purchase_date']))
-        . '</td><td>' . $h(number_format((float) $purchase['hours_decimal'], 2, '.', '')) . ' h</td><td>S/ '
-        . $h(number_format((float) $purchase['hourly_rate'], 2, '.', ',')) . '</td><td>S/ '
+        . '</td><td>' . $h(number_format($purchaseQuantity, 2, '.', '')) . ($purchaseIsDay ? ' día(s)' : ' h') . '</td><td>S/ '
+        . $h(number_format((float) $purchase['hourly_rate'], 2, '.', ',')) . ($purchaseIsDay ? ' por día' : ' por hora') . '</td><td>S/ '
         . $h(number_format((float) $purchase['total_amount'], 2, '.', ',')) . '</td><td>'
         . $h((string) ($purchase['registered_by'] ?: '—')) . '</td></tr>';
 }
 if ($hourPurchaseRows === '') {
     $hourPurchaseRows = '<tr><td colspan="5" class="center">No hay horas compradas en el período seleccionado.</td></tr>';
 }
-$hourPurchaseSection = '<h2 class="section">Horas compradas · ' . $h($monthLabel)
-    . '</h2><table class="detail hour-purchases"><thead><tr><th>Fecha</th><th>Horas decimales</th>'
-    . '<th>Precio por hora</th><th>Total</th><th>Registrado por</th></tr></thead><tbody>'
+$hourPurchaseSection = '<h2 class="section">Horas y días comprados · ' . $h($monthLabel)
+    . '</h2><table class="detail hour-purchases"><thead><tr><th>Fecha</th><th>Cantidad</th>'
+    . '<th>Precio por unidad</th><th>Total</th><th>Registrado por</th></tr></thead><tbody>'
     . $hourPurchaseRows . '</tbody></table>';
 $hourDiscountRows = '';
 foreach ($hourDiscounts as $discount) {
+    $discountIsDay = (string) ($discount['discount_unit'] ?? 'hour') === 'day';
+    $discountQuantity = (float) ($discount['quantity_decimal'] ?? $discount['hours_decimal']);
     $hourDiscountRows .= '<tr><td>' . date('d/m/Y', strtotime((string) $discount['discount_date']))
-        . '</td><td>S/ ' . $h(number_format((float) $discount['hourly_rate'], 2, '.', ','))
-        . '</td><td>' . $h(number_format((float) $discount['hours_decimal'], 2, '.', '')) . ' h'
+        . '</td><td>S/ ' . $h(number_format((float) $discount['hourly_rate'], 2, '.', ',')) . ($discountIsDay ? ' por día' : ' por hora')
+        . '</td><td>' . $h(number_format($discountQuantity, 2, '.', '')) . ($discountIsDay ? ' día(s)' : ' h')
         . '</td><td>S/ ' . $h(number_format((float) $discount['total_amount'], 2, '.', ','))
         . '</td><td>' . $h((string) ($discount['registered_by'] ?: '—')) . '</td></tr>';
 }
 if ($hourDiscountRows === '') $hourDiscountRows = '<tr><td colspan="5" class="center">No hay descuentos en el período seleccionado.</td></tr>';
 $hourDiscountSection = '<h2 class="section">Descuento · ' . $h($monthLabel)
-    . '</h2><table class="detail"><thead><tr><th>Fecha</th><th>Monto de la hora</th>'
-    . '<th>Cantidad de horas</th><th>Monto a descontar</th><th>Registrado por</th></tr></thead><tbody>'
+      . '</h2><table class="detail"><thead><tr><th>Fecha</th><th>Precio</th>'
+      . '<th>Cantidad</th><th>Monto a descontar</th><th>Registrado por</th></tr></thead><tbody>'
     . $hourDiscountRows . '</tbody></table>';
 ob_start();
 ?>

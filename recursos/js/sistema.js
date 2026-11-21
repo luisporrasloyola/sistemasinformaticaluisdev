@@ -27,19 +27,58 @@ document.querySelectorAll('.save-regime-extra').forEach(button => {
 const attendanceHempForm = document.getElementById('attendanceHempForm');
 const attendanceBuyHoursForm = document.getElementById('attendanceBuyHoursForm');
 if (attendanceBuyHoursForm) {
-    const hoursInput = attendanceBuyHoursForm.elements.hours_decimal;
+    const quantityInput = attendanceBuyHoursForm.elements.quantity_decimal;
+    const unitInput = attendanceBuyHoursForm.elements.purchase_unit;
     const rateInput = attendanceBuyHoursForm.elements.hourly_rate;
     const totalPreview = document.getElementById('attendancePurchaseTotal');
     const purchaseModal = document.getElementById('attendanceBuyHoursModal');
-    const updateTotal = () => {
-        const hoursHundredths = Math.round(Number(hoursInput.value) * 100);
-        const rateCents = Math.round(Number(rateInput.value) * 100);
-        const totalCents = hoursInput.value && rateInput.value && hoursInput.validity.valid && rateInput.validity.valid
-            ? Math.round(hoursHundredths * rateCents / 100) : 0;
-        totalPreview.textContent = `S/ ${(totalCents / 100).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const quantityLabel = document.getElementById('attendancePurchaseQuantityLabel');
+    const rateLabel = document.getElementById('attendancePurchaseRateLabel');
+    const unitHint = document.getElementById('attendancePurchaseUnitHint');
+    const impact = document.getElementById('attendancePurchaseImpact');
+    const currentMinutes = Number(document.getElementById('attendancePurchaseCurrentMinutes')?.value || 0);
+    let editingPurchase = false;
+    const formatBalance = (minutes) => {
+        const sign = minutes < 0 ? '-' : '';
+        const absolute = Math.abs(minutes);
+        return `${sign}${Math.floor(absolute / 60)} h ${String(absolute % 60).padStart(2, '0')} min (${(minutes / 510).toFixed(1)} días)`;
     };
-    hoursInput.addEventListener('input', updateTotal);
+    const updateUnitLabels = () => {
+        const days = unitInput.value === 'day';
+        quantityLabel.textContent = days ? 'Días' : 'Horas (decimal)';
+        rateLabel.textContent = days ? 'Precio por día (S/)' : 'Precio por hora (S/)';
+        quantityInput.placeholder = days ? '7' : '22.27';
+        rateInput.placeholder = days ? '200.00' : '15.00';
+        unitHint.textContent = days ? 'Cada día equivale a 8 h 30 min y se descontará del saldo vigente.' : 'El importe se calcula por horas y las horas compradas se descuentan del saldo vigente.';
+    };
+    const updateTotal = () => {
+        const isDayPurchase = unitInput.value === 'day';
+        unitHint.textContent = isDayPurchase
+            ? 'Cada día equivale a 8 h 30 min. Esta compra descontará el saldo en horas y su equivalente en días.'
+            : 'Esta compra descontará el saldo en horas y actualizará su equivalente en días.';
+        const quantityHundredths = Math.round(Number(quantityInput.value) * 100);
+        const rateCents = Math.round(Number(rateInput.value) * 100);
+        const hasValues = Number.isFinite(quantityHundredths) && Number.isFinite(rateCents) && quantityHundredths > 0 && rateCents > 0;
+        const totalCents = hasValues
+            ? Math.round(quantityHundredths * rateCents / 100) : 0;
+        totalPreview.textContent = `S/ ${(totalCents / 100).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        if (!hasValues) { impact.textContent = ''; return; }
+        if (editingPurchase) {
+            impact.className = 'small mt-2 text-muted';
+            impact.textContent = 'Al guardar, esta compra reemplazará la anterior y se recalcularán las horas y los días vigentes.';
+            return;
+        }
+        const purchasedMinutes = Math.round(quantityHundredths * (unitInput.value === 'day' ? 510 : 60) / 100);
+        const remaining = currentMinutes - purchasedMinutes;
+        const quantityLabelText = unitInput.value === 'day' ? 'día(s)' : 'hora(s)';
+        impact.className = `small mt-2 ${remaining < 0 ? 'text-danger' : 'text-success'}`;
+        impact.textContent = `Se descontarán ${Number(quantityInput.value).toFixed(2)} ${quantityLabelText} (${formatBalance(purchasedMinutes)}). Saldo resultante: ${formatBalance(remaining)}.`;
+    };
+    quantityInput.addEventListener('input', updateTotal);
+    quantityInput.addEventListener('change', updateTotal);
     rateInput.addEventListener('input', updateTotal);
+    rateInput.addEventListener('change', updateTotal);
+    unitInput.addEventListener('change', () => { updateUnitLabels(); updateTotal(); });
     purchaseModal.addEventListener('show.bs.modal', (event) => {
         attendanceBuyHoursForm.reset();
         const edit = event.relatedTarget?.closest('.edit-hour-purchase');
@@ -47,18 +86,24 @@ if (attendanceBuyHoursForm) {
         const submit = document.getElementById('attendancePurchaseSubmit');
         const balanceHint = document.getElementById('attendancePurchaseBalanceHint');
         if (edit) {
+            editingPurchase = true;
             attendanceBuyHoursForm.elements.purchase_id.value = edit.dataset.id;
             attendanceBuyHoursForm.elements.purchase_date.value = edit.dataset.date;
-            hoursInput.value = edit.dataset.hours;
+            unitInput.value = edit.dataset.unit || 'hour';
+            quantityInput.value = edit.dataset.quantity || edit.dataset.hours;
             rateInput.value = edit.dataset.rate;
             title.textContent = 'Editar compra de horas';
             submit.textContent = 'Guardar cambios';
             balanceHint.textContent = 'La compra anterior se reemplazará y el saldo de horas se recalculará.';
         } else {
+            editingPurchase = false;
             title.textContent = 'Comprar horas';
             submit.textContent = 'Guardar compra';
+            balanceHint.textContent = `Saldo disponible antes de comprar: ${formatBalance(currentMinutes)}.`;
             balanceHint.textContent = `Saldo vigente: ${balanceHint.dataset.current}. Las horas compradas se descontarán de este saldo.`;
         }
+        updateUnitLabels();
+        if (!editingPurchase) balanceHint.textContent = `Saldo disponible antes de comprar: ${formatBalance(currentMinutes)}.`;
         updateTotal();
     });
     attendanceBuyHoursForm.addEventListener('submit', async (event) => {
@@ -112,32 +157,49 @@ if (attendanceBuyHoursForm) {
 const attendanceDiscountForm = document.getElementById('attendanceDiscountForm');
 if (attendanceDiscountForm) {
     const discountModal = document.getElementById('attendanceDiscountModal');
-    const hoursInput = attendanceDiscountForm.elements.hours_decimal;
+    const unitInput = attendanceDiscountForm.elements.discount_unit;
+    const quantityInput = attendanceDiscountForm.elements.quantity_decimal;
     const rateInput = attendanceDiscountForm.elements.hourly_rate;
     const totalPreview = document.getElementById('attendanceDiscountTotal');
     const balanceHint = document.getElementById('attendanceDiscountBalanceHint');
+    const quantityLabel = document.getElementById('attendanceDiscountQuantityLabel');
+    const rateLabel = document.getElementById('attendanceDiscountRateLabel');
+    const unitHint = document.getElementById('attendanceDiscountUnitHint');
     const endpoint = `${BASE_URL}/servicios/control_personal/guardar_descuento_horas.php`;
+    const updateUnitLabels = () => {
+        const isDay = unitInput.value === 'day';
+        quantityLabel.textContent = isDay ? 'Días' : 'Cantidad de horas';
+        rateLabel.textContent = isDay ? 'Precio por día (S/)' : 'Monto de la hora (S/)';
+        unitHint.textContent = isDay
+            ? 'Cada día equivale a 8 h 30 min y se sumará ese equivalente al saldo vigente.'
+            : 'El importe se calcula por horas y se sumará el equivalente al saldo vigente.';
+    };
     const updateTotal = () => {
-        const hoursHundredths = Math.round(Number(hoursInput.value) * 100);
+        const quantityHundredths = Math.round(Number(quantityInput.value) * 100);
         const rateCents = Math.round(Number(rateInput.value) * 100);
-        const totalCents = hoursInput.value && rateInput.value && hoursInput.validity.valid && rateInput.validity.valid
-            ? Math.round(hoursHundredths * rateCents / 100) : 0;
+        const totalCents = quantityInput.value && rateInput.value && quantityInput.validity.valid && rateInput.validity.valid
+            ? Math.round(quantityHundredths * rateCents / 100) : 0;
         totalPreview.textContent = `S/ ${(totalCents / 100).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     };
-    hoursInput.addEventListener('input', updateTotal);
+    quantityInput.addEventListener('input', updateTotal);
+    quantityInput.addEventListener('change', updateTotal);
     rateInput.addEventListener('input', updateTotal);
+    rateInput.addEventListener('change', updateTotal);
+    unitInput.addEventListener('change', () => { updateUnitLabels(); updateTotal(); });
     discountModal.addEventListener('show.bs.modal', (event) => {
         attendanceDiscountForm.reset();
         const edit = event.relatedTarget?.closest('.edit-hour-discount');
         attendanceDiscountForm.elements.discount_id.value = edit?.dataset.id || '';
         if (edit) {
             attendanceDiscountForm.elements.discount_date.value = edit.dataset.date;
-            hoursInput.value = edit.dataset.hours;
+            unitInput.value = edit.dataset.unit || 'hour';
+            quantityInput.value = edit.dataset.quantity || edit.dataset.hours;
             rateInput.value = edit.dataset.rate;
         }
         document.getElementById('attendanceDiscountTitle').textContent = edit ? 'Editar descuento' : 'Nuevo descuento';
         document.getElementById('attendanceDiscountSubmit').textContent = edit ? 'Guardar cambios' : 'Guardar descuento';
         balanceHint.textContent = edit ? 'Al guardar se reemplazará este descuento y se recalculará el saldo de horas.' : `Horas extras vigentes: ${balanceHint.dataset.current}.`;
+        updateUnitLabels();
         updateTotal();
     });
     attendanceDiscountForm.addEventListener('submit', async (event) => {

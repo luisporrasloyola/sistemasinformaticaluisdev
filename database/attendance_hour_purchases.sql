@@ -2,6 +2,8 @@ CREATE TABLE IF NOT EXISTS attendance_hour_purchases (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
     worker_id INT UNSIGNED NOT NULL,
     purchase_date DATE NOT NULL,
+    purchase_unit ENUM('hour', 'day') NOT NULL DEFAULT 'hour',
+    quantity_decimal DECIMAL(8,2) NOT NULL,
     hours_decimal DECIMAL(8,2) NOT NULL,
     hourly_rate DECIMAL(10,2) NOT NULL,
     total_amount DECIMAL(12,2) NOT NULL,

@@ -18,6 +18,7 @@ function permission_modules_catalog(): array
                 'control_personal.control_asistencia' => 'Control de asistencia',
                 'control_personal.reportes' => 'Reporte de marcaciones',
                 'control_personal.reporte_asistencias' => 'Reporte de asistencias',
+                'control_personal.control_horas_extras' => 'Control de horas extras',
             ],
         ],
         'requisitos' => [

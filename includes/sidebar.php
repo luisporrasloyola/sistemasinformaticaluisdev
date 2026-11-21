@@ -78,6 +78,7 @@ $isAdmin = is_admin();
                 <?php if ($isAdmin): ?>
                     <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/reportes.php"><i class="fa-solid fa-file-export"></i><span>Reporte de marcaciones</span></a>
                     <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/reporte_asistencias.php"><i class="fa-solid fa-clipboard-check"></i><span>Reporte de asistencias</span></a>
+                    <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/control_personal/control_horas_extras.php"><i class="fa-solid fa-business-time"></i><span>Control de horas extras</span></a>
                     <a class="nav-link sub-link" href="<?= APP_URL ?>/modulos/aliados/control_asistencia.php"><i class="fa-solid fa-calendar-check"></i><span>Control de asistencia_old</span></a>
                 <?php endif; ?>
             </div>

@@ -126,7 +126,7 @@ $summaryRows[] = xlsx_row($purchaseSectionRow, [
 ], 24);
 $purchaseMerge = '<mergeCell ref="A' . $purchaseSectionRow . ':E' . $purchaseSectionRow . '"/>';
 $excelRow = $purchaseSectionRow + 1;
-$purchaseHeaders = ['Fecha', 'Horas decimales', 'Precio por hora', 'Total', 'Registrado por'];
+$purchaseHeaders = ['Fecha', 'Cantidad', 'Precio por unidad', 'Total', 'Registrado por'];
 $cells = [];
 foreach ($purchaseHeaders as $index => $header) {
     $cells[] = xlsx_cell($index + 1, $excelRow, $header, 1);
@@ -135,10 +135,12 @@ $summaryRows[] = xlsx_row($excelRow, $cells, 25);
 $excelRow++;
 if ($hourPurchases) {
     foreach ($hourPurchases as $purchase) {
+        $purchaseIsDay = (string) ($purchase['purchase_unit'] ?? 'hour') === 'day';
+        $purchaseQuantity = (float) ($purchase['quantity_decimal'] ?? $purchase['hours_decimal']);
         $values = [
             date('d/m/Y', strtotime((string) $purchase['purchase_date'])),
-            number_format((float) $purchase['hours_decimal'], 2, '.', '') . ' h',
-            'S/ ' . number_format((float) $purchase['hourly_rate'], 2, '.', ','),
+            number_format($purchaseQuantity, 2, '.', '') . ($purchaseIsDay ? ' día(s)' : ' h'),
+            'S/ ' . number_format((float) $purchase['hourly_rate'], 2, '.', ',') . ($purchaseIsDay ? ' por día' : ' por hora'),
             'S/ ' . number_format((float) $purchase['total_amount'], 2, '.', ','),
             (string) ($purchase['registered_by'] ?: '—'),
         ];
@@ -159,15 +161,17 @@ $discountSectionRow = $excelRow + 1;
 $summaryRows[] = xlsx_row($discountSectionRow, [xlsx_cell(1, $discountSectionRow, 'DESCUENTOS · ' . mb_strtoupper($monthLabel, 'UTF-8'), 1)], 24);
 $discountMerge = '<mergeCell ref="A' . $discountSectionRow . ':E' . $discountSectionRow . '"/>';
 $excelRow = $discountSectionRow + 1;
-$discountHeaders = ['Fecha', 'Monto de la hora', 'Cantidad de horas', 'Monto a descontar', 'Registrado por'];
+  $discountHeaders = ['Fecha', 'Precio', 'Cantidad', 'Monto a descontar', 'Registrado por'];
 $cells = [];
 foreach ($discountHeaders as $index => $header) $cells[] = xlsx_cell($index + 1, $excelRow, $header, 1);
 $summaryRows[] = xlsx_row($excelRow, $cells, 25);
 $excelRow++;
 foreach ($hourDiscounts as $discount) {
+      $discountIsDay = (string) ($discount['discount_unit'] ?? 'hour') === 'day';
+      $discountQuantity = (float) ($discount['quantity_decimal'] ?? $discount['hours_decimal']);
     $values = [date('d/m/Y', strtotime((string) $discount['discount_date'])),
-        'S/ ' . number_format((float) $discount['hourly_rate'], 2, '.', ','),
-        number_format((float) $discount['hours_decimal'], 2, '.', '') . ' h',
+          'S/ ' . number_format((float) $discount['hourly_rate'], 2, '.', ',') . ($discountIsDay ? ' por día' : ' por hora'),
+          number_format($discountQuantity, 2, '.', '') . ($discountIsDay ? ' día(s)' : ' h'),
         'S/ ' . number_format((float) $discount['total_amount'], 2, '.', ','),
         (string) ($discount['registered_by'] ?: '—')];
     $cells = [];

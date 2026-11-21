@@ -16,7 +16,8 @@ $purchaseIdRaw = trim((string) ($_POST['purchase_id'] ?? ''));
 $purchaseId = $purchaseIdRaw === '' ? null : filter_var($purchaseIdRaw, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
 $action = (string) ($_POST['action'] ?? 'save');
 $purchaseDate = (string) ($_POST['purchase_date'] ?? '');
-$hoursText = trim((string) ($_POST['hours_decimal'] ?? ''));
+$quantityText = trim((string) ($_POST['quantity_decimal'] ?? ($_POST['hours_decimal'] ?? '')));
+$purchaseUnit = (string) ($_POST['purchase_unit'] ?? 'hour');
 $rateText = trim((string) ($_POST['hourly_rate'] ?? ''));
 if (!$workerId || !preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $reportMonth)
     || !in_array($action, ['save', 'delete'], true) || $purchaseId === false || ($action === 'delete' && !$purchaseId)) {
@@ -26,26 +27,31 @@ if ($action === 'save') {
     $parsedPurchaseDate = DateTimeImmutable::createFromFormat('!Y-m-d', $purchaseDate);
     if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $purchaseDate)
         || !$parsedPurchaseDate || $parsedPurchaseDate->format('Y-m-d') !== $purchaseDate
-        || $purchaseDate > date('Y-m-d') || substr($purchaseDate, 0, 7) !== $reportMonth) {
-        json_response(['ok' => false, 'message' => 'Seleccione una fecha válida dentro del mes del reporte que no sea futura.'], 422);
+        || substr($purchaseDate, 0, 7) !== $reportMonth) {
+        json_response(['ok' => false, 'message' => 'Seleccione una fecha válida dentro del mes del reporte. Puede programar una fecha futura.'], 422);
     }
-    if (!preg_match('/^\d{1,4}(?:\.\d{1,2})?$/', $hoursText) || (float) $hoursText <= 0
+    if (!in_array($purchaseUnit, ['hour', 'day'], true)
+        || !preg_match('/^\d{1,4}(?:\.\d{1,2})?$/', $quantityText) || (float) $quantityText <= 0
         || !preg_match('/^\d{1,6}(?:\.\d{1,2})?$/', $rateText) || (float) $rateText <= 0) {
-        json_response(['ok' => false, 'message' => 'Ingrese horas decimales y tarifa por hora mayores que cero, con hasta dos decimales.'], 422);
+        json_response(['ok' => false, 'message' => 'Ingrese una cantidad y precio mayores que cero, con hasta dos decimales.'], 422);
     }
 }
-$hoursParts = explode('.', $hoursText, 2);
+$quantityParts = explode('.', $quantityText, 2);
 $rateParts = explode('.', $rateText, 2);
-$hoursHundredths = $action === 'save' ? (int) $hoursParts[0] * 100 + (int) str_pad($hoursParts[1] ?? '', 2, '0') : 0;
+$quantityHundredths = $action === 'save' ? (int) $quantityParts[0] * 100 + (int) str_pad($quantityParts[1] ?? '', 2, '0') : 0;
 $rateCents = $action === 'save' ? (int) $rateParts[0] * 100 + (int) str_pad($rateParts[1] ?? '', 2, '0') : 0;
-$purchasedMinutes = $action === 'save' ? intdiv($hoursHundredths * 60 + 50, 100) : 0;
-$totalCents = $action === 'save' ? intdiv($hoursHundredths * $rateCents + 50, 100) : 0;
+$purchasedMinutes = $action === 'save' ? intdiv($quantityHundredths * ($purchaseUnit === 'day' ? 510 : 60) + 50, 100) : 0;
+$totalCents = $action === 'save' ? intdiv($quantityHundredths * $rateCents + 50, 100) : 0;
 if ($action === 'save' && ($purchasedMinutes < 1 || $totalCents < 1 || $totalCents > 999999999999)) {
     json_response(['ok' => false, 'message' => 'Revise las horas y la tarifa ingresadas.'], 422);
 }
 
 $pdo = db();
 try {
+    $daysSchemaAvailable = attendance_report_hour_purchase_days_available();
+    if ($action === 'save' && $purchaseUnit === 'day' && !$daysSchemaAvailable) {
+        throw new DomainException('Ejecute primero database/attendance_hour_purchases_days.sql para registrar compras por días.');
+    }
     $pdo->beginTransaction();
     $workerStmt = $pdo->prepare('SELECT id FROM workers WHERE id = ? FOR UPDATE');
     $workerStmt->execute([$workerId]);
@@ -72,14 +78,21 @@ try {
     $available = (int) attendance_report_build_hours_ledger((int) $workerId, $reportMonth)['current']['closing_minutes'];
     $available += (int) ($existing['purchased_minutes'] ?? 0);
     if ($purchasedMinutes > $available) throw new DomainException('Las horas compradas superan el saldo vigente del trabajador.');
-    $values = [$purchaseDate, number_format($hoursHundredths / 100, 2, '.', ''),
+    $legacyValues = [$purchaseDate, number_format($purchasedMinutes / 60, 2, '.', ''), number_format($rateCents / 100, 2, '.', ''), number_format($totalCents / 100, 2, '.', ''), $purchasedMinutes];
+    $values = [$purchaseDate, $purchaseUnit, number_format($quantityHundredths / 100, 2, '.', ''), number_format($purchasedMinutes / 60, 2, '.', ''),
         number_format($rateCents / 100, 2, '.', ''), number_format($totalCents / 100, 2, '.', ''), $purchasedMinutes];
-    if ($existing) {
-        $stmt = $pdo->prepare('UPDATE attendance_hour_purchases SET purchase_date = ?, hours_decimal = ?, hourly_rate = ?, total_amount = ?, purchased_minutes = ? WHERE id = ? AND worker_id = ?');
+    if ($existing && $daysSchemaAvailable) {
+        $stmt = $pdo->prepare('UPDATE attendance_hour_purchases SET purchase_date = ?, purchase_unit = ?, quantity_decimal = ?, hours_decimal = ?, hourly_rate = ?, total_amount = ?, purchased_minutes = ? WHERE id = ? AND worker_id = ?');
         $stmt->execute(array_merge($values, [$purchaseId, $workerId]));
+    } elseif ($existing) {
+        $stmt = $pdo->prepare('UPDATE attendance_hour_purchases SET purchase_date = ?, hours_decimal = ?, hourly_rate = ?, total_amount = ?, purchased_minutes = ? WHERE id = ? AND worker_id = ?');
+        $stmt->execute(array_merge($legacyValues, [$purchaseId, $workerId]));
+    } elseif ($daysSchemaAvailable) {
+        $stmt = $pdo->prepare('INSERT INTO attendance_hour_purchases (purchase_date, purchase_unit, quantity_decimal, hours_decimal, hourly_rate, total_amount, purchased_minutes, worker_id, registered_by_user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        $stmt->execute(array_merge($values, [$workerId, (int) (current_user()['id'] ?? 0) ?: null]));
     } else {
         $stmt = $pdo->prepare('INSERT INTO attendance_hour_purchases (purchase_date, hours_decimal, hourly_rate, total_amount, purchased_minutes, worker_id, registered_by_user_id) VALUES (?, ?, ?, ?, ?, ?, ?)');
-        $stmt->execute(array_merge($values, [$workerId, (int) (current_user()['id'] ?? 0) ?: null]));
+        $stmt->execute(array_merge($legacyValues, [$workerId, (int) (current_user()['id'] ?? 0) ?: null]));
     }
     $pdo->commit();
     json_response(['ok' => true, 'message' => $existing ? 'Compra de horas actualizada.' : 'Compra de horas registrada.']);

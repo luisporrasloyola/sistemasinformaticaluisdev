@@ -27,6 +27,19 @@ function attendance_report_trips_by_date(array $trips): array
 }
 
 /** Detalle auditable de las horas compradas dentro del período exportado. */
+function attendance_report_hour_purchase_days_available(): bool
+{
+    static $available = null;
+    if ($available !== null) return $available;
+    try {
+        db()->query('SELECT purchase_unit, quantity_decimal FROM attendance_hour_purchases LIMIT 1');
+        return $available = true;
+    } catch (PDOException $error) {
+        if (in_array($error->getCode(), ['42S02', '42S22'], true)) return $available = false;
+        throw $error;
+    }
+}
+
 function attendance_report_hour_purchases(int $workerId, string $dateFrom, string $dateTo): array
 {
     if ($workerId <= 0 || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom)
@@ -35,7 +48,11 @@ function attendance_report_hour_purchases(int $workerId, string $dateFrom, strin
     }
 
     try {
-        $stmt = db()->prepare('SELECT p.id, p.purchase_date, p.hours_decimal, p.hourly_rate,
+        $daysAvailable = attendance_report_hour_purchase_days_available();
+        $fields = $daysAvailable
+            ? 'p.id, p.purchase_date, p.purchase_unit, p.quantity_decimal, p.hours_decimal, p.hourly_rate,'
+            : "p.id, p.purchase_date, 'hour' AS purchase_unit, p.hours_decimal AS quantity_decimal, p.hours_decimal, p.hourly_rate,";
+        $stmt = db()->prepare('SELECT ' . $fields . '
                 p.total_amount, p.purchased_minutes, COALESCE(u.name, \'\') AS registered_by
             FROM attendance_hour_purchases p
             LEFT JOIN users u ON u.id = p.registered_by_user_id
@@ -52,11 +69,28 @@ function attendance_report_hour_purchases(int $workerId, string $dateFrom, strin
 }
 
 /** Descuentos de horas registrados en el período. */
+function attendance_report_hour_discount_days_available(): bool
+{
+    static $available = null;
+    if ($available !== null) return $available;
+    try {
+        db()->query('SELECT discount_unit, quantity_decimal FROM attendance_hour_discounts LIMIT 1');
+        return $available = true;
+    } catch (PDOException $error) {
+        if (in_array($error->getCode(), ['42S02', '42S22'], true)) return $available = false;
+        throw $error;
+    }
+}
+
 function attendance_report_hour_discounts(int $workerId, string $dateFrom, string $dateTo): array
 {
     if ($workerId <= 0 || $dateFrom > $dateTo) return [];
     try {
-        $stmt = db()->prepare('SELECT d.id, d.discount_date, d.hours_decimal, d.hourly_rate,
+        $daysAvailable = attendance_report_hour_discount_days_available();
+        $fields = $daysAvailable
+            ? 'd.id, d.discount_date, d.discount_unit, d.quantity_decimal, d.hours_decimal, d.hourly_rate,'
+            : "d.id, d.discount_date, 'hour' AS discount_unit, d.hours_decimal AS quantity_decimal, d.hours_decimal, d.hourly_rate,";
+        $stmt = db()->prepare('SELECT ' . $fields . '
                 d.total_amount, d.discounted_minutes, COALESCE(u.name, \'\') AS registered_by
             FROM attendance_hour_discounts d LEFT JOIN users u ON u.id = d.registered_by_user_id
             WHERE d.worker_id = ? AND d.discount_date BETWEEN ? AND ?
@@ -1093,7 +1127,7 @@ function attendance_report_build_hours_ledger(int $workerId, string $throughMont
     $purchaseSchemaAvailable = true;
     try {
         $purchasesStmt = db()->prepare('SELECT DATE_FORMAT(purchase_date, \'%Y-%m\') AS month_key, SUM(purchased_minutes) AS minutes
-            FROM attendance_hour_purchases WHERE worker_id = ? AND purchase_date BETWEEN ? AND ? GROUP BY month_key');
+            FROM attendance_hour_purchases WHERE worker_id = ? AND purchase_date BETWEEN ? AND ? AND purchase_date <= CURDATE() GROUP BY month_key');
         $purchasesStmt->execute([$workerId, $firstMonth . '-01', (new DateTimeImmutable($throughMonth . '-01'))->format('Y-m-t')]);
         foreach ($purchasesStmt as $purchase) $purchasedMinutesByMonth[(string) $purchase['month_key']] = (int) $purchase['minutes'];
     } catch (PDOException $error) {
@@ -1104,7 +1138,7 @@ function attendance_report_build_hours_ledger(int $workerId, string $throughMont
     $discountSchemaAvailable = true;
     try {
         $discountStmt = db()->prepare('SELECT DATE_FORMAT(discount_date, \'%Y-%m\') AS month_key, SUM(discounted_minutes) AS minutes
-            FROM attendance_hour_discounts WHERE worker_id = ? AND discount_date BETWEEN ? AND ? GROUP BY month_key');
+            FROM attendance_hour_discounts WHERE worker_id = ? AND discount_date BETWEEN ? AND ? AND discount_date <= CURDATE() GROUP BY month_key');
         $discountStmt->execute([$workerId, $firstMonth . '-01', (new DateTimeImmutable($throughMonth . '-01'))->format('Y-m-t')]);
         foreach ($discountStmt as $discount) $discountedMinutesByMonth[(string) $discount['month_key']] = (int) $discount['minutes'];
     } catch (PDOException $error) {

@@ -20,7 +20,8 @@ if (!$workerId || !preg_match('/^\d{4}-(0[1-9]|1[0-2])$/D', $reportMonth)
 }
 
 $date = trim((string) ($_POST['discount_date'] ?? ''));
-$hoursText = trim((string) ($_POST['hours_decimal'] ?? ''));
+$quantityText = trim((string) ($_POST['quantity_decimal'] ?? $_POST['hours_decimal'] ?? ''));
+$discountUnit = (string) ($_POST['discount_unit'] ?? 'hour');
 $rateText = trim((string) ($_POST['hourly_rate'] ?? ''));
 $hoursHundredths = 0;
 $rateCents = 0;
@@ -28,21 +29,25 @@ $discountedMinutes = 0;
 $totalCents = 0;
 if ($action === 'save') {
     $parsedDate = DateTimeImmutable::createFromFormat('!Y-m-d', $date);
-    if (!$parsedDate || $parsedDate->format('Y-m-d') !== $date || $date > date('Y-m-d') || substr($date, 0, 7) !== $reportMonth) {
-        json_response(['ok' => false, 'message' => 'Seleccione una fecha válida dentro del mes del reporte que no sea futura.'], 422);
+    if (!$parsedDate || $parsedDate->format('Y-m-d') !== $date || substr($date, 0, 7) !== $reportMonth) {
+        json_response(['ok' => false, 'message' => 'Seleccione una fecha válida dentro del mes del reporte.'], 422);
     }
-    if (!preg_match('/^\d{1,4}(?:\.\d{1,2})?$/D', $hoursText) || (float) $hoursText <= 0
+    if (!in_array($discountUnit, ['hour', 'day'], true)
+        || !preg_match('/^\d{1,4}(?:\.\d{1,2})?$/D', $quantityText) || (float) $quantityText <= 0
         || !preg_match('/^\d{1,6}(?:\.\d{1,2})?$/D', $rateText) || (float) $rateText <= 0) {
-        json_response(['ok' => false, 'message' => 'Ingrese una cantidad de horas y un monto por hora mayores que cero, con hasta dos decimales.'], 422);
+        json_response(['ok' => false, 'message' => 'Ingrese una cantidad y un precio por hora o por día mayores que cero, con hasta dos decimales.'], 422);
     }
-    [$hoursWhole, $hoursFraction] = array_pad(explode('.', $hoursText, 2), 2, '');
+    if ($discountUnit === 'day' && !attendance_report_hour_discount_days_available()) {
+        json_response(['ok' => false, 'message' => 'Ejecute primero la actualización de descuentos por días en la base de datos.'], 422);
+    }
+    [$hoursWhole, $hoursFraction] = array_pad(explode('.', $quantityText, 2), 2, '');
     [$rateWhole, $rateFraction] = array_pad(explode('.', $rateText, 2), 2, '');
     $hoursHundredths = (int) $hoursWhole * 100 + (int) str_pad($hoursFraction, 2, '0');
     $rateCents = (int) $rateWhole * 100 + (int) str_pad($rateFraction, 2, '0');
-    $discountedMinutes = intdiv($hoursHundredths * 60 + 50, 100);
+    $discountedMinutes = intdiv($hoursHundredths * ($discountUnit === 'day' ? 510 : 60) + 50, 100);
     $totalCents = intdiv($hoursHundredths * $rateCents + 50, 100);
     if ($discountedMinutes < 1 || $totalCents < 1 || $totalCents > 999999999999) {
-        json_response(['ok' => false, 'message' => 'Revise las horas y el monto ingresados.'], 422);
+        json_response(['ok' => false, 'message' => 'Revise la cantidad y el monto ingresados.'], 422);
     }
 }
 
@@ -70,13 +75,28 @@ try {
         $pdo->commit();
         json_response(['ok' => true]);
     }
-    $values = [$date, number_format($hoursHundredths / 100, 2, '.', ''), number_format($rateCents / 100, 2, '.', ''), number_format($totalCents / 100, 2, '.', ''), $discountedMinutes];
-    if ($existing) {
-        $pdo->prepare('UPDATE attendance_hour_discounts SET discount_date = ?, hours_decimal = ?, hourly_rate = ?, total_amount = ?, discounted_minutes = ? WHERE id = ? AND worker_id = ?')
-            ->execute([...$values, $discountId, $workerId]);
+    $quantity = number_format($hoursHundredths / 100, 2, '.', '');
+    $hoursEquivalent = number_format($discountedMinutes / 60, 2, '.', '');
+    $rate = number_format($rateCents / 100, 2, '.', '');
+    $total = number_format($totalCents / 100, 2, '.', '');
+    if (attendance_report_hour_discount_days_available()) {
+        $values = [$date, $discountUnit, $quantity, $hoursEquivalent, $rate, $total, $discountedMinutes];
+        if ($existing) {
+            $pdo->prepare('UPDATE attendance_hour_discounts SET discount_date = ?, discount_unit = ?, quantity_decimal = ?, hours_decimal = ?, hourly_rate = ?, total_amount = ?, discounted_minutes = ? WHERE id = ? AND worker_id = ?')
+                ->execute([...$values, $discountId, $workerId]);
+        } else {
+            $pdo->prepare('INSERT INTO attendance_hour_discounts (discount_date, discount_unit, quantity_decimal, hours_decimal, hourly_rate, total_amount, discounted_minutes, worker_id, registered_by_user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+                ->execute([...$values, $workerId, (int) (current_user()['id'] ?? 0) ?: null]);
+        }
     } else {
-        $pdo->prepare('INSERT INTO attendance_hour_discounts (discount_date, hours_decimal, hourly_rate, total_amount, discounted_minutes, worker_id, registered_by_user_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
-            ->execute([...$values, $workerId, (int) (current_user()['id'] ?? 0) ?: null]);
+        $values = [$date, $quantity, $rate, $total, $discountedMinutes];
+        if ($existing) {
+            $pdo->prepare('UPDATE attendance_hour_discounts SET discount_date = ?, hours_decimal = ?, hourly_rate = ?, total_amount = ?, discounted_minutes = ? WHERE id = ? AND worker_id = ?')
+                ->execute([...$values, $discountId, $workerId]);
+        } else {
+            $pdo->prepare('INSERT INTO attendance_hour_discounts (discount_date, hours_decimal, hourly_rate, total_amount, discounted_minutes, worker_id, registered_by_user_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
+                ->execute([...$values, $workerId, (int) (current_user()['id'] ?? 0) ?: null]);
+        }
     }
     $pdo->commit();
     json_response(['ok' => true]);
