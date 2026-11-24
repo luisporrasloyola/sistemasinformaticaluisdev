@@ -4,13 +4,13 @@ declare(strict_types=1);
 require_once __DIR__ . '/attendance_calendar.php';
 
 /** Fechas extra y numeración acumulada por trabajador, incluidas las asignaciones por vigencia. */
-function attendance_extra_day_dates(PDO $pdo, array $workerIds, string $from, string $through): array
+function attendance_extra_day_dates(PDO $pdo, array $workerIds, string $from, string $through, bool $includeUpcoming = false): array
 {
     $workerIds = array_values(array_unique(array_filter(array_map('intval', $workerIds))));
     $result = [];
     if (!$workerIds || $through < $from) return ['dates' => $result, 'available' => true];
     $yesterday = (new DateTimeImmutable('today'))->modify('-1 day')->format('Y-m-d');
-    $end = min($through, $yesterday);
+    $end = $includeUpcoming ? $through : min($through, $yesterday);
     if ($end < $from) return ['dates' => $result, 'available' => true];
     $scanFrom = '1900-01-01';
     $available = true;
