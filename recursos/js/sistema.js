@@ -8156,7 +8156,7 @@ function initControlPersonalAssignments() {
         }
         conflictField.classList.toggle('d-none', awaitingSelection || !hasConflicts);
         if (awaitingSelection || !hasConflicts) syncConflictChoice('skip');
-        else if (!dayTypeChoiceTouched && scope === 'selected' && dayTypeField?.value === 'extra'
+        else if (!dayTypeChoiceTouched && scope === 'selected'
             && availableCount === 0 && conflictPolicy?.value === 'skip') {
             syncConflictChoice('day_type_only');
         }
