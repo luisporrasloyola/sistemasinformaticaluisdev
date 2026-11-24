@@ -7536,6 +7536,13 @@ input[type="checkbox"]:active {
 .report-early-overtime-check{display:flex;align-items:center;justify-content:center;gap:5px;cursor:pointer}
 .report-early-overtime-badge{display:block;width:max-content;max-width:130px;margin-top:3px;padding:2px 5px;border-radius:5px;background:#e7f8ee;color:#087440;font-size:10px;font-weight:700;line-height:1.2}
 .report-early-overtime-confirmation .swal2-html-container{white-space:pre-line;text-align:left;line-height:1.55}
+.report-worked-double-toolbar{display:flex;align-items:center;gap:12px;margin:12px 0;padding:13px 16px;border:1px solid #a8dfc2;border-radius:12px;background:linear-gradient(110deg,#f1fcf5 0%,#f8fdfb 65%,#effaf5 100%);box-shadow:0 4px 14px rgba(17,112,65,.05)}
+.report-worked-double-icon{display:grid;place-items:center;flex:0 0 36px;width:36px;height:36px;border-radius:10px;background:#d9f5e5;color:#087541;font-size:16px}
+.report-worked-double-copy{min-width:0;flex:1}.report-worked-double-copy strong,.report-worked-double-copy small{display:block}.report-worked-double-copy strong{color:#155d39;font-size:14px}.report-worked-double-copy small{margin-top:3px;color:#4b6659;font-size:12px;line-height:1.35}.report-worked-double-copy small[role=status]{color:#087541;font-weight:700}
+.report-worked-double-toolbar .btn{flex:none;white-space:nowrap}
+.report-worked-double-check{display:inline-flex;align-items:center;gap:5px;margin-top:5px;padding:3px 7px;border:1px solid #badfc9;border-radius:7px;background:#f3fcf6;color:#17603b;font-size:11px;font-weight:700;cursor:pointer}.report-worked-double-check .form-check-input{float:none;margin:0;cursor:pointer}.report-worked-double-check:has(input:checked){border-color:#65bd8d;background:#dff5e8}
+.report-worked-double-active{background:#f0fbf4!important}.report-worked-double-badge{display:block;margin-top:3px;color:#087541;font-size:11px;font-weight:700}
+@media(max-width:640px){.report-worked-double-toolbar{flex-wrap:wrap}.report-worked-double-toolbar .btn{width:100%}}
 .individual-report-indicators{grid-template-columns:repeat(3,minmax(0,1fr))}
 .report-overtime-cell{min-width:130px;font-weight:700;white-space:nowrap}
 .report-overtime-cell small{display:block;margin-top:3px;font-size:11px;line-height:1.35;font-weight:400;color:#607089;white-space:normal}

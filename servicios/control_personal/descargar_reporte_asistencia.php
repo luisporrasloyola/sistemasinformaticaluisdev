@@ -85,7 +85,8 @@ foreach ($rows as $row) {
             . 'Salida' . (!empty($row['holiday_double_applied']) && $row['exit_overtime_minutes'] > 0 ? ' ×2' : '') . ': ' . $h(attendance_report_minutes_label((int) $row['exit_overtime_minutes'])) . '</span>'
         : '-';
     $workedCell = ($row['entry'] !== '-' && $row['exit'] !== '-') || !empty($row['holiday_schedule_credit']) ? $h(attendance_report_minutes_label((int) $row['worked_minutes'])) : '-';
-    if (($row['calendar_event_type'] ?? '') === 'holiday' && $row['entry'] !== '-' && $row['exit'] !== '-') $workedCell .= '<br><span class="muted">Marcación neta</span>';
+    if (!empty($row['worked_double_applied'])) $workedCell .= '<br><span class="muted">Base ' . $h(attendance_report_minutes_label((int) $row['base_worked_minutes'])) . ' ×2</span>';
+    elseif (($row['calendar_event_type'] ?? '') === 'holiday' && $row['entry'] !== '-' && $row['exit'] !== '-') $workedCell .= '<br><span class="muted">Marcación neta</span>';
     elseif (!empty($row['holiday_double_applied']) && $workedCell !== '-') $workedCell .= '<br><span class="muted">Horario ×2 por feriado</span>';
     if (!empty($row['holiday_schedule_credit'])) $workedCell .= '<br><span class="muted">Crédito de feriado según horario</span>';
     if (!empty($row['lunch_deduction_minutes'])) $workedCell .= '<br><span class="muted">Almuerzo −' . $h(attendance_report_minutes_label((int) $row['lunch_deduction_minutes'])) . '</span>';

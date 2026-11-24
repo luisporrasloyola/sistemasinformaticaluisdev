@@ -39,6 +39,19 @@ function attendance_report_rest_justifications_available(): bool
     }
 }
 
+function attendance_report_worked_doublings_available(): bool
+{
+    static $available = null;
+    if ($available !== null) return $available;
+    try {
+        db()->query('SELECT worker_id FROM attendance_worked_hour_doublings LIMIT 1');
+        return $available = true;
+    } catch (PDOException $error) {
+        if ($error->getCode() === '42S02') return $available = false;
+        throw $error;
+    }
+}
+
 /** Detalle auditable de las horas compradas dentro del período exportado. */
 function attendance_report_hour_purchase_days_available(): bool
 {
@@ -490,6 +503,7 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
         $manualDayOverrides = [];
     }
     $earlyOvertimeAuthorized = [];
+    $workedHourDoublings = [];
     $laborRegimes = [];
     $laborCycleDates = [];
     try {
@@ -513,6 +527,13 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
             }
         } catch (Throwable $error) {
             // El reporte sigue disponible mientras se instala la migración de autorizaciones.
+        }
+        if (attendance_report_worked_doublings_available()) {
+            $doublingStmt = db()->prepare('SELECT work_date FROM attendance_worked_hour_doublings WHERE worker_id = ? AND work_date BETWEEN ? AND ?');
+            $doublingStmt->execute([$workerId, $dateFrom, $dateTo]);
+            foreach ($doublingStmt->fetchAll(PDO::FETCH_COLUMN) as $doublingDate) {
+                $workedHourDoublings[(string) $doublingDate] = true;
+            }
         }
     }
     $calendarEvents = attendance_calendar_events_between($dateFrom, $dateTo);
@@ -741,6 +762,10 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 $workedMinutes = attendance_report_worked_after_lunch($workedMinutes, $completedForLunch);
             }
             if ($holidayCalendarOnlyMarks) $lateMinutes = 0;
+            $baseWorkedMinutes = $workedMinutes;
+            $workedDoubleSelected = isset($workedHourDoublings[$date]);
+            $workedDoubleApplied = $entry && $exit && $baseWorkedMinutes > 0 && $workedDoubleSelected;
+            if ($workedDoubleApplied) $workedMinutes = $baseWorkedMinutes * 2;
 
             $latestManualComment = $latestManualComments[$id][$date][$aid] ?? null;
             if ($manualOverride) {
@@ -790,7 +815,9 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                     ? ('Régimen 21×7 · ' . $laborCycle['code'] . ($entry || $exit ? ' · con marcación' : '')) : $state['label'],
                 'state_class' => $laborCycle && $laborCycle['rest'] && ($eventType === '' || $eventType === 'rest') ? 'report-state-rest' : $state['class'],
                 'journey_key' => $journeyKey, 'journey_label' => $journey['label'], 'journey_class' => $journey['class'],
-                'worked_minutes' => $workedMinutes, 'scheduled_minutes' => $scheduledMinutes,
+                'worked_minutes' => $workedMinutes, 'base_worked_minutes' => $baseWorkedMinutes,
+                'worked_double_selected' => $workedDoubleSelected,
+                'worked_double_applied' => (bool) $workedDoubleApplied, 'scheduled_minutes' => $scheduledMinutes,
                 'holiday_schedule_credit' => $holidayScheduleCredit,
                 'lunch_deduction_minutes' => $lunchDeductionMinutes,
                 'late_minutes' => $lateMinutes, 'overtime_minutes' => $overtimeMinutes,

@@ -347,6 +347,57 @@ if (earlyOvertimeToolbar) {
     });
 }
 
+const workedDoubleToolbar = document.getElementById('reportWorkedDoubleToolbar');
+if (workedDoubleToolbar) {
+    const checks = [...document.querySelectorAll('.worked-double-day')];
+    const saveButton = document.getElementById('saveWorkedDoubleSelection');
+    const status = document.getElementById('workedDoubleSelectionStatus');
+    const pending = () => checks.filter(check => check.checked !== (check.dataset.saved === '1'));
+    const refresh = () => {
+        const changed = pending();
+        saveButton.disabled = changed.length === 0;
+        status.textContent = checks.length === 0
+            ? 'No hay jornadas completas en esta página.'
+            : changed.length === 0
+                ? 'Marque o desmarque las fechas que desea cambiar.'
+                : `${changed.length} fecha${changed.length === 1 ? '' : 's'} pendiente${changed.length === 1 ? '' : 's'} de guardar.`;
+    };
+    checks.forEach(check => check.addEventListener('change', refresh));
+    refresh();
+    saveButton.addEventListener('click', async () => {
+        const changed = pending();
+        if (!changed.length) return;
+        const enabled = changed.filter(check => check.checked).length;
+        const disabled = changed.length - enabled;
+        const confirmation = await Swal.fire({
+            icon: 'question',
+            title: 'Confirmar horas trabajadas ×2',
+            text: `Se duplicarán ${enabled} jornada(s) y se quitará la duplicación de ${disabled} jornada(s). La base es el tiempo neto después del almuerzo; las horas extras mantienen su cálculo independiente.`,
+            showCancelButton: true,
+            confirmButtonText: 'Guardar cambios',
+            cancelButtonText: 'Seguir revisando',
+            confirmButtonColor: '#15803d',
+        });
+        if (!confirmation.isConfirmed) return;
+        const body = new FormData();
+        body.append('csrf_token', csrf);
+        body.append('worker_id', workedDoubleToolbar.dataset.workerId);
+        body.append('month', workedDoubleToolbar.dataset.month);
+        body.append('changes', JSON.stringify(changed.map(check => ({date: check.value, enabled: check.checked}))));
+        saveButton.disabled = true;
+        try {
+            const response = await fetch(`${BASE_URL}/servicios/control_personal/guardar_duplicacion_horas_trabajadas.php`, {method: 'POST', body});
+            const result = await response.json();
+            if (!response.ok || !result.ok) throw new Error(result.message || 'No se pudo guardar la duplicación.');
+            await Swal.fire({icon: 'success', title: 'Cambios guardados', text: 'Las horas trabajadas del reporte se actualizaron.', timer: 1700, showConfirmButton: false});
+            window.location.reload();
+        } catch (error) {
+            Swal.fire('Atención', error.message || 'No se pudo guardar la duplicación.', 'warning');
+            refresh();
+        }
+    });
+}
+
 const attendanceReportNoteForm = document.getElementById('attendanceReportNoteForm');
 if (attendanceReportNoteForm) {
     attendanceReportNoteForm.addEventListener('submit', async (event) => {

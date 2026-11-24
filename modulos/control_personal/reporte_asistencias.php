@@ -67,6 +67,7 @@ if ($worker) {
 }
 $canEditReport = !$personalView && !$reportLocked;
 $canJustifyRest = $worker && is_admin() && !$reportLocked && !$closureError && attendance_report_rest_justifications_available();
+$canDoubleWorked = $worker && is_admin() && !$reportLocked && !$closureError && attendance_report_worked_doublings_available();
 $assignment = $report['assignment'] ?? null;
 $summary = $report['summary'] ?? [];
 $monthlyDays = $report['monthly_day_summary'][$month] ?? [];
@@ -338,6 +339,13 @@ document.addEventListener('DOMContentLoaded', () => {
         <button class="btn btn-primary" type="button" id="saveEarlyOvertimeSelection"><i class="fa-solid fa-floppy-disk me-2"></i>Guardar selección</button>
     </div>
     <?php endif; ?>
+    <?php if ($canDoubleWorked): ?>
+    <div class="report-worked-double-toolbar" id="reportWorkedDoubleToolbar" data-worker-id="<?= (int) $workerId ?>" data-month="<?= e($month) ?>">
+        <div class="report-worked-double-icon"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i></div>
+        <div class="report-worked-double-copy"><strong>Duplicar horas trabajadas</strong><small id="workedDoubleSelectionStatus" role="status"></small></div>
+        <button class="btn btn-success" type="button" id="saveWorkedDoubleSelection" disabled><i class="fa-solid fa-floppy-disk me-1" aria-hidden="true"></i>Guardar duplicación</button>
+    </div>
+    <?php endif; ?>
     <div class="table-responsive">
         <table class="table align-middle individual-report-table">
             <thead><tr><?php if (!$personalView): ?><th class="report-early-overtime-select"><label class="report-early-overtime-check"><input type="checkbox" id="selectAllEarlyOvertime" aria-label="Seleccionar todas las jornadas elegibles"><span>Sel.</span></label></th><?php endif; ?><th>Fecha</th><th>Día</th><th>Horario</th><th>Tolerancia</th><th>Proyecto</th><th>Lugar de entrada</th><th>Lugar de salida</th><th>Entrada</th><th>Salida</th><th>Tardanza</th><th>Horas extras</th><th>Horas trabajadas</th><th>Estado de asistencia</th><th>Estado de jornada</th></tr></thead>
@@ -348,7 +356,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td class="attendance-time-cell"><?= e($row['entry']) ?><?php if ($row['entry_administrative']): ?><small class="d-block text-primary">Administrativa</small><?php endif; ?></td><td class="attendance-time-cell"><?= e($row['exit']) ?><?php if (!empty($row['exit_next_day'])): ?><small class="d-block text-primary">Día siguiente</small><?php endif; ?><?php if ($row['exit_administrative']): ?><small class="d-block text-primary">Administrativa</small><?php endif; ?></td>
                     <td><?= $row['late_minutes'] > 0 ? e(attendance_report_minutes_label((int) $row['late_minutes'])) : '-' ?></td>
                     <td class="report-overtime-cell"><?= $row['overtime_minutes'] > 0 ? e(attendance_report_minutes_label((int) $row['overtime_minutes'])) : '-' ?><?php if ($row['overtime_minutes'] > 0): ?><small><?php if (!empty($row['holiday_overtime_minutes'])): ?>Feriado ×2: <?= e(attendance_report_minutes_label((int) $row['holiday_overtime_minutes'])) ?><br>Según horario neto<br><?php endif; ?>Entrada<?= !empty($row['holiday_double_applied']) && $row['early_overtime_minutes'] > 0 ? ' ×2' : '' ?>: <?= e(attendance_report_minutes_label((int) $row['early_overtime_minutes'])) ?><br>Salida<?= !empty($row['holiday_double_applied']) && $row['exit_overtime_minutes'] > 0 ? ' ×2' : '' ?>: <?= e(attendance_report_minutes_label((int) $row['exit_overtime_minutes'])) ?></small><?php endif; ?></td>
-                    <td class="attendance-time-cell text-nowrap"><?= ($row['entry'] !== '-' && $row['exit'] !== '-') || !empty($row['holiday_schedule_credit']) ? e(attendance_report_minutes_label((int) $row['worked_minutes'])) : '-' ?><?php if (($row['entry'] !== '-' && $row['exit'] !== '-') && ($row['calendar_event_type'] ?? '') === 'holiday'): ?><small class="d-block text-primary">Marcación neta</small><?php elseif (!empty($row['holiday_double_applied']) && !empty($row['holiday_schedule_credit'])): ?><small class="d-block text-primary">Horario ×2 por feriado</small><?php endif; ?><?php if (!empty($row['holiday_schedule_credit'])): ?><small class="d-block text-muted">Crédito de feriado según horario</small><?php endif; ?><?php if (!empty($row['lunch_deduction_minutes'])): ?><small class="d-block text-muted">Almuerzo −<?= e(attendance_report_minutes_label((int) $row['lunch_deduction_minutes'])) ?></small><?php endif; ?></td>
+                    <td class="attendance-time-cell text-nowrap<?= !empty($row['worked_double_applied']) ? ' report-worked-double-active' : '' ?>">
+                        <?= ($row['entry'] !== '-' && $row['exit'] !== '-') || !empty($row['holiday_schedule_credit']) ? e(attendance_report_minutes_label((int) $row['worked_minutes'])) : '-' ?>
+                        <?php if (!empty($row['worked_double_applied'])): ?><small class="report-worked-double-badge">Base <?= e(attendance_report_minutes_label((int) $row['base_worked_minutes'])) ?> ×2</small>
+                        <?php elseif (($row['entry'] !== '-' && $row['exit'] !== '-') && ($row['calendar_event_type'] ?? '') === 'holiday'): ?><small class="d-block text-primary">Marcación neta</small>
+                        <?php elseif (!empty($row['holiday_double_applied']) && !empty($row['holiday_schedule_credit'])): ?><small class="d-block text-primary">Horario ×2 por feriado</small><?php endif; ?>
+                        <?php if (!empty($row['holiday_schedule_credit'])): ?><small class="d-block text-muted">Crédito de feriado según horario</small><?php endif; ?>
+                        <?php if (!empty($row['lunch_deduction_minutes'])): ?><small class="d-block text-muted">Almuerzo −<?= e(attendance_report_minutes_label((int) $row['lunch_deduction_minutes'])) ?></small><?php endif; ?>
+                        <?php if ($canDoubleWorked && (($row['entry'] !== '-' && $row['exit'] !== '-' && (int) ($row['base_worked_minutes'] ?? 0) > 0) || !empty($row['worked_double_selected']))): ?>
+                        <label class="report-worked-double-check" title="<?= empty($row['worked_double_applied']) && !empty($row['worked_double_selected']) ? 'Sin efecto hasta que la jornada vuelva a tener entrada y salida completas' : 'Duplicar las horas netas trabajadas de esta fecha' ?>">
+                            <input type="checkbox" class="form-check-input worked-double-day" value="<?= e((string) $row['date']) ?>" data-saved="<?= !empty($row['worked_double_selected']) ? '1' : '0' ?>" <?= !empty($row['worked_double_selected']) ? 'checked' : '' ?> aria-label="Duplicar horas trabajadas del <?= e(date('d/m/Y', strtotime((string) $row['date']))) ?>"><span>×2</span>
+                        </label>
+                        <?php endif; ?>
+                    </td>
                     <td class="report-rest-state-cell"><span class="attendance-report-state report-state-code-only <?= e($row['state_class']) ?>" title="<?= e($row['state_label']) ?>" aria-label="<?= e($row['state_label']) ?>"><strong><?= e($row['state_code']) ?></strong></span><?php if (!empty($row['rest_justification_file_path'])): ?><a class="report-rest-file-link" href="<?= e(APP_URL . '/' . ltrim((string) $row['rest_justification_file_path'], '/')) ?>" target="_blank" rel="noopener" title="Ver justificante: <?= e((string) $row['rest_justification_file_name']) ?>" aria-label="Ver justificante del descanso"><i class="fa-solid fa-paperclip" aria-hidden="true"></i></a><?php endif; ?><?php if ($canJustifyRest && (string) $row['state_key'] === 'rest'): ?><button class="btn btn-sm report-rest-justify-button" type="button" data-bs-toggle="modal" data-bs-target="#restJustificationModal" data-worker-id="<?= (int) $workerId ?>" data-rest-date="<?= e((string) $row['date']) ?>" data-file-url="<?= !empty($row['rest_justification_file_path']) ? e(APP_URL . '/' . ltrim((string) $row['rest_justification_file_path'], '/')) : '' ?>" data-file-name="<?= e((string) ($row['rest_justification_file_name'] ?? '')) ?>" title="<?= !empty($row['rest_justified']) ? 'Reemplazar justificante' : 'Adjuntar justificante' ?>"><i class="fa-solid <?= !empty($row['rest_justified']) ? 'fa-arrows-rotate' : 'fa-file-arrow-up' ?>" aria-hidden="true"></i></button><?php endif; ?></td>
                     <td><span class="journey-state <?= e($row['journey_class']) ?>"><?= e($row['journey_label']) ?></span></td>
                 </tr>
