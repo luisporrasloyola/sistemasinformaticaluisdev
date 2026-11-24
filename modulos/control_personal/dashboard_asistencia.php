@@ -758,10 +758,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                         $baseAttendanceCode = $attendanceCode;
                         $extraDayNumber = (int) ($extraDaysByWorkerDate[(int) $worker['worker_id']][$cellDate] ?? 0);
-                        $isExtraDay = $extraDayNumber > 0;
-                        if ($isExtraDay && $cellDate < $today && !$manualAbsence
-                            && (!$laborCycle || (!$laborCycle['rest'] && !$laborCycle['transition']))
-                            && $calendarEventType === '') {
+                        $isExtraDay = $extraDayNumber > 0 && $cellDate < $today && !$manualAbsence
+                            && $calendarEventType === '';
+                        if ($isExtraDay) {
                             $attendanceCode = 'DE' . $extraDayNumber;
                             $attendanceLabel = 'Día Extra ' . $extraDayNumber;
                             if (!$entry && !$exit) $incidents = ['Día Extra sin marcaciones'];

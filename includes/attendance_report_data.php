@@ -774,7 +774,6 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
             if ($workedDoubleApplied) $workedMinutes = $baseWorkedMinutes * 2;
             $extraDayNumber = (int) ($extraDaysByWorker[$id][$date] ?? 0);
             $extraDay = $extraDayNumber > 0 && $date < $today
-                && (!$laborCycle || (!$laborCycle['rest'] && !$laborCycle['transition']))
                 && $eventType === '' && !$manualOverride;
             $extraDayMinutes = $extraDay ? ($weekday === 6 ? 360 : 510) : 0;
             $overtimeMinutes += $extraDayMinutes;
@@ -870,7 +869,6 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
             if ($date >= $today || isset($reportedDays[$id][$date]) || isset($manualDayOverrides[$id][$date])) continue;
             if (attendance_calendar_resolve_event($calendarEvents, $date, $id, (int) $worker['company_id'])) continue;
             $extraCycle = $laborCycleDates[$id][$date]['cycle'] ?? null;
-            if ($extraCycle && ($extraCycle['rest'] || $extraCycle['transition'])) continue;
             $weekday = (int) (new DateTimeImmutable($date))->format('N');
             $extraMinutes = $weekday === 6 ? 360 : 510;
             $rows[] = [

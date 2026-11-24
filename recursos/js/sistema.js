@@ -858,9 +858,8 @@ function initAttendanceMatrixDetail() {
             fields.manualResultAbsent.checked = isAbsentResult;
             if (fields.dayType) fields.dayType.value = cell.dataset.dayType === 'extra' ? 'extra' : 'regular';
             const isPastEditableDay = cell.dataset.manualEnabled === '1' && cell.dataset.manualLock === '';
-            const cycleRestOrTransition = /^(?:M|D[1-7])$/.test(cell.dataset.laborCycleCode || '');
             const canChangeDayType = isPastEditableDay && cell.dataset.dayTypeAvailable === '1'
-                && cell.dataset.calendarType === '' && !cycleRestOrTransition
+                && cell.dataset.calendarType === ''
                 && cell.dataset.manualAbsence !== '1';
             fields.dayTypeSection?.classList.toggle('d-none', !isPastEditableDay);
             if (fields.dayType) fields.dayType.disabled = !canChangeDayType;
@@ -868,7 +867,6 @@ function initAttendanceMatrixDetail() {
                 fields.dayTypeHint.textContent = cell.dataset.dayTypeAvailable !== '1'
                     ? 'Para habilitar Día Extra, ejecute la migración de días extra en esta base de datos.'
                     : cell.dataset.calendarType !== '' ? 'Esta fecha tiene un evento del calendario laboral.'
-                    : cycleRestOrTransition ? 'El descanso o transición del régimen 21×7 no admite Día Extra.'
                     : cell.dataset.manualAbsence === '1' ? 'Esta fecha tiene una falta administrativa.'
                     : 'Se numera por fecha para cada trabajador (DE1, DE2...).';
                 fields.dayTypeHint.classList.toggle('d-none', canChangeDayType && fields.dayType?.value !== 'extra');
@@ -8048,6 +8046,10 @@ function initControlPersonalAssignments() {
     const conflictChoices = Array.from(document.querySelectorAll('input[name="assignment_conflict_choice"]'));
     const skipDetail = document.getElementById('assignmentSkipDetail');
     const replaceDetail = document.getElementById('assignmentReplaceDetail');
+    const dayTypeField = document.getElementById('assignmentDayType');
+    const dayTypeOnlyFields = ['assignmentLocationId', 'assignmentScheduleId', 'assignmentProjectId',
+        'assignmentLaborRegime', 'assignmentActivity', 'assignmentInstructions']
+        .map((id) => document.getElementById(id)).filter(Boolean);
     const activeAssignmentPeriods = Array.isArray(window.assignmentActivePeriods) ? window.assignmentActivePeriods : [];
     const workerDirectory = new Map(workerChecks.map((check) => {
         const option = check.closest('.assignment-worker-option');
@@ -8065,14 +8067,35 @@ function initControlPersonalAssignments() {
     const groupSearch = document.getElementById('assignmentGroupSearch');
     const assignmentGroups = Array.from(document.querySelectorAll('.assignment-group'));
     const assignmentSearchEmpty = document.getElementById('assignmentSearchEmpty');
+    let dayTypeChoiceTouched = false;
 
     function syncConflictChoice(value = 'skip') {
         if (conflictPolicy) conflictPolicy.value = value;
         conflictChoices.forEach((choice) => { choice.checked = choice.value === value; });
+        const dayTypeOnly = value === 'day_type_only';
+        dayTypeOnlyFields.forEach((field) => {
+            field.disabled = dayTypeOnly;
+            field.closest('.col-md-6, .col-md-12, .col-12')?.classList.toggle('d-none', dayTypeOnly);
+        });
+        if (noEnd) {
+            if (dayTypeOnly && noEnd.checked) {
+                noEnd.checked = false;
+                if (!validUntil.value) validUntil.value = validFrom.value;
+                syncNoEnd();
+            }
+            noEnd.disabled = dayTypeOnly;
+        }
+        document.querySelectorAll('#assignmentModal .js-validity-preset').forEach((button) => {
+            button.disabled = dayTypeOnly;
+        });
     }
 
     conflictChoices.forEach((choice) => choice.addEventListener('change', () => {
-        if (choice.checked) syncConflictChoice(choice.value);
+        if (choice.checked) {
+            dayTypeChoiceTouched = true;
+            syncConflictChoice(choice.value);
+            refreshConflictVisibility();
+        }
     }));
     syncConflictChoice();
 
@@ -8107,6 +8130,9 @@ function initControlPersonalAssignments() {
 
         const hasConflicts = conflictingWorkers.size > 0;
         const availableCount = Math.max(0, targetIds.length - conflictingWorkers.size);
+        const canChangeExistingDayType = scope === 'selected' && availableCount === 0 && hasConflicts && !awaitingSelection;
+        conflictField.querySelector('.is-day-type')?.classList.toggle('d-none', !canChangeExistingDayType);
+        if (!canChangeExistingDayType && conflictPolicy?.value === 'day_type_only') syncConflictChoice('skip');
         availableWorkers = targetIds.filter((workerId) => !conflictingWorkers.has(workerId)).map((workerId) => workerDirectory.get(workerId)).filter(Boolean);
         availabilitySummary?.classList.remove('d-none');
         const availabilityCard = availabilitySummary?.querySelector('.assignment-availability-card');
@@ -8130,6 +8156,15 @@ function initControlPersonalAssignments() {
         }
         conflictField.classList.toggle('d-none', awaitingSelection || !hasConflicts);
         if (awaitingSelection || !hasConflicts) syncConflictChoice('skip');
+        else if (!dayTypeChoiceTouched && scope === 'selected' && dayTypeField?.value === 'extra'
+            && availableCount === 0 && conflictPolicy?.value === 'skip') {
+            syncConflictChoice('day_type_only');
+        }
+        if (conflictPolicy?.value === 'day_type_only') {
+            if (availabilityTitle) availabilityTitle.textContent = `${conflictingWorkers.size} ${conflictingWorkers.size === 1 ? 'trabajador con asignación' : 'trabajadores con asignación'}`;
+            if (availabilityDetail) availabilityDetail.textContent = 'Se cambiará solo el tipo de día en las fechas elegidas.';
+        }
+        availabilityCard?.classList.toggle('day-type-mode', conflictPolicy?.value === 'day_type_only');
         if (conflictHeading && hasConflicts && !awaitingSelection) {
             const count = conflictingWorkers.size;
             conflictHeading.textContent = count === 1
@@ -8519,6 +8554,7 @@ function initControlPersonalAssignments() {
         refreshConflictVisibility();
     }));
     workerField?.addEventListener('change', refreshConflictVisibility);
+    dayTypeField?.addEventListener('change', refreshConflictVisibility);
     workerSearch?.addEventListener('input', () => {
         const query = normalizarTexto(workerSearch.value);
         document.querySelectorAll('.assignment-worker-option').forEach((option) => {
@@ -8529,6 +8565,7 @@ function initControlPersonalAssignments() {
     syncAssignmentScope();
 
     document.getElementById('newAssignmentBtn')?.addEventListener('click', () => {
+        dayTypeChoiceTouched = false;
         form.reset();
         document.getElementById('assignmentProjectId').value = '';
         document.getElementById('assignmentLaborRegime').value = 'regular';
@@ -8562,6 +8599,8 @@ function initControlPersonalAssignments() {
 
     document.querySelectorAll('.js-edit-assignment').forEach((button) => {
         button.addEventListener('click', () => {
+            dayTypeChoiceTouched = false;
+            syncConflictChoice('skip');
             form.reset();
             form.classList.remove('was-validated');
             document.getElementById('assignmentId').value = button.dataset.id || '';
@@ -8612,16 +8651,19 @@ function initControlPersonalAssignments() {
         if (isMultipleAssignment) {
             const selectedCount = workerChecks.filter((check) => check.checked).length;
             const willReplace = conflictPolicy?.value === 'replace';
+            const dayTypeOnly = conflictPolicy?.value === 'day_type_only';
             const confirmed = await Swal.fire({
-                title: willReplace ? 'Confirmar cambio de asignaciones' : 'Confirmar asignación segura',
-                text: willReplace
+                title: dayTypeOnly ? 'Confirmar tipo de día' : (willReplace ? 'Confirmar cambio de asignaciones' : 'Confirmar asignación segura'),
+                text: dayTypeOnly
+                    ? `Se aplicará ${dayTypeField.value === 'extra' ? 'Día Extra' : 'Día Regular'} a las fechas elegidas. Se conservarán las asignaciones actuales.`
+                    : willReplace
                     ? 'Las asignaciones activas involucradas se finalizarán y se crearán nuevas. El historial anterior permanecerá disponible.'
                     : (scopeField.value === 'all'
                         ? 'La nueva asignación se aplicará al personal disponible. Quienes ya tengan otra asignación dentro de las fechas elegidas serán omitidos sin modificar sus datos actuales.'
                         : `Se revisarán ${selectedCount} trabajador(es). La nueva asignación se aplicará solo a quienes estén disponibles en esas fechas; los demás conservarán su asignación actual.`),
                 icon: willReplace ? 'warning' : 'question',
                 showCancelButton: true,
-                confirmButtonText: willReplace ? 'Sí, finalizar y crear' : 'Sí, asignar',
+                confirmButtonText: dayTypeOnly ? 'Sí, cambiar tipo de día' : (willReplace ? 'Sí, finalizar y crear' : 'Sí, asignar'),
                 cancelButtonText: 'Cancelar'
             });
             if (!confirmed.isConfirmed) return;
@@ -8630,6 +8672,11 @@ function initControlPersonalAssignments() {
         const data = await response.json();
         if (!data.ok) {
             Swal.fire('Atención', data.message || 'No se pudo guardar la asignación.', 'warning');
+            return;
+        }
+        if (data.mode === 'day_type_only') {
+            await Swal.fire('Tipo de día actualizado', data.message, 'success');
+            window.location.reload();
             return;
         }
 

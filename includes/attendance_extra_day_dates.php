@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/attendance_calendar.php';
+
 /** Fechas extra y numeración acumulada por trabajador, incluidas las asignaciones por vigencia. */
 function attendance_extra_day_dates(PDO $pdo, array $workerIds, string $from, string $through): array
 {
@@ -80,11 +82,39 @@ function attendance_extra_day_dates(PDO $pdo, array $workerIds, string $from, st
             if ($row['day_type'] === 'regular') unset($byWorker[$id][$date]);
             else $byWorker[$id][$date] = true;
         }
+        $firstExtraDate = null;
+        foreach ($byWorker as $dates) {
+            foreach ($dates as $date => $isExtra) {
+                if ($isExtra && ($firstExtraDate === null || $date < $firstExtraDate)) {
+                    $firstExtraDate = $date;
+                }
+            }
+        }
+        if ($firstExtraDate === null) continue;
+
+        $companies = [];
+        $workers = $pdo->prepare("SELECT id, company_id FROM workers WHERE id IN ($places)");
+        $workers->execute($ids);
+        foreach ($workers->fetchAll() as $worker) {
+            $companies[(int) $worker['id']] = (int) $worker['company_id'];
+        }
+        $calendarEvents = attendance_calendar_events_between($firstExtraDate, $end);
+        $manualAbsences = [];
+        $absences = $pdo->prepare("SELECT worker_id, mark_date FROM attendance_manual_day_overrides
+            WHERE worker_id IN ($places) AND mark_date BETWEEN ? AND ? AND attendance_status = 'falta'");
+        $absences->execute([...$ids, $firstExtraDate, $end]);
+        foreach ($absences->fetchAll() as $absence) {
+            $manualAbsences[(int) $absence['worker_id']][(string) $absence['mark_date']] = true;
+        }
         foreach ($byWorker as $id => $dates) {
             ksort($dates);
             $number = 0;
             foreach ($dates as $date => $isExtra) {
                 if (!$isExtra) continue;
+                if (isset($manualAbsences[$id][$date])
+                    || attendance_calendar_resolve_event($calendarEvents, $date, (int) $id, $companies[(int) $id] ?? 0)) {
+                    continue;
+                }
                 ++$number;
                 if ($date >= $from) $result[$id][$date] = $number;
             }

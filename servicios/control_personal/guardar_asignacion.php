@@ -3,6 +3,7 @@ require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/attendance_report_closure.php';
 require_once __DIR__ . '/../../includes/attendance_labor_regime_correction.php';
+require_once __DIR__ . '/../../includes/attendance_calendar.php';
 require_role('Administrador');
 
 verify_csrf($_POST['csrf_token'] ?? null);
@@ -107,10 +108,11 @@ function assignment_conflict_message(array $conflict): string
 if (!in_array($scopeType, ['all', 'worker', 'selected'], true)) {
     json_response(['ok' => false, 'message' => 'Seleccione a quien se aplicara la asignacion.'], 400);
 }
-if (!in_array($conflictPolicy, ['skip', 'replace'], true)) {
+if (!in_array($conflictPolicy, ['skip', 'replace', 'day_type_only'], true)) {
     json_response(['ok' => false, 'message' => 'Seleccione cómo tratar las asignaciones existentes.'], 400);
 }
-if (($scopeType === 'worker' && $workerId <= 0) || $locationId <= 0 || $scheduleId <= 0 || $projectId <= 0) {
+if (($scopeType === 'worker' && $workerId <= 0)
+    || ($conflictPolicy !== 'day_type_only' && ($locationId <= 0 || $scheduleId <= 0 || $projectId <= 0))) {
     json_response(['ok' => false, 'message' => 'Complete el alcance, lugar, horario y cliente.'], 400);
 }
 if (!in_array($laborRegime, ['regular', '21x7'], true)) {
@@ -130,6 +132,79 @@ if (!$validFromDate || $validFromDate->format('Y-m-d') !== $validFrom
 }
 if ($validUntilDate && $validUntilDate < $validFromDate) {
     json_response(['ok' => false, 'message' => 'La fecha de finalizacion no puede ser anterior a la fecha de inicio.'], 422);
+}
+
+if ($conflictPolicy === 'day_type_only') {
+    if ($id > 0 || $scopeType !== 'selected' || !$selectedWorkerIds || !$validUntilDate) {
+        json_response(['ok' => false, 'message' => 'Seleccione trabajadores y un rango de fechas cerrado para cambiar el tipo de día.'], 422);
+    }
+    $dayCount = (int) $validFromDate->diff($validUntilDate)->days + 1;
+    if ($dayCount > 31) {
+        json_response(['ok' => false, 'message' => 'Seleccione como máximo 31 días por operación.'], 422);
+    }
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        $places = implode(',', array_fill(0, count($selectedWorkerIds), '?'));
+        $workersStmt = $pdo->prepare("SELECT id, company_id FROM workers WHERE id IN ($places)");
+        $workersStmt->execute($selectedWorkerIds);
+        $targetWorkers = $workersStmt->fetchAll();
+        if (count($targetWorkers) !== count($selectedWorkerIds)) {
+            throw new DomainException('Uno o más trabajadores seleccionados no existen.');
+        }
+        $coverage = $pdo->prepare("SELECT DISTINCT worker_id FROM attendance_assignments
+            WHERE status = 1 AND worker_id IN ($places) AND valid_from <= ?
+              AND (valid_until IS NULL OR valid_until >= ?)");
+        $coverage->execute([...$selectedWorkerIds, $validFrom, $validUntil]);
+        $covered = array_fill_keys(array_map('intval', $coverage->fetchAll(PDO::FETCH_COLUMN)), true);
+        foreach ($selectedWorkerIds as $targetWorkerId) {
+            if (!isset($covered[$targetWorkerId])) {
+                throw new DomainException('Un trabajador no tiene una asignación activa que cubra todas las fechas elegidas. Revise su vigencia.');
+            }
+        }
+        attendance_report_assert_calendar_editable($validFrom, $validUntil, $selectedWorkerIds, $pdo);
+        $calendarEvents = $dayType === 'extra' ? attendance_calendar_events_between($validFrom, $validUntil) : [];
+        $absences = [];
+        if ($dayType === 'extra') {
+            $absenceStmt = $pdo->prepare("SELECT worker_id, mark_date FROM attendance_manual_day_overrides
+                WHERE worker_id IN ($places) AND mark_date BETWEEN ? AND ? AND attendance_status = 'falta'");
+            $absenceStmt->execute([...$selectedWorkerIds, $validFrom, $validUntil]);
+            foreach ($absenceStmt->fetchAll() as $absence) {
+                $absences[(int) $absence['worker_id']][(string) $absence['mark_date']] = true;
+            }
+        }
+        $saveDay = $pdo->prepare('INSERT INTO attendance_extra_days
+            (worker_id, work_date, day_type, changed_by_user_id)
+            VALUES (:worker, :date, :day_type, :actor)
+            ON DUPLICATE KEY UPDATE day_type = VALUES(day_type),
+                changed_by_user_id = VALUES(changed_by_user_id), changed_at = CURRENT_TIMESTAMP');
+        foreach ($targetWorkers as $worker) {
+            $targetWorkerId = (int) $worker['id'];
+            $cursor = $validFromDate;
+            while ($cursor <= $validUntilDate) {
+                $date = $cursor->format('Y-m-d');
+                if ($dayType === 'extra' && (isset($absences[$targetWorkerId][$date])
+                    || attendance_calendar_resolve_event($calendarEvents, $date, $targetWorkerId, (int) $worker['company_id']))) {
+                    throw new DomainException('La fecha ' . $cursor->format('d/m/Y') . ' tiene una falta o evento del calendario; no admite Día Extra.');
+                }
+                $saveDay->execute(['worker' => $targetWorkerId, 'date' => $date,
+                    'day_type' => $dayType, 'actor' => $currentUserId]);
+                $cursor = $cursor->modify('+1 day');
+            }
+        }
+        $pdo->commit();
+        json_response(['ok' => true, 'mode' => 'day_type_only',
+            'message' => 'Se aplicó ' . ($dayType === 'extra' ? 'Día Extra' : 'Día Regular') . ' a '
+                . $dayCount . ' fecha(s) de ' . count($targetWorkers) . ' trabajador(es). '
+                . 'El día actual y los futuros se reflejarán cuando hayan transcurrido.']);
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        $message = $e instanceof DomainException ? $e->getMessage()
+            : (in_array($e instanceof PDOException ? $e->getCode() : '', ['42S02', '42S22'], true)
+                ? 'Falta ejecutar las migraciones de Día Extra en esta base de datos.'
+                : 'No se pudo cambiar el tipo de día.');
+        json_response(['ok' => false, 'message' => $message], $e instanceof DomainException ? 409 : 500);
+    }
 }
 
 $checks = [

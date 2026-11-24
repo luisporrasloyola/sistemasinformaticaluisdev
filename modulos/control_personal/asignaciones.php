@@ -313,6 +313,10 @@ require __DIR__ . '/../../includes/header.php';
                                         <input type="radio" name="assignment_conflict_choice" value="replace">
                                         <span><strong>Reemplazar asignaciones</strong><small id="assignmentReplaceDetail">Cierra las actuales y aplica la nueva.</small></span>
                                     </label>
+                                    <label class="assignment-conflict-choice is-day-type">
+                                        <input type="radio" name="assignment_conflict_choice" value="day_type_only">
+                                        <span><strong>Cambiar solo el tipo de día</strong><small>Aplica Día Regular o Día Extra a un máximo de 31 fechas. Conserva el lugar, horario, cliente y vigencia de las asignaciones actuales.</small></span>
+                                    </label>
                                 </div>
                             </div>
                         </div>

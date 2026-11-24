@@ -40,11 +40,6 @@ try {
         if (attendance_calendar_event_for_worker($workDate, $workerId, (int) $companyId)) {
             day_type_response(['ok' => false, 'message' => 'No se puede marcar como Día Extra una fecha especial del calendario laboral.'], 409);
         }
-        $regimeHistory = attendance_labor_cycle_history($pdo, [$workerId], $workDate);
-        $cycle = attendance_labor_cycle_state($regimeHistory[$workerId] ?? [], $workDate)['cycle'];
-        if ($cycle && ($cycle['rest'] || $cycle['transition'])) {
-            day_type_response(['ok' => false, 'message' => 'El descanso y la transición del régimen 21×7 no se pueden marcar como Día Extra.'], 409);
-        }
         $absence = $pdo->prepare("SELECT 1 FROM attendance_manual_day_overrides WHERE worker_id = :worker AND mark_date = :date AND attendance_status = 'falta' LIMIT 1");
         $absence->execute(['worker' => $workerId, 'date' => $workDate]);
         if ($absence->fetchColumn()) {
