@@ -8095,6 +8095,7 @@ function initControlPersonalAssignments() {
     conflictChoices.forEach((choice) => choice.addEventListener('change', () => {
         if (choice.checked) {
             dayTypeChoiceTouched = true;
+            if (choice.value === 'day_type_only' && dayTypeField) dayTypeField.value = 'extra';
             syncConflictChoice(choice.value);
             refreshConflictVisibility();
         }
