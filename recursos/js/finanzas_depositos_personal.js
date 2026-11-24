@@ -352,6 +352,11 @@ document.addEventListener('DOMContentLoaded', () => {
         retry.type = 'button';
         retry.className = 'btn btn-sm btn-outline-primary';
         retry.textContent = 'Reintentar lectura';
+        const manual = document.createElement('button');
+        manual.type = 'button';
+        manual.className = 'btn btn-sm btn-outline-success';
+        manual.textContent = 'Completar manualmente';
+        manual.hidden = true;
         const save = document.createElement('button');
         save.type = 'button';
         save.className = 'btn btn-sm btn-primary';
@@ -363,8 +368,8 @@ document.addEventListener('DOMContentLoaded', () => {
         close.textContent = 'Cerrar';
         close.hidden = true;
         const actions = document.createElement('div');
-        actions.className = 'd-flex gap-2';
-        actions.append(retry, save, close);
+        actions.className = 'd-flex gap-2 flex-wrap';
+        actions.append(retry, manual, save, close);
         const status = document.createElement('div');
         status.className = 'personal-deposit-status';
         status.setAttribute('role', 'status');
@@ -395,7 +400,7 @@ document.addEventListener('DOMContentLoaded', () => {
         card.append(header, status, preview, fields);
         cards.appendChild(card);
         activateDepositorSearch(fields.querySelector('[data-field="depositante"]'));
-        return {card, status, retry, save, close, file, url, preview, preparedFile: null, saved: false};
+        return {card, status, retry, manual, save, close, file, url, preview, preparedFile: null, saved: false};
     }
 
     function validFields(card) {
@@ -528,6 +533,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function readCard(item, currentGeneration) {
         const {card, status, retry, file} = item;
         retry.disabled = true;
+        item.manual.hidden = true;
         status.classList.remove('is-error');
         status.textContent = file.type === 'application/pdf' ? 'Leyendo PDF con Gemini…' : 'Leyendo foto con Gemini…';
         try {
@@ -593,6 +599,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (file.type === 'application/pdf') throw new Error('El PDF debe contener varios beneficiarios de Interbank para guardarse automáticamente.');
             if (!['YAPE', 'PLIN', 'TRANSFERENCIA_INTERBANK', 'TRANSFERENCIA_BCP', 'TRANSFERENCIA_MOVIMIENTO', 'TRANSFERENCIA_MASIVA', 'PAGO_EFECTIVO'].includes(result.model)) {
+                item.manual.hidden = !allowed.includes(file.type);
                 status.textContent = 'Modelo pendiente de configurar. Esta foto aún no se puede guardar.';
                 return;
             }
@@ -618,6 +625,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (currentGeneration !== generation) return;
             status.classList.add('is-error');
             status.textContent = error.message || 'No se pudo completar la lectura.';
+            item.manual.hidden = !allowed.includes(file.type);
         } finally {
             retry.disabled = false;
         }
@@ -648,6 +656,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const items = files.map(makeCard);
         items.forEach(item => {
             item.retry.addEventListener('click', () => { if (!readingQueue && !item.saved) readCard(item, generation); });
+            item.manual.addEventListener('click', () => {
+                if (!manualForm || !window.bootstrap?.Modal) return;
+                const transfer = new DataTransfer();
+                transfer.items.add(item.file);
+                manualForm.elements.foto.files = transfer.files;
+                for (const key of ['fecha', 'monto', 'modo_pago', 'depositante']) {
+                    const value = item.card.querySelector(`[data-field="${key}"]`)?.value;
+                    if (value) manualForm.elements[key].value = value;
+                }
+                document.getElementById('personalDepositManualError').hidden = true;
+                window.bootstrap.Modal.getOrCreateInstance(document.getElementById('personalDepositManualModal')).show();
+            });
             item.save.addEventListener('click', () => saveCard(item, generation));
             item.close.addEventListener('click', () => {
                 URL.revokeObjectURL(item.url);

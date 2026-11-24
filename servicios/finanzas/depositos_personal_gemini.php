@@ -112,7 +112,7 @@ $response = false;
 $status = 0;
 $curlNumber = 0;
 for ($attempt = 1; $attempt <= 2; $attempt++) {
-    $modelName = $attempt === 1 ? 'gemini-3.1-flash-lite' : 'gemini-3.5-flash-lite';
+    $modelName = 'gemini-3.5-flash-lite';
     $handle = curl_init('https://generativelanguage.googleapis.com/v1beta/models/' . $modelName . ':generateContent');
     curl_setopt_array($handle, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => $body, CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'x-goog-api-key: ' . $key], CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 8, CURLOPT_TIMEOUT => 50]);
     $response = curl_exec($handle);

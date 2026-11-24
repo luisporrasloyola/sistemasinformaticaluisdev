@@ -332,6 +332,6 @@ window.pendingDepositLinks = <?= json_encode([
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 </script>
 <script src="<?= e(APP_URL . '/recursos/js/finanzas_depositos_personal_lote.js?v=2') ?>" defer></script>
-<script src="<?= e(APP_URL . '/recursos/js/finanzas_depositos_personal.js?v=30') ?>" defer></script>
+<script src="<?= e(APP_URL . '/recursos/js/finanzas_depositos_personal.js?v=31') ?>" defer></script>
 <script src="<?= e(APP_URL . '/recursos/js/finanzas_depositos_pagos_pendientes.js?v=6') ?>" defer></script>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>
