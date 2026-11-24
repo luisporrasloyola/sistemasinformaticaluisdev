@@ -3,15 +3,16 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/attendance_calendar.php';
 
-/** Fechas extra y numeración acumulada por trabajador, incluidas las asignaciones por vigencia. */
+/** Fechas extra con marcación y numeración acumulada por trabajador. */
 function attendance_extra_day_dates(PDO $pdo, array $workerIds, string $from, string $through, bool $includeUpcoming = false): array
 {
     $workerIds = array_values(array_unique(array_filter(array_map('intval', $workerIds))));
     $result = [];
-    if (!$workerIds || $through < $from) return ['dates' => $result, 'available' => true];
+    $programmed = [];
+    if (!$workerIds || $through < $from) return ['dates' => $result, 'programmed' => $programmed, 'available' => true];
     $yesterday = (new DateTimeImmutable('today'))->modify('-1 day')->format('Y-m-d');
     $end = $includeUpcoming ? $through : min($through, $yesterday);
-    if ($end < $from) return ['dates' => $result, 'available' => true];
+    if ($end < $from) return ['dates' => $result, 'programmed' => $programmed, 'available' => true];
     $scanFrom = '1900-01-01';
     $available = true;
 
@@ -92,6 +93,15 @@ function attendance_extra_day_dates(PDO $pdo, array $workerIds, string $from, st
         }
         if ($firstExtraDate === null) continue;
 
+        $markedDates = [];
+        $marks = $pdo->prepare("SELECT DISTINCT worker_id, mark_date FROM attendance_marks
+            WHERE worker_id IN ($places) AND mark_date BETWEEN ? AND ?
+              AND mark_type IN ('entrada', 'salida')");
+        $marks->execute([...$ids, $firstExtraDate, $end]);
+        foreach ($marks->fetchAll() as $mark) {
+            $markedDates[(int) $mark['worker_id']][(string) $mark['mark_date']] = true;
+        }
+
         $companies = [];
         $workers = $pdo->prepare("SELECT id, company_id FROM workers WHERE id IN ($places)");
         $workers->execute($ids);
@@ -115,10 +125,12 @@ function attendance_extra_day_dates(PDO $pdo, array $workerIds, string $from, st
                     || attendance_calendar_resolve_event($calendarEvents, $date, (int) $id, $companies[(int) $id] ?? 0)) {
                     continue;
                 }
+                if ($date >= $from) $programmed[$id][$date] = true;
+                if (!isset($markedDates[$id][$date])) continue;
                 ++$number;
                 if ($date >= $from) $result[$id][$date] = $number;
             }
         }
     }
-    return ['dates' => $result, 'available' => $available];
+    return ['dates' => $result, 'programmed' => $programmed, 'available' => $available];
 }

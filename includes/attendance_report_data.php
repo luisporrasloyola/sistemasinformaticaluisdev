@@ -773,7 +773,7 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
             $workedDoubleApplied = $entry && $exit && $baseWorkedMinutes > 0 && $workedDoubleSelected;
             if ($workedDoubleApplied) $workedMinutes = $baseWorkedMinutes * 2;
             $extraDayNumber = (int) ($extraDaysByWorker[$id][$date] ?? 0);
-            $extraDay = $extraDayNumber > 0 && $date < $today
+            $extraDay = $extraDayNumber > 0 && ($entry || $exit) && $date < $today
                 && $eventType === '' && !$manualOverride;
             $extraDayMinutes = $extraDay ? ($weekday === 6 ? 360 : 510) : 0;
             $overtimeMinutes += $extraDayMinutes;
@@ -862,11 +862,12 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
 
     $reportedDays = [];
     foreach ($rows as $row) $reportedDays[(int) $row['worker_id']][(string) $row['date']] = true;
-    // Un Día Extra también puede asignarse a una fecha sin horario ni asignación activa.
+    // Una marcación de Día Extra puede existir sin horario ni asignación activa.
     foreach ($workers as $worker) {
         $id = (int) $worker['id'];
         foreach ($extraDaysByWorker[$id] ?? [] as $date => $extraDayNumber) {
-            if ($date >= $today || isset($reportedDays[$id][$date]) || isset($manualDayOverrides[$id][$date])) continue;
+            if ($date >= $today || isset($reportedDays[$id][$date]) || isset($manualDayOverrides[$id][$date])
+                || !isset($marksByWorkerAndDateAndAssignment[$id][$date])) continue;
             if (attendance_calendar_resolve_event($calendarEvents, $date, $id, (int) $worker['company_id'])) continue;
             $extraCycle = $laborCycleDates[$id][$date]['cycle'] ?? null;
             $weekday = (int) (new DateTimeImmutable($date))->format('N');

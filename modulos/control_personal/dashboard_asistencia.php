@@ -294,6 +294,7 @@ foreach ($stmt->fetchAll() as $row) {
 }
 $extraDayData = attendance_extra_day_dates(db(), array_keys($matrixRows), $monthStart, $monthEnd, true);
 $extraDaysByWorkerDate = $extraDayData['dates'];
+$programmedExtraDaysByWorkerDate = $extraDayData['programmed'];
 $extraDaysAvailable = $extraDayData['available'];
 $restJustificationsByWorkerDate = [];
 if ($matrixRows && attendance_report_rest_justifications_available()) {
@@ -758,13 +759,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                         $baseAttendanceCode = $attendanceCode;
                         $extraDayNumber = (int) ($extraDaysByWorkerDate[(int) $worker['worker_id']][$cellDate] ?? 0);
-                        $isExtraDay = $extraDayNumber > 0 && !$manualAbsence
+                        $isExtraDay = $extraDayNumber > 0 && ($entry || $exit) && !$manualAbsence
                             && $calendarEventType === '';
                         if ($isExtraDay) {
                             $attendanceCode = 'DE' . $extraDayNumber;
-                            $attendanceLabel = 'Día Extra ' . $extraDayNumber
-                                . ($cellDate >= $today ? ' programado' : '');
-                            if ($cellDate < $today && !$entry && !$exit) $incidents = ['Día Extra sin marcaciones'];
+                            $attendanceLabel = 'Día Extra ' . $extraDayNumber;
                         }
 
                         $cellClass = preg_match('/^DE[1-9][0-9]*$/', $attendanceCode) ? 'matrix-extra-day' : match ($attendanceCode) {
@@ -859,7 +858,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             data-assignment-project-id="<?= (int) $worker['assignment_project_id'] ?>"
                             data-code="<?= e($attendanceCode ?: attendance_calendar_event_abbreviation($calendarEventType)) ?>"
                             data-base-code="<?= e($baseAttendanceCode) ?>"
-                            data-day-type="<?= $isExtraDay ? 'extra' : 'regular' ?>"
+                            data-day-type="<?= isset($programmedExtraDaysByWorkerDate[(int) $worker['worker_id']][$cellDate]) ? 'extra' : 'regular' ?>"
                             data-day-type-available="<?= $extraDaysAvailable ? '1' : '0' ?>"
                             data-manual-absence="<?= $manualAbsence ? '1' : '0' ?>"
                             data-status="<?= e(strip_tags($detailLabel)) ?>"

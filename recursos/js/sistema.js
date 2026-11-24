@@ -845,8 +845,7 @@ function initAttendanceMatrixDetail() {
             fields.permitExitEdit.classList.remove('btn-outline-danger');
             fields.permitExitEdit.classList.add('btn-outline-primary');
             fields.permitExitEdit.innerHTML = '<i class="fa-solid fa-pen me-1"></i>Permitir editar';
-            const baseCode = cell.dataset.dayType === 'extra' && cell.dataset.entry === '-' && cell.dataset.exit === '-'
-                ? '' : (cell.dataset.baseCode || cell.dataset.code);
+            const baseCode = cell.dataset.baseCode || cell.dataset.code;
             const isAbsentResult = baseCode === 'F';
             const isLateResult = baseCode === 'T' || baseCode === 'ATSA';
             const hasRegisteredMark = (cell.dataset.entry && cell.dataset.entry !== '-') || (cell.dataset.exit && cell.dataset.exit !== '-');
