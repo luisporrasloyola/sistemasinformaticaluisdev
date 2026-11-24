@@ -33,7 +33,7 @@ function attendance_report_classify_day(array $row, ?string $asOfDate = null): a
         && ($calendarType === '' || $calendarType === 'rest');
     if ($cycleRest && !$restJustified) $restKind = 'regime';
 
-    $worked = $hasEntry && $state !== 'absent';
+    $worked = ($hasEntry && $state !== 'absent') || ($state === 'extra_day' && (int) ($row['extra_day_minutes'] ?? 0) > 0);
     $incomplete = ($hasEntry && !$hasExit && $journey !== 'active') || (!$hasEntry && $hasExit);
     $regular = $worked && $hasExit && $state === 'attended' && ($row['labor_regime'] ?? 'regular') === 'regular'
         && $journey === 'completed'
@@ -62,6 +62,7 @@ function attendance_report_classify_day(array $row, ?string $asOfDate = null): a
         'labor_cycle_rest' => $cycleRest,
         'labor_cycle_rest_worked' => $cycleRest && $worked,
         'worked_minutes' => max(0, (int) ($row['worked_minutes'] ?? 0)),
+        'extra_day_minutes' => max(0, (int) ($row['extra_day_minutes'] ?? 0)),
         'holiday_overtime_minutes' => max(0, (int) ($row['holiday_overtime_minutes'] ?? 0)),
         'early_overtime_minutes' => max(0, (int) ($row['early_overtime_minutes'] ?? 0)),
         'exit_overtime_minutes' => max(0, (int) ($row['exit_overtime_minutes'] ?? 0)),

@@ -7,6 +7,7 @@ require_once __DIR__ . '/attendance_report_daily.php';
 require_once __DIR__ . '/attendance_labor_cycle.php';
 require_once __DIR__ . '/attendance_report_hours.php';
 require_once __DIR__ . '/attendance_holiday_double.php';
+require_once __DIR__ . '/attendance_extra_day_dates.php';
 
 function attendance_report_time(?string $time): string
 {
@@ -323,6 +324,9 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
     $stmt->execute($workerId > 0 ? ['worker_id' => $workerId] : []);
     $workers = $stmt->fetchAll();
 
+    $extraDayData = attendance_extra_day_dates(db(), array_column($workers, 'id'), $dateFrom, $dateTo);
+    $extraDaysByWorker = $extraDayData['dates'];
+
     $restJustifications = [];
     if ($workers && attendance_report_rest_justifications_available()) {
         try {
@@ -348,10 +352,12 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 CASE WHEN aa.deactivated_at IS NOT NULL
                     THEN LEAST(COALESCE(aa.valid_until, DATE(aa.deactivated_at)), DATE(aa.deactivated_at))
                     ELSE aa.valid_until END AS assignment_end_date,
-                s.name AS schedule_name, l.name AS location_name, l.address AS location_address
+                s.name AS schedule_name, l.name AS location_name, l.address AS location_address,
+                ap.name AS assigned_client_name
             FROM attendance_assignments aa
             JOIN attendance_schedules s ON s.id = aa.schedule_id
             JOIN attendance_locations l ON l.id = aa.location_id
+            LEFT JOIN attendance_projects ap ON ap.id = aa.project_id
             WHERE aa.worker_id IN ({$placeholders})
             ORDER BY aa.worker_id, aa.created_at, aa.id");
         $stmt->execute($ids);
@@ -766,6 +772,12 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
             $workedDoubleSelected = isset($workedHourDoublings[$date]);
             $workedDoubleApplied = $entry && $exit && $baseWorkedMinutes > 0 && $workedDoubleSelected;
             if ($workedDoubleApplied) $workedMinutes = $baseWorkedMinutes * 2;
+            $extraDayNumber = (int) ($extraDaysByWorker[$id][$date] ?? 0);
+            $extraDay = $extraDayNumber > 0 && $date < $today
+                && (!$laborCycle || (!$laborCycle['rest'] && !$laborCycle['transition']))
+                && $eventType === '' && !$manualOverride;
+            $extraDayMinutes = $extraDay ? ($weekday === 6 ? 360 : 510) : 0;
+            $overtimeMinutes += $extraDayMinutes;
 
             $latestManualComment = $latestManualComments[$id][$date][$aid] ?? null;
             if ($manualOverride) {
@@ -809,15 +821,16 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 'tolerance_minutes' => $hasSchedule ? max(0,(int)($scheduleDay['tolerance_minutes'] ?? 0)) : null,
                 'location' => $journeyLocations,
                 'entry_location' => $entryLocation, 'exit_location' => $exitLocation,
-                'state_key' => $stateKey,
-                'state_code' => $laborCycle && !$manualOverride && (($entry || $exit) || (($eventType === '' || $eventType === 'rest') && ($laborCycle['rest'] || $laborCycle['transition']))) ? $laborCycle['code'] : $state['code'],
-                'state_label' => $laborCycle && !$manualOverride && (($entry || $exit) || (($eventType === '' || $eventType === 'rest') && ($laborCycle['rest'] || $laborCycle['transition'])))
-                    ? ('Régimen 21×7 · ' . $laborCycle['code'] . ($entry || $exit ? ' · con marcación' : '')) : $state['label'],
-                'state_class' => $laborCycle && $laborCycle['rest'] && ($eventType === '' || $eventType === 'rest') ? 'report-state-rest' : $state['class'],
+                'state_key' => $extraDay && !$entry && !$exit ? 'extra_day' : $stateKey,
+                'state_code' => $extraDay ? 'DE' . $extraDayNumber : ($laborCycle && !$manualOverride && (($entry || $exit) || (($eventType === '' || $eventType === 'rest') && ($laborCycle['rest'] || $laborCycle['transition']))) ? $laborCycle['code'] : $state['code']),
+                'state_label' => $extraDay ? 'Día Extra ' . $extraDayNumber : ($laborCycle && !$manualOverride && (($entry || $exit) || (($eventType === '' || $eventType === 'rest') && ($laborCycle['rest'] || $laborCycle['transition'])))
+                    ? ('Régimen 21×7 · ' . $laborCycle['code'] . ($entry || $exit ? ' · con marcación' : '')) : $state['label']),
+                'state_class' => $extraDay ? 'report-state-extra-day' : ($laborCycle && $laborCycle['rest'] && ($eventType === '' || $eventType === 'rest') ? 'report-state-rest' : $state['class']),
                 'journey_key' => $journeyKey, 'journey_label' => $journey['label'], 'journey_class' => $journey['class'],
                 'worked_minutes' => $workedMinutes, 'base_worked_minutes' => $baseWorkedMinutes,
                 'worked_double_selected' => $workedDoubleSelected,
                 'worked_double_applied' => (bool) $workedDoubleApplied, 'scheduled_minutes' => $scheduledMinutes,
+                'extra_day' => (bool) $extraDay, 'extra_day_minutes' => $extraDayMinutes,
                 'holiday_schedule_credit' => $holidayScheduleCredit,
                 'lunch_deduction_minutes' => $lunchDeductionMinutes,
                 'late_minutes' => $lateMinutes, 'overtime_minutes' => $overtimeMinutes,
@@ -833,7 +846,7 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 'exit_overtime_minutes' => $exitOvertimeMinutes,
                 'project' => $manualOverride ? '-' : (trim((string) (($entry || $exit)
                     ? ($entry['mark_project'] ?? $exit['mark_project'] ?? '')
-                    : ($assignment['activity'] ?? ''))) ?: '-'),
+                    : ($assignment['assigned_client_name'] ?? $assignment['activity'] ?? ''))) ?: '-'),
                 'observation' => $observation,
                 'is_workday' => $hasSchedule && !$isNonWorking,
                 'calendar_event_id' => (int) ($calendarEvent['id'] ?? 0),
@@ -850,6 +863,43 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
 
     $reportedDays = [];
     foreach ($rows as $row) $reportedDays[(int) $row['worker_id']][(string) $row['date']] = true;
+    // Un Día Extra también puede asignarse a una fecha sin horario ni asignación activa.
+    foreach ($workers as $worker) {
+        $id = (int) $worker['id'];
+        foreach ($extraDaysByWorker[$id] ?? [] as $date => $extraDayNumber) {
+            if ($date >= $today || isset($reportedDays[$id][$date]) || isset($manualDayOverrides[$id][$date])) continue;
+            if (attendance_calendar_resolve_event($calendarEvents, $date, $id, (int) $worker['company_id'])) continue;
+            $extraCycle = $laborCycleDates[$id][$date]['cycle'] ?? null;
+            if ($extraCycle && ($extraCycle['rest'] || $extraCycle['transition'])) continue;
+            $weekday = (int) (new DateTimeImmutable($date))->format('N');
+            $extraMinutes = $weekday === 6 ? 360 : 510;
+            $rows[] = [
+                'worker_id' => $id, 'date' => $date, 'weekday' => $weekdayLabels[$weekday],
+                'assignment_id' => 0, 'worker' => (string) $worker['full_name'],
+                'document' => (string) $worker['document_number'], 'company' => (string) ($worker['company'] ?? ''),
+                'entry' => '-', 'exit' => '-', 'exit_next_day' => false,
+                'entry_administrative' => false, 'exit_administrative' => false,
+                'entry_administrative_actor' => '', 'exit_administrative_actor' => '',
+                'entry_administrative_reason' => '', 'exit_administrative_reason' => '',
+                'schedule' => '-', 'schedule_id' => 0, 'scheduled_entry' => '-', 'tolerance_minutes' => null,
+                'location' => '-', 'entry_location' => '-', 'exit_location' => '-',
+                'state_key' => 'extra_day', 'state_code' => 'DE' . $extraDayNumber, 'state_label' => 'Día Extra ' . $extraDayNumber,
+                'state_class' => 'report-state-extra-day', 'journey_key' => null, 'journey_label' => '-', 'journey_class' => '',
+                'worked_minutes' => 0, 'base_worked_minutes' => 0, 'worked_double_selected' => false,
+                'worked_double_applied' => false, 'scheduled_minutes' => 0, 'holiday_schedule_credit' => false,
+                'lunch_deduction_minutes' => 0, 'late_minutes' => 0, 'overtime_minutes' => $extraMinutes,
+                'extra_day' => true, 'extra_day_minutes' => $extraMinutes, 'labor_regime' => $extraCycle ? '21x7' : 'regular',
+                'labor_cycle_code' => $extraCycle['code'] ?? null, 'holiday_overtime_minutes' => 0,
+                'early_overtime_eligible' => false, 'early_overtime_authorized' => false,
+                'early_overtime_minutes' => 0, 'exit_overtime_minutes' => 0,
+                'project' => '-', 'observation' => 'Día Extra registrado administrativamente',
+                'is_workday' => true, 'calendar_event_id' => 0, 'calendar_event_type' => '',
+                'holiday_double_enabled' => false, 'holiday_double_applied' => false,
+                'calendar_event_name' => '',
+            ];
+            $reportedDays[$id][$date] = true;
+        }
+    }
     foreach ($workers as $worker) {
         $id = (int) $worker['id'];
         foreach ($manualDayOverrides[$id] ?? [] as $date => $override) {
@@ -1012,10 +1062,10 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 : (count($periodScheduleIds) > 1 ? 'Varios horarios (ver detalle)' : ($selectedAssignment['schedule_name'] ?? 'Sin horario asignado'));
         }
     }
-    $summary = ['workdays' => 0, 'attendances' => 0, 'late' => 0, 'absent' => 0, 'leaves' => 0, 'vacations' => 0, 'worked_minutes' => 0, 'late_minutes' => 0, 'holiday_overtime_minutes' => 0, 'early_overtime_minutes' => 0, 'exit_overtime_minutes' => 0, 'overtime_minutes' => 0, 'completed' => 0];
+    $summary = ['workdays' => 0, 'attendances' => 0, 'late' => 0, 'absent' => 0, 'leaves' => 0, 'vacations' => 0, 'worked_minutes' => 0, 'late_minutes' => 0, 'holiday_overtime_minutes' => 0, 'early_overtime_minutes' => 0, 'exit_overtime_minutes' => 0, 'extra_day_minutes' => 0, 'overtime_minutes' => 0, 'completed' => 0];
     foreach ($individualRows as $row) {
         if ($row['is_workday']) $summary['workdays']++;
-        if (in_array($row['state_key'], ['attended', 'late', 'early_exit', 'late_early_exit', 'incomplete'], true)) $summary['attendances']++;
+        if (in_array($row['state_key'], ['attended', 'late', 'early_exit', 'late_early_exit', 'incomplete', 'extra_day'], true)) $summary['attendances']++;
         if (in_array($row['state_key'], ['late', 'late_early_exit'], true)) $summary['late']++;
         if ($row['state_key'] === 'absent') $summary['absent']++;
         if (in_array($row['state_key'], ['vacation', 'permission'], true)) $summary['leaves']++;
@@ -1026,6 +1076,7 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
         $summary['holiday_overtime_minutes'] += $row['holiday_overtime_minutes'];
         $summary['early_overtime_minutes'] += $row['early_overtime_minutes'];
         $summary['exit_overtime_minutes'] += $row['exit_overtime_minutes'];
+        $summary['extra_day_minutes'] += $row['extra_day_minutes'] ?? 0;
         $summary['overtime_minutes'] += $row['overtime_minutes'];
     }
     $summary['punctuality'] = $summary['attendances'] > 0 ? round((($summary['attendances'] - $summary['late']) / $summary['attendances']) * 100, 1) : 0;
@@ -1218,7 +1269,7 @@ function attendance_report_build_hours_ledger(int $workerId, string $throughMont
     $months = attendance_report_hours_ledger($days, $firstMonth, $throughMonth, 0, null, $openingOverrides, $purchasedMinutesByMonth, $discountedMinutesByMonth);
     $current = $months[$throughMonth];
     $labels = [];
-    foreach (['opening_minutes', 'worked_minutes', 'holiday_overtime_minutes', 'early_overtime_minutes',
+    foreach (['opening_minutes', 'worked_minutes', 'holiday_overtime_minutes', 'early_overtime_minutes', 'extra_day_minutes',
         'exit_overtime_minutes', 'overtime_minutes', 'redeemed_minutes', 'purchased_minutes', 'discounted_minutes', 'closing_minutes'] as $field) {
         $labels[$field] = attendance_report_hours_label($current[$field]);
     }

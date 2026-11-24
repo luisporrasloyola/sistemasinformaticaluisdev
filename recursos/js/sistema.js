@@ -526,7 +526,7 @@ function initAttendanceMatrixDetail() {
     let manualInitialSnapshot = '';
     let pendingRegimeChange = null;
     const manualSnapshot = () => Array.from(document.querySelectorAll('#attendanceManualCorrectionForm input, #attendanceManualCorrectionForm select, #attendanceManualCorrectionForm textarea'))
-        .filter((control) => !['worker_id', 'mark_date'].includes(control.name))
+        .filter((control) => !['worker_id', 'mark_date'].includes(control.name) && control.id !== 'matrixDayType')
         .map((control) => [control.id || control.name, control.value, control.checked, control.disabled]);
     const fields = {
         date: document.getElementById('matrixDetailDate'),
@@ -552,6 +552,9 @@ function initAttendanceMatrixDetail() {
         manualResultPunctual: document.getElementById('matrixManualResultPunctual'),
         manualResultLate: document.getElementById('matrixManualResultLate'),
         manualResultAbsent: document.getElementById('matrixManualResultAbsent'),
+        dayType: document.getElementById('matrixDayType'),
+        dayTypeSection: document.getElementById('matrixDayTypeSection'),
+        dayTypeHint: document.getElementById('matrixDayTypeHint'),
         manualCalendarType: document.getElementById('matrixManualCalendarType'),
         manualCalendarSection: document.getElementById('matrixManualCalendarSection'),
         holidayInfoButton: document.getElementById('matrixHolidayInfoButton'),
@@ -645,7 +648,10 @@ function initAttendanceMatrixDetail() {
                 document.getElementById('adminMarkSchedule').value = hasEntry ? (cell.dataset.entryScheduleId || cell.dataset.scheduleId || '') : (cell.dataset.scheduleId || '');
                 const suggestedLocationId = hasEntry ? (cell.dataset.exitLocationId || '') : (cell.dataset.entryLocationId || '');
                 locationField.value = allowedLocationIds.has(suggestedLocationId) ? suggestedLocationId : '';
-                document.getElementById('adminMarkProject').value = hasEntry ? (cell.dataset.entryProjectId || '') : '';
+                const assignmentProjectId = cell.dataset.assigned === '1' ? (cell.dataset.assignmentProjectId || '') : '';
+                document.getElementById('adminMarkProject').value = hasEntry
+                    ? (cell.dataset.entryProjectId || assignmentProjectId)
+                    : assignmentProjectId;
                 document.getElementById('adminMarkReason').value = '';
                 adminLaborRegime.value = cell.dataset.laborRegime === '21x7' ? '21x7' : 'regular';
                 adminLaborReason.value = '';
@@ -816,8 +822,9 @@ function initAttendanceMatrixDetail() {
         fields.worker.textContent = cell.dataset.worker || '';
         fields.company.textContent = cell.dataset.company || 'Sin empresa';
         const code = cell.dataset.code || '-';
-        const summaryCode = /^A\d+$/.test(code) ? 'A' : (code === 'ASA' ? 'A' : (code === 'ATSA' ? 'T' : code));
-        fields.status.textContent = ({ A: 'Asistió', T: 'Tarde', F: 'Faltó' })[summaryCode] || cell.dataset.status || 'Sin marcaciones';
+        const isExtraDay = /^DE[1-9]\d*$/.test(code);
+        const summaryCode = isExtraDay || /^A\d+$/.test(code) ? 'A' : (code === 'ASA' ? 'A' : (code === 'ATSA' ? 'T' : code));
+        fields.status.textContent = isExtraDay ? (cell.dataset.status || 'Día Extra') : (({ A: 'Asistió', T: 'Tarde', F: 'Faltó' })[summaryCode] || cell.dataset.status || 'Sin marcaciones');
         fields.entry.textContent = cell.dataset.entry || '-';
         fields.exit.textContent = cell.dataset.exit || '-';
         fields.entryLocation.textContent = cell.dataset.entryLocation || '-';
@@ -838,15 +845,34 @@ function initAttendanceMatrixDetail() {
             fields.permitExitEdit.classList.remove('btn-outline-danger');
             fields.permitExitEdit.classList.add('btn-outline-primary');
             fields.permitExitEdit.innerHTML = '<i class="fa-solid fa-pen me-1"></i>Permitir editar';
-            const isAbsentResult = cell.dataset.code === 'F';
-            const isLateResult = cell.dataset.code === 'T' || cell.dataset.code === 'ATSA';
+            const baseCode = cell.dataset.dayType === 'extra' && cell.dataset.entry === '-' && cell.dataset.exit === '-'
+                ? '' : (cell.dataset.baseCode || cell.dataset.code);
+            const isAbsentResult = baseCode === 'F';
+            const isLateResult = baseCode === 'T' || baseCode === 'ATSA';
             const hasRegisteredMark = (cell.dataset.entry && cell.dataset.entry !== '-') || (cell.dataset.exit && cell.dataset.exit !== '-');
-            const isAttendanceResult = ['A', 'T', 'ASA', 'ATSA'].includes(cell.dataset.code)
-                || /^A\d+$/.test(cell.dataset.code || '') || (/^(M|D[1-7])$/.test(cell.dataset.code || '') && hasRegisteredMark);
+            const isAttendanceResult = ['A', 'T', 'ASA', 'ATSA'].includes(baseCode)
+                || /^A\d+$/.test(baseCode || '') || (/^(M|D[1-7])$/.test(baseCode || '') && hasRegisteredMark);
             fields.manualResultPunctual.checked = isAttendanceResult && !isLateResult;
             fields.manualResultLate.checked = isLateResult;
             const sameDayEdit = cell.dataset.manualLock === 'today' && cell.dataset.manualEnabled === '1';
             fields.manualResultAbsent.checked = isAbsentResult;
+            if (fields.dayType) fields.dayType.value = cell.dataset.dayType === 'extra' ? 'extra' : 'regular';
+            const isPastEditableDay = cell.dataset.manualEnabled === '1' && cell.dataset.manualLock === '';
+            const cycleRestOrTransition = /^(?:M|D[1-7])$/.test(cell.dataset.laborCycleCode || '');
+            const canChangeDayType = isPastEditableDay && cell.dataset.dayTypeAvailable === '1'
+                && cell.dataset.calendarType === '' && !cycleRestOrTransition
+                && cell.dataset.manualAbsence !== '1';
+            fields.dayTypeSection?.classList.toggle('d-none', !isPastEditableDay);
+            if (fields.dayType) fields.dayType.disabled = !canChangeDayType;
+            if (fields.dayTypeHint) {
+                fields.dayTypeHint.textContent = cell.dataset.dayTypeAvailable !== '1'
+                    ? 'Para habilitar Día Extra, ejecute la migración de días extra en esta base de datos.'
+                    : cell.dataset.calendarType !== '' ? 'Esta fecha tiene un evento del calendario laboral.'
+                    : cycleRestOrTransition ? 'El descanso o transición del régimen 21×7 no admite Día Extra.'
+                    : cell.dataset.manualAbsence === '1' ? 'Esta fecha tiene una falta administrativa.'
+                    : 'Se numera por fecha para cada trabajador (DE1, DE2...).';
+                fields.dayTypeHint.classList.toggle('d-none', canChangeDayType && fields.dayType?.value !== 'extra');
+            }
             setManualAbsenceMode(isAbsentResult);
             syncTodayEditFields(cell);
             fields.manualCalendarType.value = ['vacation', 'rest', 'holiday', 'non_working'].includes(cell.dataset.calendarType) ? cell.dataset.calendarType : '';
@@ -888,9 +914,10 @@ function initAttendanceMatrixDetail() {
                     : 'La jornada actual todavía está en curso.';
             }
         }
-        fields.badge.textContent = summaryCode;
+        fields.badge.textContent = isExtraDay ? code : summaryCode;
         fields.badge.className = 'badge attendance-detail-badge';
-        if (summaryCode === 'A') fields.badge.classList.add('detail-badge-ok');
+        if (isExtraDay) fields.badge.classList.add('detail-badge-neutral');
+        else if (summaryCode === 'A') fields.badge.classList.add('detail-badge-ok');
         else if (summaryCode === 'T') fields.badge.classList.add('detail-badge-warning');
         else if (summaryCode === 'F') fields.badge.classList.add('detail-badge-danger');
         else fields.badge.classList.add('detail-badge-neutral');
@@ -909,6 +936,29 @@ function initAttendanceMatrixDetail() {
     fields.manualResultPunctual?.addEventListener('change', () => chooseManualAttendance(false));
     fields.manualResultLate?.addEventListener('change', () => chooseManualAttendance(false));
     fields.manualResultAbsent?.addEventListener('change', () => chooseManualAttendance(true));
+    fields.dayType?.addEventListener('change', async () => {
+        const cell = fields.adminMarkOpen?._selectedCell;
+        if (!cell) return;
+        const selectedType = fields.dayType.value;
+        fields.dayTypeHint?.classList.toggle('d-none', selectedType !== 'extra');
+        fields.dayType.disabled = true;
+        const body = new FormData();
+        body.set('worker_id', cell.dataset.workerId || '');
+        body.set('work_date', cell.dataset.dateIso || '');
+        body.set('day_type', selectedType);
+        body.set('csrf_token', csrf);
+        try {
+            const response = await fetch(`${window.APP_URL}/servicios/control_personal/guardar_tipo_dia_asistencia.php`, { method: 'POST', body });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo guardar el tipo de día.');
+            window.location.reload();
+        } catch (error) {
+            fields.dayType.value = cell.dataset.dayType === 'extra' ? 'extra' : 'regular';
+            fields.dayTypeHint?.classList.toggle('d-none', fields.dayType.value !== 'extra');
+            fields.dayType.disabled = false;
+            Swal.fire('No se pudo guardar', error.message || 'Inténtelo nuevamente.', 'warning');
+        }
+    });
     fields.manualCalendarType?.addEventListener('change', syncManualCalendarMode);
     fields.holidayDoubleEnabled?.addEventListener('change', async () => {
         const cell = fields.adminMarkOpen?._selectedCell;
@@ -1245,10 +1295,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if ($field.hasClass('select2-hidden-accessible')) return;
             const $modal = $field.closest('.modal');
             const $manualLocation = $field.closest('#attendanceMatrixDetailModal .attendance-manual-location');
+            const $assignmentField = $field.closest('#assignmentModal .assignment-select-wrap');
             $field.select2({
                 theme: 'bootstrap4',
                 width: '100%',
-                dropdownParent: $manualLocation.length ? $manualLocation : ($modal.length ? $modal : $(document.body)),
+                dropdownParent: $assignmentField.length ? $assignmentField
+                    : ($manualLocation.length ? $manualLocation : ($modal.length ? $modal : $(document.body))),
                 placeholder: $field.data('placeholder') || 'Buscar',
                 minimumResultsForSearch: 0,
                 templateSelection: (option) => {
@@ -8478,6 +8530,12 @@ function initControlPersonalAssignments() {
 
     document.getElementById('newAssignmentBtn')?.addEventListener('click', () => {
         form.reset();
+        document.getElementById('assignmentProjectId').value = '';
+        document.getElementById('assignmentLaborRegime').value = 'regular';
+        document.getElementById('assignmentDayType').value = 'regular';
+        if (window.jQuery && jQuery('#assignmentProjectId').hasClass('select2-hidden-accessible')) {
+            jQuery('#assignmentProjectId').val('').trigger('change');
+        }
         setValidityDefaults();
         selectValidityPreset(null);
         if (window.jQuery && jQuery(workerField).hasClass('select2-hidden-accessible')) {
@@ -8516,6 +8574,12 @@ function initControlPersonalAssignments() {
             }
             document.getElementById('assignmentLocationId').value = button.dataset.locationId || '';
             document.getElementById('assignmentScheduleId').value = button.dataset.scheduleId || '';
+            document.getElementById('assignmentProjectId').value = button.dataset.projectId || '';
+            document.getElementById('assignmentLaborRegime').value = button.dataset.laborRegime === '21x7' ? '21x7' : 'regular';
+            document.getElementById('assignmentDayType').value = button.dataset.dayType === 'extra' ? 'extra' : 'regular';
+            if (window.jQuery && jQuery('#assignmentProjectId').hasClass('select2-hidden-accessible')) {
+                jQuery('#assignmentProjectId').val(button.dataset.projectId || '').trigger('change');
+            }
             document.getElementById('assignmentActivity').value = button.dataset.activity || '';
             document.getElementById('assignmentInstructions').value = button.dataset.instructions || '';
             validFrom.value = button.dataset.validFrom || localIsoDate(new Date());

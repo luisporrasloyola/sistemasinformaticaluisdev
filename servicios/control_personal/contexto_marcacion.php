@@ -31,7 +31,7 @@ $holidayStmt = db()->prepare("SELECT event_type FROM attendance_calendar_days
 $holidayStmt->execute(['today_start' => $workDate, 'today_end' => $workDate,
     'company_id' => (int) $worker['company_id'], 'worker_id' => $workerId]);
 $holidayToday = $holidayStmt->fetchColumn() === 'holiday';
-$assignmentStmt = db()->prepare("SELECT aa.id,aa.location_id,aa.schedule_id,aa.activity,l.name AS location_name,s.name AS schedule_name
+$assignmentStmt = db()->prepare("SELECT aa.id,aa.location_id,aa.schedule_id,aa.project_id,aa.labor_regime,aa.activity,l.name AS location_name,s.name AS schedule_name
     FROM attendance_assignments aa
     JOIN attendance_locations l ON l.id=aa.location_id AND l.status=1
     JOIN attendance_schedules s ON s.id=aa.schedule_id AND s.status=1
@@ -54,7 +54,7 @@ $hasExit = (bool)array_filter($marks,static fn(array $mark):bool=>$mark['mark_ty
 
 $defaultLocationId = (int)($lastMark['location_id'] ?? $assignment['location_id'] ?? 0);
 $defaultScheduleId = (int)($lastMark['schedule_id'] ?? $assignment['schedule_id'] ?? 0);
-$defaultProjectId = (int)($lastMark['project_id'] ?? 0);
+$defaultProjectId = (int)($lastMark['project_id'] ?? $assignment['project_id'] ?? 0);
 if (!$defaultProjectId && !empty($assignment['activity'])) {
     $projectStmt = db()->prepare('SELECT id FROM attendance_projects WHERE status=1 AND name=:name LIMIT 1');
     $projectStmt->execute(['name'=>$assignment['activity']]);

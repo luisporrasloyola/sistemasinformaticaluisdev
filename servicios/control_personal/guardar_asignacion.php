@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/attendance_report_closure.php';
+require_once __DIR__ . '/../../includes/attendance_labor_regime_correction.php';
 require_role('Administrador');
 
 verify_csrf($_POST['csrf_token'] ?? null);
@@ -15,6 +16,9 @@ $selectedWorkerIds = array_values(array_unique(array_filter(
 )));
 $locationId = (int) ($_POST['location_id'] ?? 0);
 $scheduleId = (int) ($_POST['schedule_id'] ?? 0);
+$projectId = (int) ($_POST['project_id'] ?? 0);
+$laborRegime = trim((string) ($_POST['labor_regime'] ?? 'regular'));
+$dayType = trim((string) ($_POST['day_type'] ?? 'regular'));
 $activity = trim((string) ($_POST['activity'] ?? ''));
 $instructions = trim((string) ($_POST['instructions'] ?? ''));
 $validFrom = trim((string) ($_POST['valid_from'] ?? ''));
@@ -106,8 +110,14 @@ if (!in_array($scopeType, ['all', 'worker', 'selected'], true)) {
 if (!in_array($conflictPolicy, ['skip', 'replace'], true)) {
     json_response(['ok' => false, 'message' => 'Seleccione cómo tratar las asignaciones existentes.'], 400);
 }
-if (($scopeType === 'worker' && $workerId <= 0) || $locationId <= 0 || $scheduleId <= 0) {
-    json_response(['ok' => false, 'message' => 'Complete el alcance, lugar y horario.'], 400);
+if (($scopeType === 'worker' && $workerId <= 0) || $locationId <= 0 || $scheduleId <= 0 || $projectId <= 0) {
+    json_response(['ok' => false, 'message' => 'Complete el alcance, lugar, horario y cliente.'], 400);
+}
+if (!in_array($laborRegime, ['regular', '21x7'], true)) {
+    json_response(['ok' => false, 'message' => 'Seleccione un régimen laboral válido.'], 400);
+}
+if (!in_array($dayType, ['regular', 'extra'], true)) {
+    json_response(['ok' => false, 'message' => 'Seleccione un tipo de día válido.'], 400);
 }
 if ($scopeType === 'selected' && !$selectedWorkerIds) {
     json_response(['ok' => false, 'message' => 'Seleccione al menos un trabajador.'], 400);
@@ -125,6 +135,7 @@ if ($validUntilDate && $validUntilDate < $validFromDate) {
 $checks = [
     ['sql' => 'SELECT id FROM attendance_locations WHERE id = :id AND status = 1 LIMIT 1', 'id' => $locationId, 'message' => 'El punto de marcacion no existe.'],
     ['sql' => 'SELECT id FROM attendance_schedules WHERE id = :id AND status = 1 LIMIT 1', 'id' => $scheduleId, 'message' => 'El horario no existe.'],
+    ['sql' => 'SELECT id FROM attendance_projects WHERE id = :id AND status = 1 LIMIT 1', 'id' => $projectId, 'message' => 'El cliente no está disponible.'],
 ];
 
 if ($scopeType === 'worker') {
@@ -147,6 +158,9 @@ $requestedStmt = db()->prepare('SELECT l.name AS location_name, s.name AS schedu
 $requestedStmt->execute(['location_id' => $locationId, 'schedule_id' => $scheduleId]);
 $requestedAssignment = $requestedStmt->fetch() ?: [];
 $requestedAssignment['activity'] = $activity ?: 'Sin actividad especificada';
+$requestedAssignment['project_id'] = $projectId;
+$requestedAssignment['labor_regime'] = $laborRegime;
+$requestedAssignment['day_type'] = $dayType;
 $requestedAssignment['valid_from'] = $validFrom;
 $requestedAssignment['valid_until'] = $validUntil;
 
@@ -181,17 +195,25 @@ if ($id > 0) {
             WHERE id = :id AND status = 1')
             ->execute(['id' => $id, 'user_id' => $currentUserId]);
         $pdo->prepare('INSERT INTO attendance_assignments
-            (worker_id, location_id, schedule_id, activity, instructions, valid_from, valid_until, status, created_by_user_id)
-            VALUES (:worker_id, :location_id, :schedule_id, :activity, :instructions, :valid_from, :valid_until, 1, :user_id)')->execute([
+            (worker_id, location_id, schedule_id, project_id, labor_regime, day_type, activity, instructions, valid_from, valid_until, status, created_by_user_id)
+            VALUES (:worker_id, :location_id, :schedule_id, :project_id, :labor_regime, :day_type, :activity, :instructions, :valid_from, :valid_until, 1, :user_id)')->execute([
                 'worker_id' => $currentWorkerId,
                 'location_id' => $locationId,
                 'schedule_id' => $scheduleId,
+                'project_id' => $projectId,
+                'labor_regime' => $laborRegime,
+                'day_type' => $dayType,
                 'activity' => $activity ?: null,
                 'instructions' => $instructions ?: null,
                 'valid_from' => $validFrom,
                 'valid_until' => $validUntil,
                 'user_id' => $currentUserId,
             ]);
+        $regimeHistory = attendance_labor_cycle_history($pdo, [$currentWorkerId], $validFrom);
+        if (attendance_labor_cycle_state($regimeHistory[$currentWorkerId] ?? [], $validFrom)['regime'] !== $laborRegime) {
+            attendance_labor_regime_correct($pdo, $currentWorkerId, $validFrom, $laborRegime,
+                'Régimen definido al editar la asignación.', $currentUserId);
+        }
         $replacedCount = 1;
         $pdo->commit();
     } catch (Throwable $e) {
@@ -257,8 +279,8 @@ if ($id > 0) {
             WHERE worker_id = :worker_id AND status = 1
               AND valid_from <= :range_end AND (valid_until IS NULL OR valid_until >= :range_start)');
         $insert = $pdo->prepare('INSERT INTO attendance_assignments
-            (worker_id, location_id, schedule_id, activity, instructions, valid_from, valid_until, status, created_by_user_id)
-            VALUES (:worker_id, :location_id, :schedule_id, :activity, :instructions, :valid_from, :valid_until, 1, :user_id)');
+            (worker_id, location_id, schedule_id, project_id, labor_regime, day_type, activity, instructions, valid_from, valid_until, status, created_by_user_id)
+            VALUES (:worker_id, :location_id, :schedule_id, :project_id, :labor_regime, :day_type, :activity, :instructions, :valid_from, :valid_until, 1, :user_id)');
 
         foreach ($workerIds as $targetWorkerId) {
             if ($conflictPolicy === 'replace') {
@@ -269,12 +291,20 @@ if ($id > 0) {
                 'worker_id' => (int) $targetWorkerId,
                 'location_id' => $locationId,
                 'schedule_id' => $scheduleId,
+                'project_id' => $projectId,
+                'labor_regime' => $laborRegime,
+                'day_type' => $dayType,
                 'activity' => $activity ?: null,
                 'instructions' => $instructions ?: null,
                 'valid_from' => $validFrom,
                 'valid_until' => $validUntil,
                 'user_id' => $currentUserId,
             ]);
+            $regimeHistory = attendance_labor_cycle_history($pdo, [(int) $targetWorkerId], $validFrom);
+            if (attendance_labor_cycle_state($regimeHistory[(int) $targetWorkerId] ?? [], $validFrom)['regime'] !== $laborRegime) {
+                attendance_labor_regime_correct($pdo, (int) $targetWorkerId, $validFrom, $laborRegime,
+                    'Régimen definido en la nueva asignación.', $currentUserId);
+            }
         }
         $pdo->commit();
     } catch (Throwable $e) {

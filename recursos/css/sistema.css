@@ -1302,6 +1302,7 @@ body {
     background: #dcfce7 !important;
     color: #166534 !important;
 }
+.matrix-extra-day{background:#e0f2fe!important;color:#075985!important}
 
 .matrix-late {
     background: #fff7ed !important;
@@ -1382,6 +1383,7 @@ body {
 }
 
 .attendance-matrix .matrix-ok > span { background: #15803d; }
+.attendance-matrix .matrix-extra-day > span{background:#0369a1}
 .attendance-matrix .matrix-absent > span { background: #dc2626; }
 .attendance-matrix .matrix-attendance-warning > span { background: #15803d; }
 .attendance-matrix .matrix-early-exit > span { background: #15803d; }
@@ -1624,6 +1626,8 @@ body {
 
 .attendance-matrix-legend .legend-attended,
 .attendance-report-state.legend-attended { background: #dcfce7; border-color: #86efac; color: #166534; }
+.attendance-matrix-legend .legend-extra-day{background:#e0f2fe;border-color:#7dd3fc;color:#075985}
+.attendance-matrix-legend .legend-extra-day strong{background:#0369a1}
 .attendance-matrix-legend .legend-attended strong,
 .attendance-report-state.legend-attended strong { background: #15803d; }
 .attendance-matrix-legend .legend-absent,
@@ -1864,6 +1868,9 @@ body {
     border-radius: 8px;
     border-color: #cfd8e3;
 }
+
+#assignmentModal .assignment-select-wrap { position: relative; }
+#assignmentModal .assignment-select-wrap .select2-container--open { z-index: 1065; }
 
 .puestos-control {
     border: 1px solid #cfd8e3;
@@ -6740,6 +6747,8 @@ input[type="checkbox"]:active {
 
 .report-state-attended { background: #dcfce7; border-color: #86efac; color: #166534; }
 .report-state-attended strong { background: #15803d; }
+.report-state-extra-day{background:#e0f2fe;border-color:#7dd3fc;color:#075985}
+.report-state-extra-day strong{background:#0369a1}
 .report-state-absent { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
 .report-state-absent strong { background: #dc2626; }
 .report-state-late { background: #fef9c3; border-color: #fde047; color: #854d0e; }
@@ -7303,6 +7312,12 @@ input[type="checkbox"]:active {
 .attendance-manual-heading div{display:flex;flex-direction:column;line-height:1.25}
 .attendance-manual-heading strong{font-size:15px}
 .attendance-manual-heading small{color:#64748b;font-size:12px;margin-top:2px}
+.attendance-day-type{margin:0 0 12px;padding:10px 12px;border:1px solid #bae6fd;border-radius:10px;background:linear-gradient(120deg,#f0f9ff,#fff)}
+.attendance-day-type .form-label{margin-bottom:5px}
+.attendance-day-type-row{display:flex;align-items:center;gap:10px}
+.attendance-day-type-row .form-select{max-width:190px;border-color:#7dd3fc}
+.attendance-day-type-hint{color:#0369a1;font-size:11px}
+@media(max-width:575.98px){.attendance-day-type-row{align-items:stretch;flex-direction:column}.attendance-day-type-row .form-select{max-width:none}}
 .attendance-manual-form .form-label{font-size:12px;font-weight:700;color:#334155;margin-bottom:5px}
 .attendance-manual-form .form-control{border-color:#cbd5e1}
 .attendance-manual-form textarea{resize:vertical;min-height:64px}

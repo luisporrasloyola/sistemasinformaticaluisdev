@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/attendance_calendar.php';
 require_once __DIR__ . '/../../includes/attendance_report_data.php';
 require_once __DIR__ . '/../../includes/attendance_labor_cycle.php';
+require_once __DIR__ . '/../../includes/attendance_extra_day_dates.php';
 require_module_access('control_personal.dashboard');
 
 $attendanceLiveVersion = (int) db()->query('SELECT COALESCE(MAX(id), 0) FROM attendance_marks')->fetchColumn();
@@ -219,6 +220,7 @@ $stmt = db()->prepare("SELECT
         c.name AS company,
         aa.schedule_id,
         aa.location_id AS assignment_location_id,
+        aa.project_id AS assignment_project_id,
         aa.valid_from AS assignment_valid_from,
         aa.valid_until AS assignment_valid_until,
         aa.valid_from AS assignment_start_date,
@@ -265,6 +267,7 @@ foreach ($stmt->fetchAll() as $row) {
         'company_id' => (int) ($row['company_id'] ?? 0),
         'schedule_id' => (int) ($row['schedule_id'] ?? 0),
         'assignment_location_id' => (int) ($row['assignment_location_id'] ?? 0),
+        'assignment_project_id' => (int) ($row['assignment_project_id'] ?? 0),
         'assignment_valid_from' => (string) ($row['assignment_valid_from'] ?? ''),
         'assignment_valid_until' => (string) ($row['assignment_valid_until'] ?? ''),
         'assignment_start_date' => (string) ($row['assignment_start_date'] ?? ''),
@@ -289,6 +292,9 @@ foreach ($stmt->fetchAll() as $row) {
         }
     }
 }
+$extraDayData = attendance_extra_day_dates(db(), array_keys($matrixRows), $monthStart, $monthEnd);
+$extraDaysByWorkerDate = $extraDayData['dates'];
+$extraDaysAvailable = $extraDayData['available'];
 $restJustificationsByWorkerDate = [];
 if ($matrixRows && attendance_report_rest_justifications_available()) {
     foreach (array_chunk(array_keys($matrixRows), 500) as $workerIds) {
@@ -628,6 +634,7 @@ document.addEventListener('DOMContentLoaded', () => {
     </div>
     <div class="attendance-matrix-legend mb-3" aria-label="Leyenda de la matriz mensual">
         <span class="legend-attended"><strong>A</strong> Asisti&oacute;</span>
+        <span class="legend-extra-day"><strong>DE</strong> Día Extra (numerado por trabajador)</span>
         <span class="legend-absent"><strong>F</strong> Falta</span>
         <span class="legend-attendance-warning"><strong>T</strong> Tarde</span>
         <span class="legend-early-exit"><strong>ASA</strong> Asisti&oacute; con salida anticipada</span>
@@ -749,8 +756,18 @@ document.addEventListener('DOMContentLoaded', () => {
                             $attendanceCode = 'DJ';
                             $attendanceLabel = 'Descanso justificado';
                         }
+                        $baseAttendanceCode = $attendanceCode;
+                        $extraDayNumber = (int) ($extraDaysByWorkerDate[(int) $worker['worker_id']][$cellDate] ?? 0);
+                        $isExtraDay = $extraDayNumber > 0;
+                        if ($isExtraDay && $cellDate < $today && !$manualAbsence
+                            && (!$laborCycle || (!$laborCycle['rest'] && !$laborCycle['transition']))
+                            && $calendarEventType === '') {
+                            $attendanceCode = 'DE' . $extraDayNumber;
+                            $attendanceLabel = 'Día Extra ' . $extraDayNumber;
+                            if (!$entry && !$exit) $incidents = ['Día Extra sin marcaciones'];
+                        }
 
-                        $cellClass = match ($attendanceCode) {
+                        $cellClass = preg_match('/^DE[1-9][0-9]*$/', $attendanceCode) ? 'matrix-extra-day' : match ($attendanceCode) {
                             'F' => 'matrix-absent',
                             'T' => 'matrix-attendance-warning',
                             'ASA' => 'matrix-early-exit',
@@ -835,10 +852,16 @@ document.addEventListener('DOMContentLoaded', () => {
                             data-marked-project-id="<?= $markedProjectId ?>"
                             data-calendar-type="<?= e($calendarEventType) ?>"
                             data-labor-regime="<?= $laborCycle ? '21x7' : 'regular' ?>"
+                            data-labor-cycle-code="<?= e((string) ($laborCycle['code'] ?? '')) ?>"
                             data-holiday-double-enabled="<?= isset($holidayDoubleDisabled[(int) $worker['worker_id']][$cellDate]) ? '0' : '1' ?>"
                             data-calendar-name="<?= e((string) ($calendarEvent['name'] ?? '')) ?>"
                             data-entry-project-id="<?= (int) ($entry['project_id'] ?? 0) ?>"
+                            data-assignment-project-id="<?= (int) $worker['assignment_project_id'] ?>"
                             data-code="<?= e($attendanceCode ?: attendance_calendar_event_abbreviation($calendarEventType)) ?>"
+                            data-base-code="<?= e($baseAttendanceCode) ?>"
+                            data-day-type="<?= $isExtraDay ? 'extra' : 'regular' ?>"
+                            data-day-type-available="<?= $extraDaysAvailable ? '1' : '0' ?>"
+                            data-manual-absence="<?= $manualAbsence ? '1' : '0' ?>"
                             data-status="<?= e(strip_tags($detailLabel)) ?>"
                             data-incidents="<?= e($detailIncidents) ?>"
                             aria-label="Ver detalle de <?= e($worker['name']) ?> del <?= e(date('d/m/Y', strtotime($cellDate))) ?>">
@@ -983,6 +1006,13 @@ document.addEventListener('DOMContentLoaded', () => {
                             <label class="attendance-result-option result-late" for="matrixManualResultLate"><input type="radio" name="attendance_result" id="matrixManualResultLate" value="tardanza" required><span><i class="fa-solid fa-clock"></i><strong>Asistió con tardanza</strong></span></label>
                             <label class="attendance-result-option result-absent" for="matrixManualResultAbsent"><input type="radio" name="attendance_result" id="matrixManualResultAbsent" value="falta" required><span><i class="fa-solid fa-user-xmark"></i><strong>Faltó</strong></span></label>
                         </div></fieldset>
+                        <div class="attendance-day-type" id="matrixDayTypeSection">
+                            <label class="form-label fw-semibold" for="matrixDayType">Tipo de día</label>
+                            <div class="attendance-day-type-row"><select class="form-select" id="matrixDayType">
+                                <option value="regular">Día Regular</option>
+                                <option value="extra">Día Extra</option>
+                            </select><span class="attendance-day-type-hint" id="matrixDayTypeHint">Se numera por fecha para cada trabajador (DE1, DE2...).</span></div>
+                        </div>
                         <div class="attendance-manual-calendar mt-3 d-none" id="matrixManualCalendarSection">
                             <div class="attendance-calendar-label"><label class="form-label fw-semibold" for="matrixManualCalendarType">Calendario laboral</label><button class="attendance-holiday-info-button d-none" type="button" id="matrixHolidayInfoButton" aria-label="Información sobre el cálculo en feriado" title="Cómo se calculan las horas en feriado"><i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i></button><label class="attendance-holiday-double-switch d-none" id="matrixHolidayDoubleWrap" for="matrixHolidayDoubleEnabled"><input class="form-check-input" type="checkbox" id="matrixHolidayDoubleEnabled" role="switch" checked><span id="matrixHolidayDoubleLabel">Duplicar horas</span></label></div>
                             <select class="form-select" id="matrixManualCalendarType" name="calendar_event_type">

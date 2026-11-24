@@ -1,21 +1,36 @@
 <?php
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../includes/attendance_labor_cycle.php';
 require_module_access('control_personal.asignaciones');
 
 $assignments = db()->query("SELECT aa.*, w.full_name, w.document_number, l.name AS location_name, s.name AS schedule_name,
+        ap.name AS client_name,
         u.name AS registered_by_name,
         GROUP_CONCAT(p.name ORDER BY p.name SEPARATOR ', ') AS positions
     FROM attendance_assignments aa
     JOIN workers w ON w.id = aa.worker_id
     JOIN attendance_locations l ON l.id = aa.location_id
     JOIN attendance_schedules s ON s.id = aa.schedule_id
+    LEFT JOIN attendance_projects ap ON ap.id = aa.project_id
     LEFT JOIN users u ON u.id = aa.created_by_user_id
     LEFT JOIN worker_positions wp ON wp.worker_id = w.id
     LEFT JOIN positions p ON p.id = wp.position_id
     WHERE aa.status = 1 AND (aa.valid_until IS NULL OR aa.valid_until >= CURDATE())
     GROUP BY aa.id
     ORDER BY l.name, s.name, w.full_name")->fetchAll();
+
+if ($assignments) {
+    $regimeHistory = attendance_labor_cycle_history(
+        db(), array_column($assignments, 'worker_id'), max(array_column($assignments, 'valid_from'))
+    );
+    foreach ($assignments as &$assignment) {
+        $assignment['effective_labor_regime'] = $assignment['labor_regime'] ?: attendance_labor_cycle_state(
+            $regimeHistory[(int) $assignment['worker_id']] ?? [], (string) $assignment['valid_from']
+        )['regime'];
+    }
+    unset($assignment);
+}
 
 $assignmentGroups = [];
 foreach ($assignments as $assignment) {
@@ -36,6 +51,7 @@ $workers = db()->query("SELECT w.id, w.full_name, w.document_number, c.name AS c
     ORDER BY w.full_name")->fetchAll();
 $locations = db()->query('SELECT id, name FROM attendance_locations WHERE status = 1 ORDER BY name')->fetchAll();
 $schedules = db()->query('SELECT id, name FROM attendance_schedules WHERE status = 1 ORDER BY name')->fetchAll();
+$clients = db()->query('SELECT id, name FROM attendance_projects WHERE status = 1 ORDER BY name')->fetchAll();
 $activeAssignmentPeriods = array_map(static fn(array $assignment): array => [
     'worker_id' => (int) $assignment['worker_id'],
     'valid_from' => (string) $assignment['valid_from'],
@@ -47,7 +63,7 @@ require __DIR__ . '/../../includes/header.php';
 <div class="page-title">
     <div>
         <h1>Asignaciones</h1>
-        <p>Relación entre trabajador, lugar, horario y actividad.</p>
+        <p>Relación entre trabajador, cliente, régimen laboral, lugar, horario y actividad.</p>
     </div>
     <button class="btn btn-primary" type="button" id="newAssignmentBtn"><i class="fa-solid fa-plus me-2"></i>Nueva asignación</button>
 </div>
@@ -61,7 +77,7 @@ require __DIR__ . '/../../includes/header.php';
         <div class="assignment-groups-actions">
             <div class="input-group input-group-sm assignment-group-search">
                 <span class="input-group-text"><i class="fa-solid fa-magnifying-glass"></i></span>
-                <input class="form-control" type="search" id="assignmentGroupSearch" placeholder="Buscar personal, lugar, horario o actividad">
+                <input class="form-control" type="search" id="assignmentGroupSearch" placeholder="Buscar personal, cliente, lugar, horario o actividad">
             </div>
             <button class="btn btn-sm btn-outline-secondary" type="button" id="expandAssignmentGroups">Expandir todos</button>
             <button class="btn btn-sm btn-outline-secondary" type="button" id="collapseAssignmentGroups">Contraer</button>
@@ -74,7 +90,7 @@ require __DIR__ . '/../../includes/header.php';
         $groupId = 'assignmentGroup' . preg_replace('/[^a-zA-Z0-9]/', '', (string) $groupIndex);
         $colorIndex = (array_search($groupIndex, array_keys($assignmentGroups), true) % 6) + 1;
         $searchParts = [$group['location'], $group['schedule']];
-        foreach ($group['assignments'] as $row) $searchParts[] = implode(' ', [$row['full_name'], $row['document_number'], $row['positions'] ?? '', $row['activity'] ?? '', $row['instructions'] ?? '']);
+        foreach ($group['assignments'] as $row) $searchParts[] = implode(' ', [$row['full_name'], $row['document_number'], $row['positions'] ?? '', $row['client_name'] ?? '', $row['labor_regime'] ?? '', $row['activity'] ?? '', $row['instructions'] ?? '']);
         $groupAssignmentIds = array_map(static fn(array $row): int => (int) $row['id'], $group['assignments']);
         $groupValidFromValues = array_values(array_unique(array_column($group['assignments'], 'valid_from')));
         $groupValidUntilValues = array_values(array_unique(array_map(static fn(array $row): string => (string) ($row['valid_until'] ?? ''), $group['assignments'])));
@@ -117,19 +133,24 @@ require __DIR__ . '/../../includes/header.php';
                 </div>
                 <div class="table-responsive">
                     <table class="table table-hover align-middle mb-0 assignment-group-table">
-                        <thead><tr><th>Personal</th><th>Puesto</th><th>Actividad</th><th>Vigencia</th><th>Registrado por</th><th>Acciones</th></tr></thead>
+                        <thead><tr><th>Personal</th><th>Puesto</th><th>Cliente</th><th>Régimen laboral</th><th>Tipo de día</th><th>Actividad</th><th>Vigencia</th><th>Registrado por</th><th>Acciones</th></tr></thead>
                         <tbody>
                         <?php foreach ($group['assignments'] as $assignment): ?>
                             <tr class="assignment-member-row" data-search="<?= e(strtolower(implode(' ', [
                                 $assignment['full_name'],
                                 $assignment['document_number'],
                                 $assignment['positions'] ?? '',
+                                $assignment['client_name'] ?? '',
+                                $assignment['labor_regime'] ?? '',
                                 $assignment['activity'] ?? '',
                                 $assignment['instructions'] ?? '',
                                 $assignment['registered_by_name'] ?? '',
                             ]))) ?>">
                                 <td><strong><?= e($assignment['full_name']) ?></strong><small class="text-muted d-block"><?= e($assignment['document_number']) ?></small></td>
                                 <td><?= e($assignment['positions'] ?: 'Sin puesto registrado') ?></td>
+                                <td><?= e($assignment['client_name'] ?: 'Sin cliente asignado') ?></td>
+                                <td><?= e($assignment['effective_labor_regime'] === '21x7' ? '21×7' : 'Regular') ?></td>
+                                <td><?= ($assignment['day_type'] ?? 'regular') === 'extra' ? 'Día Extra' : 'Día Regular' ?></td>
                                 <td><?= e($assignment['activity'] ?: 'Sin actividad especificada') ?><?php if (!empty($assignment['instructions'])): ?><small class="text-muted d-block mt-1"><i class="fa-solid fa-circle-info me-1"></i><?= e($assignment['instructions']) ?></small><?php endif; ?></td>
                                 <td><div class="small fw-semibold">Desde <?= e(date('d/m/Y', strtotime($assignment['valid_from']))) ?></div><div class="small text-muted"><?= $assignment['valid_until'] ? 'Hasta ' . e(date('d/m/Y', strtotime($assignment['valid_until']))) : 'Sin fecha de finalizaci&oacute;n' ?></div></td>
                                 <td><?= e($assignment['registered_by_name'] ?: 'No registrado') ?></td>
@@ -137,6 +158,8 @@ require __DIR__ . '/../../includes/header.php';
                         <button class="btn btn-sm btn-outline-success js-assignment-calendar" type="button"
                             data-worker-id="<?= (int) $assignment['worker_id'] ?>"
                             data-schedule-id="<?= (int) $assignment['schedule_id'] ?>"
+                            data-project-id="<?= (int) ($assignment['project_id'] ?? 0) ?>"
+                            data-labor-regime="<?= e((string) $assignment['effective_labor_regime']) ?>"
                             data-worker-name="<?= e($assignment['full_name']) ?>"
                             data-schedule-name="<?= e($assignment['schedule_name']) ?>"
                             data-location-name="<?= e($assignment['location_name']) ?>"
@@ -153,6 +176,7 @@ require __DIR__ . '/../../includes/header.php';
                             data-instructions="<?= e($assignment['instructions'] ?? '') ?>"
                             data-valid-from="<?= e($assignment['valid_from']) ?>"
                             data-valid-until="<?= e($assignment['valid_until'] ?? '') ?>"
+                            data-day-type="<?= e($assignment['day_type'] ?? 'regular') ?>"
                             title="Editar"><i class="fa-solid fa-pen"></i></button>
                         <button class="btn btn-sm btn-outline-secondary js-assignment-history" type="button"
                             data-worker-id="<?= (int) $assignment['worker_id'] ?>"
@@ -293,7 +317,7 @@ require __DIR__ . '/../../includes/header.php';
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-12 d-none" id="assignmentWorkerField">
+                    <div class="col-md-12 d-none assignment-select-wrap" id="assignmentWorkerField">
                         <label class="form-label">Personal</label>
                         <select class="form-select select2-searchable" name="worker_id" id="assignmentWorkerId" required
                             data-placeholder="Buscar por nombre, documento o empresa"
@@ -330,7 +354,7 @@ require __DIR__ . '/../../includes/header.php';
                             <div class="invalid-feedback d-block d-none" id="assignmentWorkersError">Seleccione al menos un trabajador.</div>
                         </div>
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-6 assignment-select-wrap">
                         <label class="form-label">Lugar de marcación</label>
                         <select class="form-select select2-searchable" name="location_id" id="assignmentLocationId" required data-placeholder="Buscar lugar de marcación" data-no-results="No se encontraron lugares">
                             <option value="">Seleccione</option>
@@ -338,15 +362,37 @@ require __DIR__ . '/../../includes/header.php';
                                 <option value="<?= (int) $location['id'] ?>"><?= e($location['name']) ?></option>
                             <?php endforeach; ?>
                         </select>
-                        <div class="form-text">Será el lugar de entrada. Durante la jornada podrá trasladarse y habilitar otro lugar para la salida.</div>
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-6 assignment-select-wrap">
                         <label class="form-label">Horario</label>
                         <select class="form-select select2-searchable" name="schedule_id" id="assignmentScheduleId" required data-placeholder="Buscar horario" data-no-results="No se encontraron horarios">
                             <option value="">Seleccione</option>
                             <?php foreach ($schedules as $schedule): ?>
                                 <option value="<?= (int) $schedule['id'] ?>"><?= e($schedule['name']) ?></option>
                             <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-md-6 assignment-select-wrap">
+                        <label class="form-label" for="assignmentProjectId">Cliente</label>
+                        <select class="form-select select2-searchable" name="project_id" id="assignmentProjectId" required data-placeholder="Buscar cliente" data-no-results="No se encontraron clientes">
+                            <option value="">Seleccione un cliente</option>
+                            <?php foreach ($clients as $client): ?>
+                                <option value="<?= (int) $client['id'] ?>"><?= e($client['name']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="assignmentLaborRegime">Régimen laboral</label>
+                        <select class="form-select" name="labor_regime" id="assignmentLaborRegime" required>
+                            <option value="regular" selected>Regular</option>
+                            <option value="21x7">21×7</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="assignmentDayType">Tipo de día</label>
+                        <select class="form-select" name="day_type" id="assignmentDayType" required>
+                            <option value="regular" selected>Día Regular</option>
+                            <option value="extra">Día Extra</option>
                         </select>
                     </div>
                     <div class="col-md-12">
