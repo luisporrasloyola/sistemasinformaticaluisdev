@@ -8068,11 +8068,13 @@ function initControlPersonalAssignments() {
     const assignmentGroups = Array.from(document.querySelectorAll('.assignment-group'));
     const assignmentSearchEmpty = document.getElementById('assignmentSearchEmpty');
     let dayTypeChoiceTouched = false;
+    let autoDayTypeOnly = false;
 
-    function syncConflictChoice(value = 'skip') {
+    function syncConflictChoice(value = 'skip', automatic = false) {
         if (conflictPolicy) conflictPolicy.value = value;
         conflictChoices.forEach((choice) => { choice.checked = choice.value === value; });
         const dayTypeOnly = value === 'day_type_only';
+        autoDayTypeOnly = dayTypeOnly && automatic;
         dayTypeOnlyFields.forEach((field) => {
             field.disabled = dayTypeOnly;
             field.closest('.col-md-6, .col-md-12, .col-12')?.classList.toggle('d-none', dayTypeOnly);
@@ -8132,7 +8134,8 @@ function initControlPersonalAssignments() {
         const availableCount = Math.max(0, targetIds.length - conflictingWorkers.size);
         const canChangeExistingDayType = scope === 'selected' && availableCount === 0 && hasConflicts && !awaitingSelection;
         conflictField.querySelector('.is-day-type')?.classList.toggle('d-none', !canChangeExistingDayType);
-        if (!canChangeExistingDayType && conflictPolicy?.value === 'day_type_only') syncConflictChoice('skip');
+        if ((!canChangeExistingDayType || (dayTypeField?.value === 'regular' && autoDayTypeOnly))
+            && conflictPolicy?.value === 'day_type_only') syncConflictChoice('skip');
         availableWorkers = targetIds.filter((workerId) => !conflictingWorkers.has(workerId)).map((workerId) => workerDirectory.get(workerId)).filter(Boolean);
         availabilitySummary?.classList.remove('d-none');
         const availabilityCard = availabilitySummary?.querySelector('.assignment-availability-card');
@@ -8156,9 +8159,9 @@ function initControlPersonalAssignments() {
         }
         conflictField.classList.toggle('d-none', awaitingSelection || !hasConflicts);
         if (awaitingSelection || !hasConflicts) syncConflictChoice('skip');
-        else if (!dayTypeChoiceTouched && scope === 'selected'
+        else if (!dayTypeChoiceTouched && scope === 'selected' && dayTypeField?.value === 'extra'
             && availableCount === 0 && conflictPolicy?.value === 'skip') {
-            syncConflictChoice('day_type_only');
+            syncConflictChoice('day_type_only', true);
         }
         if (conflictPolicy?.value === 'day_type_only') {
             if (availabilityTitle) availabilityTitle.textContent = `${conflictingWorkers.size} ${conflictingWorkers.size === 1 ? 'trabajador con asignación' : 'trabajadores con asignación'}`;
@@ -8634,6 +8637,14 @@ function initControlPersonalAssignments() {
 
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
+        if (!document.getElementById('assignmentId').value && scopeField.value === 'selected'
+            && workerChecks.some((check) => check.checked)
+            && conflictPolicy?.value === 'skip' && availableWorkers.length === 0) {
+            Swal.fire('Seleccione cómo continuar',
+                'El personal seleccionado ya tiene asignación. Elija «Cambiar solo el tipo de día» para modificar esas fechas o «Reemplazar asignaciones» para crear una nueva.',
+                'warning');
+            return;
+        }
         if (!form.checkValidity()) {
             form.classList.add('was-validated');
             return;
