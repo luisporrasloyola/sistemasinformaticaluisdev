@@ -8068,13 +8068,11 @@ function initControlPersonalAssignments() {
     const assignmentGroups = Array.from(document.querySelectorAll('.assignment-group'));
     const assignmentSearchEmpty = document.getElementById('assignmentSearchEmpty');
     let dayTypeChoiceTouched = false;
-    let autoDayTypeOnly = false;
 
-    function syncConflictChoice(value = 'skip', automatic = false) {
+    function syncConflictChoice(value = 'skip') {
         if (conflictPolicy) conflictPolicy.value = value;
         conflictChoices.forEach((choice) => { choice.checked = choice.value === value; });
         const dayTypeOnly = value === 'day_type_only';
-        autoDayTypeOnly = dayTypeOnly && automatic;
         dayTypeOnlyFields.forEach((field) => {
             field.disabled = dayTypeOnly;
             field.closest('.col-md-6, .col-md-12, .col-12')?.classList.toggle('d-none', dayTypeOnly);
@@ -8135,8 +8133,11 @@ function initControlPersonalAssignments() {
         const availableCount = Math.max(0, targetIds.length - conflictingWorkers.size);
         const canChangeExistingDayType = scope === 'selected' && availableCount === 0 && hasConflicts && !awaitingSelection;
         conflictField.querySelector('.is-day-type')?.classList.toggle('d-none', !canChangeExistingDayType);
-        if ((!canChangeExistingDayType || (dayTypeField?.value === 'regular' && autoDayTypeOnly))
-            && conflictPolicy?.value === 'day_type_only') syncConflictChoice('skip');
+        if (conflictPolicy?.value === 'day_type_only'
+            && (!canChangeExistingDayType || dayTypeField?.value === 'regular')) {
+            dayTypeChoiceTouched = false;
+            syncConflictChoice('skip');
+        }
         availableWorkers = targetIds.filter((workerId) => !conflictingWorkers.has(workerId)).map((workerId) => workerDirectory.get(workerId)).filter(Boolean);
         availabilitySummary?.classList.remove('d-none');
         const availabilityCard = availabilitySummary?.querySelector('.assignment-availability-card');
@@ -8162,7 +8163,7 @@ function initControlPersonalAssignments() {
         if (awaitingSelection || !hasConflicts) syncConflictChoice('skip');
         else if (!dayTypeChoiceTouched && scope === 'selected' && dayTypeField?.value === 'extra'
             && availableCount === 0 && conflictPolicy?.value === 'skip') {
-            syncConflictChoice('day_type_only', true);
+            syncConflictChoice('day_type_only');
         }
         if (conflictPolicy?.value === 'day_type_only') {
             if (availabilityTitle) availabilityTitle.textContent = `${conflictingWorkers.size} ${conflictingWorkers.size === 1 ? 'trabajador con asignación' : 'trabajadores con asignación'}`;
