@@ -60,6 +60,14 @@ require __DIR__ . '/../../includes/header.php';
                     <button class="btn btn-primary <?= $personalView ? 'd-none' : '' ?>" type="button" id="addRequirementBtn"><i class="fa-solid fa-plus me-2"></i>Agregar Requisito</button>
                 </div>
             </div>
+            <form id="requirementSearchForm" class="mb-3" role="search">
+                <label class="visually-hidden" for="requirementSearchInput">Buscar por requisito</label>
+                <div class="input-group" style="max-width:420px">
+                    <input class="form-control" id="requirementSearchInput" type="search" placeholder="Escriba el nombre del requisito" autocomplete="off" aria-controls="requirementsTable">
+                    <button class="btn btn-outline-primary" type="submit"><i class="fa-solid fa-magnifying-glass me-1" aria-hidden="true"></i>Ver</button>
+                </div>
+                <div class="small text-muted mt-1" id="requirementSearchFeedback" role="status" aria-live="polite"></div>
+            </form>
             <div class="table-responsive">
                 <table class="table table-hover align-middle" id="requirementsTable">
                     <thead>

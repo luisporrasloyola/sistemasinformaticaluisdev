@@ -81,6 +81,45 @@ try {
         $stmt->execute([$creditor, $dueDate, $amount, $reason, $userId]);
         json_response(['ok' => true, 'message' => 'Pago pendiente registrado.']);
     }
+    if ($action === 'edit') {
+        $id = filter_var($_POST['id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        $creditor = trim((string) ($_POST['creditor'] ?? ''));
+        $dueDate = trim((string) ($_POST['due_date'] ?? ''));
+        $reason = trim((string) ($_POST['reason'] ?? ''));
+        if (!$id || $creditor === '' || mb_strlen($creditor) > 150 || !pending_payment_date($dueDate)
+            || $reason === '' || mb_strlen($reason) > 2000) {
+            json_response(['ok' => false, 'message' => 'Complete el acreedor, la fecha de vencimiento y el motivo.'], 422);
+        }
+        db()->beginTransaction();
+        $stmt = db()->prepare('SELECT creditor FROM finance_pending_payments WHERE id = ? FOR UPDATE');
+        $stmt->execute([$id]);
+        $originalCreditor = $stmt->fetchColumn();
+        if ($originalCreditor === false) {
+            db()->rollBack();
+            json_response(['ok' => false, 'message' => 'El pago pendiente ya no existe.'], 404);
+        }
+        $stmt = db()->prepare('SELECT COALESCE(SUM(amount), 0) FROM finance_pending_payment_abonos WHERE pending_payment_id = ?');
+        $stmt->execute([$id]);
+        $paidCents = (int) round((float) $stmt->fetchColumn() * 100);
+        if ($amountCents < $paidCents) {
+            db()->rollBack();
+            json_response(['ok' => false, 'message' => 'El monto de la deuda no puede ser menor que los S/ ' . number_format($paidCents / 100, 2, '.', ',') . ' ya abonados.'], 422);
+        }
+        if ($creditor !== $originalCreditor) {
+            $stmt = db()->prepare('SELECT d.creditor FROM finance_pending_payment_abonos a JOIN finance_personal_deposits d ON d.id = a.deposit_id WHERE a.pending_payment_id = ?');
+            $stmt->execute([$id]);
+            foreach ($stmt as $deposit) {
+                if (!pending_payment_creditor_matches((string) $deposit['creditor'], $creditor)) {
+                    db()->rollBack();
+                    json_response(['ok' => false, 'message' => 'El nuevo acreedor no coincide con un depósito vinculado. Desvincúlelo antes de cambiar el acreedor.'], 422);
+                }
+            }
+        }
+        $stmt = db()->prepare('UPDATE finance_pending_payments SET creditor = ?, due_date = ?, amount = ?, reason = ? WHERE id = ?');
+        $stmt->execute([$creditor, $dueDate, $amount, $reason, $id]);
+        db()->commit();
+        json_response(['ok' => true, 'message' => 'Pago pendiente actualizado.']);
+    }
     if ($action === 'abono' || $action === 'apply_deposit') {
         $id = filter_var($_POST['id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
         $depositId = $action === 'apply_deposit' ? filter_var($_POST['deposit_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) : null;

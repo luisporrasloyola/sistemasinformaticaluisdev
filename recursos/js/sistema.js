@@ -491,6 +491,7 @@ let replicateRequirementModal = null;
 let replicateAllRequirementsModal = null;
 let replicateAllExistingPairs = new Set();
 let requirementRows = [];
+let requirementSearchTerm = '';
 let requirementFolders = [];
 let openRequirementFolders = new Set();
 let requirementSeparators = [];
@@ -2353,7 +2354,17 @@ function initRequirementsModule() {
     document.getElementById('positionSelect').addEventListener('change', (event) => {
         currentPositionId = event.target.value;
         openRequirementFolders.clear();
+        requirementSearchTerm = '';
+        const requirementSearchInput = document.getElementById('requirementSearchInput');
+        if (requirementSearchInput) requirementSearchInput.value = '';
         loadRequirements();
+    });
+    document.getElementById('requirementSearchForm')?.addEventListener('submit', (event) => {
+        event.preventDefault();
+        requirementSearchTerm = document.getElementById('requirementSearchInput').value.trim();
+        separatorPlacementId = null;
+        selectedSeparatorSlots.clear();
+        renderRequirements();
     });
 
     $('#requirementSelect').select2({
@@ -2423,6 +2434,9 @@ function initRequirementsModule() {
 
 async function loadWorker(id) {
     currentWorkerId = id;
+    requirementSearchTerm = '';
+    const requirementSearchInput = document.getElementById('requirementSearchInput');
+    if (requirementSearchInput) requirementSearchInput.value = '';
     separatorPlacementId = null;
     selectedSeparatorSlots.clear();
     const replicateAllButton = document.getElementById('replicateAllRequirementsBtn');
@@ -2509,8 +2523,16 @@ async function loadRequirements() {
 }
 
 function renderRequirements() {
+    const search = requirementSearchTerm.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     const separatorButton = document.getElementById('addRequirementSeparatorBtn');
-    if (separatorButton) separatorButton.innerHTML = separatorPlacementId !== null ? '<i class="fa-solid fa-xmark me-1"></i>Cancelar' : '<i class="fa-solid fa-minus me-1"></i>Separador';
+    if (separatorButton) {
+        separatorButton.innerHTML = separatorPlacementId !== null ? '<i class="fa-solid fa-xmark me-1"></i>Cancelar' : '<i class="fa-solid fa-minus me-1"></i>Separador';
+        separatorButton.disabled = !!search;
+    }
+    const deleteAllButton = document.getElementById('deleteAllRequirementsBtn');
+    if (deleteAllButton) deleteAllButton.disabled = !!search || !requirementRows.length || !requirementRows.every(row => row.can_modify === true);
+    const replicateAllButton = document.getElementById('replicateAllRequirementsBtn');
+    if (replicateAllButton) replicateAllButton.disabled = !!search || !requirementRows.some(row => row.can_modify === true) || !currentWorkerPositions.some(position => Number(position.id) !== Number(currentPositionId));
     document.getElementById('deleteSelectedRequirementSeparatorBtn')?.classList.toggle('d-none', !(separatorPlacementId > 0));
     const saveSeparatorsButton = document.getElementById('saveRequirementSeparatorsBtn');
     if (saveSeparatorsButton) {
@@ -2527,7 +2549,7 @@ function renderRequirements() {
         const rightOrder = Number(right[field]) || Number.MAX_SAFE_INTEGER;
         return leftOrder - rightOrder || String(left.requirement || left.name).localeCompare(String(right.requirement || right.name), 'es') || Number(left.id) - Number(right.id);
     };
-    const orderButtons = (kind, id, index, length) => window.pmiCanReplicateRequirement === true && length > 1
+    const orderButtons = (kind, id, index, length) => !search && window.pmiCanReplicateRequirement === true && length > 1
         ? `<span class="requirement-order-buttons"><button class="btn btn-sm btn-outline-secondary" type="button" onclick="moveRequirementOrder('${kind}', ${Number(id)}, 'up')" ${index === 0 ? 'disabled' : ''} title="Subir" aria-label="Subir"><i class="fa-solid fa-arrow-up"></i></button><button class="btn btn-sm btn-outline-secondary" type="button" onclick="moveRequirementOrder('${kind}', ${Number(id)}, 'down')" ${index === length - 1 ? 'disabled' : ''} title="Bajar" aria-label="Bajar"><i class="fa-solid fa-arrow-down"></i></button></span>`
         : '';
     const visibleFolders = requirementFolders.filter(folder => requirementRows.some(row => String(row.folder_id) === String(folder.id))).sort((a, b) => orderCompare(a, b, 'sort_order'));
@@ -2593,6 +2615,17 @@ function renderRequirements() {
             </tr>
         `);
     };
+    if (search) {
+        const matches = requirementRows.filter(row => String(row.requirement || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(search));
+        matches.sort((a, b) => String(a.requirement).localeCompare(String(b.requirement), 'es'));
+        matches.forEach((row, index) => renderRow(row, false, false, index, matches.length));
+        if (!matches.length) tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No se encontraron requisitos con esa búsqueda.</td></tr>';
+        const requirementSearchFeedback = document.getElementById('requirementSearchFeedback');
+        if (requirementSearchFeedback) requirementSearchFeedback.textContent = `${matches.length} requisito${matches.length === 1 ? '' : 's'} encontrado${matches.length === 1 ? '' : 's'}`;
+        return;
+    }
+    const requirementSearchFeedback = document.getElementById('requirementSearchFeedback');
+    if (requirementSearchFeedback) requirementSearchFeedback.textContent = '';
     topLevel.forEach(({kind, item}, index) => {
         if (kind === 'folder') {
             const folder = item;
@@ -3686,6 +3719,8 @@ function postFormWithProgress(url, formData, onProgress) {
 let currentMachineId = null;
 let machineDocumentModal = null;
 let machineReadOnlyMode = false;
+let machineDocumentRows = [];
+let machineDocumentSearchTerm = '';
 
 function initMaquinariaDatos() {
     const table = document.getElementById('maquinariaTable');
@@ -3979,6 +4014,11 @@ function initMaquinariaDocumentos() {
     machineSearchElement.addEventListener('change', (event) => {
         if (event.target.value) loadMachine(event.target.value);
     });
+    document.getElementById('machineDocumentSearchForm').addEventListener('submit', (event) => {
+        event.preventDefault();
+        machineDocumentSearchTerm = document.getElementById('machineDocumentSearchInput').value.trim();
+        renderMachineDocuments();
+    });
 
     if (machineSearchElement.value) {
         loadMachine(machineSearchElement.value).then(() => {
@@ -4031,6 +4071,8 @@ async function uploadMachinePhoto(event) {
 }
 async function loadMachine(id) {
     currentMachineId = id;
+    machineDocumentSearchTerm = '';
+    document.getElementById('machineDocumentSearchInput').value = '';
     const response = await fetch(`${BASE_URL}/servicios/perfil_maquinaria.php?id=${id}`);
     const data = await response.json();
     if (!data.ok) return;
@@ -4049,9 +4091,21 @@ async function loadMachineDocuments() {
     if (!currentMachineId) return;
     const response = await fetch(`${BASE_URL}/servicios/listar_documentos_maquinaria.php?maquinaria_id=${currentMachineId}&t=${Date.now()}`);
     const data = await response.json();
+    machineDocumentRows = data.rows || [];
+    renderMachineDocuments();
+}
+
+function renderMachineDocuments() {
     const tbody = document.querySelector('#machineDocumentsTable tbody');
     tbody.innerHTML = '';
-    (data.rows || []).forEach((row) => {
+    const search = machineDocumentSearchTerm.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const rows = search ? machineDocumentRows.filter(row => String(row.documento || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(search)) : machineDocumentRows;
+    document.getElementById('machineDocumentSearchFeedback').textContent = search ? `${rows.length} documento${rows.length === 1 ? '' : 's'} encontrado${rows.length === 1 ? '' : 's'}` : '';
+    if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">${search ? 'No se encontraron documentos con esa búsqueda.' : 'No hay documentos registrados para este equipo.'}</td></tr>`;
+        return;
+    }
+    rows.forEach((row) => {
         const hasPdf = !!row.archivo_path;
         const downloadName = escapeHtml(row.archivo_nombre_original || `${row.documento}.pdf`);
         const downloadButton = hasPdf
@@ -4421,6 +4475,8 @@ async function downloadMachineDocumentsZip(selectedIds = []) {
 
 let currentCompanyModuleId = null;
 let companyDocumentModal = null;
+let companyDocumentRows = [];
+let companyDocumentSearchTerm = '';
 
 function initEmpresaModuloDatos() {
     const table = document.getElementById('empresaModuloTable');
@@ -4615,6 +4671,11 @@ function initEmpresaModuloDocumentos() {
     companySearchElement.addEventListener('change', (event) => {
         if (event.target.value) loadCompanyModule(event.target.value);
     });
+    document.getElementById('companyDocumentSearchForm').addEventListener('submit', (event) => {
+        event.preventDefault();
+        companyDocumentSearchTerm = document.getElementById('companyDocumentSearchInput').value.trim();
+        renderCompanyDocuments();
+    });
 
     document.getElementById('downloadCompanyDocumentsBtn')?.addEventListener('click', downloadCompanyDocumentsBundle);
     document.getElementById('downloadSelectedCompanyDocumentsBtn')?.addEventListener('click', downloadSelectedCompanyDocumentsBundle);
@@ -4657,6 +4718,8 @@ async function uploadCompanyModulePhoto(event) {
 
 async function loadCompanyModule(id) {
     currentCompanyModuleId = id;
+    companyDocumentSearchTerm = '';
+    document.getElementById('companyDocumentSearchInput').value = '';
     const response = await fetch(`${BASE_URL}/servicios/empresa/perfil_empresa.php?id=${id}`);
     const data = await response.json();
     if (!data.ok) return;
@@ -4674,9 +4737,21 @@ async function loadCompanyDocuments() {
     if (!currentCompanyModuleId) return;
     const response = await fetch(`${BASE_URL}/servicios/empresa/listar_documentos_empresa.php?empresa_id=${currentCompanyModuleId}&t=${Date.now()}`);
     const data = await response.json();
+    companyDocumentRows = data.rows || [];
+    renderCompanyDocuments();
+}
+
+function renderCompanyDocuments() {
     const tbody = document.querySelector('#companyDocumentsTable tbody');
     tbody.innerHTML = '';
-    (data.rows || []).forEach((row) => {
+    const search = companyDocumentSearchTerm.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const rows = search ? companyDocumentRows.filter(row => String(row.documento || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(search)) : companyDocumentRows;
+    document.getElementById('companyDocumentSearchFeedback').textContent = search ? `${rows.length} documento${rows.length === 1 ? '' : 's'} encontrado${rows.length === 1 ? '' : 's'}` : '';
+    if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">${search ? 'No se encontraron documentos con esa búsqueda.' : 'No hay documentos registrados para esta empresa.'}</td></tr>`;
+        return;
+    }
+    rows.forEach((row) => {
         const hasPdf = !!row.archivo_path;
         const downloadName = escapeHtml(row.archivo_nombre_original || `${row.documento}.pdf`);
         const downloadButton = hasPdf
@@ -4999,6 +5074,8 @@ async function downloadCompanyDocumentsZip(selectedIds = []) {
 
 let currentCompanySecurityId = null;
 let companySecurityModal = null;
+let companySecurityRows = [];
+let companySecuritySearchTerm = '';
 
 function initEmpresaSeguridadDocumentos() {
     const companySearchElement = document.getElementById('companySecuritySearch');
@@ -5020,6 +5097,11 @@ function initEmpresaSeguridadDocumentos() {
     companySearchElement.addEventListener('change', (event) => {
         if (event.target.value) loadCompanySecurity(event.target.value);
     });
+    document.getElementById('companySecuritySearchForm').addEventListener('submit', (event) => {
+        event.preventDefault();
+        companySecuritySearchTerm = document.getElementById('companySecuritySearchInput').value.trim();
+        renderCompanySecurityRows();
+    });
     document.getElementById('downloadCompanySecurityBtn')?.addEventListener('click', downloadCompanySecurityBundle);
     document.getElementById('downloadSelectedCompanySecurityBtn')?.addEventListener('click', downloadSelectedCompanySecurityBundle);
     document.getElementById('addCompanySecurityBtn')?.addEventListener('click', openAddCompanySecurity);
@@ -5038,6 +5120,8 @@ function initEmpresaSeguridadDocumentos() {
 
 async function loadCompanySecurity(id) {
     currentCompanySecurityId = id;
+    companySecuritySearchTerm = '';
+    document.getElementById('companySecuritySearchInput').value = '';
     const response = await fetch(`${BASE_URL}/servicios/empresa/perfil_empresa.php?id=${id}`);
     const data = await response.json();
     if (!data.ok) return;
@@ -5073,9 +5157,21 @@ async function loadCompanySecurityRows() {
     if (!currentCompanySecurityId) return;
     const response = await fetch(`${BASE_URL}/servicios/empresa/listar_seguridad_empresa.php?empresa_id=${currentCompanySecurityId}&t=${Date.now()}`);
     const data = await response.json();
+    companySecurityRows = data.rows || [];
+    renderCompanySecurityRows();
+}
+
+function renderCompanySecurityRows() {
     const tbody = document.querySelector('#companySecurityTable tbody');
     tbody.innerHTML = '';
-    (data.rows || []).forEach((row) => {
+    const search = companySecuritySearchTerm.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const rows = search ? companySecurityRows.filter(row => String(row.documento || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(search)) : companySecurityRows;
+    document.getElementById('companySecuritySearchFeedback').textContent = search ? `${rows.length} documento${rows.length === 1 ? '' : 's'} encontrado${rows.length === 1 ? '' : 's'}` : '';
+    if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">${search ? 'No se encontraron documentos con esa búsqueda.' : 'No hay documentos de seguridad registrados para esta empresa.'}</td></tr>`;
+        return;
+    }
+    rows.forEach((row) => {
         const hasPdf = !!row.archivo_path;
         const downloadName = escapeHtml(row.archivo_nombre_original || `${row.documento}.pdf`);
         const downloadButton = hasPdf ? `<a class="btn btn-sm btn-outline-success" href="${BASE_URL}/${row.archivo_path}" download="${downloadName}" title="Descargar documento"><i class="fa-solid fa-download"></i></a>` : '';
@@ -5351,7 +5447,11 @@ function initEmpresaGenericModules() {
         const form = root.querySelector('.js-company-generic-form');
         const select = root.querySelector('.js-company-generic-select');
         const pdfInput = root.querySelector('.js-company-generic-pdf-input');
+        const documentSearchForm = root.querySelector('.js-company-generic-document-search');
+        const documentSearchInput = root.querySelector('.js-company-generic-document-search-input');
         let currentCompanyId = null;
+        let documentRows = [];
+        let documentSearchTerm = '';
 
         if (!module || !search || !modal || !form || !select) return;
 
@@ -5363,6 +5463,11 @@ function initEmpresaGenericModules() {
 
         search.addEventListener('change', (event) => {
             if (event.target.value) loadCompany(event.target.value);
+        });
+        documentSearchForm?.addEventListener('submit', (event) => {
+            event.preventDefault();
+            documentSearchTerm = documentSearchInput.value.trim();
+            renderRows();
         });
 
         root.querySelector('.js-company-generic-photo-btn')?.addEventListener('click', () => {
@@ -5379,6 +5484,8 @@ function initEmpresaGenericModules() {
 
         async function loadCompany(id) {
             currentCompanyId = id;
+            documentSearchTerm = '';
+            if (documentSearchInput) documentSearchInput.value = '';
             const response = await fetch(`${BASE_URL}/servicios/empresa/perfil_empresa.php?id=${id}`);
             const data = await response.json();
             if (!data.ok) return;
@@ -5410,9 +5517,22 @@ function initEmpresaGenericModules() {
         async function loadRows() {
             const response = await fetch(`${BASE_URL}/servicios/empresa/documentos_genericos_empresa.php?action=list&module=${module}&empresa_id=${currentCompanyId}&t=${Date.now()}`);
             const data = await response.json();
+            documentRows = data.rows || [];
+            renderRows();
+        }
+
+        function renderRows() {
             const tbody = root.querySelector('.js-company-generic-tbody');
             tbody.innerHTML = '';
-            (data.rows || []).forEach((row) => {
+            const searchTerm = documentSearchTerm.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+            const rows = searchTerm ? documentRows.filter(row => String(row.documento || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(searchTerm)) : documentRows;
+            const feedback = root.querySelector('.js-company-generic-document-search-feedback');
+            if (feedback) feedback.textContent = searchTerm ? `${rows.length} documento${rows.length === 1 ? '' : 's'} encontrado${rows.length === 1 ? '' : 's'}` : '';
+            if (!rows.length) {
+                tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">${searchTerm ? 'No se encontraron documentos con esa búsqueda.' : 'No hay documentos registrados para esta empresa.'}</td></tr>`;
+                return;
+            }
+            rows.forEach((row) => {
                 const hasPdf = !!row.archivo_path;
                 const downloadName = escapeHtml(row.archivo_nombre_original || `${row.documento}.pdf`);
                 const downloadButton = hasPdf ? `<a class="btn btn-sm btn-outline-success" href="${BASE_URL}/${row.archivo_path}" download="${downloadName}" title="Descargar documento"><i class="fa-solid fa-download"></i></a>` : '';

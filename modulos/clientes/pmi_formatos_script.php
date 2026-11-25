@@ -66,18 +66,65 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) { Swal.fire('Atención', error.message, 'warning'); }
     });
 
-    table.querySelectorAll('.format-folder-toggle').forEach(button => button.addEventListener('click', () => {
-        const expanded = button.getAttribute('aria-expanded') !== 'true';
-        table.querySelectorAll('.format-document-row[data-folder-id="' + button.dataset.folderId + '"]').forEach(row => { row.hidden = !expanded; });
+    const formatRows = Array.from(table.querySelectorAll('.format-document-row'));
+    const formatFolderButtons = Array.from(table.querySelectorAll('.format-folder-toggle'));
+    const formatSearchForm = document.getElementById('clientFormatSearchForm');
+    const formatSearchInput = document.getElementById('clientFormatSearchInput');
+    const formatSearchFeedback = document.getElementById('clientFormatSearchFeedback');
+    const normalizeFormatSearch = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase();
+    let appliedFormatSearch = '';
+    let previousFolderStates = null;
+    const setFormatFolderExpanded = (button, expanded) => {
         button.setAttribute('aria-expanded', expanded ? 'true' : 'false');
         button.closest('.client-pmi-folder-header').classList.toggle('is-open', expanded);
         const icon = button.querySelector('.fa-chevron-down,.fa-chevron-up');
         icon?.classList.toggle('fa-chevron-up', expanded);
         icon?.classList.toggle('fa-chevron-down', !expanded);
+    };
+    formatFolderButtons.forEach(button => button.addEventListener('click', () => {
+        if (appliedFormatSearch) return;
+        const expanded = button.getAttribute('aria-expanded') !== 'true';
+        formatRows.filter(row => row.dataset.folderId === button.dataset.folderId).forEach(row => { row.hidden = !expanded; });
+        setFormatFolderExpanded(button, expanded);
     }));
+    const formatNoResults = document.createElement('tr');
+    formatNoResults.innerHTML = '<td colspan="8" class="text-center text-muted py-4">No se encontraron formatos con esa búsqueda.</td>';
+    formatNoResults.hidden = true;
+    table.tBodies[0].append(formatNoResults);
+    formatSearchForm.addEventListener('submit', event => {
+        event.preventDefault();
+        const term = normalizeFormatSearch(formatSearchInput.value.trim());
+        if (term && !appliedFormatSearch) previousFolderStates = new Map(formatFolderButtons.map(button => [button.dataset.folderId, button.getAttribute('aria-expanded') === 'true']));
+        appliedFormatSearch = term;
+        let matches = 0;
+        formatRows.forEach(row => {
+            const match = term && normalizeFormatSearch(row.cells[1]?.textContent).includes(term);
+            if (match) matches++;
+            row.hidden = term ? !match : (row.dataset.folderId ? !formatFolderButtons.some(button => button.dataset.folderId === row.dataset.folderId && button.getAttribute('aria-expanded') === 'true') : false);
+        });
+        formatFolderButtons.forEach(button => {
+            const header = button.closest('.client-pmi-folder-header');
+            const folderHasMatch = formatRows.some(row => row.dataset.folderId === button.dataset.folderId && !row.hidden);
+            header.hidden = !!term && !folderHasMatch;
+            let next = header.nextElementSibling;
+            while (next?.classList.contains('client-pmi-folder-item')) next = next.nextElementSibling;
+            if (next?.classList.contains('client-pmi-folder-gap')) next.hidden = header.hidden;
+            setFormatFolderExpanded(button, term ? folderHasMatch : (previousFolderStates?.get(button.dataset.folderId) ?? button.getAttribute('aria-expanded') === 'true'));
+            button.disabled = !!term;
+        });
+        if (!term && previousFolderStates) {
+            formatRows.forEach(row => { if (row.dataset.folderId) row.hidden = !previousFolderStates.get(row.dataset.folderId); });
+            previousFolderStates = null;
+        }
+        table.querySelector('.client-format-empty')?.toggleAttribute('hidden', !!term);
+        formatNoResults.hidden = !term || matches > 0;
+        formatSearchFeedback.textContent = term ? `${matches} formato${matches === 1 ? '' : 's'} encontrado${matches === 1 ? '' : 's'}` : '';
+        syncSelectAllFormats();
+    });
     const selectAllFormats = document.getElementById('selectAllFormats');
-    const syncSelectAllFormats = () => { const items = checks(); selectAllFormats.checked = items.length > 0 && items.every(check => check.checked); selectAllFormats.indeterminate = items.some(check => check.checked) && !selectAllFormats.checked; };
-    selectAllFormats.addEventListener('change', event => { checks().forEach(check => { check.checked = event.target.checked; }); selectAllFormats.indeterminate = false; });
+    const selectableChecks = () => checks().filter(check => !appliedFormatSearch || !check.closest('tr').hidden);
+    const syncSelectAllFormats = () => { const items = selectableChecks(); selectAllFormats.checked = items.length > 0 && items.every(check => check.checked); selectAllFormats.indeterminate = items.some(check => check.checked) && !selectAllFormats.checked; };
+    selectAllFormats.addEventListener('change', event => { selectableChecks().forEach(check => { check.checked = event.target.checked; }); selectAllFormats.indeterminate = false; });
     checks().forEach(check => check.addEventListener('change', syncSelectAllFormats));
     document.getElementById('downloadAllFormats').addEventListener('click', event => {
         if (event.currentTarget.dataset.hasFiles !== '0') return;

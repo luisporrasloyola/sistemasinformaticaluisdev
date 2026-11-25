@@ -60,6 +60,14 @@ require __DIR__ . '/../../includes/header.php';
                 <h2 class="mb-0">Documentos</h2>
                 <div class="d-flex gap-2 flex-wrap"><button class="btn btn-outline-primary" type="button" id="downloadSelectedMachineDocumentsBtn"><i class="fa-solid fa-file-zipper me-2"></i>Descargar seleccionados</button><button class="btn btn-outline-primary" type="button" id="downloadMachineDocumentsBtn"><i class="fa-solid fa-download me-2"></i>Descargar todo</button><button class="btn btn-primary" type="button" id="addMachineDocumentBtn"><i class="fa-solid fa-plus me-2"></i>Agregar documentos</button></div>
             </div>
+            <form id="machineDocumentSearchForm" class="mb-3" role="search">
+                <label class="visually-hidden" for="machineDocumentSearchInput">Buscar por documento</label>
+                <div class="input-group" style="max-width:420px">
+                    <input class="form-control" id="machineDocumentSearchInput" type="search" placeholder="Escriba el nombre del documento" autocomplete="off" aria-controls="machineDocumentsTable">
+                    <button class="btn btn-outline-primary" type="submit"><i class="fa-solid fa-magnifying-glass me-1" aria-hidden="true"></i>Ver</button>
+                </div>
+                <div class="small text-muted mt-1" id="machineDocumentSearchFeedback" role="status" aria-live="polite"></div>
+            </form>
             <div class="table-responsive">
                 <table class="table table-hover align-middle" id="machineDocumentsTable">
                     <thead>

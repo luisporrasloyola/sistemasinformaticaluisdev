@@ -525,6 +525,14 @@ require __DIR__ . '/../../includes/header.php';
                         <button class="btn btn-sm btn-primary" type="button" id="addBaseDocument"><i class="fa-solid fa-plus me-1"></i>Agregar documentos</button>
                     </div>
                 </div>
+                <form id="clientBaseSearchForm" class="mb-3" role="search">
+                    <label class="visually-hidden" for="clientBaseSearchInput">Buscar por requisito</label>
+                    <div class="input-group" style="max-width:420px">
+                        <input class="form-control" id="clientBaseSearchInput" type="search" placeholder="Escriba el nombre del requisito" autocomplete="off" aria-controls="clientBaseTable">
+                        <button class="btn btn-outline-primary" type="submit"><i class="fa-solid fa-magnifying-glass me-1" aria-hidden="true"></i>Ver</button>
+                    </div>
+                    <div class="small text-muted mt-1" id="clientBaseSearchFeedback" role="status" aria-live="polite"></div>
+                </form>
                 <div class="table-responsive"><table class="table table-hover align-middle" id="clientBaseTable"><thead><tr><th><input class="form-check-input" id="selectAllBase" type="checkbox" aria-label="Seleccionar todos los requisitos"></th><th>Requisito</th><th>F. Registro</th><th>F. Inicio</th><th>F. Fin</th><th>Estado</th><th>Registrado por</th><th>Acciones</th></tr></thead><tbody>
                     <?php foreach ($baseFolders as $folder): ?>
                     <?php $folderDocs = array_values(array_filter($baseDocuments, static fn(array $doc): bool => (int) ($doc['folder_id'] ?? 0) === (int) $folder['id'])); ?>
@@ -533,7 +541,7 @@ require __DIR__ . '/../../includes/header.php';
                     <tr class="client-pmi-folder-gap"><td colspan="8"></td></tr>
                     <?php endforeach; ?>
                     <?php foreach ($baseDocuments as $document): if (!empty($document['folder_id'])) continue; ?><tr class="client-base-row"><?php require __DIR__ . '/pmi_base_row.php'; ?></tr><?php endforeach; ?>
-                    <?php if (!$baseDocuments && !$baseFolders): ?><tr><td colspan="8" class="text-center text-muted py-4">No hay requisitos registrados para este cliente.</td></tr><?php endif; ?>
+                    <?php if (!$baseDocuments && !$baseFolders): ?><tr class="client-base-empty"><td colspan="8" class="text-center text-muted py-4">No hay requisitos registrados para este cliente.</td></tr><?php endif; ?>
                 </tbody></table></div>
                 </div>
                 </div>
@@ -915,10 +923,67 @@ document.addEventListener('DOMContentLoaded', () => {
     const baseChecks=()=>Array.from(document.querySelectorAll('.base-document-check'));
     document.getElementById('downloadAllBase').addEventListener('click',event=>{if(event.currentTarget.dataset.hasFiles==='0'){event.preventDefault();Swal.fire('Atención','No hay archivos adjuntos disponibles para descargar.','warning')}});
     const selectAllBase=document.getElementById('selectAllBase');
-    const syncSelectAllBase=()=>{const items=baseChecks();selectAllBase.checked=items.length>0&&items.every(check=>check.checked);selectAllBase.indeterminate=items.some(check=>check.checked)&&!selectAllBase.checked};
-    selectAllBase.addEventListener('change',event=>{baseChecks().forEach(check=>{check.checked=event.target.checked});selectAllBase.indeterminate=false});
+    const baseTable=document.getElementById('clientBaseTable');
+    const baseSearchForm=document.getElementById('clientBaseSearchForm');
+    const baseSearchInput=document.getElementById('clientBaseSearchInput');
+    const baseSearchFeedback=document.getElementById('clientBaseSearchFeedback');
+    const baseRows=Array.from(baseTable.querySelectorAll('.client-base-row'));
+    const baseFolderButtons=Array.from(baseTable.querySelectorAll('.folder-toggle'));
+    const normalizeBaseSearch=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase();
+    let appliedBaseSearch='';
+    let previousFolderStates=null;
+    const selectableBaseChecks=()=>baseChecks().filter(check=>!appliedBaseSearch||!check.closest('tr').hidden);
+    const syncSelectAllBase=()=>{const items=selectableBaseChecks();selectAllBase.checked=items.length>0&&items.every(check=>check.checked);selectAllBase.indeterminate=items.some(check=>check.checked)&&!selectAllBase.checked};
+    selectAllBase.addEventListener('change',event=>{selectableBaseChecks().forEach(check=>{check.checked=event.target.checked});selectAllBase.indeterminate=false});
     baseChecks().forEach(check=>check.addEventListener('change',syncSelectAllBase));
-    document.querySelectorAll('.folder-toggle').forEach(button=>button.addEventListener('click',()=>{const expand=button.getAttribute('aria-expanded')!=='true';document.querySelectorAll('.client-base-row[data-folder-id="'+button.dataset.folderId+'"]').forEach(row=>{row.hidden=!expand});button.setAttribute('aria-expanded',expand?'true':'false');button.closest('.client-pmi-folder-header').classList.toggle('is-open',expand);button.querySelector('.fa-chevron-down,.fa-chevron-up')?.classList.toggle('fa-chevron-up',expand);button.querySelector('.fa-chevron-down,.fa-chevron-up')?.classList.toggle('fa-chevron-down',!expand)}));
+    const setBaseFolderExpanded=(button,expand)=>{
+        button.setAttribute('aria-expanded',expand?'true':'false');
+        button.closest('.client-pmi-folder-header').classList.toggle('is-open',expand);
+        const icon=button.querySelector('.fa-chevron-down,.fa-chevron-up');
+        icon?.classList.toggle('fa-chevron-up',expand);
+        icon?.classList.toggle('fa-chevron-down',!expand);
+    };
+    baseFolderButtons.forEach(button=>button.addEventListener('click',()=>{
+        if(appliedBaseSearch)return;
+        const expand=button.getAttribute('aria-expanded')!=='true';
+        baseRows.filter(row=>row.dataset.folderId===button.dataset.folderId).forEach(row=>{row.hidden=!expand});
+        setBaseFolderExpanded(button,expand);
+    }));
+    const baseNoResults=document.createElement('tr');
+    baseNoResults.innerHTML='<td colspan="8" class="text-center text-muted py-4">No se encontraron requisitos con esa búsqueda.</td>';
+    baseNoResults.hidden=true;
+    baseTable.tBodies[0].append(baseNoResults);
+    baseSearchForm.addEventListener('submit',event=>{
+        event.preventDefault();
+        const term=normalizeBaseSearch(baseSearchInput.value.trim());
+        if(term&&!appliedBaseSearch)previousFolderStates=new Map(baseFolderButtons.map(button=>[button.dataset.folderId,button.getAttribute('aria-expanded')==='true']));
+        appliedBaseSearch=term;
+        let matches=0;
+        baseRows.forEach(row=>{
+            const match=term&&normalizeBaseSearch(row.cells[1]?.textContent).includes(term);
+            if(match)matches++;
+            row.hidden=term?!match:(row.dataset.folderId?!baseFolderButtons.some(button=>button.dataset.folderId===row.dataset.folderId&&button.getAttribute('aria-expanded')==='true'):false);
+        });
+        baseFolderButtons.forEach(button=>{
+            const header=button.closest('.client-pmi-folder-header');
+            const folderHasMatch=baseRows.some(row=>row.dataset.folderId===button.dataset.folderId&&!row.hidden);
+            header.hidden=!!term&&!folderHasMatch;
+            const gap=header.nextElementSibling;
+            let next=gap;
+            while(next?.classList.contains('client-pmi-folder-item'))next=next.nextElementSibling;
+            if(next?.classList.contains('client-pmi-folder-gap'))next.hidden=header.hidden;
+            setBaseFolderExpanded(button,term?folderHasMatch:(previousFolderStates?.get(button.dataset.folderId)??button.getAttribute('aria-expanded')==='true'));
+            button.disabled=!!term;
+        });
+        if(!term&&previousFolderStates){
+            baseRows.forEach(row=>{if(row.dataset.folderId)row.hidden=!previousFolderStates.get(row.dataset.folderId)});
+            previousFolderStates=null;
+        }
+        baseTable.querySelector('.client-base-empty')?.toggleAttribute('hidden',!!term);
+        baseNoResults.hidden=!term||matches>0;
+        baseSearchFeedback.textContent=term?`${matches} requisito${matches===1?'':'s'} encontrado${matches===1?'':'s'}`:'';
+        syncSelectAllBase();
+    });
     const folderChoices=()=>Array.from(document.querySelectorAll('.base-folder-document-check:not(:disabled)'));
     const folderSelectAll=document.getElementById('baseFolderSelectAll');
     const syncFolderSelectAll=()=>{const choices=folderChoices();folderSelectAll.checked=choices.length>0&&choices.every(check=>check.checked);folderSelectAll.indeterminate=choices.some(check=>check.checked)&&!folderSelectAll.checked};

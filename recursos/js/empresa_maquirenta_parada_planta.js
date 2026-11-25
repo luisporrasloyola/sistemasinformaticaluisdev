@@ -1,6 +1,8 @@
 let currentParadaPlantaCompanyId = null;
 let paradaPlantaModal = null;
 let paradaPlantaReadOnly = false;
+let paradaPlantaRows = [];
+let paradaPlantaSearchTerm = '';
 
 document.addEventListener('DOMContentLoaded', () => {
     const search = document.getElementById('paradaPlantaCompanySearch');
@@ -31,6 +33,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     search.addEventListener('change', event => {
         if (event.target.value) loadParadaPlantaCompany(event.target.value);
+    });
+    document.getElementById('paradaPlantaDocumentSearchForm').addEventListener('submit', event => {
+        event.preventDefault();
+        paradaPlantaSearchTerm = document.getElementById('paradaPlantaDocumentSearchInput').value.trim();
+        renderParadaPlantaRows();
     });
 
     document.getElementById('addParadaPlantaBtn')?.addEventListener('click', openAddParadaPlanta);
@@ -64,6 +71,8 @@ async function loadParadaPlantaCompany(id) {
         const data = await paradaPlantaRequest(`${BASE_URL}/servicios/empresa_maquirenta/parada_planta.php?action=profile&id=${encodeURIComponent(id)}`);
         const company = data.empresa;
         currentParadaPlantaCompanyId = String(id);
+        paradaPlantaSearchTerm = '';
+        document.getElementById('paradaPlantaDocumentSearchInput').value = '';
         document.getElementById('paradaPlantaWorkspace').classList.remove('d-none');
         document.getElementById('paradaPlantaPhoto').src = company.foto_path ? `${BASE_URL}/${company.foto_path}` : `${BASE_URL}/recursos/imagen_referencial.php`;
         document.getElementById('paradaPlantaName').textContent = company.razon_social || '';
@@ -78,10 +87,21 @@ async function loadParadaPlantaCompany(id) {
 async function loadParadaPlantaRows() {
     if (!currentParadaPlantaCompanyId) return;
     const data = await paradaPlantaRequest(`${BASE_URL}/servicios/empresa_maquirenta/parada_planta.php?action=list&empresa_maquirenta_id=${encodeURIComponent(currentParadaPlantaCompanyId)}&t=${Date.now()}`);
+    paradaPlantaRows = data.rows || [];
+    renderParadaPlantaRows();
+}
+
+function renderParadaPlantaRows() {
     const tbody = document.querySelector('#paradaPlantaTable tbody');
     tbody.innerHTML = '';
-
-    (data.rows || []).forEach(row => {
+    const search = paradaPlantaSearchTerm.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const rows = search ? paradaPlantaRows.filter(row => String(row.documento || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(search)) : paradaPlantaRows;
+    document.getElementById('paradaPlantaDocumentSearchFeedback').textContent = search ? `${rows.length} documento${rows.length === 1 ? '' : 's'} encontrado${rows.length === 1 ? '' : 's'}` : '';
+    if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">${search ? 'No se encontraron documentos con esa búsqueda.' : 'No hay documentos registrados para esta empresa.'}</td></tr>`;
+        return;
+    }
+    rows.forEach(row => {
         const hasFile = !!row.archivo_path;
         const download = hasFile ? `<a class="btn btn-sm btn-outline-success" href="${BASE_URL}/${row.archivo_path}" download="${escapeHtml(row.archivo_nombre_original || row.documento)}" title="Descargar"><i class="fa-solid fa-download"></i></a>` : '';
         tbody.insertAdjacentHTML('beforeend', `

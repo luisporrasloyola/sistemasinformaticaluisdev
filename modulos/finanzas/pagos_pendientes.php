@@ -50,6 +50,7 @@ require __DIR__ . '/../../includes/header.php';
                     <td class="pending-payment-reason"><?= nl2br(e((string) $payment['reason'])) ?></td>
                     <td><span class="badge <?= $statusClass ?>"><?= $status ?></span></td>
                     <td class="text-nowrap">
+                        <button class="btn btn-sm btn-outline-primary pending-edit-button" type="button" data-id="<?= (int) $payment['id'] ?>" data-creditor="<?= e((string) $payment['creditor']) ?>" data-due-date="<?= e((string) $payment['due_date']) ?>" data-amount="<?= number_format($totalCents / 100, 2, '.', '') ?>" data-paid="<?= number_format($paidCents / 100, 2, '.', '') ?>" data-reason="<?= e((string) $payment['reason']) ?>" title="Editar pago pendiente" aria-label="Editar pago pendiente de <?= e((string) $payment['creditor']) ?>"><i class="fa-solid fa-pen" aria-hidden="true"></i></button>
                         <?php if ($remainingCents > 0): ?><button class="btn btn-sm btn-pending-abono" type="button" data-bs-toggle="modal" data-bs-target="#pendingAbonoModal" data-id="<?= (int) $payment['id'] ?>" data-creditor="<?= e((string) $payment['creditor']) ?>" data-remaining="<?= number_format($remainingCents / 100, 2, '.', '') ?>"><i class="fa-solid fa-money-bill-transfer me-1" aria-hidden="true"></i>Abonar</button><?php endif; ?>
                         <button class="btn btn-sm btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#pendingHistoryModal" data-creditor="<?= e((string) $payment['creditor']) ?>" data-history="<?= e(json_encode($history[(int) $payment['id']] ?? [], JSON_UNESCAPED_UNICODE)) ?>">Ver pagos</button>
                         <button class="btn btn-sm btn-outline-danger pending-delete-button" type="button" data-id="<?= (int) $payment['id'] ?>" data-creditor="<?= e((string) $payment['creditor']) ?>" title="Eliminar pago pendiente" aria-label="Eliminar pago pendiente de <?= e((string) $payment['creditor']) ?>"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
@@ -87,7 +88,7 @@ require __DIR__ . '/../../includes/header.php';
     <div class="modal-body"><p id="pendingHistoryCreditor" class="fw-semibold"></p><div class="table-responsive"><table class="table table-sm"><thead><tr><th>Fecha</th><th>Monto</th><th>Registrado por</th><th>Comprobante</th><th>Acción</th></tr></thead><tbody id="pendingHistoryRows"></tbody></table></div></div>
     <div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cerrar</button></div>
 </div></div></div>
-<style>.pending-payment-reason{min-width:180px;max-width:360px;white-space:normal}.pending-payment-form .form-label{font-weight:600}.btn-pending-abono{--bs-btn-color:#fff;--bs-btn-bg:#7b3fb2;--bs-btn-border-color:#7b3fb2;--bs-btn-hover-color:#fff;--bs-btn-hover-bg:#653294;--bs-btn-hover-border-color:#653294;--bs-btn-active-color:#fff;--bs-btn-active-bg:#542879;--bs-btn-active-border-color:#542879;--bs-btn-focus-shadow-rgb:123,63,178}</style>
+<style>.pending-payment-reason{min-width:180px;max-width:360px;white-space:normal}.pending-payment-form .form-label{font-weight:600}.pending-edit-row td{background:#eef5ff!important;vertical-align:middle}.pending-edit-row .form-control{min-width:120px;font-size:.85rem}.pending-edit-row textarea{min-width:200px;resize:vertical}.btn-pending-abono{--bs-btn-color:#fff;--bs-btn-bg:#7b3fb2;--bs-btn-border-color:#7b3fb2;--bs-btn-hover-color:#fff;--bs-btn-hover-bg:#653294;--bs-btn-hover-border-color:#653294;--bs-btn-active-color:#fff;--bs-btn-active-bg:#542879;--bs-btn-active-border-color:#542879;--bs-btn-focus-shadow-rgb:123,63,178}</style>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     const endpoint = <?= json_encode(APP_URL . '/servicios/finanzas/pagos_pendientes_guardar.php') ?>;
@@ -135,6 +136,59 @@ document.addEventListener('DOMContentLoaded', () => {
             button.disabled = false;
         }
     }));
+    let activeEdit = null;
+    const closeEdit = () => {
+        if (!activeEdit || activeEdit.busy) return;
+        activeEdit.original.style.display = '';
+        activeEdit.row.remove();
+        activeEdit = null;
+    };
+    document.getElementById('pendingPaymentsTable').addEventListener('click', async event => {
+        const editButton = event.target.closest('.pending-edit-button');
+        if (editButton) {
+            if (activeEdit?.busy) return;
+            closeEdit();
+            const original = editButton.closest('tr');
+            const row = document.createElement('tr');
+            row.className = 'pending-edit-row';
+            row.innerHTML = '<td><input class="form-control form-control-sm" name="creditor" maxlength="150" required aria-label="Acreedor"></td><td><input class="form-control form-control-sm" name="due_date" type="date" required aria-label="Fecha de vencimiento"></td><td><input class="form-control form-control-sm" name="amount" type="number" min="0.01" max="9999999999.99" step="0.01" inputmode="decimal" required aria-label="Monto de la deuda"><small class="d-block text-muted mt-1 pending-edit-paid"></small></td><td><textarea class="form-control form-control-sm" name="reason" rows="2" maxlength="2000" required aria-label="Motivo"></textarea></td><td><span class="badge bg-primary">Editando</span></td><td class="text-nowrap"><button class="btn btn-sm btn-primary pending-edit-save" type="button" title="Guardar cambios"><i class="fa-solid fa-check me-1" aria-hidden="true"></i>Guardar</button> <button class="btn btn-sm btn-outline-secondary pending-edit-cancel" type="button">Cancelar</button></td>';
+            row.querySelector('[name="creditor"]').value = editButton.dataset.creditor;
+            row.querySelector('[name="due_date"]').value = editButton.dataset.dueDate;
+            const amount = row.querySelector('[name="amount"]');
+            const paid = Number(editButton.dataset.paid);
+            amount.min = Math.max(0.01, paid).toFixed(2);
+            amount.value = editButton.dataset.amount;
+            if (paid > 0) row.querySelector('.pending-edit-paid').textContent = `Abonado: S/ ${paid.toFixed(2)}`;
+            row.querySelector('[name="reason"]').value = editButton.dataset.reason;
+            original.after(row);
+            original.style.display = 'none';
+            activeEdit = {original, row, id:editButton.dataset.id, busy:false};
+            row.querySelector('[name="creditor"]').focus();
+            return;
+        }
+        if (event.target.closest('.pending-edit-cancel')) { closeEdit(); return; }
+        const saveButton = event.target.closest('.pending-edit-save');
+        if (!saveButton || !activeEdit || activeEdit.row !== saveButton.closest('tr') || activeEdit.busy) return;
+        const fields = [...activeEdit.row.querySelectorAll('input, textarea')];
+        for (const field of fields) if (!field.reportValidity()) return;
+        const data = new FormData();
+        data.set('action', 'edit');
+        data.set('id', activeEdit.id);
+        data.set('csrf_token', csrf);
+        for (const field of fields) data.set(field.name, field.value);
+        activeEdit.busy = true;
+        saveButton.disabled = true;
+        try {
+            const response = await fetch(endpoint, {method:'POST', body:data, credentials:'same-origin'});
+            const result = await response.json();
+            if (!response.ok || !result.ok) throw new Error(result.message || 'No se pudo actualizar el pago pendiente.');
+            window.location.reload();
+        } catch (error) {
+            Swal.fire('Atención', error.message, 'warning');
+            activeEdit.busy = false;
+            saveButton.disabled = false;
+        }
+    });
     document.getElementById('pendingAbonoModal').addEventListener('show.bs.modal', event => {
         const button = event.relatedTarget;
         const remaining = Number(button.dataset.remaining);

@@ -1,6 +1,8 @@
 let currentSantaRosaParadaCompanyId = null;
 let santaRosaParadaModal = null;
 let santaRosaParadaReadOnly = false;
+let santaRosaParadaRows = [];
+let santaRosaParadaSearchTerm = '';
 
 document.addEventListener('DOMContentLoaded', () => {
     const search = document.getElementById('santaRosaParadaCompanySearch');
@@ -31,6 +33,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     search.addEventListener('change', event => {
         if (event.target.value) loadSantaRosaParadaCompany(event.target.value);
+    });
+    document.getElementById('santaRosaParadaDocumentSearchForm').addEventListener('submit', event => {
+        event.preventDefault();
+        santaRosaParadaSearchTerm = document.getElementById('santaRosaParadaDocumentSearchInput').value.trim();
+        renderSantaRosaParadaRows();
     });
 
     document.getElementById('addSantaRosaParadaBtn')?.addEventListener('click', openAddSantaRosaParada);
@@ -64,6 +71,8 @@ async function loadSantaRosaParadaCompany(id) {
         const data = await santaRosaParadaRequest(`${BASE_URL}/servicios/empresa_maquirenta/parada_planta_santa_rosa.php?action=profile&id=${encodeURIComponent(id)}`);
         const company = data.empresa;
         currentSantaRosaParadaCompanyId = String(id);
+        santaRosaParadaSearchTerm = '';
+        document.getElementById('santaRosaParadaDocumentSearchInput').value = '';
         document.getElementById('santaRosaParadaWorkspace').classList.remove('d-none');
         document.getElementById('santaRosaParadaPhoto').src = company.foto_path ? `${BASE_URL}/${company.foto_path}` : `${BASE_URL}/recursos/imagen_referencial.php`;
         document.getElementById('santaRosaParadaName').textContent = company.razon_social || '';
@@ -78,10 +87,21 @@ async function loadSantaRosaParadaCompany(id) {
 async function loadSantaRosaParadaRows() {
     if (!currentSantaRosaParadaCompanyId) return;
     const data = await santaRosaParadaRequest(`${BASE_URL}/servicios/empresa_maquirenta/parada_planta_santa_rosa.php?action=list&empresa_maquirenta_id=${encodeURIComponent(currentSantaRosaParadaCompanyId)}&t=${Date.now()}`);
+    santaRosaParadaRows = data.rows || [];
+    renderSantaRosaParadaRows();
+}
+
+function renderSantaRosaParadaRows() {
     const tbody = document.querySelector('#santaRosaParadaTable tbody');
     tbody.innerHTML = '';
-
-    (data.rows || []).forEach(row => {
+    const search = santaRosaParadaSearchTerm.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const rows = search ? santaRosaParadaRows.filter(row => String(row.documento || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(search)) : santaRosaParadaRows;
+    document.getElementById('santaRosaParadaDocumentSearchFeedback').textContent = search ? `${rows.length} documento${rows.length === 1 ? '' : 's'} encontrado${rows.length === 1 ? '' : 's'}` : '';
+    if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">${search ? 'No se encontraron documentos con esa búsqueda.' : 'No hay documentos registrados para esta empresa.'}</td></tr>`;
+        return;
+    }
+    rows.forEach(row => {
         const hasFile = !!row.archivo_path;
         const download = hasFile ? `<a class="btn btn-sm btn-outline-success" href="${BASE_URL}/${row.archivo_path}" download="${escapeHtml(row.archivo_nombre_original || row.documento)}" title="Descargar"><i class="fa-solid fa-download"></i></a>` : '';
         tbody.insertAdjacentHTML('beforeend', `

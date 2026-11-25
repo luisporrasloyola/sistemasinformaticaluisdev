@@ -9,6 +9,14 @@
                 <button class="btn btn-sm btn-outline-primary" type="button" id="createFormatFolder"><i class="fa-solid fa-folder-plus me-1"></i>Crear carpeta</button>
                 <button class="btn btn-sm btn-primary" type="button" id="addFormatDocument"><i class="fa-solid fa-plus me-1"></i>Agregar formatos</button>
             </div></div>
+            <form id="clientFormatSearchForm" class="mb-3" role="search">
+                <label class="visually-hidden" for="clientFormatSearchInput">Buscar por formato</label>
+                <div class="input-group" style="max-width:420px">
+                    <input class="form-control" id="clientFormatSearchInput" type="search" placeholder="Escriba el nombre del formato" autocomplete="off" aria-controls="clientFormatTable">
+                    <button class="btn btn-outline-primary" type="submit"><i class="fa-solid fa-magnifying-glass me-1" aria-hidden="true"></i>Ver</button>
+                </div>
+                <div class="small text-muted mt-1" id="clientFormatSearchFeedback" role="status" aria-live="polite"></div>
+            </form>
             <div class="table-responsive"><table class="table table-hover align-middle" id="clientFormatTable"><thead><tr><th><input class="form-check-input" id="selectAllFormats" type="checkbox" aria-label="Seleccionar todos los formatos"></th><th>Formato</th><th>F. Registro</th><th>F. Inicio</th><th>F. Fin</th><th>Estado</th><th>Registrado por</th><th>Acciones</th></tr></thead><tbody>
                 <?php foreach ($formatFolders as $folder): ?>
                     <?php $folderDocs = array_values(array_filter($formatDocuments, static fn(array $doc): bool => (int) ($doc['folder_id'] ?? 0) === (int) $folder['id'])); ?>
@@ -17,7 +25,7 @@
                     <tr class="client-pmi-folder-gap"><td colspan="8"></td></tr>
                 <?php endforeach; ?>
                 <?php foreach ($formatDocuments as $document): if (!empty($document['folder_id'])) continue; ?><tr class="format-document-row"><?php require __DIR__ . '/pmi_formato_row.php'; ?></tr><?php endforeach; ?>
-                <?php if (!$formatDocuments && !$formatFolders): ?><tr><td colspan="8" class="text-center text-muted py-4">No hay formatos registrados para este cliente.</td></tr><?php endif; ?>
+                <?php if (!$formatDocuments && !$formatFolders): ?><tr class="client-format-empty"><td colspan="8" class="text-center text-muted py-4">No hay formatos registrados para este cliente.</td></tr><?php endif; ?>
             </tbody></table></div>
         </div>
     </div>

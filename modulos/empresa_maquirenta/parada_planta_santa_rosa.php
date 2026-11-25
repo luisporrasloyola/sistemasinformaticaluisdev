@@ -54,6 +54,14 @@ require __DIR__ . '/../../includes/header.php';
                     <button class="btn btn-primary" type="button" id="addSantaRosaParadaBtn"><i class="fa-solid fa-plus me-2"></i>Agregar documentos</button>
                 </div>
             </div>
+            <form id="santaRosaParadaDocumentSearchForm" class="mb-3" role="search">
+                <label class="visually-hidden" for="santaRosaParadaDocumentSearchInput">Buscar por documento</label>
+                <div class="input-group" style="max-width:420px">
+                    <input class="form-control" id="santaRosaParadaDocumentSearchInput" type="search" placeholder="Escriba el nombre del documento" autocomplete="off" aria-controls="santaRosaParadaTable">
+                    <button class="btn btn-outline-primary" type="submit"><i class="fa-solid fa-magnifying-glass me-1" aria-hidden="true"></i>Ver</button>
+                </div>
+                <div class="small text-muted mt-1" id="santaRosaParadaDocumentSearchFeedback" role="status" aria-live="polite"></div>
+            </form>
             <div class="table-responsive">
                 <table class="table table-hover align-middle" id="santaRosaParadaTable">
                     <thead>

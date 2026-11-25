@@ -1,6 +1,8 @@
 let currentMaquirentaFormatosCompanyId = null;
 let maquirentaFormatosModal = null;
 let maquirentaFormatosReadOnly = false;
+let maquirentaFormatosRows = [];
+let maquirentaFormatosSearchTerm = '';
 
 document.addEventListener('DOMContentLoaded', () => {
     const search = document.getElementById('maquirentaFormatosCompanySearch');
@@ -31,6 +33,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     search.addEventListener('change', event => {
         if (event.target.value) loadMaquirentaFormatosCompany(event.target.value);
+    });
+    document.getElementById('maquirentaFormatosDocumentSearchForm').addEventListener('submit', event => {
+        event.preventDefault();
+        maquirentaFormatosSearchTerm = document.getElementById('maquirentaFormatosDocumentSearchInput').value.trim();
+        renderMaquirentaFormatosRows();
     });
 
     document.getElementById('addMaquirentaFormatosBtn')?.addEventListener('click', openAddMaquirentaFormatos);
@@ -64,6 +71,8 @@ async function loadMaquirentaFormatosCompany(id) {
         const data = await maquirentaFormatosRequest(`${BASE_URL}/servicios/empresa_maquirenta/formatos.php?action=profile&id=${encodeURIComponent(id)}`);
         const company = data.empresa;
         currentMaquirentaFormatosCompanyId = String(id);
+        maquirentaFormatosSearchTerm = '';
+        document.getElementById('maquirentaFormatosDocumentSearchInput').value = '';
         document.getElementById('maquirentaFormatosWorkspace').classList.remove('d-none');
         document.getElementById('maquirentaFormatosPhoto').src = company.foto_path ? `${BASE_URL}/${company.foto_path}` : `${BASE_URL}/recursos/imagen_referencial.php`;
         document.getElementById('maquirentaFormatosName').textContent = company.razon_social || '';
@@ -78,10 +87,21 @@ async function loadMaquirentaFormatosCompany(id) {
 async function loadMaquirentaFormatosRows() {
     if (!currentMaquirentaFormatosCompanyId) return;
     const data = await maquirentaFormatosRequest(`${BASE_URL}/servicios/empresa_maquirenta/formatos.php?action=list&empresa_maquirenta_id=${encodeURIComponent(currentMaquirentaFormatosCompanyId)}&t=${Date.now()}`);
+    maquirentaFormatosRows = data.rows || [];
+    renderMaquirentaFormatosRows();
+}
+
+function renderMaquirentaFormatosRows() {
     const tbody = document.querySelector('#maquirentaFormatosTable tbody');
     tbody.innerHTML = '';
-
-    (data.rows || []).forEach(row => {
+    const search = maquirentaFormatosSearchTerm.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const rows = search ? maquirentaFormatosRows.filter(row => String(row.documento || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(search)) : maquirentaFormatosRows;
+    document.getElementById('maquirentaFormatosDocumentSearchFeedback').textContent = search ? `${rows.length} formato${rows.length === 1 ? '' : 's'} encontrado${rows.length === 1 ? '' : 's'}` : '';
+    if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">${search ? 'No se encontraron formatos con esa búsqueda.' : 'No hay formatos registrados para esta empresa.'}</td></tr>`;
+        return;
+    }
+    rows.forEach(row => {
         const hasFile = !!row.archivo_path;
         const download = hasFile ? `<a class="btn btn-sm btn-outline-success" href="${BASE_URL}/${row.archivo_path}" download="${escapeHtml(row.archivo_nombre_original || row.documento)}" title="Descargar"><i class="fa-solid fa-download"></i></a>` : '';
         tbody.insertAdjacentHTML('beforeend', `
