@@ -195,8 +195,8 @@ if ($workerId > 0) {
     $allDepositWorkers = personal_deposit_workers();
     $resolvedCreditors = [];
     $resolvedDepositors = [];
-    $allDepositsStmt = db()->prepare('SELECT d.id, d.deposit_date, d.creditor, d.depositor, d.amount, d.worker_id, d.image_path, d.image_original_name, COALESCE(editor.name, author.name) AS registered_by FROM finance_personal_deposits d LEFT JOIN users author ON author.id = d.registered_by_user_id LEFT JOIN users editor ON editor.id = d.last_edited_by_user_id WHERE d.deposit_date BETWEEN ? AND ? ORDER BY d.deposit_date DESC, d.id DESC');
-    $allDepositsStmt->execute([$period['start'], $period['end']]);
+    $allDepositsStmt = db()->prepare('SELECT d.id, d.deposit_date, d.creditor, d.depositor, er.reason AS expense_reason, d.amount, d.worker_id, d.image_path, d.image_original_name, COALESCE(editor.name, author.name) AS registered_by FROM finance_personal_deposits d LEFT JOIN finance_personal_expense_reasons er ON er.deposit_id = d.id AND er.worker_id = ? LEFT JOIN users author ON author.id = d.registered_by_user_id LEFT JOIN users editor ON editor.id = d.last_edited_by_user_id WHERE d.deposit_date BETWEEN ? AND ? ORDER BY d.deposit_date DESC, d.id DESC');
+    $allDepositsStmt->execute([$workerId, $period['start'], $period['end']]);
     foreach ($allDepositsStmt as $deposit) {
         $date = (string) $deposit['deposit_date'];
         if (personal_expense_deposit_is_worker($deposit, $workerId, $allDepositWorkers, $resolvedCreditors)) {
@@ -300,7 +300,9 @@ if ($workerId > 0) {
         if (!array_key_exists($date, $displayDays)) $displayDays[$date] = null;
         foreach ($deposits as $deposit) {
             $outgoingExpensesByDate[$date][] = [
-                'amount' => (string) $deposit['amount'], 'reason' => (string) $deposit['creditor'],
+                'amount' => (string) $deposit['amount'],
+                'reason' => (string) ($deposit['expense_reason'] ?? $deposit['creditor']),
+                'deposit_id' => (int) $deposit['id'],
             ];
         }
     }
@@ -481,8 +483,8 @@ require __DIR__ . '/../../includes/header.php';
                     <td><?= e(($mark['project_name'] ?? null) ?: '—') ?></td>
                     <td class="text-nowrap per-diem-amount-cell"><?= $perDiem !== null ? 'S/ ' . number_format((float) $perDiem, ((float) $perDiem == (int) $perDiem ? 0 : 2), '.', ',') : '—' ?></td>
                     <td class="per-diem-observations-cell" style="white-space:pre-line"><?= $observations !== '' ? e($observations) : '—' ?></td>
-                    <td class="additional-expense-cell text-nowrap"><?php if ($expenses): foreach ($expenses as $expense): ?><div class="expense-display-line">S/ <?= number_format((float) $expense['amount'], 2, '.', ',') ?></div><?php endforeach; else: ?>—<?php endif; ?></td>
-                    <td class="additional-reason-cell"><?php if ($expenses): foreach ($expenses as $expense): ?><div class="expense-display-line"><?= $expense['reason'] !== '' ? e($expense['reason']) : '—' ?></div><?php endforeach; else: ?>—<?php endif; ?></td>
+                    <td class="additional-expense-cell text-nowrap"><?php if ($expenses): foreach ($expenses as $expenseIndex => $expense): ?><div class="expense-display-line expense-paired expense-pair-<?= $expenseIndex % 4 ?>"><span>S/ <?= number_format((float) $expense['amount'], 2, '.', ',') ?></span><svg class="expense-pair-arrow" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true"><path class="expense-pair-arrow-line" d="M2 10 C30 8 48 12 96 10"/><path class="expense-pair-arrow-tip" d="M84 3 L97 10 L84 17"/></svg></div><?php endforeach; else: ?>—<?php endif; ?></td>
+                    <td class="additional-reason-cell"><?php if ($expenses): foreach ($expenses as $expenseIndex => $expense): ?><div class="expense-display-line expense-paired expense-pair-<?= $expenseIndex % 4 ?>"><?= $expense['reason'] !== '' ? e($expense['reason']) : '—' ?></div><?php endforeach; else: ?>—<?php endif; ?></td>
                     <td class="honorarios-cell text-nowrap"><?= $honorarios !== null ? 'S/ ' . number_format($honorarios, 2, '.', ',') : '—' ?></td>
                     <td class="total-expense-cell text-nowrap"><?= $total !== null ? 'S/ ' . number_format($total, 2, '.', ',') : '—' ?></td>
                     <td class="deposit-amount-cell text-nowrap"><?= isset($depositsByDate[$date]) ? 'S/ ' . number_format($depositsByDate[$date] / 100, 2, '.', ',') : '—' ?></td>
@@ -553,22 +555,35 @@ require __DIR__ . '/../../includes/header.php';
 .personal-expense-pagination { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-top:14px; color:#526b91; font-size:.78rem; }
 .personal-expense-pagination .btn { border-radius:7px; }
 #personalPerDiemTable { width:100%; min-width:1030px; table-layout:fixed; color:#172b4d; }
+#personalPerDiemTable:has(.per-diem-editing) { width:1700px; min-width:1700px; table-layout:fixed; }
+#personalPerDiemTable:has(.per-diem-editing) thead th:nth-child(1) { width:90px; }
+#personalPerDiemTable:has(.per-diem-editing) thead th:nth-child(2) { width:110px; }
+#personalPerDiemTable:has(.per-diem-editing) thead th:nth-child(3) { width:105px; }
+#personalPerDiemTable:has(.per-diem-editing) thead th:nth-child(4) { width:105px; }
+#personalPerDiemTable:has(.per-diem-editing) thead th:nth-child(5) { width:210px; }
+#personalPerDiemTable:has(.per-diem-editing) thead th:nth-child(6) { width:185px; }
+#personalPerDiemTable:has(.per-diem-editing) thead th:nth-child(7) { width:255px; }
+#personalPerDiemTable:has(.per-diem-editing) thead th:nth-child(8) { width:115px; }
+#personalPerDiemTable:has(.per-diem-editing) thead th:nth-child(9) { width:105px; }
+#personalPerDiemTable:has(.per-diem-editing) thead th:nth-child(10) { width:110px; }
+#personalPerDiemTable:has(.per-diem-editing) thead th:nth-child(11) { width:125px; }
+#personalPerDiemTable:has(.per-diem-editing) thead th:nth-child(12) { width:100px; }
+#personalPerDiemTable:has(.per-diem-editing) thead th:nth-child(13) { width:85px; }
 #personalPerDiemTable thead th { padding:.65rem .25rem; background:#f7f9fc; border-bottom:1px solid #cbd8eb; color:#0f172a; font-size:.62rem; font-weight:800; text-transform:uppercase; vertical-align:middle; white-space:normal; overflow-wrap:anywhere; }
 #personalPerDiemTable thead th:nth-child(1) { width:7%; }
-#personalPerDiemTable thead th:nth-child(2) { width:8%; }
-#personalPerDiemTable thead th:nth-child(3) { width:8%; }
-#personalPerDiemTable thead th:nth-child(4) { width:8%; }
-#personalPerDiemTable thead th:nth-child(5) { width:10%; }
-#personalPerDiemTable thead th:nth-child(6) { width:8%; }
-#personalPerDiemTable thead th:nth-child(7) { width:8%; }
-#personalPerDiemTable thead th:nth-child(8) { width:8%; }
-#personalPerDiemTable thead th:nth-child(9) { width:8%; }
-#personalPerDiemTable thead th:nth-child(10) { width:9%; }
-#personalPerDiemTable thead th:nth-child(11) { width:9%; }
-#personalPerDiemTable thead th:nth-child(12) { width:9%; }
-#personalPerDiemTable thead th:nth-child(13) { width:8%; }
+#personalPerDiemTable thead th:nth-child(2) { width:7%; }
+#personalPerDiemTable thead th:nth-child(3) { width:7%; }
+#personalPerDiemTable thead th:nth-child(4) { width:7%; }
+#personalPerDiemTable thead th:nth-child(5) { width:6%; }
+#personalPerDiemTable thead th:nth-child(6) { width:10%; }
+#personalPerDiemTable thead th:nth-child(7) { width:13%; }
+#personalPerDiemTable thead th:nth-child(8) { width:7%; }
+#personalPerDiemTable thead th:nth-child(9) { width:7%; }
+#personalPerDiemTable thead th:nth-child(10) { width:8%; }
+#personalPerDiemTable thead th:nth-child(11) { width:8%; }
+#personalPerDiemTable thead th:nth-child(12) { width:6%; }
+#personalPerDiemTable thead th:nth-child(13) { width:7%; }
 #personalPerDiemTable tbody td { padding:.5rem .25rem; border-bottom:1px solid #dce5f0; font-size:.72rem; vertical-align:middle; overflow-wrap:anywhere; }
-#personalPerDiemTable:has(.per-diem-editing) { min-width:1350px; table-layout:auto; }
 #personalPerDiemTable tbody tr:hover:not(.per-diem-editing) td { background:#f8fbff; }
 #personalPerDiemTable tbody tr:last-child td { border-bottom:0; }
 #personalPerDiemTable tfoot td { padding:.6rem .25rem; background:#f4f7fb; border-top:1px solid #d7e2f0; color:#0f172a; font-size:.78rem; font-weight:800; }
@@ -586,10 +601,14 @@ require __DIR__ . '/../../includes/header.php';
 #personalPerDiemTable tr.per-diem-editing > td:first-child { box-shadow:inset 3px 0 #2563eb; }
 #personalPerDiemTable tr.per-diem-editing .form-control { border-color:#cbd9eb; background:#fff; }
 #personalPerDiemTable tr.per-diem-editing .form-control:focus { border-color:#4f83e6; box-shadow:0 0 0 3px rgba(37,99,235,.12); }
+#personalPerDiemTable tr.per-diem-editing .form-control { width:100%; min-width:0; font-size:.72rem; padding:.3rem .4rem; }
+#personalPerDiemTable tr.per-diem-editing .additional-expense-input { flex:1 1 0; }
+#personalPerDiemTable tr.per-diem-editing .remove-additional-expense { flex:none; width:30px; padding:.25rem; }
+#personalPerDiemTable tr.per-diem-editing .add-additional-expense { white-space:nowrap; font-size:.7rem; padding:.3rem .45rem; }
 #personalPerDiemTable tr.per-diem-bulk-editing > td { background:#f3f7fd; }
 #personalPerDiemTable tr.per-diem-bulk-editing > td:first-child { box-shadow:inset 3px 0 #2563eb; }
-#personalPerDiemTable.per-diem-bulk-mode { min-width:1350px; table-layout:auto; }
 #personalPerDiemTable.per-diem-bulk-mode .per-diem-actions-cell .edit-personal-per-diem { display:none; }
+#personalPerDiemTable.per-diem-bulk-mode { min-width:1350px; table-layout:auto; }
 #personalPerDiemTable .bulk-linked-expense { padding:4px 0; color:#52627a; font-size:.76rem; white-space:normal; }
 #personalPerDiemTable .per-diem-observations-cell:has(textarea) { min-width:260px; white-space:normal!important; }
 #personalPerDiemTable .additional-expense-cell:has(input) { min-width:155px; }
@@ -599,7 +618,21 @@ require __DIR__ . '/../../includes/header.php';
 #personalPerDiemTable .bulk-honorarios-toggle input { margin:0; }
 #personalPerDiemTable .expense-display-line { min-height:2rem; padding:.25rem 0; border-bottom:1px solid #e5eaf0; }
 #personalPerDiemTable .expense-display-line:last-child { border-bottom:0; }
+#personalPerDiemTable .expense-pair-0 { --expense-pair-bg:#eaf3ff; --expense-pair-accent:#2563eb; --expense-pair-border:#bed6ff; }
+#personalPerDiemTable .expense-pair-1 { --expense-pair-bg:#eaf8ef; --expense-pair-accent:#168451; --expense-pair-border:#bce6cc; }
+#personalPerDiemTable .expense-pair-2 { --expense-pair-bg:#fff3e5; --expense-pair-accent:#b65b0a; --expense-pair-border:#f7d6ad; }
+#personalPerDiemTable .expense-pair-3 { --expense-pair-bg:#f3edff; --expense-pair-accent:#7140b8; --expense-pair-border:#d9c6fa; }
+#personalPerDiemTable .additional-expense-cell .expense-paired,#personalPerDiemTable .additional-reason-cell .expense-paired { position:relative; box-sizing:border-box; margin-bottom:3px; padding:.3rem .4rem; border:0; border-radius:5px; background:var(--expense-pair-bg); color:#172b4d; }
+#personalPerDiemTable .additional-expense-cell .expense-paired { font-weight:700; }
+#personalPerDiemTable .additional-expense-cell .expense-display-line.expense-paired { display:flex; align-items:center; }
+#personalPerDiemTable .expense-pair-arrow { flex:1 1 0; min-width:15px; height:20px; margin-left:6px; margin-right:-10px; overflow:visible; pointer-events:none; }
+#personalPerDiemTable .expense-pair-arrow path { fill:none; stroke-linecap:round; stroke-linejoin:round; vector-effect:non-scaling-stroke; }
+#personalPerDiemTable .expense-pair-arrow-line { stroke:var(--expense-pair-accent); stroke-width:3; }
+#personalPerDiemTable .expense-pair-arrow-tip { stroke:var(--expense-pair-accent); stroke-width:2.5; }
+#personalPerDiemTable .additional-reason-cell .expense-paired:not(.expense-display-line) { padding-left:1.15rem; }
+#personalPerDiemTable .additional-reason-cell .expense-paired:not(.expense-display-line)::before { content:'→'; position:absolute; left:.2rem; top:50%; transform:translateY(-50%); color:var(--expense-pair-accent); font-size:1rem; font-weight:800; line-height:1; }
 #personalPerDiemTable .expense-edit-line { min-height:2.75rem; margin-bottom:.35rem; }
+#personalPerDiemTable .additional-expense-cell > .bulk-linked-expense,#personalPerDiemTable .additional-reason-cell > .linked-expense-line { display:flex; align-items:center; min-height:2.75rem; margin-bottom:.35rem; }
 .personal-per-diem-rules-modal .modal-content { overflow:hidden; border:1px solid #cbd8eb; border-radius:15px; box-shadow:0 20px 55px rgba(15,35,70,.2); }
 .personal-per-diem-rules-modal .modal-header { padding:16px 20px; background:#f4f7fb; border-bottom:1px solid #d7e2f0; }
 .personal-per-diem-rules-modal .modal-title { display:flex; align-items:center; gap:10px; color:#172b4d; font-weight:750; }
@@ -725,6 +758,68 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     const table = document.getElementById('personalPerDiemTable');
+    const alignDisplayedExpenses = () => {
+        for (const row of table.tBodies[0].rows) {
+            const amounts = [...row.querySelectorAll('.additional-expense-cell > .expense-display-line')];
+            const reasons = [...row.querySelectorAll('.additional-reason-cell > .expense-display-line')];
+            for (const line of [...amounts, ...reasons]) line.style.minHeight = '';
+            amounts.forEach((amount, index) => {
+                const reason = reasons[index];
+                if (!reason) return;
+                const height = Math.max(amount.offsetHeight, reason.offsetHeight);
+                amount.style.minHeight = `${height}px`;
+                reason.style.minHeight = `${height}px`;
+            });
+        }
+    };
+    requestAnimationFrame(alignDisplayedExpenses);
+    window.addEventListener('resize', () => requestAnimationFrame(alignDisplayedExpenses));
+    const colorExpensePairs = (amountCell, reasonCell) => {
+        const amounts = [
+            ...amountCell.querySelectorAll('.additional-expense-list > .expense-edit-line, .bulk-expense-amounts > .expense-edit-line'),
+            ...amountCell.querySelectorAll(':scope > .bulk-linked-expense')
+        ];
+        const reasons = [
+            ...reasonCell.querySelectorAll('.additional-reason-list > .expense-edit-line, .bulk-expense-reasons > .expense-edit-line'),
+            ...reasonCell.querySelectorAll(':scope > .linked-expense-line')
+        ];
+        amounts.forEach((amount, index) => {
+            for (const item of [amount, reasons[index]]) {
+                if (!item) continue;
+                item.classList.remove('expense-pair-0', 'expense-pair-1', 'expense-pair-2', 'expense-pair-3');
+                item.classList.add('expense-paired', `expense-pair-${index % 4}`);
+            }
+        });
+    };
+    const addLinkedExpense = (amountCell, reasonCell, linked) => {
+        const note = document.createElement('div');
+        note.className = 'bulk-linked-expense';
+        note.textContent = `S/ ${Number(linked.amount).toFixed(2)} · ${linked.source === 'hour_purchase' ? 'Compra de horas' : 'Depósito vinculado'}`;
+        const addButton = amountCell.querySelector('.add-additional-expense');
+        if (addButton) amountCell.insertBefore(note, addButton);
+        else amountCell.append(note);
+        const line = document.createElement('div');
+        line.className = 'expense-edit-line linked-expense-line';
+        if (linked.deposit_id) {
+            const input = document.createElement('textarea');
+            input.className = 'form-control form-control-sm linked-expense-reason-input';
+            input.rows = 1;
+            input.maxLength = 1000;
+            input.setAttribute('aria-label', 'Motivo del gasto vinculado');
+            input.dataset.depositId = linked.deposit_id;
+            input.dataset.initialReason = linked.reason;
+            input.value = linked.reason;
+            line.append(input);
+        } else {
+            line.className = 'bulk-linked-expense linked-expense-line';
+            line.textContent = linked.reason;
+        }
+        reasonCell.append(line);
+        colorExpensePairs(amountCell, reasonCell);
+    };
+    const changedLinkedReasons = reasonCell => [...reasonCell.querySelectorAll('.linked-expense-reason-input')]
+        .filter(input => input.value.trim() !== input.dataset.initialReason.trim())
+        .map(input => ({deposit_id: Number(input.dataset.depositId), reason: input.value.trim()}));
     let activeEdit = null;
     const bulkButton = document.getElementById('bulkEditPersonalExpenses');
     const assignHonorariosButton = document.getElementById('bulkAssignHonorarios');
@@ -772,6 +867,7 @@ document.addEventListener('DOMContentLoaded', () => {
         reasonLine.querySelector('textarea').value = reason;
         amounts.append(amountLine);
         reasons.append(reasonLine);
+        colorExpensePairs(edit.additionalCell, edit.reasonCell);
     };
     const closeBulk = () => {
         for (const edit of bulkRows.values()) {
@@ -790,6 +886,7 @@ document.addEventListener('DOMContentLoaded', () => {
         commonHonorarios.value = '';
         currentHonorarios.textContent = '';
         honorariosRequested = false;
+        requestAnimationFrame(alignDisplayedExpenses);
     };
     assignHonorariosButton.addEventListener('click', () => {
         honorariosRequested = true;
@@ -835,14 +932,7 @@ document.addEventListener('DOMContentLoaded', () => {
             honorariosCell.querySelector('.bulk-honorarios').value = button.dataset.honorarios;
             for (const expense of edit.initial.expenses) addBulkExpense(edit, expense.amount, expense.reason);
             for (const linked of JSON.parse(button.dataset.linkedExpenses || '[]')) {
-                const note = document.createElement('div');
-                note.className = 'bulk-linked-expense';
-                note.textContent = `S/ ${Number(linked.amount).toFixed(2)} · ${linked.source === 'hour_purchase' ? 'Compra de horas' : 'Depósito vinculado'}`;
-                additionalCell.append(note);
-                const reason = document.createElement('div');
-                reason.className = 'bulk-linked-expense';
-                reason.textContent = linked.reason;
-                reasonCell.append(reason);
+                addLinkedExpense(additionalCell, reasonCell, linked);
             }
             bulkRows.set(edit.date, edit);
         }
@@ -862,6 +952,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ? `Actual: S/ ${previousTotal.toFixed(2)} en ${previous.length} ${previous.length === 1 ? 'fecha' : 'fechas'}`
             : 'Actual: sin honorarios registrados';
         updateHonorariosCount();
+        requestAnimationFrame(alignDisplayedExpenses);
     });
     bulkCancel.addEventListener('click', () => {
         if (<?= $bulkAllPages ? 'true' : 'false' ?>) {
@@ -884,6 +975,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const index = [...edit.additionalCell.querySelector('.bulk-expense-amounts').children].indexOf(line);
         line.remove();
         edit.reasonCell.querySelector('.bulk-expense-reasons').children[index]?.remove();
+        colorExpensePairs(edit.additionalCell, edit.reasonCell);
     });
     bulkSave.addEventListener('click', async () => {
         if (!commonHonorarios.reportValidity()) return;
@@ -904,9 +996,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             const observations = edit.observationsCell.querySelector('textarea').value.trim();
             const amount = amountInput.value.trim();
+            const linkedExpenses = changedLinkedReasons(edit.reasonCell);
             const initialAmount = edit.initial.amount !== '' ? edit.initial.amount : edit.row.querySelector('.edit-personal-per-diem').dataset.automatic;
-            if (amount !== initialAmount || honorariosInput.value.trim() !== edit.initial.honorarios || observations !== edit.initial.observations.trim() || JSON.stringify(expenses) !== JSON.stringify(edit.initial.expenses)) {
-                changes.push({mark_date:edit.date, amount_override:amount, honorarios:honorariosInput.value.trim(), observations, additional_expenses:expenses});
+            const otherFieldsChanged = amount !== initialAmount || honorariosInput.value.trim() !== edit.initial.honorarios || observations !== edit.initial.observations.trim() || JSON.stringify(expenses) !== JSON.stringify(edit.initial.expenses);
+            if (otherFieldsChanged || linkedExpenses.length) {
+                changes.push({mark_date:edit.date, amount_override:amount, honorarios:honorariosInput.value.trim(), observations, additional_expenses:expenses, linked_expenses:linkedExpenses, reason_only:!otherFieldsChanged});
             }
         }
         if (!changes.length) { bulkCancel.click(); return; }
@@ -949,6 +1043,7 @@ document.addEventListener('DOMContentLoaded', () => {
         reasonLine.querySelector('textarea').value = reason;
         amountList.append(amountLine);
         reasonList.append(reasonLine);
+        colorExpensePairs(activeEdit.additionalCell, activeEdit.reasonCell);
     }
     function cancelEdit() {
         if (!activeEdit) return;
@@ -964,6 +1059,7 @@ document.addEventListener('DOMContentLoaded', () => {
         reasonCell.style.whiteSpace = 'pre-line';
         row.classList.remove('per-diem-editing');
         activeEdit = null;
+        requestAnimationFrame(alignDisplayedExpenses);
     }
     table.addEventListener('click', async event => {
         const button = event.target.closest('button');
@@ -973,6 +1069,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const index = [...activeEdit.additionalCell.querySelector('.additional-expense-list').children].indexOf(button.closest('.expense-edit-line'));
             button.closest('.expense-edit-line').remove();
             activeEdit.reasonCell.querySelector('.additional-reason-list').children[index]?.remove();
+            colorExpensePairs(activeEdit.additionalCell, activeEdit.reasonCell);
             return;
         }
         if (button.classList.contains('cancel-personal-per-diem')) { cancelEdit(); return; }
@@ -1015,6 +1112,9 @@ document.addEventListener('DOMContentLoaded', () => {
             actionsCell.innerHTML = '<div class="d-flex gap-1"><button class="btn btn-sm btn-primary save-personal-per-diem" type="button" title="Guardar" aria-label="Guardar cambios"><i class="fa-solid fa-check" aria-hidden="true"></i></button><button class="btn btn-sm btn-outline-secondary cancel-personal-per-diem" type="button" title="Cancelar" aria-label="Cancelar edición"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div>';
             activeEdit = {row, amountCell, observationsCell, additionalCell, reasonCell, honorariosCell, totalCell, actionsCell, original, markDate};
             expenses.forEach(expense => addExpenseLine(expense.amount, expense.reason));
+            for (const linked of JSON.parse(button.dataset.linkedExpenses || '[]')) addLinkedExpense(additionalCell, reasonCell, linked);
+            activeEdit.initial = {amount:amountInput.value, honorarios:honorariosCell.querySelector('input').value, observations, expenses:JSON.stringify(expenses)};
+            requestAnimationFrame(alignDisplayedExpenses);
             amountInput.focus();
             return;
         }
@@ -1042,7 +1142,12 @@ document.addEventListener('DOMContentLoaded', () => {
         data.set('mark_date', markDate);
         data.set('amount_override', amountInput.value);
         data.set('honorarios', honorariosInput.value.trim());
+        const linkedExpenses = changedLinkedReasons(reasonCell);
+        const initial = activeEdit.initial;
+        const otherFieldsChanged = amountInput.value !== initial.amount || honorariosInput.value.trim() !== initial.honorarios || observationsInput.value.trim() !== initial.observations.trim() || JSON.stringify(expenses) !== initial.expenses;
         data.set('additional_expenses', JSON.stringify(expenses));
+        data.set('linked_expenses', JSON.stringify(linkedExpenses));
+        data.set('reason_only', linkedExpenses.length && !otherFieldsChanged ? '1' : '0');
         data.set('observations_direct', observationsInput.value.trim());
         button.disabled = true;
         try {

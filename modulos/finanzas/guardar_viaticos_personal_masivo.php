@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/finanzas_depositos_personal_match.php';
 require_once __DIR__ . '/../../includes/finanzas_personal_edicion_autorizacion.php';
+require_once __DIR__ . '/../../includes/finanzas_personal_motivos_gastos.php';
 require_module_access('finanzas.gastos_personal');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_response(['ok' => false, 'message' => 'Método no permitido.'], 405);
@@ -16,6 +17,7 @@ if (!is_array($rows) || !array_is_list($rows) || count($rows) < 1 || count($rows
     json_response(['ok' => false, 'message' => 'La selección debe contener entre 1 y 400 registros.'], 422);
 }
 $dates = [];
+$linkedReasonsByDate = [];
 foreach ($rows as $row) {
     if (!is_array($row)) json_response(['ok' => false, 'message' => 'Registro no válido.'], 422);
     if (!is_string($row['mark_date'] ?? null) || !is_scalar($row['amount_override'] ?? null) || !is_scalar($row['honorarios'] ?? null)
@@ -41,6 +43,11 @@ foreach ($rows as $row) {
             || (float) $expense['amount'] > 999999.99 || mb_strlen(trim($expense['reason'])) > 1000) {
             json_response(['ok' => false, 'message' => 'Revise los gastos adicionales.'], 422);
         }
+    }
+    try {
+        $linkedReasonsByDate[$date] = personal_expense_linked_reasons($row['linked_expenses'] ?? []);
+    } catch (InvalidArgumentException $error) {
+        json_response(['ok' => false, 'message' => $error->getMessage()], 422);
     }
     $dates[$date] = true;
 }
@@ -86,14 +93,20 @@ try {
         $date = (string) $row['mark_date'];
         $amount = trim((string) $row['amount_override']);
         $honorarios = trim((string) $row['honorarios']);
-        $save->execute([$workerId, $date, $amount === '' ? null : number_format((float) $amount, 2, '.', ''), $honorarios === '' ? null : number_format((float) $honorarios, 2, '.', ''), trim((string) $row['observations']), (int) (current_user()['id'] ?? 0) ?: null]);
-        $delete->execute([$workerId, $date]);
-        foreach ($row['additional_expenses'] as $index => $expense) {
-            $insert->execute([$workerId, $date, $index, number_format((float) $expense['amount'], 2, '.', ''), trim($expense['reason'])]);
+        if (($row['reason_only'] ?? false) !== true) {
+            $save->execute([$workerId, $date, $amount === '' ? null : number_format((float) $amount, 2, '.', ''), $honorarios === '' ? null : number_format((float) $honorarios, 2, '.', ''), trim((string) $row['observations']), (int) (current_user()['id'] ?? 0) ?: null]);
+            $delete->execute([$workerId, $date]);
+            foreach ($row['additional_expenses'] as $index => $expense) {
+                $insert->execute([$workerId, $date, $index, number_format((float) $expense['amount'], 2, '.', ''), trim($expense['reason'])]);
+            }
         }
+        personal_expense_save_linked_reasons(db(), (int) $workerId, $date, $linkedReasonsByDate[$date], $workers);
     }
     db()->commit();
     json_response(['ok' => true, 'saved' => count($rows)]);
+} catch (DomainException $error) {
+    if (db()->inTransaction()) db()->rollBack();
+    json_response(['ok' => false, 'message' => $error->getMessage()], 409);
 } catch (Throwable $error) {
     if (db()->inTransaction()) db()->rollBack();
     error_log('Personal bulk expenses save failed: ' . get_class($error));

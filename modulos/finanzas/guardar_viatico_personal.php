@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/finanzas_depositos_personal_match.php';
 require_once __DIR__ . '/../../includes/finanzas_personal_edicion_autorizacion.php';
+require_once __DIR__ . '/../../includes/finanzas_personal_motivos_gastos.php';
 require_module_access('finanzas.gastos_personal');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_response(['ok' => false, 'message' => 'Método no permitido.'], 405);
@@ -19,7 +20,13 @@ $additionalReason = trim((string) ($_POST['additional_reason'] ?? ''));
 $observations = trim((string) ($_POST['observations'] ?? ''));
 $newObservation = trim((string) ($_POST['new_observation'] ?? ''));
 $directObservations = isset($_POST['observations_direct']) ? trim((string) $_POST['observations_direct']) : null;
+$reasonOnly = (string) ($_POST['reason_only'] ?? '') === '1';
 $expenseItems = null;
+try {
+    $linkedReasons = personal_expense_linked_reasons($_POST['linked_expenses'] ?? '[]');
+} catch (InvalidArgumentException $error) {
+    json_response(['ok' => false, 'message' => $error->getMessage()], 422);
+}
 if (isset($_POST['additional_expenses'])) {
     $expenseItems = json_decode((string) $_POST['additional_expenses'], true);
     if (!is_array($expenseItems) || !array_is_list($expenseItems) || count($expenseItems) > 30) {
@@ -93,20 +100,26 @@ try {
         db()->rollBack();
         json_response(['ok' => false, 'message' => personal_expense_locked_message($lockedRecord)], 403);
     }
-    $save = db()->prepare('INSERT INTO finance_personal_per_diem_edits (worker_id, mark_date, amount_override, honorarios, additional_expense, additional_reason, observations, updated_by_user_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE amount_override = VALUES(amount_override), honorarios = VALUES(honorarios), additional_expense = VALUES(additional_expense), additional_reason = VALUES(additional_reason), observations = VALUES(observations), updated_by_user_id = VALUES(updated_by_user_id)');
-    $save->execute([$workerId, $markDate, $amountText === '' ? null : number_format((float) $amountText, 2, '.', ''), $honorariosText === '' ? null : number_format((float) $honorariosText, 2, '.', ''), $expenseItems !== null || $additionalText === '' ? null : number_format((float) $additionalText, 2, '.', ''), $expenseItems !== null || $additionalReason === '' ? null : $additionalReason, $combined, (int) (current_user()['id'] ?? 0) ?: null]);
-    if ($expenseItems !== null) {
-        $delete = db()->prepare('DELETE FROM finance_personal_additional_expenses WHERE worker_id = ? AND mark_date = ?');
-        $delete->execute([$workerId, $markDate]);
-        $insert = db()->prepare('INSERT INTO finance_personal_additional_expenses (worker_id, mark_date, sort_order, amount, reason) VALUES (?, ?, ?, ?, ?)');
-        foreach ($expenseItems as $index => $item) {
-            $insert->execute([$workerId, $markDate, $index, number_format((float) $item['amount'], 2, '.', ''), trim($item['reason'])]);
+    if (!$reasonOnly) {
+        $save = db()->prepare('INSERT INTO finance_personal_per_diem_edits (worker_id, mark_date, amount_override, honorarios, additional_expense, additional_reason, observations, updated_by_user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE amount_override = VALUES(amount_override), honorarios = VALUES(honorarios), additional_expense = VALUES(additional_expense), additional_reason = VALUES(additional_reason), observations = VALUES(observations), updated_by_user_id = VALUES(updated_by_user_id)');
+        $save->execute([$workerId, $markDate, $amountText === '' ? null : number_format((float) $amountText, 2, '.', ''), $honorariosText === '' ? null : number_format((float) $honorariosText, 2, '.', ''), $expenseItems !== null || $additionalText === '' ? null : number_format((float) $additionalText, 2, '.', ''), $expenseItems !== null || $additionalReason === '' ? null : $additionalReason, $combined, (int) (current_user()['id'] ?? 0) ?: null]);
+        if ($expenseItems !== null) {
+            $delete = db()->prepare('DELETE FROM finance_personal_additional_expenses WHERE worker_id = ? AND mark_date = ?');
+            $delete->execute([$workerId, $markDate]);
+            $insert = db()->prepare('INSERT INTO finance_personal_additional_expenses (worker_id, mark_date, sort_order, amount, reason) VALUES (?, ?, ?, ?, ?)');
+            foreach ($expenseItems as $index => $item) {
+                $insert->execute([$workerId, $markDate, $index, number_format((float) $item['amount'], 2, '.', ''), trim($item['reason'])]);
+            }
         }
     }
+    if ($linkedReasons) personal_expense_save_linked_reasons(db(), (int) $workerId, $markDate, $linkedReasons, personal_deposit_workers());
     db()->commit();
     json_response(['ok' => true]);
+} catch (DomainException $error) {
+    if (db()->inTransaction()) db()->rollBack();
+    json_response(['ok' => false, 'message' => $error->getMessage()], 409);
 } catch (PDOException $error) {
     if (db()->inTransaction()) db()->rollBack();
     json_response(['ok' => false, 'message' => 'No se pudo guardar el viático.'], 500);
