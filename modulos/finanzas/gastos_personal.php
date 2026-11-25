@@ -801,7 +801,7 @@ document.addEventListener('DOMContentLoaded', () => {
         label.textContent = `S/ ${Number(linked.amount).toFixed(2)} · ${linked.source === 'hour_purchase' ? 'Compra de horas' : 'Depósito vinculado'}`;
         note.append(label);
         note.insertAdjacentHTML('beforeend', '<svg class="expense-pair-arrow" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true"><path class="expense-pair-arrow-line" d="M2 10 C30 8 48 12 96 10"/><path class="expense-pair-arrow-tip" d="M84 3 L97 10 L84 17"/></svg>');
-        const addButton = amountCell.querySelector('.add-additional-expense');
+        const addButton = amountCell.querySelector('.add-additional-expense, .bulk-add-expense');
         if (addButton) amountCell.insertBefore(note, addButton);
         else amountCell.append(note);
         const line = document.createElement('div');
