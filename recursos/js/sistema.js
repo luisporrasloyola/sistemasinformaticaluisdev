@@ -2317,6 +2317,15 @@ async function guardarPmiMasivo(event) {
 function initRequirementsModule() {
     const workerSearch = $('#workerSearch');
     if (!workerSearch.length) return;
+    const companyFilter = document.getElementById('pmiCompanyFilter');
+    if (companyFilter) {
+        $(companyFilter).select2({
+            theme: 'bootstrap4',
+            width: '100%',
+            minimumResultsForSearch: 0,
+            placeholder: 'Buscar empresa'
+        });
+    }
 
     requirementModal = new bootstrap.Modal(document.getElementById('requirementModal'));
     const replicateModalElement = document.getElementById('replicateRequirementModal');
@@ -2341,16 +2350,27 @@ function initRequirementsModule() {
     workerSearch.select2({
         theme: 'bootstrap4',
         width: '100%',
-        placeholder: 'Escriba nombre, documento o empresa',
+        placeholder: 'Escriba nombre o documento',
         ajax: {
             url: personalServiceUrl('buscar_personal.php'),
             dataType: 'json',
             delay: 250,
-            data: (params) => ({ q: params.term || '' })
+            data: (params) => ({ q: params.term || '', empresa_id: companyFilter?.value || '' })
         }
     });
 
     workerSearch.on('select2:select', (event) => loadWorker(event.params.data.id));
+    $(companyFilter).on('change', () => {
+        workerSearch.select2('close');
+        workerSearch.empty().val(null).trigger('change');
+        currentWorkerId = null;
+        currentPositionId = null;
+        document.getElementById('requirementsWorkspace').classList.add('d-none');
+        renderWorkerBankAccounts([]);
+        const url = new URL(window.location.href);
+        ['worker_id', 'puesto_id', 'requisito_id', 'requisito_nombre', 'requisito_registro_id'].forEach(key => url.searchParams.delete(key));
+        window.history.replaceState(null, '', url);
+    });
     document.getElementById('positionSelect').addEventListener('change', (event) => {
         currentPositionId = event.target.value;
         openRequirementFolders.clear();
@@ -2434,6 +2454,7 @@ function initRequirementsModule() {
 
 async function loadWorker(id) {
     currentWorkerId = id;
+    renderWorkerBankAccounts([]);
     requirementSearchTerm = '';
     const requirementSearchInput = document.getElementById('requirementSearchInput');
     if (requirementSearchInput) requirementSearchInput.value = '';
@@ -2448,6 +2469,7 @@ async function loadWorker(id) {
     const response = await fetch(`${personalServiceUrl('perfil_personal.php')}?id=${id}`);
     const data = await response.json();
     if (!data.ok) return;
+    if (currentWorkerId !== id) return;
 
     const worker = data.worker;
     document.getElementById('requirementsWorkspace').classList.remove('d-none');
@@ -2469,6 +2491,7 @@ async function loadWorker(id) {
     if (workerBirthDate) workerBirthDate.textContent = birthDate;
     document.getElementById('workerCompany').textContent = worker.company || '';
     document.getElementById('workerPositions').textContent = data.positions.map((p) => p.name).join(', ');
+    renderWorkerBankAccounts(data.bank_accounts || [], worker.full_name);
     currentWorkerPositions = data.positions || [];
     document.getElementById('workerActive').checked = Number(worker.status) === 1;
 
@@ -2490,6 +2513,27 @@ async function loadWorker(id) {
             $('#requirementSelect').append(new Option(catalogName, catalogId, true, true)).trigger('change');
         }
     }
+}
+
+function renderWorkerBankAccounts(accounts, workerName = '') {
+    const empty = document.getElementById('workerBankAccountsEmpty');
+    const button = document.getElementById('workerBankAccountsViewBtn');
+    const body = document.getElementById('workerBankAccountsViewBody');
+    if (!empty || !button || !body) return;
+
+    body.replaceChildren();
+    const hasAccounts = Array.isArray(accounts) && accounts.length > 0;
+    empty.classList.toggle('d-none', hasAccounts);
+    button.classList.toggle('d-none', !hasAccounts);
+    if (!hasAccounts) return;
+
+    document.getElementById('workerBankAccountsViewTitle').textContent = `Cuentas bancarias de ${workerName}`;
+    accounts.forEach(account => {
+        const row = body.insertRow();
+        [account.bank_name, account.account_number, account.currency === 'USD' ? 'Dólares (USD)' : 'Soles (PEN)', account.cci].forEach(value => {
+            row.insertCell().textContent = value || '-';
+        });
+    });
 }
 
 function setWorkerImageDownload(elementId, workerId, type, available) {

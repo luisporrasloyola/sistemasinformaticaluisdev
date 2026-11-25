@@ -382,6 +382,22 @@ if ($workerId > 0) {
     $stmt = db()->prepare($sql);
     $stmt->execute($selectedCompanyId === null ? [] : [(int) $selectedCompanyId]);
     $workers = $stmt->fetchAll();
+    $listBankAccounts = [];
+    if ($workers) {
+        $workerIdsForBanks = array_map(static fn(array $person): int => (int) $person['id'], $workers);
+        $bankPlaceholders = implode(',', array_fill(0, count($workerIdsForBanks), '?'));
+        try {
+            $bankStmt = db()->prepare("SELECT a.worker_id, b.name AS bank_name, a.account_number, a.currency, a.cci
+                FROM worker_bank_accounts a JOIN worker_bank_catalog b ON b.id = a.bank_id
+                WHERE a.worker_id IN ($bankPlaceholders) ORDER BY a.worker_id, a.id");
+            $bankStmt->execute($workerIdsForBanks);
+            foreach ($bankStmt as $account) {
+                $listBankAccounts[(int) $account['worker_id']][] = $account;
+            }
+        } catch (PDOException $error) {
+            if ($error->getCode() !== '42S02') throw $error;
+        }
+    }
     $listBalances = [];
     if ($workers) {
         $workerIds = array_fill_keys(array_map(static fn(array $person): int => (int) $person['id'], $workers), true);
@@ -1179,11 +1195,12 @@ document.addEventListener('DOMContentLoaded', () => {
     </form>
     <div class="table-responsive">
         <table class="table table-hover align-middle data-table mb-0" id="gastosPersonalTable">
-            <thead><tr><th>Empresa</th><th>Personal</th><th>Saldo restante</th><th class="text-end" data-orderable="false">Acción</th></tr></thead>
+            <thead><tr><th>Empresa</th><th>Personal</th><th>Cuenta bancaria</th><th>Saldo restante</th><th class="text-end" data-orderable="false">Acción</th></tr></thead>
             <tbody>
                 <?php if ($selectedCompanyId === null || $selectedCompanyId === $lifeCompanyId): ?><tr>
                     <td>Life Maquinarias</td>
                     <td><strong>Cuenta soles empresa</strong></td>
+                    <td>—</td>
                     <td>—</td>
                     <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="<?= APP_URL ?>/modulos/finanzas/gastos_cuenta_empresa.php" aria-label="Ver gastos de Cuenta soles empresa"><i class="fa-solid fa-eye me-1" aria-hidden="true"></i>Ver gastos</a></td>
                 </tr><?php endif; ?>
@@ -1191,6 +1208,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 <tr>
                     <td><?= e($person['company'] ?: 'Sin empresa') ?></td>
                     <td><strong><?= e($person['full_name']) ?></strong><small class="d-block text-muted"><?= e(($person['document_type'] ?: 'Documento') . ': ' . $person['document_number']) ?></small></td>
+                    <td class="personal-expense-bank-cell">
+                        <?php foreach ($listBankAccounts[(int) $person['id']] ?? [] as $account): ?>
+                            <div class="personal-expense-bank-account">
+                                <strong><?= e($account['bank_name']) ?></strong> <span><?= $account['currency'] === 'USD' ? 'Dólares (USD)' : 'Soles (PEN)' ?></span>
+                                <small>N.º <?= e($account['account_number']) ?> · CCI <?= e($account['cci']) ?></small>
+                            </div>
+                        <?php endforeach; ?>
+                        <?php if (empty($listBankAccounts[(int) $person['id']])): ?>—<?php endif; ?>
+                    </td>
                     <td class="text-nowrap" data-order="<?= isset($listBalances[(int) $person['id']]) ? (int) $listBalances[(int) $person['id']] : '' ?>"><?= isset($listBalances[(int) $person['id']]) ? 'S/ ' . number_format($listBalances[(int) $person['id']] / 100, 2, '.', ',') : '—' ?></td>
                     <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="<?= APP_URL ?>/modulos/finanzas/gastos_personal.php?trabajador_id=<?= (int) $person['id'] ?>" aria-label="Ver gastos de <?= e($person['full_name']) ?>"><i class="fa-solid fa-eye me-1" aria-hidden="true"></i>Ver gastos</a></td>
                 </tr>
@@ -1200,6 +1226,14 @@ document.addEventListener('DOMContentLoaded', () => {
     </div>
 </div>
 <style>
+#gastosPersonalTable { font-size:.83rem; }
+#gastosPersonalTable th { font-size:.78rem; white-space:nowrap; }
+#gastosPersonalTable th,#gastosPersonalTable td { padding:.5rem .55rem; }
+#gastosPersonalTable .personal-expense-bank-cell { min-width:190px; max-width:300px; overflow-wrap:anywhere; }
+#gastosPersonalTable .personal-expense-bank-account + .personal-expense-bank-account { border-top:1px solid #e4eaf2; margin-top:.35rem; padding-top:.35rem; }
+#gastosPersonalTable .personal-expense-bank-account strong { font-weight:650; }
+#gastosPersonalTable .personal-expense-bank-account span { color:#64748b; font-size:.76rem; }
+#gastosPersonalTable .personal-expense-bank-account small { display:block; font-size:.76rem; line-height:1.3; }
 #gastosPersonalTable_wrapper > .row:first-child > .col-md-6:last-child { flex:0 0 72%; max-width:72%; }
 #gastosPersonalTable_wrapper > .row:first-child > .col-md-6:first-child { flex:0 0 28%; max-width:28%; }
 #gastosPersonalTable_filter { display:flex; align-items:center; justify-content:end; gap:30px; flex-wrap:wrap; }

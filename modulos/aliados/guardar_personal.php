@@ -68,6 +68,46 @@ function personal_completo(array $workerData, array $positions, ?string $photoPa
 
 try {
     db()->beginTransaction();
+    $bankAccounts = json_decode((string) ($_POST['bank_accounts'] ?? '[]'), true, 32, JSON_THROW_ON_ERROR);
+    if (!is_array($bankAccounts) || !array_is_list($bankAccounts) || count($bankAccounts) > 20) {
+        throw new DomainException('La lista de cuentas bancarias no es válida.');
+    }
+    $bankStorageReady = true;
+    try {
+        db()->query('SELECT 1 FROM worker_bank_accounts LIMIT 0');
+        db()->query('SELECT 1 FROM worker_bank_catalog LIMIT 0');
+    } catch (PDOException $e) {
+        $bankStorageReady = false;
+    }
+    if (!$bankStorageReady && $bankAccounts) {
+        throw new DomainException('La base de datos aún no tiene las tablas de cuentas bancarias.');
+    }
+    $validBank = $bankStorageReady ? db()->prepare('SELECT 1 FROM worker_bank_catalog WHERE id = :id') : null;
+    $normalizedAccounts = [];
+    $accountKeys = [];
+    foreach ($bankAccounts as $account) {
+        if (!is_array($account)) {
+            throw new DomainException('La lista de cuentas bancarias no es válida.');
+        }
+        $bankId = filter_var($account['bank_id'] ?? null, FILTER_VALIDATE_INT);
+        $accountNumber = trim((string) ($account['account_number'] ?? ''));
+        $currency = (string) ($account['currency'] ?? '');
+        $cci = trim((string) ($account['cci'] ?? ''));
+        if (!$bankId || $bankId < 1 || $accountNumber === ''
+            || !in_array($currency, ['PEN', 'USD'], true) || $cci === '') {
+            throw new DomainException('Revise los datos de la cuenta bancaria y el CCI.');
+        }
+        $validBank->execute(['id' => $bankId]);
+        if (!$validBank->fetchColumn()) {
+            throw new DomainException('Uno de los bancos seleccionados ya no existe.');
+        }
+        $key = $bankId . ':' . $accountNumber . ':' . $currency;
+        if (isset($accountKeys[$key])) {
+            throw new DomainException('La misma cuenta bancaria está repetida.');
+        }
+        $accountKeys[$key] = true;
+        $normalizedAccounts[] = ['bank_id' => $bankId, 'account_number' => $accountNumber, 'currency' => $currency, 'cci' => $cci];
+    }
     $companyId = resolve_catalog_id('companies', $companyInput);
     $photo = upload_file($_FILES['photo'] ?? [], 'fotos', ['image/jpeg','image/png','image/webp']);
     $signature = upload_file($_FILES['signature'] ?? [], 'firmas', ['image/jpeg','image/png','image/webp']);
@@ -161,6 +201,14 @@ try {
         $insertPosition->execute(['worker_id' => $id, 'position_id' => $positionId]);
     }
 
+    if ($bankStorageReady) {
+        db()->prepare('DELETE FROM worker_bank_accounts WHERE worker_id = :id')->execute(['id' => $id]);
+        $insertBankAccount = db()->prepare('INSERT INTO worker_bank_accounts (worker_id, bank_id, account_number, currency, cci) VALUES (:worker_id, :bank_id, :account_number, :currency, :cci)');
+        foreach ($normalizedAccounts as $account) {
+            $insertBankAccount->execute(['worker_id' => $id] + $account);
+        }
+    }
+
     db()->commit();
     redirect('modulos/aliados/personal.php');
 } catch (DomainException $e) {
@@ -168,6 +216,12 @@ try {
         db()->rollBack();
     }
     $target = 'modulos/aliados/formulario_personal.php' . ($id > 0 ? '?id=' . $id . '&error=' : '?error=') . urlencode($e->getMessage());
+    redirect($target);
+} catch (JsonException $e) {
+    if (db()->inTransaction()) {
+        db()->rollBack();
+    }
+    $target = 'modulos/aliados/formulario_personal.php' . ($id > 0 ? '?id=' . $id . '&error=' : '?error=') . urlencode('La lista de cuentas bancarias no es válida.');
     redirect($target);
 } catch (PDOException $e) {
     if (db()->inTransaction()) {

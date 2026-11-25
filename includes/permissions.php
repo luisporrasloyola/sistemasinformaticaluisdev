@@ -90,6 +90,7 @@ function permission_modules_catalog(): array
                 'empresa_maquirenta.formatos' => 'Formatos',
                 'empresa_maquirenta.personal' => 'Personal',
                 'empresa_maquirenta.pmi_individual' => 'PMI Individual',
+                'empresa_maquirenta.fotocheks' => 'Fotocheks',
                 'empresa_maquirenta.pms' => 'Central Térmica Ventanilla - PMS',
                 'empresa_maquirenta.permiso_trabajo' => 'Central Térmica Ventanilla - Permiso de trabajo',
                 'empresa_maquirenta.parada_planta' => 'Central Térmica Ventanilla - Parada de Planta',
@@ -172,6 +173,12 @@ function permission_document_scopes(): array
         'empresa_maquirenta.formatos' => [
             'label' => 'Empresa Maquirenta - Formatos',
             'table' => 'empresa_maquirenta_formatos_catalogo',
+            'name_column' => 'nombre',
+            'active_column' => 'estado',
+        ],
+        'empresa_maquirenta.fotocheks' => [
+            'label' => 'Empresa Maquirenta - Fotocheks',
+            'table' => 'empresa_maquirenta_fotocheks_catalogo',
             'name_column' => 'nombre',
             'active_column' => 'estado',
         ],

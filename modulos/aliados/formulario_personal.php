@@ -42,6 +42,21 @@ function progreso_personal_formulario(array $worker, array $positions): int
 
 $companies = db()->query('SELECT * FROM companies WHERE status = 1 ORDER BY name')->fetchAll();
 $positions = db()->query('SELECT * FROM positions WHERE status = 1 ORDER BY name')->fetchAll();
+$banks = [];
+$bankAccounts = [];
+$bankStorageReady = true;
+try {
+    $banks = db()->query('SELECT id, name FROM worker_bank_catalog ORDER BY name')->fetchAll();
+    if ($id > 0) {
+        $stmt = db()->prepare('SELECT a.id, a.bank_id, b.name AS bank_name, a.account_number, a.currency, a.cci FROM worker_bank_accounts a JOIN worker_bank_catalog b ON b.id = a.bank_id WHERE a.worker_id = :id ORDER BY a.id');
+        $stmt->execute(['id' => $id]);
+        $bankAccounts = $stmt->fetchAll();
+    } else {
+        db()->query('SELECT 1 FROM worker_bank_accounts LIMIT 0');
+    }
+} catch (PDOException $e) {
+    $bankStorageReady = false;
+}
 $progress = progreso_personal_formulario($worker, $selectedPositions);
 $calculatedStatus = $progress === 100;
 
@@ -157,6 +172,20 @@ require __DIR__ . '/../../includes/header.php';
                     </div>
                 </div>
                 <div class="col-md-12">
+                    <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+                        <label class="form-label mb-0">Cuenta bancaria</label>
+                        <button class="btn btn-sm btn-outline-primary" type="button" id="newWorkerBankAccountBtn" <?= $bankStorageReady ? '' : 'disabled' ?>><i class="fa-solid fa-plus me-1" aria-hidden="true"></i>Nuevo</button>
+                    </div>
+                    <?php if (!$bankStorageReady): ?><div class="alert alert-warning py-2">Para registrar cuentas bancarias, ejecute primero <code>database/worker_bank_accounts.sql</code> en esta base de datos.</div><?php endif; ?>
+                    <div class="table-responsive border rounded" id="workerBankAccounts" data-worker-id="<?= (int) $worker['id'] ?>" data-accounts="<?= e(json_encode($bankAccounts, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?: '[]') ?>" data-bank-service="<?= e(APP_URL) ?>/servicios/bancos_personal.php" data-account-service="<?= e(APP_URL) ?>/servicios/cuentas_bancarias_personal.php">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead class="table-light"><tr><th>Banco</th><th>Número de cuenta</th><th>Moneda</th><th>CCI</th><th>Acciones</th></tr></thead>
+                            <tbody id="workerBankAccountsBody"></tbody>
+                        </table>
+                    </div>
+                    <input type="hidden" id="workerBankAccountsData" name="bank_accounts" value="<?= e(json_encode($bankAccounts, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?: '[]') ?>">
+                </div>
+                <div class="col-md-12">
                     <label class="form-label" for="personalObservations">Observaciones</label>
                     <textarea class="form-control" id="personalObservations" name="personal_observations" rows="4" maxlength="1200" placeholder="Ingrese observaciones internas del personal, si corresponde."><?= e($worker['personal_observations'] ?? '') ?></textarea>
                     <div class="form-text">Campo opcional para notas administrativas del personal.</div>
@@ -208,6 +237,40 @@ require __DIR__ . '/../../includes/header.php';
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
                 <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk me-2"></i>Guardar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal fade" id="workerBankAccountModal" tabindex="-1" aria-labelledby="workerBankAccountModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form class="modal-content needs-validation" id="workerBankAccountForm" novalidate>
+            <div class="modal-header">
+                <h5 class="modal-title" id="workerBankAccountModalTitle">Nueva cuenta bancaria</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <div class="d-flex align-items-center justify-content-between gap-2 mb-1">
+                        <label class="form-label mb-0" for="workerBankSelect">Tipo de banco</label>
+                        <div class="d-flex gap-1">
+                            <button class="btn btn-sm btn-outline-primary" type="button" id="addWorkerBankBtn" title="Agregar banco" aria-label="Agregar banco"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
+                            <button class="btn btn-sm btn-outline-danger" type="button" id="deleteWorkerBankBtn" title="Eliminar banco seleccionado" aria-label="Eliminar banco seleccionado"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
+                        </div>
+                    </div>
+                    <select class="form-select" id="workerBankSelect" required>
+                        <option value="">Seleccione un banco</option>
+                        <?php foreach ($banks as $bank): ?><option value="<?= (int) $bank['id'] ?>"><?= e($bank['name']) ?></option><?php endforeach; ?>
+                    </select>
+                    <div class="invalid-feedback">Seleccione un banco.</div>
+                </div>
+                <div class="mb-3"><label class="form-label" for="workerBankAccountNumber">Número de cuenta</label><input class="form-control" id="workerBankAccountNumber" type="text" required autocomplete="off"><div class="invalid-feedback">Ingrese el número de cuenta.</div></div>
+                <div class="mb-3"><label class="form-label" for="workerBankCurrency">Tipo de moneda</label><select class="form-select" id="workerBankCurrency" required><option value="">Seleccione una moneda</option><option value="PEN">Soles (PEN)</option><option value="USD">Dólares (USD)</option></select><div class="invalid-feedback">Seleccione una moneda.</div></div>
+                <div><label class="form-label" for="workerBankCci">CCI</label><input class="form-control" id="workerBankCci" type="text" required autocomplete="off"><div class="invalid-feedback">Ingrese el CCI.</div></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancelar</button>
+                <button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk me-1" aria-hidden="true"></i>Agregar cuenta</button>
             </div>
         </form>
     </div>
@@ -418,6 +481,7 @@ require __DIR__ . '/../../includes/header.php';
     updateProgress();
 })();
 </script>
+<script src="<?= APP_URL ?>/recursos/js/personal_bank_accounts.js?v=<?= filemtime(__DIR__ . '/../../recursos/js/personal_bank_accounts.js') ?>"></script>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>
 
 

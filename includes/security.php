@@ -332,6 +332,7 @@ function default_user_landing_path(): string
         'empresa_maquirenta.documentos' => 'modulos/empresa_maquirenta/documentos.php',
         'empresa_maquirenta.seguridad' => 'modulos/empresa_maquirenta/seguridad.php',
         'empresa_maquirenta.formatos' => 'modulos/empresa_maquirenta/formatos.php',
+        'empresa_maquirenta.fotocheks' => 'modulos/empresa_maquirenta/fotocheks.php',
         'empresa_maquirenta.pms' => 'modulos/empresa_maquirenta/pms.php',
         'empresa_maquirenta.permiso_trabajo' => 'modulos/empresa_maquirenta/permiso_trabajo.php',
         'empresa_maquirenta.parada_planta' => 'modulos/empresa_maquirenta/parada_planta.php',

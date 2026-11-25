@@ -23,6 +23,7 @@ $valorizacionesOpen = str_ends_with($currentPath, '/modulos/empresa_maquirenta/v
 $ventanillaOpen = str_ends_with($currentPath, '/modulos/empresa_maquirenta/informes.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/charla_preoperacional.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/pms.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/permiso_trabajo.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/parada_planta.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/audios_charla.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/participacion_pms.php');
 $santaRosaOpen = str_ends_with($currentPath, '/modulos/empresa_maquirenta/informes_santa_rosa.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/charla_preoperacional_santa_rosa.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/pms_santa_rosa.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/permiso_trabajo_santa_rosa.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/parada_planta_santa_rosa.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/audios_charla_santa_rosa.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/participacion_pms_santa_rosa.php');
 $formatosOpen = str_ends_with($currentPath, '/modulos/empresa_maquirenta/formatos.php');
+$fotocheksOpen = str_ends_with($currentPath, '/modulos/empresa_maquirenta/fotocheks.php');
 $formatoPersonalOpen = str_ends_with($currentPath, '/modulos/empresa_maquirenta/personal.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/formulario_personal.php');
 $formatoPmiOpen = str_ends_with($currentPath, '/modulos/empresa_maquirenta/pmi_individual.php');
 $pmsOpen = str_ends_with($currentPath, '/modulos/empresa_maquirenta/pms.php');
@@ -189,7 +190,7 @@ $isAdmin = is_admin();
             </button>
             <div class="collapse <?= $finanzasOpen ? 'show' : '' ?>" id="finanzasMenu"><div class="submenu">
                 <a class="nav-link sub-link <?= $finanzasGastosOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/finanzas/gastos_personal.php"><i class="fa-solid fa-receipt"></i><span>Gastos de personal</span></a>
-                <a class="nav-link sub-link <?= $finanzasDepositosOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/finanzas/depositos_personal.php"><i class="fa-solid fa-money-bill-transfer"></i><span>Depósitos al personal</span></a>
+                <a class="nav-link sub-link <?= $finanzasDepositosOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/finanzas/depositos_personal.php"><i class="fa-solid fa-money-bill-transfer"></i><span>Depósitos al personal</span></a>
                 <a class="nav-link sub-link <?= $finanzasPagosPendientesOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/finanzas/pagos_pendientes.php"><i class="fa-solid fa-clock"></i><span>Pagos pendientes</span></a>
             </div></div>
 
@@ -208,6 +209,7 @@ $isAdmin = is_admin();
                     <a class="nav-link sub-link <?= $formatosOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/empresa_maquirenta/formatos.php"><i class="fa-solid fa-file-invoice"></i><span>Formatos</span></a>
                     <?php if ($isAdmin || current_user_can_module('empresa_maquirenta.personal')): ?><a class="nav-link sub-link <?= $formatoPersonalOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/empresa_maquirenta/personal.php"><i class="fa-solid fa-users"></i><span>Personal</span></a><?php endif; ?>
                     <?php if ($isAdmin || current_user_can_module('empresa_maquirenta.pmi_individual')): ?><a class="nav-link sub-link <?= $formatoPmiOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/empresa_maquirenta/pmi_individual.php"><i class="fa-solid fa-file-shield"></i><span>PMI Individual</span></a><?php endif; ?>
+                    <a class="nav-link sub-link <?= $fotocheksOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/empresa_maquirenta/fotocheks.php"><i class="fa-solid fa-id-card"></i><span>Fotocheks</span></a>
                 </div>
             </div>
 
@@ -290,7 +292,7 @@ $isAdmin = is_admin();
                 <button class="nav-link nav-parent <?= $finanzasOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#finanzasMenuGestor" aria-expanded="<?= $finanzasOpen ? 'true' : 'false' ?>" aria-controls="finanzasMenuGestor"><i class="fa-solid fa-coins"></i><span>Finanzas</span><i class="fa-solid fa-chevron-down nav-caret"></i></button>
                 <div class="collapse <?= $finanzasOpen ? 'show' : '' ?>" id="finanzasMenuGestor"><div class="submenu">
                     <?php if (current_user_can_module('finanzas.gastos_personal')): ?><a class="nav-link sub-link <?= $finanzasGastosOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/finanzas/gastos_personal.php"><i class="fa-solid fa-receipt"></i><span>Gastos de personal</span></a><?php endif; ?>
-                    <?php if (current_user_can_module('finanzas.depositos_personal')): ?><a class="nav-link sub-link <?= $finanzasDepositosOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/finanzas/depositos_personal.php"><i class="fa-solid fa-money-bill-transfer"></i><span>Depósitos al personal</span></a><?php endif; ?>
+                    <?php if (current_user_can_module('finanzas.depositos_personal')): ?><a class="nav-link sub-link <?= $finanzasDepositosOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/finanzas/depositos_personal.php"><i class="fa-solid fa-money-bill-transfer"></i><span>Depósitos al personal</span></a><?php endif; ?>
                     <?php if (current_user_can_module('finanzas.pagos_pendientes')): ?><a class="nav-link sub-link <?= $finanzasPagosPendientesOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/finanzas/pagos_pendientes.php"><i class="fa-solid fa-clock"></i><span>Pagos pendientes</span></a><?php endif; ?>
                 </div></div>
             <?php endif; ?>
@@ -313,6 +315,7 @@ $isAdmin = is_admin();
                     <?php endif; ?>
                     <?php if (current_user_can_module('empresa_maquirenta.personal')): ?><a class="nav-link sub-link <?= $formatoPersonalOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/empresa_maquirenta/personal.php"><i class="fa-solid fa-users"></i><span>Personal</span></a><?php endif; ?>
                     <?php if (current_user_can_module('empresa_maquirenta.pmi_individual')): ?><a class="nav-link sub-link <?= $formatoPmiOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/empresa_maquirenta/pmi_individual.php"><i class="fa-solid fa-file-shield"></i><span>PMI Individual</span></a><?php endif; ?>
+                    <?php if (current_user_can_module('empresa_maquirenta.fotocheks')): ?><a class="nav-link sub-link <?= $fotocheksOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/empresa_maquirenta/fotocheks.php"><i class="fa-solid fa-id-card"></i><span>Fotocheks</span></a><?php endif; ?>
                 </div></div>
             <?php endif; ?>
             <?php if (current_user_can_module('usuarios')): ?>

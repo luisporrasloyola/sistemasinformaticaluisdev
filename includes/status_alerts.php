@@ -68,6 +68,12 @@ function status_alert_scopes(): array
             'name_column' => 'nombre',
             'active_column' => 'estado',
         ],
+        'empresa_maquirenta.fotocheks' => [
+            'label' => 'Empresa Maquirenta - Fotocheks',
+            'table' => 'empresa_maquirenta_fotocheks_catalogo',
+            'name_column' => 'nombre',
+            'active_column' => 'estado',
+        ],
         'empresa_maquirenta.parada_planta' => [
             'label' => 'Empresa Maquirenta - Parada de Planta',
             'table' => 'empresa_maquirenta_parada_planta_catalogo',

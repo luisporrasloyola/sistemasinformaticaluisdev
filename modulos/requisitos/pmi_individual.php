@@ -1,16 +1,29 @@
 <?php
 require_once __DIR__ . '/../../includes/security.php';
+require_once __DIR__ . '/../../config/database.php';
 require_module_access('requisitos.pmi_individual');
 $personalView = is_personal_role();
 $pmiWorkerId = $personalView ? (int) (current_user_worker_id() ?? 0) : max(0, (int) ($_GET['worker_id'] ?? 0));
 $pmiWorkerLabel = '';
+$pmiWorkerCompanyId = 0;
 if ($pmiWorkerId) {
-    require_once __DIR__ . '/../../config/database.php';
-    $stmt = db()->prepare("SELECT CONCAT(w.full_name, ' - ', w.document_number, ' - ', COALESCE(c.name, 'Sin empresa'))
+    $stmt = db()->prepare("SELECT w.company_id, CONCAT(w.full_name, ' - ', w.document_number, ' - ', COALESCE(c.name, 'Sin empresa')) AS label
         FROM workers w LEFT JOIN companies c ON c.id = w.company_id WHERE w.id = :id");
     $stmt->execute(['id' => $pmiWorkerId]);
-    $pmiWorkerLabel = (string) $stmt->fetchColumn();
+    $selectedWorker = $stmt->fetch();
+    $pmiWorkerLabel = (string) ($selectedWorker['label'] ?? '');
+    $pmiWorkerCompanyId = (int) ($selectedWorker['company_id'] ?? 0);
 }
+$pmiCompanies = db()->query('SELECT id, name FROM companies ORDER BY name, id')->fetchAll();
+$pmiCompanyId = 0;
+foreach ($pmiCompanies as $company) {
+    if (mb_strtolower(trim((string) $company['name']), 'UTF-8') === 'life maquinarias') {
+        $pmiCompanyId = (int) $company['id'];
+        break;
+    }
+}
+if (!$pmiCompanyId && $pmiCompanies) $pmiCompanyId = (int) $pmiCompanies[0]['id'];
+if ($pmiWorkerLabel !== '' && $pmiWorkerCompanyId) $pmiCompanyId = $pmiWorkerCompanyId;
 require __DIR__ . '/../../includes/header.php';
 ?>
 <div class="page-title">
@@ -20,9 +33,19 @@ require __DIR__ . '/../../includes/header.php';
     </div>
 </div>
 
-<div class="work-panel mb-3">
-    <label class="form-label"><?= $personalView ? 'Mi información' : 'Buscar por nombre, DNI / documento o empresa' ?></label>
-    <select class="form-select" id="workerSearch" <?= $personalView ? 'disabled' : '' ?>><?php if ($pmiWorkerId): ?><option value="<?= $pmiWorkerId ?>" selected><?= e($pmiWorkerLabel) ?></option><?php endif; ?></select>
+<div class="work-panel mb-3 pmi-worker-filters">
+    <div class="pmi-worker-filter-grid">
+        <div class="pmi-worker-filter-field">
+            <label class="form-label" for="pmiCompanyFilter">Empresa</label>
+            <select class="form-select" id="pmiCompanyFilter" <?= $personalView ? 'disabled' : '' ?>>
+                <?php foreach ($pmiCompanies as $company): ?><option value="<?= (int) $company['id'] ?>" <?= $pmiCompanyId === (int) $company['id'] ? 'selected' : '' ?>><?= e($company['name']) ?></option><?php endforeach; ?>
+            </select>
+        </div>
+        <div class="pmi-worker-filter-field">
+            <label class="form-label" for="workerSearch"><?= $personalView ? 'Mi información' : 'Buscar por nombre o DNI / documento' ?></label>
+            <select class="form-select" id="workerSearch" <?= $personalView ? 'disabled' : '' ?>><?php if ($pmiWorkerId && $pmiWorkerLabel !== ''): ?><option value="<?= $pmiWorkerId ?>" selected><?= e($pmiWorkerLabel) ?></option><?php endif; ?></select>
+        </div>
+    </div>
 </div>
 
 <div class="row g-3 d-none" id="requirementsWorkspace">
@@ -53,6 +76,7 @@ require __DIR__ . '/../../includes/header.php';
                 <dt>Fecha de nacimiento</dt><dd id="workerBirthDate"></dd>
                 <dt>Empresa</dt><dd id="workerCompany"></dd>
                 <dt>Puesto de trabajo</dt><dd id="workerPositions"></dd>
+                <dt>Cuenta bancaria</dt><dd><span id="workerBankAccountsEmpty">-</span><button class="btn btn-sm btn-outline-primary d-none" type="button" id="workerBankAccountsViewBtn" data-bs-toggle="modal" data-bs-target="#workerBankAccountsViewModal"><i class="fa-solid fa-eye me-1" aria-hidden="true"></i>Ver</button></dd>
             </dl>
             <div class="form-check form-switch mb-3">
                 <input class="form-check-input" type="checkbox" id="workerActive" disabled>
@@ -105,6 +129,26 @@ require __DIR__ . '/../../includes/header.php';
                     <tbody></tbody>
                 </table>
             </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="workerBankAccountsViewModal" tabindex="-1" aria-labelledby="workerBankAccountsViewTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="workerBankAccountsViewTitle">Cuentas bancarias</h5>
+                <button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-sm align-middle mb-0">
+                        <thead><tr><th>Banco</th><th>Número de cuenta</th><th>Moneda</th><th>CCI</th></tr></thead>
+                        <tbody id="workerBankAccountsViewBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cerrar</button></div>
         </div>
     </div>
 </div>
@@ -249,6 +293,13 @@ require __DIR__ . '/../../includes/header.php';
 </div>
 <?php endif; ?>
 <style>
+.pmi-worker-filters{background:#fff;border:1px solid #d7e3f2;border-radius:14px;box-shadow:0 4px 14px rgba(25,55,100,.04)}
+.pmi-worker-filter-grid{display:grid;grid-template-columns:minmax(210px,.42fr) minmax(0,1fr);gap:1rem;align-items:end}
+.pmi-worker-filter-field{min-width:0}
+.pmi-worker-filter-field .form-label{display:block;margin-bottom:.4rem;font-size:.81rem;font-weight:700;color:#27436b}
+.pmi-worker-filter-field .form-select,.pmi-worker-filter-field .select2-container--bootstrap4 .select2-selection{min-height:38px;border-color:#cbd9ea;border-radius:8px}
+.pmi-worker-filter-field .form-select:focus,.pmi-worker-filter-field .select2-container--bootstrap4.select2-container--focus .select2-selection{border-color:#6da1f7;box-shadow:0 0 0 .2rem rgba(47,111,237,.14)}
+@media(max-width:700px){.pmi-worker-filter-grid{grid-template-columns:minmax(0,1fr);gap:.8rem}}
 #requirementsWorkspace .worker-card .worker-download-btn{border:1px solid transparent!important;color:#fff!important;font-weight:700;box-shadow:0 2px 5px rgba(15,23,42,.13);transition:filter .15s ease,transform .15s ease,box-shadow .15s ease}
 #requirementsWorkspace .worker-card #downloadWorkerPhoto{background:#2563eb!important;border-color:#1d4ed8!important}
 #requirementsWorkspace .worker-card #downloadWorkerSignature{background:#0d9488!important;border-color:#0f766e!important}
