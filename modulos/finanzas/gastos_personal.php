@@ -607,11 +607,12 @@ require __DIR__ . '/../../includes/header.php';
 #personalPerDiemTable tr.per-diem-editing .add-additional-expense { white-space:nowrap; font-size:.7rem; padding:.3rem .45rem; }
 #personalPerDiemTable tr.per-diem-bulk-editing > td { background:#f3f7fd; }
 #personalPerDiemTable tr.per-diem-bulk-editing > td:first-child { box-shadow:inset 3px 0 #2563eb; }
+#personalPerDiemTable tr.per-diem-editing > .additional-expense-cell,#personalPerDiemTable tr.per-diem-editing > .additional-reason-cell,#personalPerDiemTable tr.per-diem-bulk-editing > .additional-expense-cell,#personalPerDiemTable tr.per-diem-bulk-editing > .additional-reason-cell { vertical-align:top; }
 #personalPerDiemTable.per-diem-bulk-mode .per-diem-actions-cell .edit-personal-per-diem { display:none; }
 #personalPerDiemTable.per-diem-bulk-mode { min-width:1350px; table-layout:auto; }
 #personalPerDiemTable .bulk-linked-expense { padding:4px 0; color:#52627a; font-size:.76rem; white-space:normal; }
 #personalPerDiemTable .per-diem-observations-cell:has(textarea) { min-width:260px; white-space:normal!important; }
-#personalPerDiemTable .additional-expense-cell:has(input) { min-width:155px; }
+#personalPerDiemTable .additional-expense-cell:has(input) { min-width:185px; }
 #personalPerDiemTable .additional-reason-cell:has(textarea) { min-width:220px; white-space:normal!important; }
 #personalPerDiemTable .honorarios-cell:has(input) { min-width:130px; }
 #personalPerDiemTable .bulk-honorarios-toggle { display:flex; align-items:center; gap:5px; margin-bottom:4px; font-size:.72rem; white-space:nowrap; }
@@ -629,9 +630,11 @@ require __DIR__ . '/../../includes/header.php';
 #personalPerDiemTable .expense-pair-arrow path { fill:none; stroke-linecap:round; stroke-linejoin:round; vector-effect:non-scaling-stroke; }
 #personalPerDiemTable .expense-pair-arrow-line { stroke:var(--expense-pair-accent); stroke-width:3; }
 #personalPerDiemTable .expense-pair-arrow-tip { stroke:var(--expense-pair-accent); stroke-width:2.5; }
-#personalPerDiemTable .additional-reason-cell .expense-paired:not(.expense-display-line) { padding-left:1.15rem; }
-#personalPerDiemTable .additional-reason-cell .expense-paired:not(.expense-display-line)::before { content:'→'; position:absolute; left:.2rem; top:50%; transform:translateY(-50%); color:var(--expense-pair-accent); font-size:1rem; font-weight:800; line-height:1; }
+#personalPerDiemTable .expense-linked-amount .expense-pair-arrow { flex:0 0 38px; width:38px; margin-left:4px; margin-right:-10px; }
+#personalPerDiemTable .expense-manual-amount .expense-pair-arrow { flex:0 0 30px; width:30px; margin-left:0; margin-right:-10px; }
+#personalPerDiemTable .expense-manual-amount .form-control { flex:1 1 0; min-width:0; }
 #personalPerDiemTable .expense-edit-line { min-height:2.75rem; margin-bottom:.35rem; }
+#personalPerDiemTable .additional-reason-list > .expense-edit-line,#personalPerDiemTable .bulk-expense-reasons > .expense-edit-line { display:flex; align-items:center; }
 #personalPerDiemTable .additional-expense-cell > .bulk-linked-expense,#personalPerDiemTable .additional-reason-cell > .linked-expense-line { display:flex; align-items:center; min-height:2.75rem; margin-bottom:.35rem; }
 .personal-per-diem-rules-modal .modal-content { overflow:hidden; border:1px solid #cbd8eb; border-radius:15px; box-shadow:0 20px 55px rgba(15,35,70,.2); }
 .personal-per-diem-rules-modal .modal-header { padding:16px 20px; background:#f4f7fb; border-bottom:1px solid #d7e2f0; }
@@ -793,8 +796,11 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     const addLinkedExpense = (amountCell, reasonCell, linked) => {
         const note = document.createElement('div');
-        note.className = 'bulk-linked-expense';
-        note.textContent = `S/ ${Number(linked.amount).toFixed(2)} · ${linked.source === 'hour_purchase' ? 'Compra de horas' : 'Depósito vinculado'}`;
+        note.className = 'bulk-linked-expense expense-linked-amount';
+        const label = document.createElement('span');
+        label.textContent = `S/ ${Number(linked.amount).toFixed(2)} · ${linked.source === 'hour_purchase' ? 'Compra de horas' : 'Depósito vinculado'}`;
+        note.append(label);
+        note.insertAdjacentHTML('beforeend', '<svg class="expense-pair-arrow" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true"><path class="expense-pair-arrow-line" d="M2 10 C30 8 48 12 96 10"/><path class="expense-pair-arrow-tip" d="M84 3 L97 10 L84 17"/></svg>');
         const addButton = amountCell.querySelector('.add-additional-expense');
         if (addButton) amountCell.insertBefore(note, addButton);
         else amountCell.append(note);
@@ -858,8 +864,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const reasons = edit.reasonCell.querySelector('.bulk-expense-reasons');
         if (amounts.children.length >= 30) return;
         const amountLine = document.createElement('div');
-        amountLine.className = 'expense-edit-line d-flex gap-1';
-        amountLine.innerHTML = '<input class="form-control form-control-sm bulk-expense-amount" type="number" min="0" max="999999.99" step="0.01" inputmode="decimal" aria-label="Importe del gasto adicional"><button class="btn btn-sm btn-outline-danger bulk-remove-expense" type="button" aria-label="Quitar gasto"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>';
+        amountLine.className = 'expense-edit-line expense-manual-amount d-flex align-items-center gap-1';
+        amountLine.innerHTML = '<input class="form-control form-control-sm bulk-expense-amount" type="number" min="0" max="999999.99" step="0.01" inputmode="decimal" aria-label="Importe del gasto adicional"><button class="btn btn-sm btn-outline-danger bulk-remove-expense" type="button" aria-label="Quitar gasto"><i class="fa-solid fa-trash" aria-hidden="true"></i></button><svg class="expense-pair-arrow" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true"><path class="expense-pair-arrow-line" d="M2 10 C30 8 48 12 96 10"/><path class="expense-pair-arrow-tip" d="M84 3 L97 10 L84 17"/></svg>';
         amountLine.querySelector('input').value = amount;
         const reasonLine = document.createElement('div');
         reasonLine.className = 'expense-edit-line';
@@ -1034,8 +1040,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const reasonList = activeEdit.reasonCell.querySelector('.additional-reason-list');
         if (amountList.children.length >= 30) return;
         const amountLine = document.createElement('div');
-        amountLine.className = 'expense-edit-line d-flex gap-1';
-        amountLine.innerHTML = '<input class="form-control form-control-sm additional-expense-input" type="number" min="0" max="999999.99" step="0.01" inputmode="decimal" aria-label="Importe del gasto adicional"><button class="btn btn-sm btn-outline-danger remove-additional-expense" type="button" title="Quitar gasto" aria-label="Quitar gasto"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>';
+        amountLine.className = 'expense-edit-line expense-manual-amount d-flex align-items-center gap-1';
+        amountLine.innerHTML = '<input class="form-control form-control-sm additional-expense-input" type="number" min="0" max="999999.99" step="0.01" inputmode="decimal" aria-label="Importe del gasto adicional"><button class="btn btn-sm btn-outline-danger remove-additional-expense" type="button" title="Quitar gasto" aria-label="Quitar gasto"><i class="fa-solid fa-trash" aria-hidden="true"></i></button><svg class="expense-pair-arrow" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true"><path class="expense-pair-arrow-line" d="M2 10 C30 8 48 12 96 10"/><path class="expense-pair-arrow-tip" d="M84 3 L97 10 L84 17"/></svg>';
         amountLine.querySelector('input').value = amount;
         const reasonLine = document.createElement('div');
         reasonLine.className = 'expense-edit-line';
