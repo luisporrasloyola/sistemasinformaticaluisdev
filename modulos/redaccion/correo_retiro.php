@@ -12,7 +12,6 @@ $workers = db()->query("SELECT w.id, w.full_name, w.document_number,
     FROM workers w
     LEFT JOIN worker_positions wp ON wp.worker_id = w.id
     LEFT JOIN positions p ON p.id = wp.position_id
-    WHERE w.status = 0
     GROUP BY w.id, w.full_name, w.document_number
     ORDER BY w.full_name, w.id")->fetchAll();
 $signatureUser = current_user() ?? [];
