@@ -299,7 +299,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="attendance-reference-hour-extras">
             <div class="attendance-reference-extra-parts">
                 <div>Feriado ×2<strong><?= e(attendance_report_hours_label((int) ($monthlyHours['holiday_overtime_minutes'] ?? 0))) ?></strong></div>
-                <div>Días Extra (DE)<strong><?= e(attendance_report_hours_label((int) ($monthlyHours['extra_day_minutes'] ?? 0))) ?></strong><small><?= (int) ($monthlyHours['extra_day_count'] ?? 0) ?> día(s) · sábados 6 h; otros 8 h 30 min</small></div>
+                <div>Días Extra (DE)<strong><?= e(attendance_report_hours_label((int) ($monthlyHours['extra_day_minutes'] ?? 0))) ?></strong><small><?= (int) ($monthlyHours['extra_day_count'] ?? 0) ?> día(s) con horas · tiempo neto trabajado; ×2 si está activado</small></div>
                 <div>Extra por entrada<strong><?= e(attendance_report_hours_label((int) ($monthlyHours['early_overtime_minutes'] ?? 0))) ?></strong></div>
                 <div>Extra por salida<strong><?= e(attendance_report_hours_label((int) ($monthlyHours['exit_overtime_minutes'] ?? 0))) ?></strong></div>
             </div>
