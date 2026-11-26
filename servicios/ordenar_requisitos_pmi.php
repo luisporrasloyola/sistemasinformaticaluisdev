@@ -16,12 +16,17 @@ $targetId = filter_var($_POST['target_id'] ?? null, FILTER_VALIDATE_INT, ['optio
 $targetKind = (string) ($_POST['target_kind'] ?? '');
 $placement = (string) ($_POST['placement'] ?? '');
 $dragMove = $targetId && in_array($targetKind, ['folder', 'record'], true) && in_array($placement, ['before', 'after'], true);
-if (!$workerId || !$positionId || !$recordId || !in_array($kind, ['folder', 'record'], true) || (!$dragMove && !in_array($direction, ['up', 'down'], true))) {
+$insideMove = $targetId && $targetKind === 'folder' && $kind === 'record' && $placement === 'inside';
+$outsidePlacement = (string) ($_POST['outside_placement'] ?? '');
+$outsideMove = $kind === 'record' && $placement === 'outside' && in_array($outsidePlacement, ['before', 'after', 'end'], true)
+    && ($outsidePlacement === 'end' || ($targetId && in_array($targetKind, ['folder', 'record'], true)));
+if (!$workerId || !$positionId || !$recordId || !in_array($kind, ['folder', 'record'], true) || (!$dragMove && !$insideMove && !$outsideMove && !in_array($direction, ['up', 'down'], true))) {
     json_response(['ok' => false, 'message' => 'Movimiento inválido.'], 422);
 }
 
 
 require_once __DIR__ . '/../includes/pmi_requirement_order.php';
+require_once __DIR__ . '/../includes/pmi_requirement_folder_move.php';
 
 $pdo = db();
 try {
@@ -29,6 +34,18 @@ try {
     $position = $pdo->prepare('SELECT 1 FROM worker_positions WHERE worker_id = ? AND position_id = ? FOR UPDATE');
     $position->execute([$workerId, $positionId]);
     if (!$position->fetchColumn()) throw new RuntimeException('El puesto no pertenece al trabajador.');
+    if ($insideMove || $outsideMove) {
+        $permission = $pdo->prepare('SELECT requirement_id FROM worker_requirements WHERE id = ? AND worker_id = ? AND position_id = ?');
+        $permission->execute([$recordId, $workerId, $positionId]);
+        $requirementId = $permission->fetchColumn();
+        if (!$requirementId || !current_user_can_document('requisitos.pmi_individual', (int) $requirementId, 'upload')) {
+            throw new DomainException('No tiene permiso para organizar este requisito.');
+        }
+        if ($insideMove) pmi_requirement_add_to_folder($pdo, (int) $workerId, (int) $positionId, (int) $recordId, (int) $targetId);
+        else pmi_requirement_remove_from_folder($pdo, (int) $workerId, (int) $positionId, (int) $recordId, $targetKind, (int) $targetId, $outsidePlacement);
+        $pdo->commit();
+        json_response($insideMove ? ['ok' => true, 'folder_id' => (int) $targetId] : ['ok' => true]);
+    }
 
     if ($kind === 'folder') {
         $folderExists = $pdo->prepare('SELECT 1 FROM pmi_requirement_folders WHERE id = ? AND worker_id = ? AND position_id = ?');

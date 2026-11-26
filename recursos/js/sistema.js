@@ -2617,7 +2617,7 @@ function renderRequirements() {
     };
     const groupHeader = (folder, count, index) => {
         const expanded = openRequirementFolders.has(String(folder.id));
-        tbody.insertAdjacentHTML('beforeend', `<tr class="requirement-folder-header ${expanded ? 'is-open' : ''}" ${orderAttributes('folder', folder.id)}><td colspan="8" class="requirement-folder-heading${canDragOrder ? ' requirement-drag-handle' : ''}" ${canDragOrder ? 'draggable="true" title="Arrastrar para ordenar"' : ''}><div class="d-flex align-items-center justify-content-between gap-2 flex-wrap"><div class="d-flex align-items-center gap-2"><button class="requirement-folder-toggle" type="button" draggable="false" data-folder-id="${Number(folder.id)}" aria-expanded="${expanded}" aria-label="${expanded ? 'Contraer' : 'Desplegar'} carpeta"><span class="requirement-folder-icon"><i class="fa-solid fa-${expanded ? 'folder-open' : 'folder-closed'}"></i></span></button><span class="requirement-folder-label"><strong>${escapeHtml(folder.name)}</strong><small>${count} requisito${count === 1 ? '' : 's'} dentro de la carpeta</small></span><button class="requirement-folder-toggle" type="button" draggable="false" data-folder-id="${Number(folder.id)}" aria-expanded="${expanded}" aria-label="${expanded ? 'Contraer' : 'Desplegar'} carpeta"><i class="fa-solid fa-chevron-${expanded ? 'up' : 'down'} ms-2" aria-hidden="true"></i></button></div>${window.pmiPersonalReadOnly === true ? '' : `<span class="d-flex gap-2">${window.pmiCanReplicateRequirement === true && count ? `<button class="btn btn-sm btn-outline-success" type="button" onclick="replicateRequirementFolder(${Number(folder.id)})" title="Replicar carpeta y requisitos" aria-label="Replicar carpeta y requisitos"><i class="fa-solid fa-copy"></i></button>` : ''}<button class="btn btn-sm btn-outline-primary" type="button" onclick="editRequirementFolder(${Number(folder.id)})" title="Modificar registros de la carpeta"><i class="fa-solid fa-pen"></i></button><button class="btn btn-sm btn-outline-danger" type="button" onclick="deleteRequirementFolder(${Number(folder.id)})" title="Eliminar carpeta"><i class="fa-solid fa-trash"></i></button></span>`}</div></td></tr>`);
+        tbody.insertAdjacentHTML('beforeend', `<tr class="requirement-folder-header ${expanded ? 'is-open' : ''}" ${orderAttributes('folder', folder.id)}><td colspan="8" class="requirement-folder-heading${canDragOrder ? ' requirement-drag-handle' : ''}" ${canDragOrder ? 'draggable="true" title="Arrastrar para ordenar"' : ''}><div class="d-flex align-items-center justify-content-between gap-2 flex-wrap"><div class="d-flex align-items-center gap-2"><button class="requirement-folder-toggle" type="button" draggable="false" data-folder-id="${Number(folder.id)}" aria-expanded="${expanded}" aria-label="${expanded ? 'Contraer' : 'Desplegar'} carpeta"><span class="requirement-folder-icon"><i class="fa-solid fa-${expanded ? 'folder-open' : 'folder-closed'}"></i></span></button><span class="requirement-folder-label"><strong>${escapeHtml(folder.name)}</strong><small>${count} requisito${count === 1 ? '' : 's'} dentro de la carpeta</small><small class="requirement-folder-drop-hint"><i class="fa-solid fa-folder-plus me-1" aria-hidden="true"></i>Soltar para agregar a esta carpeta</small></span><button class="requirement-folder-toggle" type="button" draggable="false" data-folder-id="${Number(folder.id)}" aria-expanded="${expanded}" aria-label="${expanded ? 'Contraer' : 'Desplegar'} carpeta"><i class="fa-solid fa-chevron-${expanded ? 'up' : 'down'} ms-2" aria-hidden="true"></i></button></div>${window.pmiPersonalReadOnly === true ? '' : `<span class="d-flex gap-2">${window.pmiCanReplicateRequirement === true && count ? `<button class="btn btn-sm btn-outline-success" type="button" onclick="replicateRequirementFolder(${Number(folder.id)})" title="Replicar carpeta y requisitos" aria-label="Replicar carpeta y requisitos"><i class="fa-solid fa-copy"></i></button>` : ''}<button class="btn btn-sm btn-outline-primary" type="button" onclick="editRequirementFolder(${Number(folder.id)})" title="Modificar registros de la carpeta"><i class="fa-solid fa-pen"></i></button><button class="btn btn-sm btn-outline-danger" type="button" onclick="deleteRequirementFolder(${Number(folder.id)})" title="Eliminar carpeta"><i class="fa-solid fa-trash"></i></button></span>`}</div></td></tr>`);
 
     };
     const renderRow = (row, inFolder = false, isLast = false, index = 0, groupLength = 1) => {
@@ -2686,6 +2686,7 @@ function renderRequirements() {
             renderSeparatorSlot('ungrouped', 0, item.id, index < topLevel.length - 1);
         }
     });
+    if (canDragOrder && requirementRows.some(row => row.folder_id)) tbody.insertAdjacentHTML('beforeend', '<tr class="requirement-folder-exit" data-order-root-drop="true"><td colspan="8"><i class="fa-solid fa-folder-minus me-2" aria-hidden="true"></i>Soltar aqu&iacute; para sacar de la carpeta</td></tr>');
     if (!requirementRows.length && !requirementFolders.length) tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No hay requisitos registrados para este puesto.</td></tr>';
 }
 
@@ -3486,10 +3487,27 @@ function bindRequirementOrderDrag(tbody) {
     let startedOnControl = false;
     const isControl = target => !!target.closest('button,a,input,select,textarea,[contenteditable="true"]');
     tbody.addEventListener('mousedown', event => { startedOnControl = isControl(event.target); });
-    const clearTargets = () => tbody.querySelectorAll('.requirement-drop-before,.requirement-drop-after').forEach(row => row.classList.remove('requirement-drop-before', 'requirement-drop-after'));
+    const clearTargets = () => tbody.querySelectorAll('.requirement-drop-before,.requirement-drop-after,.requirement-drop-inside,.requirement-drop-outside').forEach(row => row.classList.remove('requirement-drop-before', 'requirement-drop-after', 'requirement-drop-inside', 'requirement-drop-outside'));
+    const dropPlacement = (target, event) => {
+        if (dragging?.dataset.orderKind === 'record' && dragging.dataset.orderScope !== '0' && (target.hasAttribute('data-order-root-drop') || target.dataset.orderScope === '0')) return 'outside';
+        const box = target.getBoundingClientRect();
+        const relativeY = event.clientY - box.top;
+        if (dragging?.dataset.orderKind === 'record' && dragging.dataset.orderScope === '0' && target.dataset.orderKind === 'folder' && relativeY > box.height * 0.22 && relativeY < box.height * 0.78) return 'inside';
+        return relativeY < box.height / 2 ? 'before' : 'after';
+    };
     const validTarget = event => {
-        const target = event.target.closest('tr[data-order-id]');
-        return dragging && target && target !== dragging && target.dataset.orderScope === dragging.dataset.orderScope ? target : null;
+        const target = event.target.closest('tr[data-order-id],tr[data-order-root-drop]');
+        if (!dragging || !target || target === dragging) return null;
+        const member = dragging.dataset.orderKind === 'record' && dragging.dataset.orderScope !== '0';
+        if (target.hasAttribute('data-order-root-drop')) return member ? target : null;
+        if (member && target.dataset.orderScope === '0') {
+            if (target.dataset.orderKind === 'folder') {
+                const box = target.getBoundingClientRect(), y = event.clientY - box.top;
+                if (y > box.height * 0.22 && y < box.height * 0.78) return null;
+            }
+            return target;
+        }
+        return target.dataset.orderScope === dragging.dataset.orderScope ? target : null;
     };
     tbody.addEventListener('dragstart', event => {
         const handle = event.target.closest('.requirement-drag-handle');
@@ -3501,6 +3519,7 @@ function bindRequirementOrderDrag(tbody) {
         event.dataTransfer.effectAllowed = 'move';
         event.dataTransfer.setData('text/plain', dragging.dataset.orderKind + ':' + dragging.dataset.orderId);
         dragging.classList.add('requirement-is-dragging');
+        tbody.classList.toggle('requirement-dragging-member', dragging.dataset.orderKind === 'record' && dragging.dataset.orderScope !== '0');
     });
     tbody.addEventListener('dragover', event => {
         const target = validTarget(event);
@@ -3508,18 +3527,21 @@ function bindRequirementOrderDrag(tbody) {
         if (!target) return;
         event.preventDefault();
         event.dataTransfer.dropEffect = 'move';
-        const box = target.getBoundingClientRect();
-        target.classList.add(event.clientY < box.top + box.height / 2 ? 'requirement-drop-before' : 'requirement-drop-after');
+        target.classList.add('requirement-drop-' + dropPlacement(target, event));
     });
     tbody.addEventListener('drop', async event => {
         const target = validTarget(event);
         if (!target || requirementOrderSaving) return;
         event.preventDefault();
-        const box = target.getBoundingClientRect();
-        const move = {kind: dragging.dataset.orderKind, record_id: dragging.dataset.orderId, target_kind: target.dataset.orderKind, target_id: target.dataset.orderId, placement: event.clientY < box.top + box.height / 2 ? 'before' : 'after'};
+        const move = {kind: dragging.dataset.orderKind, record_id: dragging.dataset.orderId, target_kind: target.dataset.orderKind || 'root', target_id: target.dataset.orderId || '0', placement: dropPlacement(target, event)};
+        if (move.placement === 'outside') {
+            const box = target.getBoundingClientRect();
+            move.outside_placement = target.hasAttribute('data-order-root-drop') ? 'end' : (event.clientY < box.top + box.height / 2 ? 'before' : 'after');
+        }
         const workerId = originWorker, positionId = originPosition;
         dragging.classList.remove('requirement-is-dragging');
         dragging = null;
+        tbody.classList.remove('requirement-dragging-member');
         clearTargets();
         if (Number(currentWorkerId) !== Number(workerId) || Number(currentPositionId) !== Number(positionId)) return;
         requirementOrderSaving = true;
@@ -3533,7 +3555,10 @@ function bindRequirementOrderDrag(tbody) {
             const response = await fetch(`${BASE_URL}/servicios/ordenar_requisitos_pmi.php`, {method: 'POST', body});
             const data = await response.json();
             if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo guardar el orden.');
-            if (Number(currentWorkerId) === Number(workerId) && Number(currentPositionId) === Number(positionId)) await loadRequirements();
+            if (Number(currentWorkerId) === Number(workerId) && Number(currentPositionId) === Number(positionId)) {
+                if (move.placement === 'inside') openRequirementFolders.add(String(move.target_id));
+                await loadRequirements();
+            }
         } catch (error) {
             Swal.fire('Atenci\u00f3n', error.message || 'No se pudo guardar el orden.', 'warning');
         } finally {
@@ -3544,6 +3569,7 @@ function bindRequirementOrderDrag(tbody) {
     tbody.addEventListener('dragend', () => {
         dragging?.classList.remove('requirement-is-dragging');
         dragging = null;
+        tbody.classList.remove('requirement-dragging-member');
         clearTargets();
     });
 }
