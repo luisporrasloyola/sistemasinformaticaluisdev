@@ -343,6 +343,10 @@ function default_user_landing_path(): string
         'empresa_maquirenta.parada_planta_santa_rosa' => 'modulos/empresa_maquirenta/parada_planta_santa_rosa.php',
         'empresa_maquirenta.audios_charla_santa_rosa' => 'modulos/empresa_maquirenta/audios_charla_santa_rosa.php',
         'empresa_maquirenta.participacion_pms_santa_rosa' => 'modulos/empresa_maquirenta/participacion_pms_santa_rosa.php',
+        'redaccion.correo_ingreso' => 'modulos/redaccion/correo_ingreso.php',
+        'redaccion.correo_retiro' => 'modulos/redaccion/correo_retiro.php',
+        'redaccion.correo_pernocte' => 'modulos/redaccion/correo_pernocte.php',
+        'redaccion.whatsapp' => 'modulos/redaccion/whatsapp.php',
         'usuarios' => 'modulos/usuario/usuarios.php',
     ];
 

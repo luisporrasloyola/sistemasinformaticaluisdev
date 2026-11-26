@@ -103,6 +103,15 @@ function permission_modules_catalog(): array
                 'empresa_maquirenta.participacion_pms_santa_rosa' => 'Central Térmica Santa Rosa - Participación de PMS',
             ],
         ],
+        'redaccion' => [
+            'label' => 'Redacción',
+            'children' => [
+                'redaccion.correo_ingreso' => 'Correo de ingreso',
+                'redaccion.correo_retiro' => 'Correo de retiro',
+                'redaccion.correo_pernocte' => 'Correo de pernocte',
+                'redaccion.whatsapp' => 'WhatsApp',
+            ],
+        ],
         'usuarios' => ['label' => 'Usuarios', 'children' => []],
         'configuracion' => [
             'label' => 'Configuración',

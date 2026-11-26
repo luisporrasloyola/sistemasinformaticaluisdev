@@ -18,6 +18,11 @@ $finanzasGastosOpen = str_ends_with($currentPath, '/modulos/finanzas/gastos_pers
 $finanzasDepositosOpen = str_ends_with($currentPath, '/modulos/finanzas/depositos_personal.php');
 $finanzasPagosPendientesOpen = str_ends_with($currentPath, '/modulos/finanzas/pagos_pendientes.php');
 $empresaMaquirentaOpen = str_contains($currentPath, '/modulos/empresa_maquirenta/');
+$redaccionOpen = str_contains($currentPath, '/modulos/redaccion/');
+$redaccionIngresoOpen = str_ends_with($currentPath, '/modulos/redaccion/correo_ingreso.php');
+$redaccionRetiroOpen = str_ends_with($currentPath, '/modulos/redaccion/correo_retiro.php');
+$redaccionPernocteOpen = str_ends_with($currentPath, '/modulos/redaccion/correo_pernocte.php');
+$redaccionWhatsappOpen = str_ends_with($currentPath, '/modulos/redaccion/whatsapp.php');
 $empresaMaquirentaDashboardOpen = str_ends_with($currentPath, '/modulos/empresa_maquirenta/dashboard.php');
 $valorizacionesOpen = str_ends_with($currentPath, '/modulos/empresa_maquirenta/valorizaciones.php');
 $ventanillaOpen = str_ends_with($currentPath, '/modulos/empresa_maquirenta/informes.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/charla_preoperacional.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/pms.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/permiso_trabajo.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/parada_planta.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/audios_charla.php') || str_ends_with($currentPath, '/modulos/empresa_maquirenta/participacion_pms.php');
@@ -213,6 +218,15 @@ $isAdmin = is_admin();
                 </div>
             </div>
 
+            <button class="nav-link nav-parent <?= $redaccionOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#redaccionMenu" aria-expanded="<?= $redaccionOpen ? 'true' : 'false' ?>" aria-controls="redaccionMenu">
+                <i class="fa-solid fa-pen-nib"></i><span>Redacción</span><i class="fa-solid fa-chevron-down nav-caret"></i>
+            </button>
+            <div class="collapse <?= $redaccionOpen ? 'show' : '' ?>" id="redaccionMenu"><div class="submenu">
+                <a class="nav-link sub-link <?= $redaccionIngresoOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/redaccion/correo_ingreso.php"><i class="fa-solid fa-envelope"></i><span>Correo de ingreso</span></a>
+                <a class="nav-link sub-link <?= $redaccionRetiroOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/redaccion/correo_retiro.php"><i class="fa-solid fa-envelope"></i><span>Correo de retiro</span></a>
+                <a class="nav-link sub-link <?= $redaccionPernocteOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/redaccion/correo_pernocte.php"><i class="fa-solid fa-envelope"></i><span>Correo de pernocte</span></a>
+                <a class="nav-link sub-link <?= $redaccionWhatsappOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/redaccion/whatsapp.php"><i class="fa-brands fa-whatsapp"></i><span>WhatsApp</span></a>
+            </div></div>
             <a class="nav-link <?= $usuarioOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/usuario/usuarios.php"><i class="fa-solid fa-users-gear"></i><span>Usuarios</span></a>
             <button class="nav-link nav-parent <?= $configuracionOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#configuracionMenu" aria-expanded="<?= $configuracionOpen ? 'true' : 'false' ?>" aria-controls="configuracionMenu">
                 <i class="fa-solid fa-gear"></i><span>Configuración</span><i class="fa-solid fa-chevron-down nav-caret"></i>
@@ -316,6 +330,17 @@ $isAdmin = is_admin();
                     <?php if (current_user_can_module('empresa_maquirenta.personal')): ?><a class="nav-link sub-link <?= $formatoPersonalOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/empresa_maquirenta/personal.php"><i class="fa-solid fa-users"></i><span>Personal</span></a><?php endif; ?>
                     <?php if (current_user_can_module('empresa_maquirenta.pmi_individual')): ?><a class="nav-link sub-link <?= $formatoPmiOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/empresa_maquirenta/pmi_individual.php"><i class="fa-solid fa-file-shield"></i><span>PMI Individual</span></a><?php endif; ?>
                     <?php if (current_user_can_module('empresa_maquirenta.fotocheks')): ?><a class="nav-link sub-link <?= $fotocheksOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/empresa_maquirenta/fotocheks.php"><i class="fa-solid fa-id-card"></i><span>Fotocheks</span></a><?php endif; ?>
+                </div></div>
+            <?php endif; ?>
+            <?php if (current_user_can_module('redaccion')): ?>
+                <button class="nav-link nav-parent <?= $redaccionOpen ? 'active' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#redaccionMenuGestor" aria-expanded="<?= $redaccionOpen ? 'true' : 'false' ?>" aria-controls="redaccionMenuGestor">
+                    <i class="fa-solid fa-pen-nib"></i><span>Redacción</span><i class="fa-solid fa-chevron-down nav-caret"></i>
+                </button>
+                <div class="collapse <?= $redaccionOpen ? 'show' : '' ?>" id="redaccionMenuGestor"><div class="submenu">
+                    <?php if (current_user_can_module('redaccion.correo_ingreso')): ?><a class="nav-link sub-link <?= $redaccionIngresoOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/redaccion/correo_ingreso.php"><i class="fa-solid fa-envelope"></i><span>Correo de ingreso</span></a><?php endif; ?>
+                    <?php if (current_user_can_module('redaccion.correo_retiro')): ?><a class="nav-link sub-link <?= $redaccionRetiroOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/redaccion/correo_retiro.php"><i class="fa-solid fa-envelope"></i><span>Correo de retiro</span></a><?php endif; ?>
+                    <?php if (current_user_can_module('redaccion.correo_pernocte')): ?><a class="nav-link sub-link <?= $redaccionPernocteOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/redaccion/correo_pernocte.php"><i class="fa-solid fa-envelope"></i><span>Correo de pernocte</span></a><?php endif; ?>
+                    <?php if (current_user_can_module('redaccion.whatsapp')): ?><a class="nav-link sub-link <?= $redaccionWhatsappOpen ? 'active' : '' ?>" href="<?= APP_URL ?>/modulos/redaccion/whatsapp.php"><i class="fa-brands fa-whatsapp"></i><span>WhatsApp</span></a><?php endif; ?>
                 </div></div>
             <?php endif; ?>
             <?php if (current_user_can_module('usuarios')): ?>

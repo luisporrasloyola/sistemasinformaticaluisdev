@@ -210,15 +210,21 @@ if (exportButtons.length) {
             }
         }
 
-        const summaryLines = 4 + data.rates.length + (data.mobility_active ? 3 : 0);
-        if (y - 14 - summaryLines * totalLineHeight - 11 < contentBottom) addSummaryPage();
+        const movementSubtotalCents = Number(data.mobilization_cents || 0) + Number(data.demobilization_cents || 0);
+        const hasMovementAmounts = movementSubtotalCents !== 0;
+        const serviceIgvCents = Math.round(Number(data.price_cents || 0) * 18 / 100);
+        const serviceTotalCents = Number(data.price_cents || 0) + serviceIgvCents;
+        const movementIgvCents = Math.round(movementSubtotalCents * 18 / 100);
+        const movementTotalCents = movementSubtotalCents + movementIgvCents;
+        const summaryLines = 5 + data.rates.length + (hasMovementAmounts ? 6 : 0);
+        if (y - 14 - summaryLines * totalLineHeight - 20 < contentBottom) addSummaryPage();
         y -= 14;
         const totalLabelX = 215;
         const totalValueRight = A4[0] - left - 8;
         function drawTotal(label, value, emphasize = false) {
             const size = emphasize ? 9 : 7.5;
             const font = emphasize ? bold : regular;
-            drawFitted(label, totalLabelX, y, 285, size, emphasize ? bold : regular, tableText);
+            drawFitted(label, totalLabelX, y, 285, size, font, tableText);
             const shown = clean(value);
             page.drawText(shown, {x: totalValueRight - font.widthOfTextAtSize(shown, size), y, size, font, color: tableText});
             y -= emphasize ? 16 : totalLineHeight;
@@ -228,17 +234,20 @@ if (exportButtons.length) {
         drawTotal('Horas totales', hoursText(data.total_minutes));
         data.rates.forEach(rate => drawTotal(`Precio por hora ${rate.name}`, moneyWithCurrency(Math.round(Number(rate.price) * 100))));
         drawTotal(`Precio del ${dateText(data.first_date)} al ${dateText(data.last_date)}`, moneyWithCurrency(data.price_cents));
-        if (data.mobility_active) {
-            const equipmentName = data.client.equipment ? ` ${data.client.equipment}` : '';
-            drawTotal(`Total de movilización${equipmentName}`, moneyWithCurrency(data.mobilization_cents));
-            drawTotal(`Total de desmovilización${equipmentName}`, moneyWithCurrency(data.demobilization_cents));
-            drawTotal('Subtotal', moneyWithCurrency(data.subtotal_cents));
-        }
-        drawTotal('IGV (18 %)', moneyWithCurrency(data.igv_cents));
+        drawTotal('IGV (18 %)', moneyWithCurrency(serviceIgvCents));
         y -= 5;
         drawLine(totalLabelX, y + 9, totalValueRight, y + 9, tableLine);
-        drawTotal('Monto total', moneyWithCurrency(data.total_cents), true);
-        page.drawImage(signatureImage, {x: A4[0] - left - signatureWidth, y: signatureY, width: signatureWidth, height: signatureHeight});
+        drawTotal('Monto total', moneyWithCurrency(serviceTotalCents), true);
+        if (hasMovementAmounts) {
+            y -= 12;
+            drawTotal('Movilización', moneyWithCurrency(data.mobilization_cents));
+            drawTotal('Desmovilización', moneyWithCurrency(data.demobilization_cents));
+            drawTotal('Sub total', moneyWithCurrency(movementSubtotalCents));
+            drawTotal('IGV (18 %)', moneyWithCurrency(movementIgvCents));
+            y -= 5;
+            drawLine(totalLabelX, y + 9, totalValueRight, y + 9, tableLine);
+            drawTotal('Monto total', moneyWithCurrency(movementTotalCents), true);
+        }        page.drawImage(signatureImage, {x: A4[0] - left - signatureWidth, y: signatureY, width: signatureWidth, height: signatureHeight});
         progress(`Añadiendo adjuntos (0/${data.records.length})…`);
 
         let attachmentSheet;
