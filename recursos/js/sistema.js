@@ -2447,7 +2447,7 @@ function initRequirementsModule() {
     });
     document.getElementById('newCatalogRequirementBtn')?.addEventListener('click', addCatalogRequirement);
     document.getElementById('deleteCatalogRequirementBtn')?.addEventListener('click', deleteCatalogRequirement);
-    document.getElementById('quickPhotoInput').addEventListener('change', uploadQuickPhoto);
+    document.getElementById('quickPhotoInput')?.addEventListener('change', uploadQuickPhoto);
 
     if (window.pmiPersonalWorkerId) loadWorker(window.pmiPersonalWorkerId);
 }

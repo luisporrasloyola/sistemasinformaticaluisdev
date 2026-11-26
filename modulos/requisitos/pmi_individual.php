@@ -53,10 +53,6 @@ require __DIR__ . '/../../includes/header.php';
         <div class="work-panel h-100">
             <div class="worker-card text-center">
                 <img id="workerPhoto" src="<?= APP_URL ?>/recursos/imagen_referencial.php" alt="Foto trabajador">
-                <label class="btn btn-sm btn-outline-primary mt-2 <?= $personalView ? 'd-none' : '' ?>">
-                    Clic para cambiar foto
-                    <input class="d-none" id="quickPhotoInput" type="file" accept="image/png,image/jpeg,image/webp">
-                </label>
                 <div class="d-flex justify-content-center gap-2 mt-2 flex-wrap" aria-label="Descargas del trabajador">
                     <a class="btn btn-sm worker-download-btn disabled" id="downloadWorkerPhoto" href="#" aria-disabled="true" tabindex="-1" title="No hay foto disponible"><i class="fa-solid fa-download me-1" aria-hidden="true"></i>Foto</a>
                     <a class="btn btn-sm worker-download-btn disabled" id="downloadWorkerSignature" href="#" aria-disabled="true" tabindex="-1" title="No hay firma disponible"><i class="fa-solid fa-download me-1" aria-hidden="true"></i>Firma</a>
