@@ -2593,9 +2593,10 @@ function renderRequirements() {
         const rightOrder = Number(right[field]) || Number.MAX_SAFE_INTEGER;
         return leftOrder - rightOrder || String(left.requirement || left.name).localeCompare(String(right.requirement || right.name), 'es') || Number(left.id) - Number(right.id);
     };
-    const orderButtons = (kind, id, index, length) => !search && window.pmiCanReplicateRequirement === true && length > 1
-        ? `<span class="requirement-order-buttons"><button class="btn btn-sm btn-outline-secondary" type="button" onclick="moveRequirementOrder('${kind}', ${Number(id)}, 'up')" ${index === 0 ? 'disabled' : ''} title="Subir" aria-label="Subir"><i class="fa-solid fa-arrow-up"></i></button><button class="btn btn-sm btn-outline-secondary" type="button" onclick="moveRequirementOrder('${kind}', ${Number(id)}, 'down')" ${index === length - 1 ? 'disabled' : ''} title="Bajar" aria-label="Bajar"><i class="fa-solid fa-arrow-down"></i></button></span>`
-        : '';
+    const canDragOrder = !search && separatorPlacementId === null && window.pmiCanReplicateRequirement === true && window.pmiPersonalReadOnly !== true;
+    const orderAttributes = (kind, id, folderId = 0) => canDragOrder ? `data-order-kind="${kind}" data-order-id="${Number(id)}" data-order-scope="${Number(folderId) || 0}"` : '';
+    const orderCellAttributes = canDragOrder ? 'class="requirement-drag-handle" draggable="true" title="Arrastrar para ordenar"' : '';
+    bindRequirementOrderDrag(tbody);
     const visibleFolders = requirementFolders.filter(folder => requirementRows.some(row => String(row.folder_id) === String(folder.id))).sort((a, b) => orderCompare(a, b, 'sort_order'));
     const ungrouped = requirementRows.filter(row => !row.folder_id).sort((a, b) => orderCompare(a, b, 'sort_order'));
     const topLevel = [...visibleFolders.map(folder => ({kind: 'folder', item: folder})), ...ungrouped.map(row => ({kind: 'record', item: row}))]
@@ -2616,8 +2617,8 @@ function renderRequirements() {
     };
     const groupHeader = (folder, count, index) => {
         const expanded = openRequirementFolders.has(String(folder.id));
-        tbody.insertAdjacentHTML('beforeend', `<tr class="requirement-folder-header ${expanded ? 'is-open' : ''}"><td colspan="8" class="requirement-folder-heading"><div class="d-flex align-items-center justify-content-between gap-2 flex-wrap"><button class="requirement-folder-toggle" type="button" data-folder-id="${Number(folder.id)}" aria-expanded="${expanded}"><span class="requirement-folder-icon"><i class="fa-solid fa-${expanded ? 'folder-open' : 'folder-closed'}"></i></span><span class="requirement-folder-label"><strong>${escapeHtml(folder.name)}</strong><small>${count} requisito${count === 1 ? '' : 's'} dentro de la carpeta</small></span><i class="fa-solid fa-chevron-${expanded ? 'up' : 'down'} ms-2" aria-hidden="true"></i></button>${window.pmiPersonalReadOnly === true ? '' : `<span class="d-flex gap-2">${window.pmiCanReplicateRequirement === true && count ? `<button class="btn btn-sm btn-outline-success" type="button" onclick="replicateRequirementFolder(${Number(folder.id)})" title="Replicar carpeta y requisitos" aria-label="Replicar carpeta y requisitos"><i class="fa-solid fa-copy"></i></button>` : ''}<button class="btn btn-sm btn-outline-primary" type="button" onclick="editRequirementFolder(${Number(folder.id)})" title="Modificar registros de la carpeta"><i class="fa-solid fa-pen"></i></button><button class="btn btn-sm btn-outline-danger" type="button" onclick="deleteRequirementFolder(${Number(folder.id)})" title="Eliminar carpeta"><i class="fa-solid fa-trash"></i></button></span>`}</div></td></tr>`);
-        tbody.lastElementChild.querySelector('span.d-flex.gap-2')?.insertAdjacentHTML('afterbegin', orderButtons('folder', folder.id, index, topLevel.length));
+        tbody.insertAdjacentHTML('beforeend', `<tr class="requirement-folder-header ${expanded ? 'is-open' : ''}" ${orderAttributes('folder', folder.id)}><td colspan="8" class="requirement-folder-heading${canDragOrder ? ' requirement-drag-handle' : ''}" ${canDragOrder ? 'draggable="true" title="Arrastrar para ordenar"' : ''}><div class="d-flex align-items-center justify-content-between gap-2 flex-wrap"><div class="d-flex align-items-center gap-2"><button class="requirement-folder-toggle" type="button" draggable="false" data-folder-id="${Number(folder.id)}" aria-expanded="${expanded}" aria-label="${expanded ? 'Contraer' : 'Desplegar'} carpeta"><span class="requirement-folder-icon"><i class="fa-solid fa-${expanded ? 'folder-open' : 'folder-closed'}"></i></span></button><span class="requirement-folder-label"><strong>${escapeHtml(folder.name)}</strong><small>${count} requisito${count === 1 ? '' : 's'} dentro de la carpeta</small></span><button class="requirement-folder-toggle" type="button" draggable="false" data-folder-id="${Number(folder.id)}" aria-expanded="${expanded}" aria-label="${expanded ? 'Contraer' : 'Desplegar'} carpeta"><i class="fa-solid fa-chevron-${expanded ? 'up' : 'down'} ms-2" aria-hidden="true"></i></button></div>${window.pmiPersonalReadOnly === true ? '' : `<span class="d-flex gap-2">${window.pmiCanReplicateRequirement === true && count ? `<button class="btn btn-sm btn-outline-success" type="button" onclick="replicateRequirementFolder(${Number(folder.id)})" title="Replicar carpeta y requisitos" aria-label="Replicar carpeta y requisitos"><i class="fa-solid fa-copy"></i></button>` : ''}<button class="btn btn-sm btn-outline-primary" type="button" onclick="editRequirementFolder(${Number(folder.id)})" title="Modificar registros de la carpeta"><i class="fa-solid fa-pen"></i></button><button class="btn btn-sm btn-outline-danger" type="button" onclick="deleteRequirementFolder(${Number(folder.id)})" title="Eliminar carpeta"><i class="fa-solid fa-trash"></i></button></span>`}</div></td></tr>`);
+
     };
     const renderRow = (row, inFolder = false, isLast = false, index = 0, groupLength = 1) => {
         const hasAttachment = !!(row.file_path || row.word_file_path || row.image_file_path);
@@ -2637,18 +2638,17 @@ function renderRequirements() {
             : '';
         const removeFromFolderButton = !personalReadOnly && row.folder_id ? `<button class="btn btn-sm btn-outline-warning" type="button" onclick="removeRequirementFromFolder(${Number(row.id)})" title="Quitar de la carpeta sin borrar el requisito"><i class="fa-solid fa-folder-minus"></i></button>` : '';
         tbody.insertAdjacentHTML('beforeend', `
-            <tr class="${inFolder ? `requirement-folder-item${isLast ? ' is-last' : ''}` : 'requirement-ungrouped-item'}">
+            <tr class="${inFolder ? `requirement-folder-item${isLast ? ' is-last' : ''}` : 'requirement-ungrouped-item'}" ${orderAttributes('record', row.id, row.folder_id)}>
                 <td class="text-center">
                     <input class="form-check-input requirement-download-check" type="checkbox" value="${row.id}" data-has-attachment="${hasAttachment ? '1' : '0'}" title="Seleccionar registro">
                 </td>
-                <td>${escapeHtml(row.requirement)}</td>
-                <td>${row.registration_date}</td>
-                <td>${row.start_date}</td>
-                <td>${row.end_date}</td>
-                <td><span class="badge ${row.status.class}">${row.status.label}</span></td>
-                <td>${escapeHtml(row.registered_by || '')}</td>
+                <td ${orderCellAttributes}>${escapeHtml(row.requirement)}</td>
+                <td ${orderCellAttributes}>${row.registration_date}</td>
+                <td ${orderCellAttributes}>${row.start_date}</td>
+                <td ${orderCellAttributes}>${row.end_date}</td>
+                <td ${orderCellAttributes}><span class="badge ${row.status.class}">${row.status.label}</span></td>
+                <td ${orderCellAttributes}>${escapeHtml(row.registered_by || '')}</td>
                 <td class="text-nowrap">
-                    ${orderButtons('record', row.id, index, groupLength)}
                     ${editButton}
                     ${viewButton}
                     ${fileButtons}
@@ -3478,24 +3478,74 @@ async function uploadQuickPhoto(event) {
     }
 }
 
-async function moveRequirementOrder(kind, recordId, direction) {
-    const workerId = currentWorkerId;
-    const positionId = currentPositionId;
-    const body = new FormData();
-    body.append('csrf_token', csrf);
-    body.append('worker_id', workerId);
-    body.append('position_id', positionId);
-    body.append('record_id', recordId);
-    body.append('kind', kind);
-    body.append('direction', direction);
-    try {
-        const response = await fetch(`${BASE_URL}/servicios/ordenar_requisitos_pmi.php`, { method: 'POST', body });
-        const data = await response.json();
-        if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo cambiar el orden.');
-        if (Number(currentWorkerId) === Number(workerId) && Number(currentPositionId) === Number(positionId)) await loadRequirements();
-    } catch (error) {
-        Swal.fire('Atención', error.message, 'warning');
-    }
+let requirementOrderSaving = false;
+function bindRequirementOrderDrag(tbody) {
+    if (tbody.dataset.orderDragBound) return;
+    tbody.dataset.orderDragBound = '1';
+    let dragging = null, originWorker = null, originPosition = null;
+    let startedOnControl = false;
+    const isControl = target => !!target.closest('button,a,input,select,textarea,[contenteditable="true"]');
+    tbody.addEventListener('mousedown', event => { startedOnControl = isControl(event.target); });
+    const clearTargets = () => tbody.querySelectorAll('.requirement-drop-before,.requirement-drop-after').forEach(row => row.classList.remove('requirement-drop-before', 'requirement-drop-after'));
+    const validTarget = event => {
+        const target = event.target.closest('tr[data-order-id]');
+        return dragging && target && target !== dragging && target.dataset.orderScope === dragging.dataset.orderScope ? target : null;
+    };
+    tbody.addEventListener('dragstart', event => {
+        const handle = event.target.closest('.requirement-drag-handle');
+        if (!handle || requirementOrderSaving || startedOnControl || isControl(event.target)) { event.preventDefault(); return; }
+        dragging = handle.closest('tr[data-order-id]');
+        if (!dragging) { event.preventDefault(); return; }
+        originWorker = currentWorkerId;
+        originPosition = currentPositionId;
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', dragging.dataset.orderKind + ':' + dragging.dataset.orderId);
+        dragging.classList.add('requirement-is-dragging');
+    });
+    tbody.addEventListener('dragover', event => {
+        const target = validTarget(event);
+        clearTargets();
+        if (!target) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+        const box = target.getBoundingClientRect();
+        target.classList.add(event.clientY < box.top + box.height / 2 ? 'requirement-drop-before' : 'requirement-drop-after');
+    });
+    tbody.addEventListener('drop', async event => {
+        const target = validTarget(event);
+        if (!target || requirementOrderSaving) return;
+        event.preventDefault();
+        const box = target.getBoundingClientRect();
+        const move = {kind: dragging.dataset.orderKind, record_id: dragging.dataset.orderId, target_kind: target.dataset.orderKind, target_id: target.dataset.orderId, placement: event.clientY < box.top + box.height / 2 ? 'before' : 'after'};
+        const workerId = originWorker, positionId = originPosition;
+        dragging.classList.remove('requirement-is-dragging');
+        dragging = null;
+        clearTargets();
+        if (Number(currentWorkerId) !== Number(workerId) || Number(currentPositionId) !== Number(positionId)) return;
+        requirementOrderSaving = true;
+        tbody.setAttribute('aria-busy', 'true');
+        const body = new FormData();
+        body.append('csrf_token', csrf);
+        body.append('worker_id', workerId);
+        body.append('position_id', positionId);
+        Object.entries(move).forEach(([key, value]) => body.append(key, value));
+        try {
+            const response = await fetch(`${BASE_URL}/servicios/ordenar_requisitos_pmi.php`, {method: 'POST', body});
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.message || 'No se pudo guardar el orden.');
+            if (Number(currentWorkerId) === Number(workerId) && Number(currentPositionId) === Number(positionId)) await loadRequirements();
+        } catch (error) {
+            Swal.fire('Atenci\u00f3n', error.message || 'No se pudo guardar el orden.', 'warning');
+        } finally {
+            requirementOrderSaving = false;
+            tbody.removeAttribute('aria-busy');
+        }
+    });
+    tbody.addEventListener('dragend', () => {
+        dragging?.classList.remove('requirement-is-dragging');
+        dragging = null;
+        clearTargets();
+    });
 }
 
 async function replicateRequirementFolder(folderId) {

@@ -12,14 +12,21 @@ $positionId = filter_var($_POST['position_id'] ?? null, FILTER_VALIDATE_INT, ['o
 $recordId = filter_var($_POST['record_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
 $kind = (string) ($_POST['kind'] ?? '');
 $direction = (string) ($_POST['direction'] ?? '');
-if (!$workerId || !$positionId || !$recordId || !in_array($kind, ['folder', 'record'], true) || !in_array($direction, ['up', 'down'], true)) {
+$targetId = filter_var($_POST['target_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+$targetKind = (string) ($_POST['target_kind'] ?? '');
+$placement = (string) ($_POST['placement'] ?? '');
+$dragMove = $targetId && in_array($targetKind, ['folder', 'record'], true) && in_array($placement, ['before', 'after'], true);
+if (!$workerId || !$positionId || !$recordId || !in_array($kind, ['folder', 'record'], true) || (!$dragMove && !in_array($direction, ['up', 'down'], true))) {
     json_response(['ok' => false, 'message' => 'Movimiento inválido.'], 422);
 }
+
+
+require_once __DIR__ . '/../includes/pmi_requirement_order.php';
 
 $pdo = db();
 try {
     $pdo->beginTransaction();
-    $position = $pdo->prepare('SELECT 1 FROM worker_positions WHERE worker_id = ? AND position_id = ?');
+    $position = $pdo->prepare('SELECT 1 FROM worker_positions WHERE worker_id = ? AND position_id = ? FOR UPDATE');
     $position->execute([$workerId, $positionId]);
     if (!$position->fetchColumn()) throw new RuntimeException('El puesto no pertenece al trabajador.');
 
@@ -52,16 +59,15 @@ try {
             if ($item['kind'] === $kind && $item['id'] === (int) $recordId) { $index = $offset; break; }
         }
         if ($index === null) throw new RuntimeException('El elemento ya no está disponible. Actualice la página.');
-        $other = $index + ($direction === 'up' ? -1 : 1);
+        $other = pmi_order_destination($topLevel, $index, $direction, (bool) $dragMove, (int) $targetId, $targetKind, $placement);
         if ($other < 0 || $other >= count($topLevel)) throw new RuntimeException('El elemento ya está en el extremo de la lista.');
-        $first = $topLevel[min($index, $other)];
-        $second = $topLevel[max($index, $other)];
-        $separatorsStmt = $pdo->prepare("SELECT id, scope_type, after_item_id FROM pmi_requirement_separators WHERE worker_id = ? AND position_id = ? AND scope_id = 0 AND ((scope_type = ? AND after_item_id = ?) OR (scope_type = ? AND after_item_id = ?)) FOR UPDATE");
-        $separatorsStmt->execute([$workerId, $positionId, $first['kind'] === 'folder' ? 'folders' : 'ungrouped', $first['id'], $second['kind'] === 'folder' ? 'folders' : 'ungrouped', $second['id']]);
+        $previousOrder = $topLevel;
+        $separatorsStmt = $pdo->prepare("SELECT id, scope_type, after_item_id FROM pmi_requirement_separators WHERE worker_id = ? AND position_id = ? AND scope_id = 0 AND scope_type IN ('folders', 'ungrouped') FOR UPDATE");
+        $separatorsStmt->execute([$workerId, $positionId]);
         $separators = $separatorsStmt->fetchAll(PDO::FETCH_ASSOC);
         $parkSeparator = $pdo->prepare('UPDATE pmi_requirement_separators SET after_item_id = ? WHERE id = ?');
         foreach ($separators as $offset => $separator) $parkSeparator->execute([4294967295 - $offset, (int) $separator['id']]);
-        [$topLevel[$index], $topLevel[$other]] = [$topLevel[$other], $topLevel[$index]];
+        $topLevel = pmi_order_insert($topLevel, $index, $other);
         $updateFolder = $pdo->prepare('UPDATE pmi_requirement_folders SET sort_order = ? WHERE id = ? AND worker_id = ? AND position_id = ?');
         $updateRecord = $pdo->prepare('UPDATE worker_requirements SET sort_order = ? WHERE id = ? AND worker_id = ? AND position_id = ?');
         foreach ($topLevel as $offset => $item) {
@@ -70,8 +76,10 @@ try {
         }
         $moveSeparator = $pdo->prepare('UPDATE pmi_requirement_separators SET scope_type = ?, after_item_id = ? WHERE id = ?');
         foreach ($separators as $separator) {
-            $fromFirst = $separator['scope_type'] === ($first['kind'] === 'folder' ? 'folders' : 'ungrouped') && (int) $separator['after_item_id'] === $first['id'];
-            $anchor = $fromFirst ? $second : $first;
+            $anchor = ['kind' => $separator['scope_type'] === 'folders' ? 'folder' : 'record', 'id' => (int) $separator['after_item_id']];
+            foreach ($previousOrder as $offset => $previousItem) {
+                if ($previousItem['kind'] === $anchor['kind'] && $previousItem['id'] === $anchor['id']) { $anchor = $topLevel[$offset]; break; }
+            }
             $moveSeparator->execute([$anchor['kind'] === 'folder' ? 'folders' : 'ungrouped', $anchor['id'], (int) $separator['id']]);
         }
         $pdo->commit();
@@ -85,14 +93,13 @@ try {
 
     $index = array_search((int) $recordId, $ids, true);
     if ($index === false) throw new RuntimeException('El elemento ya no está disponible. Actualice la página.');
-    $other = $index + ($direction === 'up' ? -1 : 1);
+    $other = pmi_order_destination(array_map(static fn(int $id): array => ['kind' => 'record', 'id' => $id], $ids), $index, $direction, (bool) $dragMove, (int) $targetId, $targetKind, $placement);
     if ($other < 0 || $other >= count($ids)) throw new RuntimeException('El elemento ya está en el extremo de la lista.');
-    $firstAnchor = $ids[min($index, $other)];
-    $secondAnchor = $ids[max($index, $other)];
+    $previousIds = $ids;
     $separatorScope = 'folder';
     $separatorScopeId = (int) $folderId;
-    $separatorQuery = $pdo->prepare('SELECT id, after_item_id FROM pmi_requirement_separators WHERE worker_id = ? AND position_id = ? AND scope_type = ? AND scope_id = ? AND after_item_id IN (?, ?) FOR UPDATE');
-    $separatorQuery->execute([$workerId, $positionId, $separatorScope, $separatorScopeId, $firstAnchor, $secondAnchor]);
+    $separatorQuery = $pdo->prepare('SELECT id, after_item_id FROM pmi_requirement_separators WHERE worker_id = ? AND position_id = ? AND scope_type = ? AND scope_id = ? FOR UPDATE');
+    $separatorQuery->execute([$workerId, $positionId, $separatorScope, $separatorScopeId]);
     $separatorsToMove = $separatorQuery->fetchAll(PDO::FETCH_ASSOC);
     if ($separatorsToMove) {
         // Apartar primero los anclajes evita conflictos con la clave única durante el intercambio.
@@ -101,14 +108,15 @@ try {
             $parkSeparator->execute([4294967295 - $offset, (int) $separator['id']]);
         }
     }
-    [$ids[$index], $ids[$other]] = [$ids[$other], $ids[$index]];
+    $ids = pmi_order_insert($ids, $index, $other);
     foreach ($ids as $order => $id) {
         $update->execute([$order + 1, $id, (int) $folderId]);
     }
     if ($separatorsToMove) {
         $moveSeparator = $pdo->prepare('UPDATE pmi_requirement_separators SET after_item_id = ? WHERE id = ?');
         foreach ($separatorsToMove as $separator) {
-            $newAnchor = (int) $separator['after_item_id'] === $firstAnchor ? $secondAnchor : $firstAnchor;
+            $previousIndex = array_search((int) $separator['after_item_id'], $previousIds, true);
+            $newAnchor = $previousIndex === false ? (int) $separator['after_item_id'] : $ids[$previousIndex];
             $moveSeparator->execute([$newAnchor, (int) $separator['id']]);
         }
     }

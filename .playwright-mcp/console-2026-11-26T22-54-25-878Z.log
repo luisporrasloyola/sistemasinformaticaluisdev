@@ -1,0 +1,4 @@
+[  269042ms] SyntaxError: Failed to execute 'appendChild' on 'Node': Identifier 'currentWorkerId' has already been declared
+    at addScriptContent (eval at evaluate (:370:30), <anonymous>:7:25)
+    at UtilityScript.evaluate (<anonymous>:372:16)
+    at UtilityScript.<anonymous> (<anonymous>:1:44)
