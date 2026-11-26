@@ -55,14 +55,38 @@ foreach ($candidates->fetchAll(PDO::FETCH_ASSOC) as $candidate) {
         }
         if ($unmarkedDate === null) continue;
 
+        $pdo->prepare('DELETE FROM attendance_worked_hour_doublings WHERE worker_id = ? AND work_date = ?')
+            ->execute([$workerId, $markedDate]);
         $report = attendance_report_build($markedDate, $markedDate, $workerId);
-        $expectedMinutes = (int) (new DateTimeImmutable($markedDate))->format('N') === 6 ? 360 : 510;
+        $extraRows = array_filter($report['rows'], static fn(array $row): bool =>
+            $row['date'] === $markedDate && !empty($row['extra_day']));
+        if (!$extraRows) continue;
+        $expectedMinutes = array_sum(array_column($extraRows, 'worked_minutes'));
         $credited = array_sum(array_map(
             static fn(array $row): int => (int) ($row['extra_day_minutes'] ?? 0),
             array_filter($report['rows'], static fn(array $row): bool => $row['date'] === $markedDate)
         ));
         if ($credited !== $expectedMinutes) {
-            throw new RuntimeException('El reporte no acreditó exactamente el DE con marcación.');
+            throw new RuntimeException('El DE no coincide con las horas netas trabajadas.');
+        }
+        foreach ($extraRows as $row) {
+            if ($row['overtime_minutes'] !== $row['worked_minutes']
+                || $row['early_overtime_minutes'] !== 0 || $row['exit_overtime_minutes'] !== 0) {
+                throw new RuntimeException('El DE sumó extras adicionales al tiempo trabajado.');
+            }
+        }
+        if ($expectedMinutes > 0) {
+            $pdo->prepare('INSERT INTO attendance_worked_hour_doublings (worker_id, work_date) VALUES (?, ?)')
+                ->execute([$workerId, $markedDate]);
+            $doubledReport = attendance_report_build($markedDate, $markedDate, $workerId);
+            foreach ($doubledReport['rows'] as $row) {
+                if ($row['date'] !== $markedDate || empty($row['extra_day'])) continue;
+                $completed = $row['entry'] !== '-' && $row['exit'] !== '-';
+                $expected = $row['worked_minutes'] * ($completed ? 2 : 1);
+                if ($row['overtime_minutes'] !== $expected || $row['extra_day_minutes'] !== $expected) {
+                    throw new RuntimeException('El x2 de DE no duplicó solo las extras netas.');
+                }
+            }
         }
         $unmarkedReport = attendance_report_build($unmarkedDate, $unmarkedDate, $workerId);
         foreach ($unmarkedReport['rows'] as $row) {

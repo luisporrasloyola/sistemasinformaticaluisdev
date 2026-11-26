@@ -29,6 +29,7 @@ require __DIR__ . '/../../includes/header.php';
             <thead>
             <tr>
                 <th>Equipo</th>
+                <th>Capacidad</th>
                 <th>Empresa</th>
                 <th>Serie o Placa</th>
                 <th>A&ntilde;o del equipo</th>
@@ -41,6 +42,7 @@ require __DIR__ . '/../../includes/header.php';
             <?php foreach ($maquinarias as $item): ?>
                 <tr>
                     <td><?= e($item['equipo']) ?></td>
+                    <td><?= e(($item['capacidad'] ?? '') !== '' ? $item['capacidad'] : '-') ?></td>
                     <td><?= e($item['empresa'] ?? '') ?></td>
                     <td><?= e($item['serie_placa']) ?></td>
                     <td><?= e((string) $item['anio_equipo']) ?></td>

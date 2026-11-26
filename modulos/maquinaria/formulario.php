@@ -6,7 +6,7 @@ $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT) ?: 0;
 $machine = null;
 $contacts = [];
 if ($id > 0) {
-    $stmt = db()->prepare('SELECT id, company_id, equipo, serie_placa, anio_equipo, foto_path FROM maquinarias WHERE id = ?');
+    $stmt = db()->prepare('SELECT id, company_id, equipo, capacidad, serie_placa, anio_equipo, foto_path FROM maquinarias WHERE id = ?');
     $stmt->execute([$id]);
     $machine = $stmt->fetch();
     if (!$machine) { http_response_code(404); exit('No se encontró la maquinaria.'); }
@@ -31,6 +31,10 @@ require __DIR__ . '/../../includes/header.php';
                 <div class="col-md-6">
                     <label class="form-label" for="maquinariaEquipo">Equipo</label>
                     <input class="form-control" name="equipo" id="maquinariaEquipo" value="<?= e($machine['equipo'] ?? '') ?>" required maxlength="150">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="maquinariaCapacidad">Capacidad</label>
+                    <input class="form-control" name="capacidad" id="maquinariaCapacidad" value="<?= e($machine['capacidad'] ?? '') ?>" maxlength="100" placeholder="Ej.: 20 ton">
                 </div>
                 <div class="col-md-6 position-relative">
                     <label class="form-label" for="maquinariaEmpresa">Empresa</label>

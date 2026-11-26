@@ -9,6 +9,7 @@ verify_csrf($_POST['csrf_token'] ?? null);
 $id = (int) ($_POST['id'] ?? 0);
 $companyInput = (string) ($_POST['company_id'] ?? '');
 $equipo = trim((string) ($_POST['equipo'] ?? ''));
+$capacidad = trim((string) ($_POST['capacidad'] ?? ''));
 $seriePlaca = trim((string) ($_POST['serie_placa'] ?? ''));
 $anioEquipo = (int) ($_POST['anio_equipo'] ?? 0);
 $currentYear = (int) date('Y') + 1;
@@ -17,6 +18,10 @@ $contactPhones = $_POST['contact_phone'] ?? [];
 
 if ($companyInput === '' || $equipo === '' || $seriePlaca === '' || $anioEquipo < 1950 || $anioEquipo > $currentYear) {
     json_response(['ok' => false, 'message' => 'Complete todos los campos obligatorios.'], 400);
+}
+
+if (mb_strlen($capacidad, 'UTF-8') > 100) {
+    json_response(['ok' => false, 'message' => 'La capacidad no debe superar los 100 caracteres.'], 400);
 }
 
 if (!is_array($contactNames) || !is_array($contactPhones)
@@ -76,10 +81,11 @@ try {
     db()->beginTransaction();
 
     if ($id > 0) {
-        $sql = 'UPDATE maquinarias SET company_id = :company_id, equipo = :equipo, serie_placa = :serie_placa, anio_equipo = :anio_equipo';
+        $sql = 'UPDATE maquinarias SET company_id = :company_id, equipo = :equipo, capacidad = :capacidad, serie_placa = :serie_placa, anio_equipo = :anio_equipo';
         $params = [
             'company_id' => $companyId,
             'equipo' => $equipo,
+            'capacidad' => $capacidad,
             'serie_placa' => $seriePlaca,
             'anio_equipo' => $anioEquipo,
             'id' => $id,
@@ -91,10 +97,11 @@ try {
         $sql .= ' WHERE id = :id';
         db()->prepare($sql)->execute($params);
     } else {
-        $stmt = db()->prepare('INSERT INTO maquinarias (company_id, equipo, serie_placa, anio_equipo, foto_path) VALUES (:company_id, :equipo, :serie_placa, :anio_equipo, :foto_path)');
+        $stmt = db()->prepare('INSERT INTO maquinarias (company_id, equipo, capacidad, serie_placa, anio_equipo, foto_path) VALUES (:company_id, :equipo, :capacidad, :serie_placa, :anio_equipo, :foto_path)');
         $stmt->execute([
             'company_id' => $companyId,
             'equipo' => $equipo,
+            'capacidad' => $capacidad,
             'serie_placa' => $seriePlaca,
             'anio_equipo' => $anioEquipo,
             'foto_path' => $foto['path'],

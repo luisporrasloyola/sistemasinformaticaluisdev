@@ -770,13 +770,28 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
             if ($holidayCalendarOnlyMarks) $lateMinutes = 0;
             $baseWorkedMinutes = $workedMinutes;
             $workedDoubleSelected = isset($workedHourDoublings[$date]);
-            $workedDoubleApplied = $entry && $exit && $baseWorkedMinutes > 0 && $workedDoubleSelected;
-            if ($workedDoubleApplied) $workedMinutes = $baseWorkedMinutes * 2;
             $extraDayNumber = (int) ($extraDaysByWorker[$id][$date] ?? 0);
             $extraDay = $extraDayNumber > 0 && ($entry || $exit) && $date < $today
                 && $eventType === '' && !$manualOverride;
-            $extraDayMinutes = $extraDay ? ($weekday === 6 ? 360 : 510) : 0;
-            $overtimeMinutes += $extraDayMinutes;
+            $extraDayMinutes = 0;
+            if ($extraDay) {
+                // DE acredita el tiempo neto real completo, sin sumar otra vez entrada o salida.
+                $extraDayMinutes = $workedMinutes;
+                $holidayOvertimeMinutes = 0;
+                $earlyOvertimeMinutes = 0;
+                $exitOvertimeMinutes = 0;
+                $overtimeMinutes = $extraDayMinutes;
+            }
+            // La selección histórica por trabajador y fecha ahora duplica solo las horas extras.
+            $baseOvertimeMinutes = $overtimeMinutes;
+            $overtimeDoubleApplied = $entry && $exit && $baseOvertimeMinutes > 0 && $workedDoubleSelected;
+            if ($overtimeDoubleApplied) {
+                $holidayOvertimeMinutes *= 2;
+                $earlyOvertimeMinutes *= 2;
+                $exitOvertimeMinutes *= 2;
+                $extraDayMinutes *= 2;
+                $overtimeMinutes = $baseOvertimeMinutes * 2;
+            }
 
             $latestManualComment = $latestManualComments[$id][$date][$aid] ?? null;
             if ($manualOverride) {
@@ -827,8 +842,9 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 'state_class' => $extraDay ? 'report-state-extra-day' : ($laborCycle && $laborCycle['rest'] && ($eventType === '' || $eventType === 'rest') ? 'report-state-rest' : $state['class']),
                 'journey_key' => $journeyKey, 'journey_label' => $journey['label'], 'journey_class' => $journey['class'],
                 'worked_minutes' => $workedMinutes, 'base_worked_minutes' => $baseWorkedMinutes,
-                'worked_double_selected' => $workedDoubleSelected,
-                'worked_double_applied' => (bool) $workedDoubleApplied, 'scheduled_minutes' => $scheduledMinutes,
+                'overtime_double_selected' => $workedDoubleSelected,
+                'overtime_double_applied' => (bool) $overtimeDoubleApplied,
+                'base_overtime_minutes' => $baseOvertimeMinutes, 'scheduled_minutes' => $scheduledMinutes,
                 'extra_day' => (bool) $extraDay, 'extra_day_minutes' => $extraDayMinutes,
                 'holiday_schedule_credit' => $holidayScheduleCredit,
                 'lunch_deduction_minutes' => $lunchDeductionMinutes,
@@ -871,7 +887,8 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
             if (attendance_calendar_resolve_event($calendarEvents, $date, $id, (int) $worker['company_id'])) continue;
             $extraCycle = $laborCycleDates[$id][$date]['cycle'] ?? null;
             $weekday = (int) (new DateTimeImmutable($date))->format('N');
-            $extraMinutes = $weekday === 6 ? 360 : 510;
+            // Sin una jornada calculada no hay horas trabajadas que acreditar como extras.
+            $extraMinutes = 0;
             $rows[] = [
                 'worker_id' => $id, 'date' => $date, 'weekday' => $weekdayLabels[$weekday],
                 'assignment_id' => 0, 'worker' => (string) $worker['full_name'],
@@ -884,8 +901,8 @@ function attendance_report_build(string $dateFrom, string $dateTo, int $workerId
                 'location' => '-', 'entry_location' => '-', 'exit_location' => '-',
                 'state_key' => 'extra_day', 'state_code' => 'DE' . $extraDayNumber, 'state_label' => 'Día Extra ' . $extraDayNumber,
                 'state_class' => 'report-state-extra-day', 'journey_key' => null, 'journey_label' => '-', 'journey_class' => '',
-                'worked_minutes' => 0, 'base_worked_minutes' => 0, 'worked_double_selected' => false,
-                'worked_double_applied' => false, 'scheduled_minutes' => 0, 'holiday_schedule_credit' => false,
+                'worked_minutes' => 0, 'base_worked_minutes' => 0, 'overtime_double_selected' => false,
+                'overtime_double_applied' => false, 'base_overtime_minutes' => 0, 'scheduled_minutes' => 0, 'holiday_schedule_credit' => false,
                 'lunch_deduction_minutes' => 0, 'late_minutes' => 0, 'overtime_minutes' => $extraMinutes,
                 'extra_day' => true, 'extra_day_minutes' => $extraMinutes, 'labor_regime' => $extraCycle ? '21x7' : 'regular',
                 'labor_cycle_code' => $extraCycle['code'] ?? null, 'holiday_overtime_minutes' => 0,

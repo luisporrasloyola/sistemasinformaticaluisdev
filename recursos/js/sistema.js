@@ -371,8 +371,8 @@ if (workedDoubleToolbar) {
         const disabled = changed.length - enabled;
         const confirmation = await Swal.fire({
             icon: 'question',
-            title: 'Confirmar horas trabajadas ×2',
-            text: `Se duplicarán ${enabled} jornada(s) y se quitará la duplicación de ${disabled} jornada(s). La base es el tiempo neto después del almuerzo; las horas extras mantienen su cálculo independiente.`,
+            title: 'Confirmar horas extras ×2',
+            text: `Se duplicarán ${enabled} jornada(s) y se quitará la duplicación de ${disabled} jornada(s). La base son las horas extras calculadas de cada fecha; las horas trabajadas mantienen su valor original.`,
             showCancelButton: true,
             confirmButtonText: 'Guardar cambios',
             cancelButtonText: 'Seguir revisando',
@@ -389,7 +389,7 @@ if (workedDoubleToolbar) {
             const response = await fetch(`${BASE_URL}/servicios/control_personal/guardar_duplicacion_horas_trabajadas.php`, {method: 'POST', body});
             const result = await response.json();
             if (!response.ok || !result.ok) throw new Error(result.message || 'No se pudo guardar la duplicación.');
-            await Swal.fire({icon: 'success', title: 'Cambios guardados', text: 'Las horas trabajadas del reporte se actualizaron.', timer: 1700, showConfirmButton: false});
+            await Swal.fire({icon: 'success', title: 'Cambios guardados', text: 'Las horas extras del reporte se actualizaron.', timer: 1700, showConfirmButton: false});
             window.location.reload();
         } catch (error) {
             Swal.fire('Atención', error.message || 'No se pudo guardar la duplicación.', 'warning');

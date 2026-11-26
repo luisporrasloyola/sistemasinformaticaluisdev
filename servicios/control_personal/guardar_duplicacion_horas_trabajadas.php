@@ -6,7 +6,7 @@ require_once __DIR__ . '/../../includes/attendance_report_data.php';
 require_once __DIR__ . '/../../includes/attendance_report_closure.php';
 require_module_access('control_personal.reporte_asistencias');
 header('Content-Type: application/json; charset=utf-8');
-if (!is_admin()) json_response(['ok' => false, 'message' => 'Solo un administrador puede duplicar horas trabajadas.'], 403);
+if (!is_admin()) json_response(['ok' => false, 'message' => 'Solo un administrador puede duplicar horas extras.'], 403);
 verify_csrf($_POST['csrf_token'] ?? null);
 
 $workerId = filter_var($_POST['worker_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
@@ -40,13 +40,13 @@ try {
     if (!$report['worker']) throw new DomainException('No se encontró al trabajador.');
     $eligible = [];
     foreach ($report['individual_rows'] as $row) {
-        if ($row['entry'] !== '-' && $row['exit'] !== '-' && (int) ($row['base_worked_minutes'] ?? 0) > 0) {
+        if ($row['entry'] !== '-' && $row['exit'] !== '-' && (int) ($row['base_overtime_minutes'] ?? 0) > 0) {
             $eligible[(string) $row['date']] = true;
         }
     }
     $toEnable = array_filter($requested);
     if (array_diff_key($toEnable, $eligible)) {
-        throw new DomainException('Una de las fechas ya no tiene entrada y salida completas. Actualice el reporte.');
+        throw new DomainException('Una de las fechas ya no tiene entrada, salida y horas extras. Actualice el reporte.');
     }
     $userId = (int) (current_user()['id'] ?? 0) ?: null;
     $enable = $pdo->prepare('INSERT INTO attendance_worked_hour_doublings (worker_id, work_date, enabled_by_user_id) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE enabled_by_user_id = VALUES(enabled_by_user_id), enabled_at = NOW()');
@@ -56,12 +56,12 @@ try {
         else $disable->execute([(int) $workerId, $date]);
     }
     $pdo->commit();
-    json_response(['ok' => true, 'message' => 'Duplicación de horas trabajadas guardada.', 'changed' => count($requested)]);
+    json_response(['ok' => true, 'message' => 'Duplicación de horas extras guardada.', 'changed' => count($requested)]);
 } catch (DomainException $error) {
     if (isset($pdo) && $pdo->inTransaction()) $pdo->rollBack();
     json_response(['ok' => false, 'message' => $error->getMessage()], 409);
 } catch (Throwable $error) {
     if (isset($pdo) && $pdo->inTransaction()) $pdo->rollBack();
-    error_log('Error al guardar duplicación de horas trabajadas: ' . $error->getMessage());
+    error_log('Error al guardar duplicación de horas extras: ' . $error->getMessage());
     json_response(['ok' => false, 'message' => 'No se pudieron guardar las duplicaciones.'], 500);
 }
