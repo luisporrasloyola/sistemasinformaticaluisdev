@@ -13,7 +13,7 @@
     <div class="modal-body"><input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>"><input type="hidden" name="client_id" value="<?= (int) $clientId ?>"><input type="hidden" name="habilitation_id" id="personalFormatHabilitation"><input type="hidden" name="catalog_id" id="personalFormatCatalog"><input type="hidden" name="habilitacion_area" value="<?= e($habilitationArea) ?>"><input type="hidden" name="habilitation_buscar" value="<?= e($habilitationSearch) ?>"><input type="hidden" name="habilitation_pagina" value="<?= (int) $habilitationPage ?>">
         <p class="small text-muted">Las fechas y el archivo de este formato pertenecen solo a esta habilitación de personal.</p>
         <div class="row g-3"><div class="col-md-4"><label class="form-label" for="personalFormatRegistration">F. Registro</label><input class="form-control" type="date" name="registration_date" id="personalFormatRegistration" required></div><div class="col-md-4"><label class="form-label" for="personalFormatStart">F. Inicio</label><input class="form-control" type="date" name="start_date" id="personalFormatStart"></div><div class="col-md-4"><label class="form-label" for="personalFormatEnd">F. Fin</label><input class="form-control" type="date" name="end_date" id="personalFormatEnd"></div></div>
-        <div class="mt-3"><label class="form-label" for="personalFormatFile">Archivo (PDF o imagen)</label><input class="form-control" type="file" name="file" id="personalFormatFile" accept="application/pdf,image/jpeg,image/png,image/webp"><small class="text-muted" id="personalFormatFileHelp">Formatos permitidos: PDF, JPG, PNG y WEBP. Máximo 10 MB.</small></div>
+        <div class="mt-3"><label class="form-label" for="personalFormatFile">Archivo (PDF, imagen, Word o Excel)</label><input class="form-control" type="file" name="file" id="personalFormatFile" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx"><small class="text-muted" id="personalFormatFileHelp">Formatos permitidos: PDF, JPG, PNG, WEBP, DOC, DOCX, XLS y XLSX. Máximo 10 MB.</small></div>
     </div><div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk me-1"></i>Guardar formato</button></div>
 </form></div></div>
 <div class="modal fade" id="habilitationPreview" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-xl modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h2 class="modal-title h5" id="habilitationPreviewTitle">Vista previa</h2><button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Cerrar"></button></div><div class="modal-body client-pmi-preview-body" id="habilitationPreviewBody"></div></div></div></div>
@@ -388,14 +388,27 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('personalFormatEnd').value = record.end_date || '';
         document.getElementById('personalFormatModalTitle').textContent = (record.registration_date ? 'Editar' : 'Registrar') + ' formato: ' + record.name;
         document.getElementById('personalFormatFileHelp').textContent = record.has_file
-            ? 'Si no selecciona otro archivo, se conservará el actual. PDF, JPG, PNG o WEBP; máximo 10 MB.'
-            : 'Formatos permitidos: PDF, JPG, PNG y WEBP. Máximo 10 MB.';
+            ? 'Si no selecciona otro archivo, se conservará el actual. PDF, JPG, PNG, WEBP, DOC, DOCX, XLS y XLSX; máximo 10 MB.'
+            : 'Formatos permitidos: PDF, JPG, PNG, WEBP, DOC, DOCX, XLS y XLSX. Máximo 10 MB.';
         bootstrap.Modal.getOrCreateInstance(document.getElementById('personalFormatModal')).show();
     }));
     const preview = document.getElementById('habilitationPreview');
     document.querySelectorAll('.preview-habilitation-file').forEach(button => button.addEventListener('click', () => {
-        const node = document.createElement(/\.pdf$/i.test(button.dataset.url) ? 'iframe' : 'img');
-        node.src = button.dataset.url; node.title = button.dataset.name; node.alt = button.dataset.name;
+        const officeFile = /\.(docx?|xlsx?)$/i.test(button.dataset.url);
+        const node = document.createElement(officeFile ? 'div' : /\.pdf$/i.test(button.dataset.url) ? 'iframe' : 'img');
+        if (officeFile) {
+            node.className = 'text-center p-4';
+            const info = document.createElement('p');
+            info.textContent = 'Descargue el archivo para abrirlo en Word o Excel.';
+            const link = document.createElement('a');
+            link.className = 'btn btn-primary';
+            link.href = button.dataset.downloadUrl || button.dataset.url;
+            link.download = '';
+            link.textContent = 'Descargar archivo';
+            node.append(info, link);
+        } else {
+            node.src = button.dataset.url; node.title = button.dataset.name; node.alt = button.dataset.name;
+        }
         document.getElementById('habilitationPreviewBody').replaceChildren(node);
         document.getElementById('habilitationPreviewTitle').textContent = button.dataset.name;
         bootstrap.Modal.getOrCreateInstance(preview).show();

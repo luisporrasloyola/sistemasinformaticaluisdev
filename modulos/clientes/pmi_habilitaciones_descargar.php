@@ -69,7 +69,7 @@ if ($habilitation['area'] === 'personal') {
     $formatStmt->execute(['client_id' => $clientId, 'project_id' => $projectId, 'habilitation_id' => $habilitationId]);
     foreach ($formatStmt->fetchAll() as $row) {
         if ($mode === 'selected' && !in_array((int) $row['id'], $formatIds, true)) { continue; }
-        if (!preg_match('~^archivos/[A-Za-z0-9_/-]+\.(pdf|jpe?g|png|webp)$~i', (string) $row['file_path'])) { continue; }
+        if (!preg_match('~^archivos/[A-Za-z0-9_/-]+\.(pdf|jpe?g|png|webp|docx?|xlsx?)$~i', (string) $row['file_path'])) { continue; }
         $path = realpath(dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . $row['file_path']);
         if (!$path || !$root || !str_starts_with($path, $root . DIRECTORY_SEPARATOR) || !is_file($path)) { continue; }
         $files[] = ['id' => (int) $row['id'], 'path' => $path, 'name' => $safe($habilitation['subject_name'] ?? 'Personal') . ' - ' . $safe($row['name']) . '.' . strtolower(pathinfo($path, PATHINFO_EXTENSION))];

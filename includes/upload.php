@@ -42,17 +42,9 @@ function upload_file(array $file, string $folder, array $allowedMime, ?array $al
             throw new RuntimeException('La extensión del archivo no corresponde a su tipo.');
         }
         if (in_array($originalExtension, ['docx', 'xlsx', 'pptx'], true) && in_array($mime, ['application/zip', 'application/x-zip-compressed'], true)) {
-            if (!class_exists('ZipArchive')) throw new RuntimeException('El servidor no puede verificar este archivo de Office.');
-            $zip = new ZipArchive();
-            if ($zip->open($file['tmp_name']) !== true) throw new RuntimeException('El archivo de Office no es válido.');
-            $officeFolder = ['docx' => 'word/', 'xlsx' => 'xl/', 'pptx' => 'ppt/'][$originalExtension];
-            $validOfficeFile = $zip->locateName('[Content_Types].xml') !== false;
-            for ($i = 0; $validOfficeFile && $i < $zip->numFiles; $i++) {
-                if (str_starts_with((string) $zip->getNameIndex($i), $officeFolder)) break;
+            if (!office_attachment_archive_matches((string) $file['tmp_name'], $originalExtension)) {
+                throw new RuntimeException('El archivo de Office no corresponde a su extensión.');
             }
-            $validOfficeFile = $validOfficeFile && $i < $zip->numFiles;
-            $zip->close();
-            if (!$validOfficeFile) throw new RuntimeException('El archivo de Office no corresponde a su extensión.');
         }
     }
 
@@ -85,6 +77,30 @@ function upload_file(array $file, string $folder, array $allowedMime, ?array $al
         'path' => 'archivos/' . $folder . '/' . $safeName,
         'name' => preg_replace('/[^A-Za-z0-9._ -]/', '_', (string) $file['name']),
     ];
+}
+
+/** Verifica los componentes Office sin extraer ni convertir el archivo. */
+function office_attachment_archive_matches(string $path, string $extension): bool
+{
+    $parts = ['docx' => 'word/document.xml', 'xlsx' => 'xl/workbook.xml', 'pptx' => 'ppt/presentation.xml'];
+    if (!isset($parts[$extension])) return false;
+    if (class_exists('ZipArchive')) {
+        $zip = new ZipArchive();
+        if ($zip->open($path) !== true) return false;
+        try {
+            return $zip->locateName('[Content_Types].xml') !== false && $zip->locateName($parts[$extension]) !== false;
+        } finally {
+            $zip->close();
+        }
+    }
+    if (!class_exists('PharData')) throw new RuntimeException('El servidor no puede verificar este archivo de Office.');
+    try {
+        $archive = new PharData($path, 0, null, Phar::ZIP);
+        return isset($archive['[Content_Types].xml'], $archive[$parts[$extension]])
+            && $archive['[Content_Types].xml']->isFile() && $archive[$parts[$extension]]->isFile();
+    } catch (UnexpectedValueException | BadMethodCallException $error) {
+        return false;
+    }
 }
 
 function document_attachment_mimes(): array

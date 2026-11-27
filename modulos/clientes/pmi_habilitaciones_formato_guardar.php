@@ -49,7 +49,9 @@ try {
     $catalog->execute(['catalog_id' => $catalogId, 'client_id' => $clientId, 'project_id' => $projectId]);
     if (!$catalog->fetchColumn()) throw new DomainException('El formato ya no está disponible en Formatos editables.');
 
-    $newFile = upload_file($_FILES['file'] ?? [], 'clientes_pmi_formatos_personal', document_attachment_mimes())['path'];
+    $extensions = array_intersect_key(format_attachment_extensions(), array_flip(['pdf', 'jpg', 'jpeg', 'png', 'webp', 'doc', 'docx', 'xls', 'xlsx']));
+    $mimes = array_values(array_unique(array_merge(...array_values($extensions))));
+    $newFile = upload_file($_FILES['file'] ?? [], 'clientes_pmi_formatos_personal', $mimes, $extensions)['path'];
     db()->beginTransaction();
     $current = db()->prepare('SELECT id, file_path FROM client_pmi_habilitation_formats
         WHERE habilitation_id=:habilitation_id AND catalog_id=:catalog_id FOR UPDATE');
